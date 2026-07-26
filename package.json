@@ -1,0 +1,9 @@
+{
+  "name": "family-app",
+  "private": true,
+  "scripts": {
+    "api": "pnpm --filter api start:dev",
+    "mobile": "pnpm --filter mobile start",
+    "seed": "pnpm --filter api seed"
+  }
+}

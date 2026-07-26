@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: family-app-db
+    environment:
+      POSTGRES_USER: family
+      POSTGRES_PASSWORD: family123
+      POSTGRES_DB: family_app
+    ports:
+      - "5433:5432"
+    volumes:
+      - family_app_pgdata:/var/lib/postgresql/data
+
+volumes:
+  family_app_pgdata:
