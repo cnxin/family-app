@@ -12,11 +12,18 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export type MemberRole = 'chef' | 'member';
+export type MemberRole = 'owner' | 'admin' | 'member';
 export type DishCategory = '荤菜' | '素菜' | '汤' | '主食' | '甜品';
 export type IngredientCategory = '蔬菜' | '肉类' | '海鲜' | '蛋奶' | '调料' | '主食' | '其他';
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
 export type MenuItemStatus = 'pending' | 'accepted' | 'cooking' | 'done' | 'rejected';
+export type MenuEventType =
+  | 'item_ordered'
+  | 'item_status_changed'
+  | 'item_assigned'
+  | 'item_note_changed'
+  | 'meal_chef_assigned'
+  | 'menu_completed';
 export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
 
 export interface DishRecipeStep {
@@ -51,6 +58,7 @@ export class Household {
 }
 
 @Entity('members')
+@Check('CHK_members_role', `"role" IN ('owner', 'admin', 'member')`)
 @Index('IDX_members_household', ['householdId'])
 export class Member {
   @PrimaryGeneratedColumn('uuid')
@@ -75,7 +83,10 @@ export class Member {
   @Column({ type: 'varchar', default: 'member' })
   role: MemberRole;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ default: false })
+  prefersCooking: boolean;
+
+  @Column({ type: 'varchar', nullable: true, select: false })
   pinHash: string | null;
 
   @CreateDateColumn()
@@ -198,6 +209,7 @@ export class DishIngredient {
 }
 
 @Entity('menus')
+@Check('CHK_menus_status', `"status" IN ('open', 'done')`)
 @Unique('UQ_menus_household_date_meal', ['householdId', 'date', 'mealType'])
 @Index('IDX_menus_household_date', ['householdId', 'date'])
 export class Menu {
@@ -223,8 +235,34 @@ export class Menu {
   @Column({ type: 'varchar', default: 'open' })
   status: 'open' | 'done';
 
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'chefId',
+    foreignKeyConstraintName: 'FK_menus_chef',
+  })
+  chef: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  chefId: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  completedAt: Date | null;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'completedById',
+    foreignKeyConstraintName: 'FK_menus_completed_by',
+  })
+  completedBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  completedById: string | null;
+
   @OneToMany(() => MenuItem, (mi) => mi.menu)
   items: MenuItem[];
+
+  @OneToMany(() => MenuEvent, (event) => event.menu)
+  events: MenuEvent[];
 }
 
 @Entity('menu_items')
@@ -276,6 +314,102 @@ export class MenuItem {
 
   @Column({ type: 'varchar', default: 'pending' })
   status: MenuItemStatus;
+
+  @Column({ type: 'varchar', nullable: true })
+  statusReason: string | null;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'assignedToId',
+    foreignKeyConstraintName: 'FK_menu_items_assigned_to',
+  })
+  assignedTo: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  assignedToId: string | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+}
+
+@Entity('menu_events')
+@Check(
+  'CHK_menu_events_type',
+  `"type" IN ('item_ordered', 'item_status_changed', 'item_assigned', 'item_note_changed', 'meal_chef_assigned', 'menu_completed')`,
+)
+@Index('IDX_menu_events_household_menu', ['householdId', 'menuId'])
+@Index('IDX_menu_events_recipient_read', ['recipientId', 'readAt'])
+export class MenuEvent {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_menu_events_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Menu, (menu) => menu.events, {
+    eager: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'menuId',
+    foreignKeyConstraintName: 'FK_menu_events_menu',
+  })
+  menu: Menu;
+
+  @Column('uuid')
+  menuId: string;
+
+  @ManyToOne(() => MenuItem, { eager: true, nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'menuItemId',
+    foreignKeyConstraintName: 'FK_menu_events_item',
+  })
+  menuItem: MenuItem | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  menuItemId: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_menu_events_actor',
+  })
+  actor: Member;
+
+  @Column('uuid')
+  actorId: string;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'recipientId',
+    foreignKeyConstraintName: 'FK_menu_events_recipient',
+  })
+  recipient: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  recipientId: string | null;
+
+  @Column({ type: 'varchar' })
+  type: MenuEventType;
+
+  @Column({ type: 'varchar', nullable: true })
+  fromValue: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  toValue: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  reason: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  readAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -376,6 +510,7 @@ export const ALL_ENTITIES = [
   DishIngredient,
   Menu,
   MenuItem,
+  MenuEvent,
   ShoppingItem,
   InventoryItem,
 ];

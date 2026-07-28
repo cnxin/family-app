@@ -15,6 +15,7 @@ import type {
   MealType,
   Menu,
   MenuDateCount,
+  MenuEvent,
   MenuItem,
   MenuItemStatus,
   ShoppingItem,
@@ -81,6 +82,7 @@ export function useAddMenuItems() {
       void qc.invalidateQueries({ queryKey: ['menu'] });
       void qc.invalidateQueries({ queryKey: ['menus'] });
       void qc.invalidateQueries({ queryKey: ['menu-dates'] });
+      void qc.invalidateQueries({ queryKey: ['menu-events'] });
     },
   });
 }
@@ -88,16 +90,95 @@ export function useAddMenuItems() {
 export function useUpdateMenuItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; status?: MenuItemStatus; note?: string }) =>
+    mutationFn: (input: {
+      id: string;
+      status?: MenuItemStatus;
+      note?: string;
+      assignedToId?: string | null;
+      reason?: string;
+    }) =>
       api<MenuItem>(`/menu-items/${input.id}`, {
         method: 'PATCH',
-        body: { status: input.status, note: input.note },
+        body: {
+          status: input.status,
+          note: input.note,
+          assignedToId: input.assignedToId,
+          reason: input.reason,
+        },
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['menu'] });
       void qc.invalidateQueries({ queryKey: ['menus'] });
       void qc.invalidateQueries({ queryKey: ['menu-dates'] });
+      void qc.invalidateQueries({ queryKey: ['menu-events'] });
     },
+  });
+}
+
+export function useAssignMenuChef() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { menuId: string; chefId: string | null }) =>
+      api<Menu>(`/menus/${input.menuId}/chef`, {
+        method: 'PATCH',
+        body: { chefId: input.chefId },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['menu'] });
+      void qc.invalidateQueries({ queryKey: ['menus'] });
+      void qc.invalidateQueries({ queryKey: ['menu-events'] });
+    },
+  });
+}
+
+export function useCompleteMenu() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (menuId: string) =>
+      api<Menu>(`/menus/${menuId}/complete`, { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['menu'] });
+      void qc.invalidateQueries({ queryKey: ['menus'] });
+      void qc.invalidateQueries({ queryKey: ['menu-events'] });
+    },
+  });
+}
+
+export function useMenuEvents(menuId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['menu-events', menuId],
+    queryFn: () => api<MenuEvent[]>(`/menus/${menuId}/events`),
+    enabled,
+  });
+}
+
+export function useMenuNotifications() {
+  return useQuery({
+    queryKey: ['menu-notifications'],
+    queryFn: () => api<MenuEvent[]>('/menu-notifications'),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useMarkMenuNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<MenuEvent>(`/menu-notifications/${id}/read`, { method: 'PATCH' }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['menu-notifications'] }),
+  });
+}
+
+export function useUpdateCookingPreference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prefersCooking: boolean) =>
+      api<Member>('/members/me/preferences', {
+        method: 'PATCH',
+        body: { prefersCooking },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['members'] }),
   });
 }
 

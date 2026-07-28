@@ -21,6 +21,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSession } from '../lib/session';
+import { memberSubtitle } from '../lib/member';
 import { radius, type as t, useTheme } from '../lib/theme';
 
 export const DESKTOP_BREAKPOINT = 1024;
@@ -162,7 +163,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {member?.name}
             </Text>
             <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
-              {member?.role === 'chef' ? '经常掌勺' : '家庭成员'}
+              {member ? memberSubtitle(member) : '家庭成员'}
             </Text>
           </View>
           <UserRound color={c.tertiaryLabel} size={18} />

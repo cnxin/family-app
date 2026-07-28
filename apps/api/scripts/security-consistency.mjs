@@ -5,6 +5,7 @@ import pg from 'pg';
 const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
 const TEST_DATE = '2199-12-29';
+const LOCK_TEST_DATE = '2199-12-26';
 const SHOPPING_TRANSACTION_DATE = '2199-12-27';
 
 function assert(condition, message) {
@@ -60,9 +61,11 @@ const transactionIds = {
 
 try {
   const initialMembers = await request('/members');
-  const chef = initialMembers.body.data.find((member) => member.role === 'chef');
+  const chef = initialMembers.body.data.find(
+    (member) => member.role === 'owner' && member.prefersCooking,
+  );
   const member = initialMembers.body.data.find((item) => item.role === 'member');
-  assert(chef && member, '测试家庭包含掌勺成员和普通成员');
+  assert(chef && member, '成员权限角色和掌勺偏好已经分离');
   memberId = member.id;
 
   const pinRow = await db.query(
@@ -99,6 +102,26 @@ try {
   assert(memberLogin.status === 201 && chefLogin.status === 201, '正确凭据可登录');
   const memberToken = memberLogin.body.data.token;
   const chefToken = chefLogin.body.data.token;
+
+  const preferenceOff = await request(
+    '/members/me/preferences',
+    chefToken,
+    'PATCH',
+    { prefersCooking: false },
+  );
+  const preferenceOn = await request(
+    '/members/me/preferences',
+    chefToken,
+    'PATCH',
+    { prefersCooking: true },
+  );
+  assert(
+    preferenceOff.status === 200 &&
+      preferenceOff.body.data.role === 'owner' &&
+      preferenceOff.body.data.prefersCooking === false &&
+      preferenceOn.body.data.prefersCooking === true,
+    '掌勺偏好可独立修改且不改变家庭权限角色',
+  );
 
   const payload = JSON.parse(
     Buffer.from(memberToken.split('.')[1], 'base64url').toString('utf8'),
@@ -150,6 +173,16 @@ try {
     memberToken,
   );
   const menu = menuResponse.body.data;
+  const assignedMenu = await request(
+    `/menus/${menu.id}/chef`,
+    memberToken,
+    'PATCH',
+    { chefId: member.id },
+  );
+  assert(
+    assignedMenu.status === 200 && assignedMenu.body.data.chef.id === member.id,
+    '本餐可以指定任意正式家庭成员为主厨',
+  );
 
   const firstOrder = await request(
     `/menus/${menu.id}/items`,
@@ -158,6 +191,13 @@ try {
     { items: [{ dishId: dishes[0].id, note: '一致性测试' }] },
   );
   assert(firstOrder.status === 201, '普通成员可以点菜');
+  assert(
+    !('pinHash' in firstOrder.body.data.chef) &&
+      firstOrder.body.data.items.every(
+        (item) => !('pinHash' in item.requestedBy),
+      ),
+    '菜单成员关系不会泄露 PIN 哈希',
+  );
 
   const duplicate = await request(
     `/menus/${menu.id}/items`,
@@ -203,8 +243,10 @@ try {
     { status: 'done' },
   );
   assert(
-    memberStatus.status === 200 && acceptedAgain.status === 200,
-    '所有家庭成员都能接单，重复提交当前状态保持幂等',
+    memberStatus.status === 200 &&
+      memberStatus.body.data.assignedTo.id === member.id &&
+      acceptedAgain.status === 200,
+    '所有家庭成员都能认领菜品，认领人会被记录且重复提交保持幂等',
   );
   assert(skipped.status === 409, '不能跳过制作状态直接完成');
 
@@ -231,21 +273,87 @@ try {
   const secondItem = secondOrder.body.data.items.find(
     (item) => item.dishId === dishes[1].id && item.status === 'pending',
   );
-  const rejected = await request(
+  const secondClaim = await request(
     `/menu-items/${secondItem.id}`,
-    memberToken,
+    chefToken,
+    'PATCH',
+    { status: 'accepted' },
+  );
+  const missingReason = await request(
+    `/menu-items/${secondItem.id}`,
+    chefToken,
     'PATCH',
     { status: 'rejected' },
   );
-  const restored = await request(
+  const rejected = await request(
     `/menu-items/${secondItem.id}`,
     chefToken,
+    'PATCH',
+    { status: 'rejected', reason: '临时调整菜单' },
+  );
+  assert(
+    secondClaim.status === 200 &&
+      secondClaim.body.data.assignedTo.id === chef.id &&
+      missingReason.status === 400 &&
+      rejected.status === 200 &&
+      rejected.body.data.statusReason === '临时调整菜单',
+    '已接单的菜必须填写原因才能划掉，并保留原因',
+  );
+
+  const menuEvents = await request(
+    `/menus/${menu.id}/events`,
+    memberToken,
+  );
+  assert(
+    menuEvents.status === 200 &&
+      menuEvents.body.data.some(
+        (event) =>
+          event.menuItemId === secondItem.id &&
+          event.type === 'item_status_changed' &&
+          event.toValue === 'rejected' &&
+          event.reason === '临时调整菜单' &&
+          event.actor.id === chef.id,
+      ),
+    '菜单历史记录操作人、状态、原因和时间',
+  );
+  const notifications = await request('/menu-notifications', memberToken);
+  const notification = notifications.body.data.find(
+    (event) => event.menuItemId === secondItem.id,
+  );
+  assert(notification, '点菜人收到划掉提醒');
+  const crossRead = await request(
+    `/menu-notifications/${notification.id}/read`,
+    chefToken,
+    'PATCH',
+  );
+  const markedRead = await request(
+    `/menu-notifications/${notification.id}/read`,
+    memberToken,
+    'PATCH',
+  );
+  const notificationsAfterRead = await request(
+    '/menu-notifications',
+    memberToken,
+  );
+  assert(
+    notifications.status === 200 &&
+      notification.reason === '临时调整菜单' &&
+      crossRead.status === 404 &&
+      markedRead.status === 200 &&
+      !notificationsAfterRead.body.data.some(
+        (event) => event.id === notification.id,
+      ),
+    '划掉提醒只对点菜人可见并可标记已读',
+  );
+
+  const restored = await request(
+    `/menu-items/${secondItem.id}`,
+    memberToken,
     'PATCH',
     { status: 'pending' },
   );
   assert(
-    rejected.status === 200 &&
-      restored.status === 200 &&
+    restored.status === 200 &&
       restored.body.data.status === 'pending',
     '划掉的菜可以恢复为待接单',
   );
@@ -298,6 +406,88 @@ try {
     { note: '不应写入' },
   );
   assert(crossNote.status === 403, '家庭成员不能修改其他人的点菜备注');
+
+  const lockMenu = (
+    await request(
+      `/menus?date=${LOCK_TEST_DATE}&mealType=dinner`,
+      memberToken,
+    )
+  ).body.data;
+  const lockOrder = await request(
+    `/menus/${lockMenu.id}/items`,
+    memberToken,
+    'POST',
+    { items: [{ dishId: dishes[0].id }] },
+  );
+  const lockItem = lockOrder.body.data.items.find(
+    (item) => item.dishId === dishes[0].id,
+  );
+  const prematureComplete = await request(
+    `/menus/${lockMenu.id}/complete`,
+    memberToken,
+    'POST',
+  );
+  await request(`/menus/${lockMenu.id}/chef`, memberToken, 'PATCH', {
+    chefId: chef.id,
+  });
+  await request(`/menu-items/${lockItem.id}`, chefToken, 'PATCH', {
+    status: 'accepted',
+  });
+  await request(`/menu-items/${lockItem.id}`, chefToken, 'PATCH', {
+    status: 'cooking',
+  });
+  const cookingCancellationWithoutReason = await request(
+    `/menu-items/${lockItem.id}`,
+    memberToken,
+    'PATCH',
+    { status: 'rejected' },
+  );
+  await request(`/menu-items/${lockItem.id}`, chefToken, 'PATCH', {
+    status: 'done',
+  });
+  const completedMenu = await request(
+    `/menus/${lockMenu.id}/complete`,
+    memberToken,
+    'POST',
+  );
+  assert(
+    prematureComplete.status === 409 &&
+      cookingCancellationWithoutReason.status === 400 &&
+      completedMenu.status === 201 &&
+      completedMenu.body.data.status === 'done' &&
+      completedMenu.body.data.completedBy.id === member.id,
+    '全部有效菜品上桌后才能结束本餐，制作中取消也必须填写原因',
+  );
+
+  const lockedAdd = await request(
+    `/menus/${lockMenu.id}/items`,
+    memberToken,
+    'POST',
+    { items: [{ dishId: dishes[1].id }] },
+  );
+  const lockedUpdate = await request(
+    `/menu-items/${lockItem.id}`,
+    memberToken,
+    'PATCH',
+    { note: '不应写入' },
+  );
+  const lockedChef = await request(
+    `/menus/${lockMenu.id}/chef`,
+    memberToken,
+    'PATCH',
+    { chefId: null },
+  );
+  const lockEvents = await request(
+    `/menus/${lockMenu.id}/events`,
+    memberToken,
+  );
+  assert(
+    lockedAdd.status === 409 &&
+      lockedUpdate.status === 409 &&
+      lockedChef.status === 409 &&
+      lockEvents.body.data.some((event) => event.type === 'menu_completed'),
+    '结束后菜单、菜品状态和主厨均锁定，完成动作保留在历史中',
+  );
 
   const dishBefore = dishes.find((dish) => dish.ingredients.length >= 1);
   const ingredientsBefore = comparableIngredients(dishBefore);
@@ -402,8 +592,8 @@ try {
   await db.query(
     `DELETE FROM menus WHERE "householdId" = (
        SELECT "householdId" FROM members WHERE id = $1
-     ) AND date = $2`,
-    [memberId, TEST_DATE],
+     ) AND date IN ($2, $3)`,
+    [memberId, TEST_DATE, LOCK_TEST_DATE],
   );
   if (memberId) {
     await db.query('UPDATE members SET "pinHash" = $1 WHERE id = $2', [

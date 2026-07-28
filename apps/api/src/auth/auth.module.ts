@@ -4,6 +4,7 @@ import {
   Get,
   Module,
   NotFoundException,
+  Patch,
   Post,
   UnauthorizedException,
   UseGuards,
@@ -12,13 +13,19 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { Repository } from 'typeorm';
 import { verifyPin } from '../common/pin';
 import { DEFAULT_HOUSEHOLD_ID } from '../database/database.constants';
 import { Member } from '../entities';
 import { CapabilitiesGuard } from './capabilities';
-import { JwtAuthGuard, Public } from './jwt.guard';
+import { CurrentUser, JwtAuthGuard, JwtUser, Public } from './jwt.guard';
 
 class LoginDto {
   @IsUUID()
@@ -28,6 +35,11 @@ class LoginDto {
   @IsString()
   @MaxLength(64)
   pin?: string;
+}
+
+class UpdatePreferencesDto {
+  @IsBoolean()
+  prefersCooking: boolean;
 }
 
 function jwtSecret() {
@@ -52,6 +64,16 @@ export class AuthController {
     const list = await this.members.find({
       where: { householdId: DEFAULT_HOUSEHOLD_ID },
       order: { createdAt: 'ASC' },
+      select: {
+        id: true,
+        householdId: true,
+        name: true,
+        avatarEmoji: true,
+        role: true,
+        prefersCooking: true,
+        pinHash: true,
+        createdAt: true,
+      },
     });
     return list.map(({ pinHash, ...m }) => ({ ...m, hasPin: !!pinHash }));
   }
@@ -60,9 +82,21 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Post('auth/login')
   async login(@Body() dto: LoginDto) {
-    const member = await this.members.findOneBy({
-      id: dto.memberId,
-      householdId: DEFAULT_HOUSEHOLD_ID,
+    const member = await this.members.findOne({
+      where: {
+        id: dto.memberId,
+        householdId: DEFAULT_HOUSEHOLD_ID,
+      },
+      select: {
+        id: true,
+        householdId: true,
+        name: true,
+        avatarEmoji: true,
+        role: true,
+        prefersCooking: true,
+        pinHash: true,
+        createdAt: true,
+      },
     });
     if (!member) throw new NotFoundException('成员不存在');
     if (member.pinHash && !(await verifyPin(dto.pin ?? '', member.pinHash))) {
@@ -77,6 +111,20 @@ export class AuthController {
     });
     const { pinHash, ...profile } = member;
     return { token, member: profile };
+  }
+
+  @Patch('members/me/preferences')
+  async updatePreferences(
+    @Body() dto: UpdatePreferencesDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    const member = await this.members.findOneBy({
+      id: user.memberId,
+      householdId: user.householdId,
+    });
+    if (!member) throw new NotFoundException('成员不存在');
+    member.prefersCooking = dto.prefersCooking;
+    return this.members.save(member);
   }
 }
 

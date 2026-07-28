@@ -1,6 +1,13 @@
-export type MemberRole = 'chef' | 'member';
+export type MemberRole = 'owner' | 'admin' | 'member';
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
 export type MenuItemStatus = 'pending' | 'accepted' | 'cooking' | 'done' | 'rejected';
+export type MenuEventType =
+  | 'item_ordered'
+  | 'item_status_changed'
+  | 'item_assigned'
+  | 'item_note_changed'
+  | 'meal_chef_assigned'
+  | 'menu_completed';
 export type DishCategory = '荤菜' | '素菜' | '汤' | '主食' | '甜品';
 export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
 
@@ -20,6 +27,7 @@ export interface Member {
   name: string;
   avatarEmoji: string;
   role: MemberRole;
+  prefersCooking: boolean;
   hasPin?: boolean;
 }
 
@@ -57,8 +65,12 @@ export interface MenuItem {
   dishId: string;
   dish: Dish;
   requestedBy: Member;
+  assignedTo: Member | null;
+  assignedToId: string | null;
   note: string | null;
   status: MenuItemStatus;
+  statusReason: string | null;
+  createdAt: string;
 }
 
 export interface Menu {
@@ -66,7 +78,27 @@ export interface Menu {
   date: string;
   mealType: MealType;
   status: 'open' | 'done';
+  chef: Member | null;
+  chefId: string | null;
+  completedAt: string | null;
+  completedBy: Member | null;
   items: MenuItem[];
+}
+
+export interface MenuEvent {
+  id: string;
+  menuId: string;
+  menu: Menu;
+  menuItemId: string | null;
+  menuItem: MenuItem | null;
+  actor: Member;
+  recipientId: string | null;
+  type: MenuEventType;
+  fromValue: string | null;
+  toValue: string | null;
+  reason: string | null;
+  readAt: string | null;
+  createdAt: string;
 }
 
 export interface ShoppingItem {

@@ -77,7 +77,8 @@ async function main() {
         householdId: household.id,
         name: '爸爸',
         avatarEmoji: '👨‍🍳',
-        role: 'chef',
+        role: 'owner',
+        prefersCooking: true,
       }),
       members.create({
         householdId: household.id,
@@ -86,7 +87,7 @@ async function main() {
         role: 'member',
       }),
     ]);
-    console.log('成员 ✓ 爸爸(掌勺) / 妈妈');
+    console.log('成员 ✓ 爸爸(家庭管理员，经常掌勺) / 妈妈');
   }
 
   const ingredients = AppDataSource.getRepository(Ingredient);

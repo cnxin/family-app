@@ -19,7 +19,14 @@ export type Capability =
   | 'manage_inventory';
 
 const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
-  chef: new Set([
+  owner: new Set([
+    'place_meal_order',
+    'update_meal_status',
+    'manage_recipes',
+    'manage_shopping',
+    'manage_inventory',
+  ]),
+  admin: new Set([
     'place_meal_order',
     'update_meal_status',
     'manage_recipes',

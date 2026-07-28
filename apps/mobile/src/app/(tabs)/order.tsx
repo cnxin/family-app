@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import {
   Check,
   Clock3,
+  LockKeyhole,
   Plus,
   Search,
   ShoppingBasket,
@@ -31,14 +32,22 @@ import { Card, PrimaryButton, Segmented } from '../../components/ui';
 import { api, photoUri } from '../../lib/api';
 import { useCart } from '../../lib/cart';
 import { mealLabel, relativeDateLabel } from '../../lib/date';
-import { useAddMenuItems, useDishes } from '../../lib/queries';
+import { useAddMenuItems, useDishes, useMenu } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../lib/theme';
 import type { Dish, Menu } from '../../lib/types';
 
 const CATEGORIES = ['全部', '荤菜', '素菜', '汤', '主食', '甜品'];
 
-function CartPanel({ onSubmit, submitting }: { onSubmit: () => void; submitting: boolean }) {
+function CartPanel({
+  locked,
+  onSubmit,
+  submitting,
+}: {
+  locked: boolean;
+  onSubmit: () => void;
+  submitting: boolean;
+}) {
   const c = useTheme();
   const cart = useCart();
 
@@ -113,9 +122,9 @@ function CartPanel({ onSubmit, submitting }: { onSubmit: () => void; submitting:
           </Pressable>
         ) : null}
         <PrimaryButton
-          title="提交菜单"
+          title={locked ? '本餐已结束' : '提交菜单'}
           onPress={onSubmit}
-          disabled={!cart.entries.length}
+          disabled={!cart.entries.length || locked}
           loading={submitting}
           icon={!submitting ? <Check color="#FFFFFF" size={18} /> : undefined}
         />
@@ -132,11 +141,13 @@ export default function OrderScreen() {
   const { member } = useSession();
   const cart = useCart();
   const { data: dishes, isLoading, error } = useDishes();
+  const { data: targetMenu } = useMenu(cart.date, cart.mealType);
   const addItems = useAddMenuItems();
   const [category, setCategory] = useState('全部');
   const [search, setSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const columns = desktop ? (width >= 1720 ? 4 : 3) : 2;
+  const menuLocked = targetMenu?.status === 'done';
 
   const filtered = useMemo(() => {
     let list = dishes ?? [];
@@ -147,6 +158,10 @@ export default function OrderScreen() {
 
   const submit = async () => {
     if (!cart.entries.length) return;
+    if (menuLocked) {
+      Alert.alert('本餐已结束', '历史菜单已经锁定，不能继续加菜');
+      return;
+    }
     setSubmitting(true);
     try {
       const menu = await api<Menu>(
@@ -228,6 +243,7 @@ export default function OrderScreen() {
           <Pressable
             accessibilityLabel={inCart ? `移除${item.name}` : `添加${item.name}`}
             accessibilityRole="button"
+            disabled={menuLocked}
             onPress={() => {
               void Haptics.selectionAsync();
               if (inCart) cart.remove(item.id);
@@ -238,6 +254,7 @@ export default function OrderScreen() {
               {
                 backgroundColor: inCart ? c.tint : pressed ? c.tintSoft : c.card,
                 borderColor: inCart ? c.tint : c.separator,
+                opacity: menuLocked ? 0.45 : 1,
               },
             ]}
           >
@@ -298,6 +315,20 @@ export default function OrderScreen() {
             />
           </View>
         </View>
+
+        {menuLocked ? (
+          <View
+            style={[
+              styles.lockNotice,
+              { backgroundColor: c.fill, borderColor: c.separator },
+            ]}
+          >
+            <LockKeyhole color={c.secondaryLabel} size={17} />
+            <Text style={[t.subhead, { color: c.secondaryLabel }]}>
+              这餐已经结束，菜单仅供查看
+            </Text>
+          </View>
+        ) : null}
 
         <ScrollView
           horizontal
@@ -366,7 +397,13 @@ export default function OrderScreen() {
             )}
           </View>
 
-          {desktop ? <CartPanel onSubmit={() => void submit()} submitting={submitting} /> : null}
+          {desktop ? (
+            <CartPanel
+              locked={menuLocked}
+              onSubmit={() => void submit()}
+              submitting={submitting}
+            />
+          ) : null}
         </View>
 
         {!desktop && cart.entries.length ? (
@@ -386,15 +423,29 @@ export default function OrderScreen() {
             <Pressable
               accessibilityRole="button"
               onPress={() => void submit()}
-              disabled={submitting}
-              style={[styles.mobileSubmit, { backgroundColor: c.tint }]}
+              disabled={submitting || menuLocked}
+              style={[
+                styles.mobileSubmit,
+                {
+                  backgroundColor: c.tint,
+                  opacity: menuLocked ? 0.45 : 1,
+                },
+              ]}
             >
               {submitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Check color="#FFFFFF" size={17} />
-                  <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>提交</Text>
+                  {menuLocked ? (
+                    <LockKeyhole color="#FFFFFF" size={17} />
+                  ) : (
+                    <Check color="#FFFFFF" size={17} />
+                  )}
+                  <Text
+                    style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}
+                  >
+                    {menuLocked ? '已结束' : '提交'}
+                  </Text>
                 </>
               )}
             </Pressable>
@@ -423,6 +474,16 @@ const styles = StyleSheet.create({
   },
   controls: { gap: 10, marginTop: 16 },
   controlsDesktop: { flexDirection: 'row', alignItems: 'center' },
+  lockNotice: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   mealGroup: { width: 270, maxWidth: '100%' },
   searchBox: {
     height: 40,

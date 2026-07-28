@@ -209,6 +209,7 @@ export function ConfirmDialog({
   message,
   confirmLabel = '确认',
   loading,
+  destructive = true,
   onCancel,
   onConfirm,
 }: {
@@ -217,6 +218,7 @@ export function ConfirmDialog({
   message: string;
   confirmLabel?: string;
   loading?: boolean;
+  destructive?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -259,7 +261,10 @@ export function ConfirmDialog({
               accessibilityRole="button"
               disabled={loading}
               onPress={onConfirm}
-              style={[styles.dialogButton, { backgroundColor: c.red }]}
+              style={[
+                styles.dialogButton,
+                { backgroundColor: destructive ? c.red : c.tint },
+              ]}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />

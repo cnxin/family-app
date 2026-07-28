@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -22,12 +23,21 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { DataSource, In, Not, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
 import { assertCapability, RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { Dish, MealType, Menu, MenuItem, MenuItemStatus } from '../entities';
+import {
+  Dish,
+  MealType,
+  Member,
+  Menu,
+  MenuEvent,
+  MenuItem,
+  MenuItemStatus,
+} from '../entities';
 
 class OrderItemDto {
   @IsUUID()
@@ -35,6 +45,7 @@ class OrderItemDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   note?: string;
 }
 
@@ -53,7 +64,23 @@ class UpdateItemDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   note?: string;
+
+  @IsOptional()
+  @IsUUID()
+  assignedToId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  reason?: string;
+}
+
+class AssignChefDto {
+  @IsOptional()
+  @IsUUID()
+  chefId?: string | null;
 }
 
 class MenuDateRangeDto {
@@ -79,7 +106,7 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
 > = {
   pending: ['accepted', 'rejected'],
   accepted: ['cooking', 'rejected'],
-  cooking: ['done'],
+  cooking: ['done', 'rejected'],
   done: [],
   rejected: ['pending'],
 };
@@ -93,11 +120,19 @@ function isUniqueViolation(error: unknown) {
   return candidate.code === '23505' || candidate.driverError?.code === '23505';
 }
 
+function assertMenuOpen(menu: Menu) {
+  if (menu.status === 'done') {
+    throw new ConflictException('这餐已经结束，历史菜单不能再修改');
+  }
+}
+
 @Injectable()
 export class MenusService {
   constructor(
     @InjectRepository(Menu) private readonly menus: Repository<Menu>,
     @InjectRepository(MenuItem) private readonly items: Repository<MenuItem>,
+    @InjectRepository(MenuEvent)
+    private readonly events: Repository<MenuEvent>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -167,8 +202,15 @@ export class MenusService {
         const menus = manager.getRepository(Menu);
         const items = manager.getRepository(MenuItem);
         const dishes = manager.getRepository(Dish);
-        const menu = await menus.findOneBy({ id: menuId, householdId });
+        const events = manager.getRepository(MenuEvent);
+        const menu = await menus
+          .createQueryBuilder('menu')
+          .where('menu.id = :menuId', { menuId })
+          .andWhere('menu.householdId = :householdId', { householdId })
+          .setLock('pessimistic_write')
+          .getOne();
         if (!menu) throw new NotFoundException('菜单不存在');
+        assertMenuOpen(menu);
         menuDate = menu.date;
         menuMealType = menu.mealType;
 
@@ -196,13 +238,25 @@ export class MenusService {
           throw new ConflictException('这餐已经点过所选菜品，请勿重复提交');
         }
 
-        await items.save(
+        const savedItems = await items.save(
           dto.items.map((item) =>
             items.create({
               menuId,
               dishId: item.dishId,
               requestedById: userId,
-              note: item.note ?? null,
+              note: item.note?.trim() || null,
+            }),
+          ),
+        );
+        await events.save(
+          savedItems.map((item) =>
+            events.create({
+              householdId,
+              menuId,
+              menuItemId: item.id,
+              actorId: userId,
+              type: 'item_ordered',
+              toValue: 'pending',
             }),
           ),
         );
@@ -221,9 +275,11 @@ export class MenusService {
     try {
       return await this.dataSource.transaction(async (manager) => {
         const items = manager.getRepository(MenuItem);
+        const members = manager.getRepository(Member);
+        const events = manager.getRepository(MenuEvent);
         const item = await items
           .createQueryBuilder('item')
-          .innerJoin('item.menu', 'menu')
+          .innerJoinAndSelect('item.menu', 'menu')
           .where('item.id = :id', { id })
           .andWhere('menu.householdId = :householdId', {
             householdId: user.householdId,
@@ -231,26 +287,134 @@ export class MenusService {
           .setLock('pessimistic_write')
           .getOne();
         if (!item) throw new NotFoundException('这道菜不在菜单里');
+        assertMenuOpen(item.menu);
 
+        const previousStatus = item.status;
+        const nextStatus = dto.status ?? previousStatus;
+        const reason = dto.reason?.trim() || null;
         if (dto.status != null) {
           assertCapability(user, 'update_meal_status');
           if (
-            dto.status !== item.status &&
-            !ALLOWED_STATUS_TRANSITIONS[item.status].includes(dto.status)
+            nextStatus !== previousStatus &&
+            !ALLOWED_STATUS_TRANSITIONS[previousStatus].includes(nextStatus)
           ) {
             throw new ConflictException(
-              `不能从「${item.status}」直接变更为「${dto.status}」`,
+              `不能从「${previousStatus}」直接变更为「${nextStatus}」`,
             );
           }
-          item.status = dto.status;
+          if (
+            nextStatus === 'rejected' &&
+            (previousStatus === 'accepted' || previousStatus === 'cooking') &&
+            !reason
+          ) {
+            throw new BadRequestException('已接单或制作中的菜需要填写划掉原因');
+          }
+        }
+
+        const assignmentProvided = Object.prototype.hasOwnProperty.call(
+          dto,
+          'assignedToId',
+        );
+        if (
+          assignmentProvided &&
+          nextStatus !== 'pending' &&
+          nextStatus !== 'accepted' &&
+          nextStatus !== 'rejected'
+        ) {
+          throw new ConflictException('只有待接单或已接单的菜可以调整认领人');
+        }
+
+        const previousAssigneeId = item.assignedToId;
+        let nextAssigneeId = previousAssigneeId;
+        let nextAssigneeName: string | null = null;
+        if (assignmentProvided) {
+          nextAssigneeId = dto.assignedToId ?? null;
+          if (nextAssigneeId) {
+            const assignee = await members.findOneBy({
+              id: nextAssigneeId,
+              householdId: user.householdId,
+            });
+            if (!assignee) throw new NotFoundException('认领成员不存在');
+            nextAssigneeName = assignee.name;
+          }
+        }
+        if (
+          nextStatus === 'accepted' &&
+          previousStatus === 'pending' &&
+          !assignmentProvided
+        ) {
+          nextAssigneeId = user.memberId;
+          nextAssigneeName = user.name;
+        }
+        if (nextStatus === 'rejected' || nextStatus === 'pending') {
+          nextAssigneeId = null;
+          nextAssigneeName = null;
+        }
+
+        const pendingEvents: MenuEvent[] = [];
+        if (nextAssigneeId !== previousAssigneeId) {
+          const previousAssignee = previousAssigneeId
+            ? await members.findOneBy({
+                id: previousAssigneeId,
+                householdId: user.householdId,
+              })
+            : null;
+          item.assignedToId = nextAssigneeId;
+          pendingEvents.push(
+            events.create({
+              householdId: user.householdId,
+              menuId: item.menuId,
+              menuItemId: item.id,
+              actorId: user.memberId,
+              type: 'item_assigned',
+              fromValue: previousAssignee?.name ?? null,
+              toValue: nextAssigneeName,
+            }),
+          );
+        }
+
+        if (nextStatus !== previousStatus) {
+          item.status = nextStatus;
+          item.statusReason = nextStatus === 'rejected' ? reason : null;
+          pendingEvents.push(
+            events.create({
+              householdId: user.householdId,
+              menuId: item.menuId,
+              menuItemId: item.id,
+              actorId: user.memberId,
+              recipientId:
+                nextStatus === 'rejected' &&
+                item.requestedById !== user.memberId
+                  ? item.requestedById
+                  : null,
+              type: 'item_status_changed',
+              fromValue: previousStatus,
+              toValue: nextStatus,
+              reason: nextStatus === 'rejected' ? reason : null,
+            }),
+          );
         }
         if (dto.note != null) {
           if (item.requestedById !== user.memberId) {
             throw new ForbiddenException('只能修改自己点菜的备注');
           }
-          item.note = dto.note;
+          const note = dto.note.trim() || null;
+          if (note !== item.note) {
+            item.note = note;
+            pendingEvents.push(
+              events.create({
+                householdId: user.householdId,
+                menuId: item.menuId,
+                menuItemId: item.id,
+                actorId: user.memberId,
+                type: 'item_note_changed',
+              }),
+            );
+          }
         }
+
         await items.save(item);
+        if (pendingEvents.length) await events.save(pendingEvents);
         const saved = await items.findOne({ where: { id } });
         if (!saved) throw new NotFoundException('这道菜不在菜单里');
         return saved;
@@ -261,6 +425,140 @@ export class MenusService {
       }
       throw error;
     }
+  }
+
+  async assignChef(menuId: string, chefId: string | null, user: JwtUser) {
+    let menuDate = '';
+    let menuMealType: MealType = 'dinner';
+    await this.dataSource.transaction(async (manager) => {
+      const menus = manager.getRepository(Menu);
+      const members = manager.getRepository(Member);
+      const events = manager.getRepository(MenuEvent);
+      const menu = await menus
+        .createQueryBuilder('menu')
+        .where('menu.id = :menuId', { menuId })
+        .andWhere('menu.householdId = :householdId', {
+          householdId: user.householdId,
+        })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!menu) throw new NotFoundException('菜单不存在');
+      assertMenuOpen(menu);
+      menuDate = menu.date;
+      menuMealType = menu.mealType;
+
+      const previousChef = menu.chefId
+        ? await members.findOneBy({
+            id: menu.chefId,
+            householdId: user.householdId,
+          })
+        : null;
+      const nextChef = chefId
+        ? await members.findOneBy({
+            id: chefId,
+            householdId: user.householdId,
+          })
+        : null;
+      if (chefId && !nextChef) throw new NotFoundException('主厨成员不存在');
+      if (menu.chefId === chefId) return;
+
+      menu.chefId = chefId;
+      await menus.save(menu);
+      await events.save(
+        events.create({
+          householdId: user.householdId,
+          menuId: menu.id,
+          actorId: user.memberId,
+          type: 'meal_chef_assigned',
+          fromValue: previousChef?.name ?? null,
+          toValue: nextChef?.name ?? null,
+        }),
+      );
+    });
+    return this.findOrCreate(user.householdId, menuDate, menuMealType);
+  }
+
+  async complete(menuId: string, user: JwtUser) {
+    let menuDate = '';
+    let menuMealType: MealType = 'dinner';
+    await this.dataSource.transaction(async (manager) => {
+      const menus = manager.getRepository(Menu);
+      const items = manager.getRepository(MenuItem);
+      const events = manager.getRepository(MenuEvent);
+      const menu = await menus
+        .createQueryBuilder('menu')
+        .where('menu.id = :menuId', { menuId })
+        .andWhere('menu.householdId = :householdId', {
+          householdId: user.householdId,
+        })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!menu) throw new NotFoundException('菜单不存在');
+      menuDate = menu.date;
+      menuMealType = menu.mealType;
+      if (menu.status === 'done') return;
+
+      const menuItems = await items.findBy({ menuId });
+      const activeItems = menuItems.filter((item) => item.status !== 'rejected');
+      if (!activeItems.length) {
+        throw new ConflictException('菜单里还没有可完成的菜');
+      }
+      if (activeItems.some((item) => item.status !== 'done')) {
+        throw new ConflictException('还有菜没有上桌，暂时不能结束本餐');
+      }
+
+      menu.status = 'done';
+      menu.completedAt = new Date();
+      menu.completedById = user.memberId;
+      await menus.save(menu);
+      await events.save(
+        events.create({
+          householdId: user.householdId,
+          menuId: menu.id,
+          actorId: user.memberId,
+          type: 'menu_completed',
+          fromValue: 'open',
+          toValue: 'done',
+        }),
+      );
+    });
+    return this.findOrCreate(user.householdId, menuDate, menuMealType);
+  }
+
+  async listEvents(menuId: string, householdId: string) {
+    const exists = await this.menus.existsBy({ id: menuId, householdId });
+    if (!exists) throw new NotFoundException('菜单不存在');
+    return this.events.find({
+      where: { menuId, householdId },
+      order: { createdAt: 'DESC' },
+      take: 30,
+    });
+  }
+
+  listNotifications(user: JwtUser) {
+    return this.events.find({
+      where: {
+        householdId: user.householdId,
+        recipientId: user.memberId,
+        readAt: IsNull(),
+      },
+      order: { createdAt: 'DESC' },
+      take: 20,
+    });
+  }
+
+  async markNotificationRead(id: string, user: JwtUser) {
+    const event = await this.events.findOneBy({
+      id,
+      householdId: user.householdId,
+      recipientId: user.memberId,
+    });
+    if (!event) throw new NotFoundException('提醒不存在');
+    if (!event.readAt) {
+      event.readAt = new Date();
+      await this.events.save(event);
+    }
+    return event;
   }
 }
 
@@ -273,7 +571,6 @@ export class MenusController {
     return this.service.listDateCounts(user.householdId, query.start, query.end);
   }
 
-  // GET /menus?date=2026-07-26 -> [早餐, 午餐, 晚餐]；带 mealType 只返回一个
   @Get('menus')
   async get(@CurrentUser() user: JwtUser, @Query() query: MenuQueryDto) {
     if (query.mealType) {
@@ -293,7 +590,7 @@ export class MenusController {
     @Body() dto: AddItemsDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.addItems(id, dto, user.householdId, user.sub);
+    return this.service.addItems(id, dto, user.householdId, user.memberId);
   }
 
   @Patch('menu-items/:id')
@@ -304,10 +601,47 @@ export class MenusController {
   ) {
     return this.service.updateItem(id, dto, user);
   }
+
+  @Patch('menus/:id/chef')
+  @RequireCapabilities('update_meal_status')
+  assignChef(
+    @Param('id') id: string,
+    @Body() dto: AssignChefDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!Object.prototype.hasOwnProperty.call(dto, 'chefId')) {
+      throw new BadRequestException('需要指定主厨成员或明确设为未指定');
+    }
+    return this.service.assignChef(id, dto.chefId ?? null, user);
+  }
+
+  @Post('menus/:id/complete')
+  @RequireCapabilities('update_meal_status')
+  complete(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.complete(id, user);
+  }
+
+  @Get('menus/:id/events')
+  events(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.listEvents(id, user.householdId);
+  }
+
+  @Get('menu-notifications')
+  notifications(@CurrentUser() user: JwtUser) {
+    return this.service.listNotifications(user);
+  }
+
+  @Patch('menu-notifications/:id/read')
+  markNotificationRead(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.markNotificationRead(id, user);
+  }
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Menu, MenuItem])],
+  imports: [TypeOrmModule.forFeature([Menu, MenuItem, MenuEvent, Member])],
   controllers: [MenusController],
   providers: [MenusService],
   exports: [MenusService],

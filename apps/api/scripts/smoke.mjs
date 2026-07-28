@@ -1,4 +1,4 @@
-// 冒烟测试：妈妈点 3 道菜 → 爸爸接单 2 道 → 生成购物清单 → 验证合并与常备过滤
+// 冒烟测试：妈妈点 3 道菜 → 家人认领 2 道 → 生成购物清单 → 验证合并与常备过滤
 const BASE = process.env.API_URL || 'http://localhost:3100';
 const today = process.env.SMOKE_DATE || new Date().toISOString().slice(0, 10);
 
@@ -24,14 +24,20 @@ function assert(cond, msg) {
 
 const members = await api('/members');
 const mom = members.find((m) => m.name === '妈妈');
-const dad = members.find((m) => m.role === 'chef');
+const dad = members.find((m) => m.prefersCooking) ?? members[0];
 
 console.log('0. 清场：划掉今天已有的菜（保证可重复跑）');
 ({ token } = await api('/auth/login', 'POST', { memberId: dad.id }));
 for (const meal of await api(`/menus?date=${today}`)) {
   for (const item of meal.items) {
-    if (item.status !== 'rejected') {
-      await api(`/menu-items/${item.id}`, 'PATCH', { status: 'rejected' });
+    if (item.status !== 'rejected' && item.status !== 'done') {
+      await api(`/menu-items/${item.id}`, 'PATCH', {
+        status: 'rejected',
+        reason:
+          item.status === 'accepted' || item.status === 'cooking'
+            ? '冒烟测试清场'
+            : undefined,
+      });
     }
   }
 }
@@ -57,7 +63,7 @@ const menuAfter = await api(`/menus?date=${today}&mealType=dinner`);
 assert(menuAfter.items.length >= 3, `晚餐菜单有 ${menuAfter.items.length} 道菜`);
 assert(menuAfter.items.some((i) => i.note === '少辣'), '备注「少辣」已保存');
 
-console.log('2. 爸爸登录接单');
+console.log('2. 家庭成员登录认领');
 ({ token } = await api('/auth/login', 'POST', { memberId: dad.id }));
 const ours = pick.map((dish) =>
   menuAfter.items.find(

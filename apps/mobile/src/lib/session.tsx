@@ -16,6 +16,7 @@ interface Session {
   ready: boolean;
   login: (memberId: string, pin?: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateMember: (member: Member) => Promise<void>;
 }
 
 const SessionContext = createContext<Session>(null as unknown as Session);
@@ -97,9 +98,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     ]);
   }, []);
 
+  const updateMember = useCallback(async (nextMember: Member) => {
+    setMember(nextMember);
+    await setStoredItem(MEMBER_KEY, JSON.stringify(nextMember));
+  }, []);
+
   const value = useMemo(
-    () => ({ member, ready, login, logout }),
-    [member, ready, login, logout],
+    () => ({ member, ready, login, logout, updateMember }),
+    [member, ready, login, logout, updateMember],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -4,6 +4,7 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -14,7 +15,12 @@ import {
   PressableScale,
   SectionHeader,
 } from '../../components/ui';
-import { useDishes, useRemoveDish } from '../../lib/queries';
+import { memberSubtitle } from '../../lib/member';
+import {
+  useDishes,
+  useRemoveDish,
+  useUpdateCookingPreference,
+} from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../lib/theme';
 
@@ -22,9 +28,10 @@ export default function ProfileScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
-  const { member, logout } = useSession();
+  const { member, logout, updateMember } = useSession();
   const { data: dishes } = useDishes();
   const removeDish = useRemoveDish();
+  const updatePreference = useUpdateCookingPreference();
 
   const confirmRemove = (id: string, name: string) => {
     Alert.alert('下架菜品', `「${name}」将不再出现在点菜列表里`, [
@@ -56,8 +63,41 @@ export default function ProfileScreen() {
           <View style={{ marginLeft: 14 }}>
             <Text style={[t.title2, { color: c.label }]}>{member?.name}</Text>
             <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 2 }]}>
-              {member?.role === 'chef' ? '经常掌勺 👨‍🍳' : '家庭成员'}
+              {member ? memberSubtitle(member) : '家庭成员'}
             </Text>
+          </View>
+        </Card>
+
+        <SectionHeader title="家庭偏好" />
+        <Card>
+          <View style={styles.preferenceRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[t.body, { color: c.label }]}>经常掌勺</Text>
+              <Text
+                style={[
+                  t.footnote,
+                  { color: c.secondaryLabel, marginTop: 3 },
+                ]}
+              >
+                {member?.prefersCooking ? '已标记' : '未标记'}
+              </Text>
+            </View>
+            <Switch
+              disabled={!member || updatePreference.isPending}
+              onValueChange={(prefersCooking) => {
+                updatePreference.mutate(prefersCooking, {
+                  onSuccess: (updated) => void updateMember(updated),
+                  onError: (error) =>
+                    Alert.alert(
+                      '更新失败',
+                      error instanceof Error ? error.message : '请稍后再试',
+                    ),
+                });
+              }}
+              trackColor={{ false: c.fillStrong, true: c.tintSoft }}
+              thumbColor={member?.prefersCooking ? c.tint : c.tertiaryLabel}
+              value={member?.prefersCooking ?? false}
+            />
           </View>
         </Card>
 
@@ -143,6 +183,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 18,
     marginTop: 16,
+  },
+  preferenceRow: {
+    minHeight: 64,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   dishRow: {
     flexDirection: 'row',

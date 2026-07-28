@@ -48,6 +48,7 @@ const ids = {
   dish: randomUUID(),
   menu: randomUUID(),
   menuItem: randomUUID(),
+  menuEvent: randomUUID(),
   shoppingItem: randomUUID(),
   inventoryItem: randomUUID(),
 };
@@ -86,6 +87,12 @@ try {
   await db.query(
     'INSERT INTO menu_items (id, "menuId", "dishId", "requestedById", status) VALUES ($1, $2, $3, $4, $5)',
     [ids.menuItem, ids.menu, ids.dish, ids.member, 'accepted'],
+  );
+  await db.query(
+    `INSERT INTO menu_events
+       (id, "householdId", "menuId", "menuItemId", "actorId", "recipientId", type, "toValue")
+     VALUES ($1, $2, $3, $4, $5, $5, 'item_status_changed', 'rejected')`,
+    [ids.menuEvent, ids.household, ids.menu, ids.menuItem, ids.member],
   );
   await db.query(
     'INSERT INTO shopping_items (id, "householdId", date, "customName", source) VALUES ($1, $2, $3, $4, $5)',
@@ -195,6 +202,34 @@ try {
   );
   assert(crossMenuItem.status === 404, '不能更新其他家庭菜单项');
 
+  const crossChef = await request(
+    `/menus/${ids.menu}/chef`,
+    defaultToken,
+    'PATCH',
+    { chefId: members.body.data[0].id },
+  );
+  const crossComplete = await request(
+    `/menus/${ids.menu}/complete`,
+    defaultToken,
+    'POST',
+  );
+  const crossEvents = await request(
+    `/menus/${ids.menu}/events`,
+    defaultToken,
+  );
+  const crossNotification = await request(
+    `/menu-notifications/${ids.menuEvent}/read`,
+    defaultToken,
+    'PATCH',
+  );
+  assert(
+    crossChef.status === 404 &&
+      crossComplete.status === 404 &&
+      crossEvents.status === 404 &&
+      crossNotification.status === 404,
+    '不能读取或操作其他家庭的主厨、历史、提醒和菜单锁定',
+  );
+
   const crossShopping = await request(
     `/shopping-items/${ids.shoppingItem}`,
     defaultToken,
@@ -216,6 +251,7 @@ try {
 
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
+  await db.query('DELETE FROM menu_events WHERE id = $1', [ids.menuEvent]);
   await db.query('DELETE FROM menu_items WHERE id = $1', [ids.menuItem]);
   await db.query('DELETE FROM shopping_items WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM inventory_items WHERE "householdId" = $1', [ids.household]);

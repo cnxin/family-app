@@ -15,6 +15,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDesktopLayout } from '../components/app-shell';
 import { PressableScale, PrimaryButton } from '../components/ui';
+import { memberSubtitle } from '../lib/member';
 import { useMembers } from '../lib/queries';
 import { useSession } from '../lib/session';
 import { radius, type as t, useTheme } from '../lib/theme';
@@ -85,7 +86,7 @@ export default function LoginScreen() {
             <View style={[styles.memberGrid, desktop && styles.memberGridDesktop]}>
               {members?.map((item, index) => {
                 const active = selected?.id === item.id;
-                const RoleIcon = item.role === 'chef' ? ChefHat : UserRound;
+                const RoleIcon = item.prefersCooking ? ChefHat : UserRound;
                 return (
                   <Animated.View
                     key={item.id}
@@ -115,7 +116,7 @@ export default function LoginScreen() {
                         <View style={styles.roleRow}>
                           <RoleIcon color={c.secondaryLabel} size={14} />
                           <Text style={[t.caption, { color: c.secondaryLabel }]}>
-                            {item.role === 'chef' ? '经常掌勺' : '家庭成员'}
+                            {memberSubtitle(item)}
                           </Text>
                         </View>
                       </View>

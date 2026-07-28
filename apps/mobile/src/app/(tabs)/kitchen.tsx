@@ -1,12 +1,24 @@
 import * as Haptics from 'expo-haptics';
-import { UtensilsCrossed } from 'lucide-react-native';
-import React, { useState } from 'react';
+import {
+  Bell,
+  Check,
+  ChefHat,
+  ChevronDown,
+  ChevronUp,
+  History,
+  LockKeyhole,
+  UtensilsCrossed,
+} from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -22,51 +34,207 @@ import {
 } from '../../components/ui';
 import { mealLabel, todayStr } from '../../lib/date';
 import {
+  useAssignMenuChef,
+  useCompleteMenu,
   useGenerateShoppingList,
+  useMarkMenuNotificationRead,
+  useMembers,
+  useMenuEvents,
+  useMenuNotifications,
   useMenusOfDate,
   useUpdateMenuItem,
 } from '../../lib/queries';
+import { useSession } from '../../lib/session';
 import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../lib/theme';
-import type { MenuItem, MenuItemStatus } from '../../lib/types';
+import type {
+  Member,
+  Menu,
+  MenuEvent,
+  MenuItem,
+  MenuItemStatus,
+} from '../../lib/types';
 
 const STATUS_META: Record<
   MenuItemStatus,
   { label: string; colorKey: 'orange' | 'tint' | 'green' | 'secondaryLabel' }
 > = {
-  pending: { label: '待接单', colorKey: 'orange' },
-  accepted: { label: '已接单', colorKey: 'tint' },
+  pending: { label: '待认领', colorKey: 'orange' },
+  accepted: { label: '已认领', colorKey: 'tint' },
   cooking: { label: '做菜中', colorKey: 'orange' },
   done: { label: '已上桌', colorKey: 'green' },
   rejected: { label: '已划掉', colorKey: 'secondaryLabel' },
 };
 
-// 每个状态可执行的下一步操作
-const ACTIONS: Partial<
-  Record<MenuItemStatus, { label: string; to: MenuItemStatus }[]>
-> = {
-  pending: [
-    { label: '接单', to: 'accepted' },
-    { label: '划掉', to: 'rejected' },
-  ],
-  accepted: [
-    { label: '开做', to: 'cooking' },
-    { label: '划掉', to: 'rejected' },
-  ],
-  cooking: [{ label: '上桌 ✓', to: 'done' }],
-  rejected: [{ label: '恢复', to: 'pending' }],
-};
+interface ItemAction {
+  key: string;
+  label: string;
+  status?: MenuItemStatus;
+  claim?: boolean;
+  destructive?: boolean;
+}
 
-function MenuItemRow({ item }: { item: MenuItem }) {
+function actionsFor(
+  item: MenuItem,
+  memberId: string,
+  locked: boolean,
+): ItemAction[] {
+  if (locked) return [];
+  if (item.status === 'pending') {
+    return [
+      { key: 'claim', label: '我来做', status: 'accepted', claim: true },
+      { key: 'reject', label: '划掉', status: 'rejected', destructive: true },
+    ];
+  }
+  if (item.status === 'accepted') {
+    return [
+      item.assignedToId === memberId
+        ? { key: 'cook', label: '开做', status: 'cooking' }
+        : { key: 'reclaim', label: '换我来做', claim: true },
+      { key: 'reject', label: '划掉', status: 'rejected', destructive: true },
+    ];
+  }
+  if (item.status === 'cooking') {
+    return [
+      { key: 'done', label: '上桌', status: 'done' },
+      { key: 'reject', label: '划掉', status: 'rejected', destructive: true },
+    ];
+  }
+  if (item.status === 'rejected') {
+    return [{ key: 'restore', label: '恢复', status: 'pending' }];
+  }
+  return [];
+}
+
+function RejectDialog({
+  item,
+  loading,
+  onCancel,
+  onConfirm,
+  visible,
+}: {
+  item: MenuItem;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+  visible: boolean;
+}) {
+  const c = useTheme();
+  const [reason, setReason] = useState('');
+  const reasonRequired = item.status === 'accepted' || item.status === 'cooking';
+  const valid = !reasonRequired || Boolean(reason.trim());
+
+  useEffect(() => {
+    if (visible) setReason('');
+  }, [visible]);
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={() => {
+        if (!loading) onCancel();
+      }}
+      transparent
+      visible={visible}
+    >
+      <View style={styles.dialogOverlay}>
+        <Pressable
+          accessibilityLabel="关闭划掉窗口"
+          accessibilityRole="button"
+          onPress={() => {
+            if (!loading) onCancel();
+          }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          accessibilityViewIsModal
+          style={[
+            styles.rejectDialog,
+            { backgroundColor: c.card, borderColor: c.separator },
+          ]}
+        >
+          <Text style={[t.title2, { color: c.label }]}>划掉「{item.dish.name}」？</Text>
+          <Text
+            style={[
+              t.subhead,
+              { color: c.secondaryLabel, marginTop: 8, lineHeight: 22 },
+            ]}
+          >
+            {reasonRequired
+              ? '这道菜已经有人准备，请填写原因。'
+              : '划掉后会移出有效菜单，之后仍可恢复。'}
+          </Text>
+          <TextInput
+            autoFocus
+            editable={!loading}
+            maxLength={200}
+            multiline
+            onChangeText={setReason}
+            placeholder={reasonRequired ? '填写划掉原因' : '原因（选填）'}
+            placeholderTextColor={c.tertiaryLabel}
+            style={[
+              styles.reasonInput,
+              {
+                backgroundColor: c.fill,
+                borderColor: c.separator,
+                color: c.label,
+              },
+            ]}
+            value={reason}
+          />
+          <View style={styles.dialogActions}>
+            <PressableScale
+              disabled={loading}
+              haptic={false}
+              onPress={onCancel}
+              style={[styles.dialogButton, { backgroundColor: c.fill }]}
+            >
+              <Text style={[t.headline, { color: c.label }]}>取消</Text>
+            </PressableScale>
+            <PressableScale
+              disabled={!valid || loading}
+              onPress={() => onConfirm(reason.trim())}
+              style={[
+                styles.dialogButton,
+                { backgroundColor: c.red, opacity: valid ? 1 : 0.4 },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={[t.headline, { color: '#FFFFFF' }]}>划掉</Text>
+              )}
+            </PressableScale>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function MenuItemRow({
+  item,
+  locked,
+  member,
+}: {
+  item: MenuItem;
+  locked: boolean;
+  member: Member;
+}) {
   const c = useTheme();
   const update = useUpdateMenuItem();
   const [confirmingReject, setConfirmingReject] = useState(false);
   const meta = STATUS_META[item.status];
   const dimmed = item.status === 'rejected';
+  const actions = actionsFor(item, member.id, locked);
 
-  const changeStatus = async (status: MenuItemStatus) => {
+  const applyChange = async (input: {
+    status?: MenuItemStatus;
+    assignedToId?: string;
+    reason?: string;
+  }) => {
     try {
-      await update.mutateAsync({ id: item.id, status });
-      if (status === 'done') {
+      await update.mutateAsync({ id: item.id, ...input });
+      if (input.status === 'done') {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success,
         );
@@ -77,16 +245,23 @@ function MenuItemRow({ item }: { item: MenuItem }) {
         error instanceof Error ? error.message : '请稍后再试',
       );
     } finally {
-      if (status === 'rejected') setConfirmingReject(false);
+      if (input.status === 'rejected') setConfirmingReject(false);
     }
   };
 
-  const selectAction = (status: MenuItemStatus) => {
-    if (status === 'rejected') {
+  const selectAction = (action: ItemAction) => {
+    if (action.destructive) {
       setConfirmingReject(true);
       return;
     }
-    void changeStatus(status);
+    if (action.claim) {
+      void applyChange({
+        assignedToId: member.id,
+        status: action.status,
+      });
+      return;
+    }
+    void applyChange({ status: action.status });
   };
 
   return (
@@ -103,7 +278,7 @@ function MenuItemRow({ item }: { item: MenuItem }) {
         <Text style={{ fontSize: 28 }}>
           {CATEGORY_EMOJI[item.dish.category] ?? '🍽️'}
         </Text>
-        <View style={{ flex: 1, marginLeft: 10 }}>
+        <View style={styles.itemDetails}>
           <Text
             style={[
               t.headline,
@@ -119,87 +294,421 @@ function MenuItemRow({ item }: { item: MenuItem }) {
             {item.requestedBy.avatarEmoji} {item.requestedBy.name} 点的
             {item.note ? ` · ${item.note}` : ''}
           </Text>
+          {item.statusReason ? (
+            <Text style={[t.caption, { color: c.red, marginTop: 3 }]}>
+              原因：{item.statusReason}
+            </Text>
+          ) : item.assignedTo ? (
+            <Text style={[t.caption, { color: c.tint, marginTop: 3 }]}>
+              {item.assignedTo.avatarEmoji} {item.assignedTo.name} 负责
+            </Text>
+          ) : null}
         </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+        <View style={styles.itemStatus}>
           <Text
             style={[t.caption, { color: c[meta.colorKey], fontWeight: '600' }]}
           >
             {meta.label}
           </Text>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {(ACTIONS[item.status] ?? []).map((action) => (
-              <PressableScale
-                key={action.to}
-                disabled={update.isPending}
-                onPress={() => selectAction(action.to)}
-                style={[
-                  styles.actionBtn,
-                  {
-                    backgroundColor:
-                      action.to === 'rejected' ? c.fill : c.tint,
-                    opacity: update.isPending ? 0.5 : 1,
-                  },
-                ]}
-              >
-                <Text
+          {actions.length ? (
+            <View style={styles.itemActions}>
+              {actions.map((action) => (
+                <PressableScale
+                  disabled={update.isPending}
+                  key={action.key}
+                  onPress={() => selectAction(action)}
                   style={[
-                    t.footnote,
+                    styles.actionBtn,
                     {
-                      color:
-                        action.to === 'rejected' ? c.secondaryLabel : '#FFF',
-                      fontWeight: '600',
+                      backgroundColor: action.destructive ? c.fill : c.tint,
+                      opacity: update.isPending ? 0.5 : 1,
                     },
                   ]}
                 >
-                  {action.label}
-                </Text>
-              </PressableScale>
-            ))}
-          </View>
+                  <Text
+                    style={[
+                      t.footnote,
+                      {
+                        color: action.destructive
+                          ? c.secondaryLabel
+                          : '#FFFFFF',
+                        fontWeight: '600',
+                      },
+                    ]}
+                  >
+                    {action.label}
+                  </Text>
+                </PressableScale>
+              ))}
+            </View>
+          ) : null}
         </View>
       </View>
 
-      <ConfirmDialog
-        confirmLabel="划掉"
+      <RejectDialog
+        item={item}
         loading={update.isPending}
-        message="划掉后会从有效菜单和购物清单统计中移除，之后仍可恢复。"
         onCancel={() => {
           if (!update.isPending) setConfirmingReject(false);
         }}
-        onConfirm={() => void changeStatus('rejected')}
-        title={`划掉「${item.dish.name}」？`}
+        onConfirm={(reason) =>
+          void applyChange({ status: 'rejected', reason: reason || undefined })
+        }
         visible={confirmingReject}
       />
     </>
   );
 }
 
+function eventDescription(event: MenuEvent) {
+  const actor = event.actor.name;
+  const dish = event.menuItem?.dish.name;
+  if (event.type === 'item_ordered') return `${actor} 点了「${dish ?? '一道菜'}」`;
+  if (event.type === 'item_assigned') {
+    return event.toValue
+      ? `${actor} 将「${dish ?? '这道菜'}」交给 ${event.toValue}`
+      : `${actor} 取消了「${dish ?? '这道菜'}」的认领`;
+  }
+  if (event.type === 'item_note_changed') {
+    return `${actor} 更新了「${dish ?? '这道菜'}」的备注`;
+  }
+  if (event.type === 'meal_chef_assigned') {
+    return event.toValue
+      ? `${actor} 将本餐主厨设为 ${event.toValue}`
+      : `${actor} 清除了本餐主厨`;
+  }
+  if (event.type === 'menu_completed') return `${actor} 结束并锁定了本餐`;
+  if (event.toValue === 'accepted') return `${actor} 认领了「${dish ?? '这道菜'}」`;
+  if (event.toValue === 'cooking') return `${actor} 开始制作「${dish ?? '这道菜'}」`;
+  if (event.toValue === 'done') return `${actor} 将「${dish ?? '这道菜'}」标记为上桌`;
+  if (event.toValue === 'pending') return `${actor} 恢复了「${dish ?? '这道菜'}」`;
+  if (event.toValue === 'rejected') return `${actor} 划掉了「${dish ?? '这道菜'}」`;
+  return `${actor} 更新了菜单`;
+}
+
+function eventTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function MealMenuSection({
+  member,
+  members,
+  menu,
+}: {
+  member: Member;
+  members: Member[];
+  menu: Menu;
+}) {
+  const c = useTheme();
+  const assignChef = useAssignMenuChef();
+  const complete = useCompleteMenu();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [confirmingComplete, setConfirmingComplete] = useState(false);
+  const { data: events, isLoading: eventsLoading } = useMenuEvents(
+    menu.id,
+    historyOpen,
+  );
+  const activeItems = menu.items.filter((item) => item.status !== 'rejected');
+  const remaining = activeItems.filter((item) => item.status !== 'done').length;
+  const locked = menu.status === 'done';
+  const canComplete = activeItems.length > 0 && remaining === 0;
+
+  const chooseChef = (chefId: string | null) => {
+    assignChef.mutate(
+      { menuId: menu.id, chefId },
+      {
+        onError: (error) =>
+          Alert.alert(
+            '设置失败',
+            error instanceof Error ? error.message : '请稍后再试',
+          ),
+      },
+    );
+  };
+
+  return (
+    <>
+      <View>
+        <SectionHeader
+          right={
+            locked ? (
+              <View style={[styles.lockedBadge, { backgroundColor: c.fill }]}>
+                <LockKeyhole color={c.secondaryLabel} size={13} />
+                <Text style={[styles.badgeText, { color: c.secondaryLabel }]}>已结束</Text>
+              </View>
+            ) : activeItems.length ? (
+              <View style={[styles.orderedBadge, { backgroundColor: c.tint }]}>
+                <UtensilsCrossed color="#FFFFFF" size={13} />
+                <Text style={styles.orderedBadgeText}>已点 {activeItems.length} 道</Text>
+              </View>
+            ) : undefined
+          }
+          title={mealLabel(menu.mealType)}
+        />
+        <Card
+          style={
+            activeItems.length
+              ? { borderColor: locked ? c.separator : c.tint, borderWidth: 1.5, overflow: 'hidden' }
+              : { overflow: 'hidden' }
+          }
+        >
+          <View style={[styles.chefRow, { borderBottomColor: c.separator }]}>
+            <View style={styles.chefLabel}>
+              <ChefHat color={c.secondaryLabel} size={17} />
+              <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '600' }]}>
+                本餐主厨
+              </Text>
+            </View>
+            {locked ? (
+              <Text style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
+                {menu.chef
+                  ? `${menu.chef.avatarEmoji} ${menu.chef.name}`
+                  : '未指定'}
+              </Text>
+            ) : (
+              <View style={styles.chefOptions}>
+                {[null, ...members].map((option) => {
+                  const id = option?.id ?? null;
+                  const active = menu.chefId === id;
+                  return (
+                    <PressableScale
+                      disabled={assignChef.isPending}
+                      haptic={false}
+                      key={id ?? 'none'}
+                      onPress={() => chooseChef(id)}
+                      style={[
+                        styles.chefOption,
+                        {
+                          backgroundColor: active ? c.tint : c.fill,
+                          opacity: assignChef.isPending ? 0.55 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          t.caption,
+                          {
+                            color: active ? '#FFFFFF' : c.label,
+                            fontWeight: '600',
+                          },
+                        ]}
+                      >
+                        {option ? `${option.avatarEmoji} ${option.name}` : '未指定'}
+                      </Text>
+                    </PressableScale>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {menu.items.length === 0 ? (
+            <Text
+              style={[
+                t.subhead,
+                { color: c.tertiaryLabel, padding: 16, textAlign: 'center' },
+              ]}
+            >
+              还没人点菜
+            </Text>
+          ) : (
+            menu.items.map((item, index) => (
+              <Animated.View
+                entering={FadeInDown.delay(index * 40).springify().damping(18)}
+                key={item.id}
+              >
+                <MenuItemRow item={item} locked={locked} member={member} />
+              </Animated.View>
+            ))
+          )}
+
+          <View style={[styles.menuFooter, { borderTopColor: c.separator }]}>
+            <PressableScale
+              haptic={false}
+              onPress={() => setHistoryOpen((open) => !open)}
+              style={styles.footerAction}
+            >
+              <History color={c.secondaryLabel} size={15} />
+              <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '600' }]}>
+                操作记录
+              </Text>
+              {historyOpen ? (
+                <ChevronUp color={c.secondaryLabel} size={14} />
+              ) : (
+                <ChevronDown color={c.secondaryLabel} size={14} />
+              )}
+            </PressableScale>
+
+            {locked ? (
+              <Text style={[t.footnote, { color: c.secondaryLabel }]}>
+                {menu.completedBy ? `${menu.completedBy.name} 已锁定` : '已锁定'}
+              </Text>
+            ) : canComplete ? (
+              <PressableScale
+                onPress={() => setConfirmingComplete(true)}
+                style={[styles.completeButton, { backgroundColor: c.green }]}
+              >
+                <Check color="#FFFFFF" size={15} />
+                <Text style={[t.footnote, { color: '#FFFFFF', fontWeight: '700' }]}>
+                  结束本餐
+                </Text>
+              </PressableScale>
+            ) : activeItems.length ? (
+              <Text style={[t.footnote, { color: c.secondaryLabel }]}>
+                还有 {remaining} 道未上桌
+              </Text>
+            ) : null}
+          </View>
+
+          {historyOpen ? (
+            <View style={[styles.historyPanel, { borderTopColor: c.separator }]}>
+              {eventsLoading ? <ActivityIndicator /> : null}
+              {!eventsLoading && !events?.length ? (
+                <Text style={[t.footnote, { color: c.tertiaryLabel }]}>暂无记录</Text>
+              ) : null}
+              {events?.map((event) => (
+                <View key={event.id} style={styles.historyRow}>
+                  <View style={[styles.historyDot, { backgroundColor: c.tint }]} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[t.footnote, { color: c.label }]}>
+                      {eventDescription(event)}
+                    </Text>
+                    {event.reason ? (
+                      <Text style={[t.caption, { color: c.red, marginTop: 2 }]}>
+                        原因：{event.reason}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={[t.caption, { color: c.tertiaryLabel }]}>
+                    {eventTime(event.createdAt)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </Card>
+      </View>
+
+      <ConfirmDialog
+        confirmLabel="结束并锁定"
+        destructive={false}
+        loading={complete.isPending}
+        message="结束后这餐的主厨、菜品和状态将变为只读。"
+        onCancel={() => {
+          if (!complete.isPending) setConfirmingComplete(false);
+        }}
+        onConfirm={() => {
+          complete.mutate(menu.id, {
+            onSuccess: () => {
+              setConfirmingComplete(false);
+              void Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
+            },
+            onError: (error) => {
+              setConfirmingComplete(false);
+              Alert.alert(
+                '结束失败',
+                error instanceof Error ? error.message : '请稍后再试',
+              );
+            },
+          });
+        }}
+        title={`结束${mealLabel(menu.mealType)}？`}
+        visible={confirmingComplete}
+      />
+    </>
+  );
+}
+
+function NotificationPanel({ notifications }: { notifications: MenuEvent[] }) {
+  const c = useTheme();
+  const markRead = useMarkMenuNotificationRead();
+  if (!notifications.length) return null;
+
+  return (
+    <View>
+      <SectionHeader title={`菜单提醒（${notifications.length}）`} />
+      <Card style={{ overflow: 'hidden' }}>
+        {notifications.map((event) => (
+          <View
+            key={event.id}
+            style={[styles.notificationRow, { borderBottomColor: c.separator }]}
+          >
+            <View style={[styles.notificationIcon, { backgroundColor: c.orangeSoft }]}>
+              <Bell color={c.orange} size={17} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
+                {event.actor.name} 划掉了你点的「{event.menuItem?.dish.name ?? '一道菜'}」
+              </Text>
+              <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>
+                {event.menu.date} {mealLabel(event.menu.mealType)}
+                {event.reason ? ` · ${event.reason}` : ''}
+              </Text>
+            </View>
+            <PressableScale
+              accessibilityLabel="标记提醒为已读"
+              disabled={markRead.isPending}
+              haptic={false}
+              onPress={() => markRead.mutate(event.id)}
+              style={[styles.readButton, { backgroundColor: c.fill }]}
+            >
+              <Check color={c.tint} size={15} />
+              <Text style={[t.caption, { color: c.tint, fontWeight: '700' }]}>知道了</Text>
+            </PressableScale>
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+}
+
 export default function KitchenScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const { member } = useSession();
   const [date, setDate] = useState(todayStr());
+  const { data: members } = useMembers();
   const { data: menus, isLoading } = useMenusOfDate(date);
+  const { data: notifications } = useMenuNotifications();
   const generate = useGenerateShoppingList();
 
   const totalItems =
     menus?.reduce(
-      (sum, m) => sum + m.items.filter((i) => i.status !== 'rejected').length,
+      (sum, menu) =>
+        sum + menu.items.filter((item) => item.status !== 'rejected').length,
       0,
     ) ?? 0;
   const hasAnyItems = menus?.some((menu) => menu.items.length > 0) ?? false;
+  const hasOpenItems =
+    menus?.some(
+      (menu) =>
+        menu.status === 'open' &&
+        menu.items.some((item) => item.status !== 'rejected'),
+    ) ?? false;
 
   const onGenerate = async () => {
     try {
       const list = await generate.mutateAsync(date);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
-        '清单已生成 🧾',
+        '清单已生成',
         list.length
           ? `共 ${list.length} 项食材，去「购物清单」页查看`
           : '接单的菜都不缺食材（常备调料不进清单）',
       );
-    } catch (e) {
-      Alert.alert('生成失败', e instanceof Error ? e.message : '稍后再试');
+    } catch (error) {
+      Alert.alert(
+        '生成失败',
+        error instanceof Error ? error.message : '请稍后再试',
+      );
     }
   };
 
@@ -211,7 +720,9 @@ export default function KitchenScreen() {
       >
         <View style={styles.header}>
           <Text style={[t.largeTitle, { color: c.label }]}>菜单安排</Text>
-          <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>查看接单进度并准备购物清单</Text>
+          <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
+            分配主厨、认领菜品并查看进度
+          </Text>
         </View>
 
         <View style={styles.dateControl}>
@@ -222,79 +733,48 @@ export default function KitchenScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-        {isLoading ? <ActivityIndicator style={{ marginTop: 48 }} /> : null}
+          {notifications ? (
+            <NotificationPanel notifications={notifications} />
+          ) : null}
 
-        {menus?.map((menu) => {
-          const activeCount = menu.items.filter((item) => item.status !== 'rejected').length;
-          return (
-            <View key={menu.id}>
-              <SectionHeader
-                title={mealLabel(menu.mealType)}
-                right={
-                  activeCount ? (
-                    <View style={[styles.orderedBadge, { backgroundColor: c.tint }]}>
-                      <UtensilsCrossed color="#FFFFFF" size={13} />
-                      <Text style={styles.orderedBadgeText}>已点 {activeCount} 道</Text>
-                    </View>
-                  ) : undefined
-                }
-              />
-              <Card
-                style={
-                  activeCount
-                    ? { borderColor: c.tint, borderWidth: 1.5, overflow: 'hidden' }
-                    : undefined
-                }
+          {isLoading ? <ActivityIndicator style={{ marginTop: 48 }} /> : null}
+
+          {member
+            ? menus?.map((menu) => (
+                <MealMenuSection
+                  key={menu.id}
+                  member={member}
+                  members={members ?? []}
+                  menu={menu}
+                />
+              ))
+            : null}
+
+          {!isLoading && !hasAnyItems ? (
+            <EmptyState
+              emoji="🍳"
+              hint="等家人去「点菜」页下单吧"
+              title="这天还没有安排"
+            />
+          ) : null}
+
+          {totalItems > 0 && hasOpenItems ? (
+            <View style={{ marginTop: 24 }}>
+              <PressableScale
+                disabled={generate.isPending}
+                onPress={() => void onGenerate()}
+                style={[styles.generateBtn, { backgroundColor: c.green }]}
               >
-                {menu.items.length === 0 ? (
-                  <Text
-                    style={[
-                      t.subhead,
-                      { color: c.tertiaryLabel, padding: 16, textAlign: 'center' },
-                    ]}
-                  >
-                    还没人点菜
-                  </Text>
+                {generate.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  menu.items.map((item, i) => (
-                    <Animated.View
-                      key={item.id}
-                      entering={FadeInDown.delay(i * 40).springify().damping(18)}
-                    >
-                      <MenuItemRow item={item} />
-                    </Animated.View>
-                  ))
+                  <Text style={[t.headline, { color: '#FFFFFF' }]}>
+                    生成购物清单（按已认领的菜）
+                  </Text>
                 )}
-              </Card>
+              </PressableScale>
             </View>
-          );
-        })}
-
-        {!isLoading && !hasAnyItems ? (
-          <EmptyState
-            emoji="🍳"
-            title="这天还没有安排"
-            hint="等家人去「点菜」页下单吧"
-          />
-        ) : null}
-
-        {totalItems > 0 ? (
-          <View style={{ marginTop: 24 }}>
-            <PressableScale
-              onPress={() => void onGenerate()}
-              disabled={generate.isPending}
-              style={[styles.generateBtn, { backgroundColor: c.green }]}
-            >
-              {generate.isPending ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={[t.headline, { color: '#FFF' }]}>
-                  🧾 生成购物清单（按已接单的菜）
-                </Text>
-              )}
-            </PressableScale>
-          </View>
-        ) : null}
+          ) : null}
         </ScrollView>
       </PageContainer>
     </SafeAreaView>
@@ -309,15 +789,51 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 32 },
   itemRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  itemDetails: { flex: 1, minWidth: 0, marginLeft: 10 },
+  itemStatus: { alignItems: 'flex-end', gap: 7, marginLeft: 8, maxWidth: 154 },
+  itemActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
   actionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    minHeight: 30,
+    paddingHorizontal: 11,
     borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chefRow: {
+    minHeight: 54,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  chefLabel: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chefOptions: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  chefOption: {
+    maxWidth: 132,
+    minHeight: 30,
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   orderedBadge: {
     height: 26,
@@ -327,10 +843,103 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
+  lockedBadge: {
+    height: 26,
+    borderRadius: radius.full,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  badgeText: { fontSize: 11, fontWeight: '800' },
   orderedBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  menuFooter: {
+    minHeight: 48,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  footerAction: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  completeButton: {
+    minHeight: 32,
+    borderRadius: radius.sm,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  historyPanel: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 9,
+  },
+  historyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  historyDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
+  notificationRow: {
+    minHeight: 66,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  notificationIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readButton: {
+    minHeight: 32,
+    borderRadius: radius.sm,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   generateBtn: {
     height: 50,
     borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 25, 20, 0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  rejectDialog: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 20,
+  },
+  reasonInput: {
+    minHeight: 92,
+    maxHeight: 150,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    marginTop: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    textAlignVertical: 'top',
+  },
+  dialogActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  dialogButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
