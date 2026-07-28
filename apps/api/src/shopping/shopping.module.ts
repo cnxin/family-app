@@ -21,6 +21,7 @@ import {
   Min,
 } from 'class-validator';
 import { In, Repository } from 'typeorm';
+import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { Menu, ShoppingItem } from '../entities';
 
 class GenerateDto {
@@ -58,8 +59,8 @@ export class ShoppingService {
     @InjectRepository(Menu) private readonly menus: Repository<Menu>,
   ) {}
 
-  async list(date: string) {
-    const list = await this.items.find({ where: { date } });
+  async list(householdId: string, date: string) {
+    const list = await this.items.find({ where: { householdId, date } });
     // 按食材分类分组排序，手动项排最后
     return list.sort((a, b) => {
       const ka = a.ingredient ? a.ingredient.category : '手动添加';
@@ -71,9 +72,9 @@ export class ShoppingService {
     });
   }
 
-  async generate(date: string) {
+  async generate(householdId: string, date: string) {
     const menus = await this.menus.find({
-      where: { date },
+      where: { householdId, date },
       relations: { items: { dish: { ingredients: { ingredient: true } } } },
     });
     const wanted = menus
@@ -96,7 +97,9 @@ export class ShoppingService {
     }
 
     // 保留旧 auto 项的勾选状态后重建
-    const oldAuto = await this.items.find({ where: { date, source: 'auto' } });
+    const oldAuto = await this.items.find({
+      where: { householdId, date, source: 'auto' },
+    });
     const checkedKeys = new Set(
       oldAuto.filter((i) => i.checked).map((i) => `${i.ingredientId}|${i.unit}`),
     );
@@ -106,6 +109,7 @@ export class ShoppingService {
     for (const entry of merged.values()) {
       await this.items.save(
         this.items.create({
+          householdId,
           date,
           ingredientId: entry.ingredientId,
           totalQty: String(entry.qty),
@@ -115,12 +119,13 @@ export class ShoppingService {
         }),
       );
     }
-    return this.list(date);
+    return this.list(householdId, date);
   }
 
-  async addManual(dto: ManualItemDto) {
+  async addManual(dto: ManualItemDto, householdId: string) {
     return this.items.save(
       this.items.create({
+        householdId,
         date: dto.date,
         customName: dto.customName,
         totalQty: dto.totalQty != null ? String(dto.totalQty) : null,
@@ -130,15 +135,15 @@ export class ShoppingService {
     );
   }
 
-  async check(id: string, checked: boolean) {
-    const item = await this.items.findOneBy({ id });
+  async check(id: string, checked: boolean, householdId: string) {
+    const item = await this.items.findOneBy({ id, householdId });
     if (!item) throw new NotFoundException('清单项不存在');
     item.checked = checked;
     return this.items.save(item);
   }
 
-  async remove(id: string) {
-    const result = await this.items.delete(id);
+  async remove(id: string, householdId: string) {
+    const result = await this.items.delete({ id, householdId });
     if (!result.affected) throw new NotFoundException('清单项不存在');
     return { id, removed: true };
   }
@@ -149,29 +154,33 @@ export class ShoppingController {
   constructor(private readonly service: ShoppingService) {}
 
   @Get('shopping-list')
-  list(@Query('date') date: string) {
+  list(@Query('date') date: string, @CurrentUser() user: JwtUser) {
     if (!date) throw new NotFoundException('date 必填 (YYYY-MM-DD)');
-    return this.service.list(date);
+    return this.service.list(user.householdId, date);
   }
 
   @Post('shopping-list/generate')
-  generate(@Body() dto: GenerateDto) {
-    return this.service.generate(dto.date);
+  generate(@Body() dto: GenerateDto, @CurrentUser() user: JwtUser) {
+    return this.service.generate(user.householdId, dto.date);
   }
 
   @Post('shopping-items')
-  addManual(@Body() dto: ManualItemDto) {
-    return this.service.addManual(dto);
+  addManual(@Body() dto: ManualItemDto, @CurrentUser() user: JwtUser) {
+    return this.service.addManual(dto, user.householdId);
   }
 
   @Patch('shopping-items/:id')
-  check(@Param('id') id: string, @Body() dto: CheckDto) {
-    return this.service.check(id, dto.checked);
+  check(
+    @Param('id') id: string,
+    @Body() dto: CheckDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.check(id, dto.checked, user.householdId);
   }
 
   @Delete('shopping-items/:id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.remove(id, user.householdId);
   }
 }
 

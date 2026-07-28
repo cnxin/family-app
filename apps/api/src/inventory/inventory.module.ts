@@ -22,6 +22,7 @@ import {
   Min,
 } from 'class-validator';
 import { Repository } from 'typeorm';
+import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { InventoryCategory, InventoryItem } from '../entities';
 
 const INVENTORY_CATEGORIES: InventoryCategory[] = [
@@ -100,18 +101,22 @@ export class InventoryService {
     private readonly items: Repository<InventoryItem>,
   ) {}
 
-  list() {
-    return this.items.find({ order: { category: 'ASC', name: 'ASC' } });
+  list(householdId: string) {
+    return this.items.find({
+      where: { householdId },
+      order: { category: 'ASC', name: 'ASC' },
+    });
   }
 
-  async create(dto: CreateInventoryItemDto) {
+  async create(dto: CreateInventoryItemDto, householdId: string) {
     const name = dto.name.trim();
-    if (await this.items.findOneBy({ name })) {
+    if (await this.items.findOneBy({ householdId, name })) {
       throw new ConflictException(`库存中已经有「${name}」`);
     }
     return this.items.save(
       this.items.create({
         ...dto,
+        householdId,
         name,
         unit: dto.unit.trim(),
         quantity: String(dto.quantity),
@@ -121,13 +126,13 @@ export class InventoryService {
     );
   }
 
-  async update(id: string, dto: UpdateInventoryItemDto) {
-    const item = await this.items.findOneBy({ id });
+  async update(id: string, dto: UpdateInventoryItemDto, householdId: string) {
+    const item = await this.items.findOneBy({ id, householdId });
     if (!item) throw new NotFoundException('库存项不存在');
 
     if (dto.name != null) {
       const name = dto.name.trim();
-      const duplicate = await this.items.findOneBy({ name });
+      const duplicate = await this.items.findOneBy({ householdId, name });
       if (duplicate && duplicate.id !== id) {
         throw new ConflictException(`库存中已经有「${name}」`);
       }
@@ -145,8 +150,8 @@ export class InventoryService {
     return this.items.save(item);
   }
 
-  async remove(id: string) {
-    const result = await this.items.delete(id);
+  async remove(id: string, householdId: string) {
+    const result = await this.items.delete({ id, householdId });
     if (!result.affected) throw new NotFoundException('库存项不存在');
     return { id, removed: true };
   }
@@ -157,23 +162,27 @@ export class InventoryController {
   constructor(private readonly service: InventoryService) {}
 
   @Get('inventory')
-  list() {
-    return this.service.list();
+  list(@CurrentUser() user: JwtUser) {
+    return this.service.list(user.householdId);
   }
 
   @Post('inventory-items')
-  create(@Body() dto: CreateInventoryItemDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreateInventoryItemDto, @CurrentUser() user: JwtUser) {
+    return this.service.create(dto, user.householdId);
   }
 
   @Patch('inventory-items/:id')
-  update(@Param('id') id: string, @Body() dto: UpdateInventoryItemDto) {
-    return this.service.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateInventoryItemDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.update(id, dto, user.householdId);
   }
 
   @Delete('inventory-items/:id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.remove(id, user.householdId);
   }
 }
 

@@ -1,26 +1,19 @@
 import 'dotenv/config';
 import 'reflect-metadata';
-import { DataSource } from 'typeorm';
 import {
-  ALL_ENTITIES,
+  DEFAULT_HOUSEHOLD_ID,
+  DEFAULT_HOUSEHOLD_SLUG,
+} from './database/database.constants';
+import AppDataSource from './database/data-source';
+import {
   Dish,
   DishCategory,
   DishIngredient,
+  Household,
   Ingredient,
   IngredientCategory,
   Member,
 } from './entities';
-
-const ds = new DataSource({
-  type: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT || 5433),
-  username: process.env.DB_USER || 'family',
-  password: process.env.DB_PASSWORD || 'family123',
-  database: process.env.DB_NAME || 'family_app',
-  entities: ALL_ENTITIES,
-  synchronize: true,
-});
 
 // [名称, 分类, 单位, 是否常备]
 const INGREDIENTS: [string, IngredientCategory, string, boolean?][] = [
@@ -61,37 +54,68 @@ const DISHES: [string, DishCategory, number, number, string, [string, number, st
 ];
 
 async function main() {
-  await ds.initialize();
+  await AppDataSource.initialize();
+  await AppDataSource.runMigrations();
 
-  const members = ds.getRepository(Member);
-  if ((await members.count()) === 0) {
+  const households = AppDataSource.getRepository(Household);
+  let household = await households.findOneBy({ id: DEFAULT_HOUSEHOLD_ID });
+  if (!household) {
+    household = await households.save(
+      households.create({
+        id: DEFAULT_HOUSEHOLD_ID,
+        name: '我的家',
+        slug: DEFAULT_HOUSEHOLD_SLUG,
+        timezone: 'Asia/Shanghai',
+      }),
+    );
+  }
+
+  const members = AppDataSource.getRepository(Member);
+  if ((await members.countBy({ householdId: household.id })) === 0) {
     await members.save([
-      members.create({ name: '爸爸', avatarEmoji: '👨‍🍳', role: 'chef' }),
-      members.create({ name: '妈妈', avatarEmoji: '👩', role: 'member' }),
+      members.create({
+        householdId: household.id,
+        name: '爸爸',
+        avatarEmoji: '👨‍🍳',
+        role: 'chef',
+      }),
+      members.create({
+        householdId: household.id,
+        name: '妈妈',
+        avatarEmoji: '👩',
+        role: 'member',
+      }),
     ]);
     console.log('成员 ✓ 爸爸(掌勺) / 妈妈');
   }
 
-  const ingredients = ds.getRepository(Ingredient);
+  const ingredients = AppDataSource.getRepository(Ingredient);
   const ingredientMap = new Map<string, Ingredient>();
   for (const [name, category, defaultUnit, isPantryStaple] of INGREDIENTS) {
-    let ing = await ingredients.findOneBy({ name });
+    let ing = await ingredients.findOneBy({ householdId: household.id, name });
     if (!ing) {
       ing = await ingredients.save(
-        ingredients.create({ name, category, defaultUnit, isPantryStaple: !!isPantryStaple }),
+        ingredients.create({
+          householdId: household.id,
+          name,
+          category,
+          defaultUnit,
+          isPantryStaple: !!isPantryStaple,
+        }),
       );
     }
     ingredientMap.set(name, ing);
   }
   console.log(`食材 ✓ ${ingredientMap.size} 种`);
 
-  const dishes = ds.getRepository(Dish);
-  const dishIngredients = ds.getRepository(DishIngredient);
+  const dishes = AppDataSource.getRepository(Dish);
+  const dishIngredients = AppDataSource.getRepository(DishIngredient);
   let created = 0;
   for (const [name, category, difficulty, estMinutes, note, list] of DISHES) {
-    if (await dishes.findOneBy({ name })) continue;
+    if (await dishes.findOneBy({ householdId: household.id, name })) continue;
     const dish = await dishes.save(
       dishes.create({
+        householdId: household.id,
         name,
         category,
         difficulty,
@@ -114,7 +138,7 @@ async function main() {
     created++;
   }
   console.log(`菜品 ✓ 新增 ${created} 道`);
-  await ds.destroy();
+  await AppDataSource.destroy();
 }
 
 main().catch((e) => {

@@ -2,6 +2,8 @@ node_modules/
 dist/
 .expo/
 uploads/
+backups/
+restore-preview/
 *.log
 .env
 .DS_Store

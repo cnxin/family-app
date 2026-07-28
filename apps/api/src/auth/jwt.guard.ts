@@ -15,6 +15,7 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
 
 export interface JwtUser {
   sub: string;
+  householdId: string;
   name: string;
   role: string;
 }
@@ -42,9 +43,14 @@ export class JwtAuthGuard implements CanActivate {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
     if (!token) throw new UnauthorizedException('未登录');
     try {
-      req.user = await this.jwt.verifyAsync<JwtUser>(token);
+      const user = await this.jwt.verifyAsync<JwtUser>(token);
+      if (!user.sub || !user.householdId) {
+        throw new UnauthorizedException('登录信息已失效，请重新登录');
+      }
+      req.user = user;
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('登录已过期，请重新登录');
     }
   }

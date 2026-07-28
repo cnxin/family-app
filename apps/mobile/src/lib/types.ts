@@ -16,6 +16,7 @@ export interface DishReferenceLink {
 
 export interface Member {
   id: string;
+  householdId: string;
   name: string;
   avatarEmoji: string;
   role: MemberRole;

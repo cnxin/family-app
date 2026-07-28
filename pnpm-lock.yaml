@@ -34,6 +34,9 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      multer:
+        specifier: ^2.0.2
+        version: 2.0.2
       pg:
         specifier: ^8.13.1
         version: 8.22.0

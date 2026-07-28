@@ -71,6 +71,20 @@ docker compose -f docker-compose.dev.yml down
 
 命名卷保存数据库和上传文件；`down` 不会删除数据。不要执行 `down -v`，除非明确要删除本地数据。
 
+## 数据迁移与备份
+
+数据库结构由 TypeORM 迁移管理，API 和种子任务启动时自动运行待执行迁移，不再使用 `synchronize` 修改表结构。
+
+```bash
+# 创建数据库与上传文件的完整备份
+./scripts/backup-dev.sh
+
+# 只恢复到新的演练数据库，不覆盖当前数据
+./scripts/restore-dev.sh backups/<备份时间> family_app_restore_test
+```
+
+完整的文件说明、异机备份建议和恢复演练流程见 [本地开发数据备份与恢复](docs/backup-restore.md)。
+
 ## Expo Go
 
 API 运行后，在仓库根目录执行：
@@ -96,6 +110,13 @@ docker compose -f docker-compose.dev.yml config --quiet
 
 # 现有 API 冒烟流程（API 已启动）
 node apps/api/scripts/smoke.mjs
+
+# 家庭数据隔离测试（API 已启动）
+npx pnpm --filter api test:isolation
+
+# 自动创建临时数据库和 API，连续运行两项测试，结束后自动清理
+docker compose -f docker-compose.dev.yml run --rm --no-deps api \
+  pnpm --filter api test:api
 ```
 
 ## 项目结构

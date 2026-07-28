@@ -131,28 +131,38 @@ export class DishesService {
     private readonly dishIngredients: Repository<DishIngredient>,
   ) {}
 
-  list() {
+  list(householdId: string) {
     return this.dishes.find({
-      where: { isActive: true },
+      where: { householdId, isActive: true },
       order: { createdAt: 'DESC' },
     });
   }
 
-  listIngredients() {
-    return this.ingredients.find({ order: { category: 'ASC', name: 'ASC' } });
+  listIngredients(householdId: string) {
+    return this.ingredients.find({
+      where: { householdId },
+      order: { category: 'ASC', name: 'ASC' },
+    });
   }
 
-  private async resolveIngredient(dto: DishIngredientDto): Promise<Ingredient> {
+  private async resolveIngredient(
+    dto: DishIngredientDto,
+    householdId: string,
+  ): Promise<Ingredient> {
     if (dto.ingredientId) {
-      const found = await this.ingredients.findOneBy({ id: dto.ingredientId });
+      const found = await this.ingredients.findOneBy({
+        id: dto.ingredientId,
+        householdId,
+      });
       if (!found) throw new NotFoundException(`食材不存在: ${dto.ingredientId}`);
       return found;
     }
     if (!dto.name) throw new NotFoundException('食材需要 ingredientId 或 name');
-    const existing = await this.ingredients.findOneBy({ name: dto.name });
+    const existing = await this.ingredients.findOneBy({ householdId, name: dto.name });
     if (existing) return existing;
     return this.ingredients.save(
       this.ingredients.create({
+        householdId,
         name: dto.name,
         category: (dto.category as Ingredient['category']) || '其他',
         defaultUnit: dto.unit,
@@ -160,10 +170,14 @@ export class DishesService {
     );
   }
 
-  private async buildIngredients(dish: Dish, items: DishIngredientDto[]) {
+  private async buildIngredients(
+    dish: Dish,
+    items: DishIngredientDto[],
+    householdId: string,
+  ) {
     await this.dishIngredients.delete({ dishId: dish.id });
     for (const item of items) {
-      const ingredient = await this.resolveIngredient(item);
+      const ingredient = await this.resolveIngredient(item, householdId);
       await this.dishIngredients.save(
         this.dishIngredients.create({
           dishId: dish.id,
@@ -175,33 +189,40 @@ export class DishesService {
     }
   }
 
-  async create(dto: UpsertDishDto, userId: string) {
+  async create(dto: UpsertDishDto, householdId: string, userId: string) {
     if (!dto.name) throw new NotFoundException('菜名必填');
     const { ingredients, ...fields } = dto;
     const dish = await this.dishes.save(
-      this.dishes.create({ ...fields, name: dto.name, createdBy: userId }),
+      this.dishes.create({
+        ...fields,
+        householdId,
+        name: dto.name,
+        createdBy: userId,
+      }),
     );
-    if (ingredients?.length) await this.buildIngredients(dish, ingredients);
-    return this.get(dish.id);
+    if (ingredients?.length) {
+      await this.buildIngredients(dish, ingredients, householdId);
+    }
+    return this.get(dish.id, householdId);
   }
 
-  async get(id: string) {
-    const dish = await this.dishes.findOneBy({ id });
+  async get(id: string, householdId: string) {
+    const dish = await this.dishes.findOneBy({ id, householdId });
     if (!dish) throw new NotFoundException('菜品不存在');
     return dish;
   }
 
-  async update(id: string, dto: UpsertDishDto) {
-    const dish = await this.get(id);
+  async update(id: string, dto: UpsertDishDto, householdId: string) {
+    const dish = await this.get(id, householdId);
     const { ingredients, ...fields } = dto;
     Object.assign(dish, fields);
     await this.dishes.save(dish);
-    if (ingredients) await this.buildIngredients(dish, ingredients);
-    return this.get(id);
+    if (ingredients) await this.buildIngredients(dish, ingredients, householdId);
+    return this.get(id, householdId);
   }
 
-  async remove(id: string) {
-    const dish = await this.get(id);
+  async remove(id: string, householdId: string) {
+    const dish = await this.get(id, householdId);
     dish.isActive = false;
     await this.dishes.save(dish);
     return { id, removed: true };
@@ -213,28 +234,32 @@ export class DishesController {
   constructor(private readonly service: DishesService) {}
 
   @Get('dishes')
-  list() {
-    return this.service.list();
+  list(@CurrentUser() user: JwtUser) {
+    return this.service.list(user.householdId);
   }
 
   @Get('ingredients')
-  listIngredients() {
-    return this.service.listIngredients();
+  listIngredients(@CurrentUser() user: JwtUser) {
+    return this.service.listIngredients(user.householdId);
   }
 
   @Post('dishes')
   create(@Body() dto: UpsertDishDto, @CurrentUser() user: JwtUser) {
-    return this.service.create(dto, user.sub);
+    return this.service.create(dto, user.householdId, user.sub);
   }
 
   @Patch('dishes/:id')
-  update(@Param('id') id: string, @Body() dto: UpsertDishDto) {
-    return this.service.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpsertDishDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.update(id, dto, user.householdId);
   }
 
   @Delete('dishes/:id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.remove(id, user.householdId);
   }
 }
 

@@ -4,9 +4,14 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
+    "migration:show": "typeorm-ts-node-commonjs migration:show -d src/database/data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
-    "seed": "ts-node -r dotenv/config src/seed.ts"
+    "seed": "ts-node -r dotenv/config src/seed.ts",
+    "test:api": "node scripts/run-api-tests.mjs",
+    "test:isolation": "node scripts/household-isolation.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -17,6 +22,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "dotenv": "^16.4.7",
+    "multer": "^2.0.2",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

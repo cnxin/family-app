@@ -12,6 +12,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { IsOptional, IsString, IsUUID } from 'class-validator';
 import { Repository } from 'typeorm';
+import { DEFAULT_HOUSEHOLD_ID } from '../database/database.constants';
 import { Member } from '../entities';
 import { JwtAuthGuard, Public } from './jwt.guard';
 
@@ -34,20 +35,27 @@ export class AuthController {
   @Public()
   @Get('members')
   async list() {
-    const list = await this.members.find({ order: { createdAt: 'ASC' } });
+    const list = await this.members.find({
+      where: { householdId: DEFAULT_HOUSEHOLD_ID },
+      order: { createdAt: 'ASC' },
+    });
     return list.map(({ pin, ...m }) => ({ ...m, hasPin: !!pin }));
   }
 
   @Public()
   @Post('auth/login')
   async login(@Body() dto: LoginDto) {
-    const member = await this.members.findOneBy({ id: dto.memberId });
+    const member = await this.members.findOneBy({
+      id: dto.memberId,
+      householdId: DEFAULT_HOUSEHOLD_ID,
+    });
     if (!member) throw new NotFoundException('成员不存在');
     if (member.pin && member.pin !== dto.pin) {
       throw new UnauthorizedException('PIN 不正确');
     }
     const token = await this.jwt.signAsync({
       sub: member.id,
+      householdId: member.householdId,
       name: member.name,
       role: member.role,
     });

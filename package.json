@@ -1,9 +1,12 @@
 {
   "name": "family-app",
   "private": true,
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "api": "pnpm --filter api start:dev",
+    "backup:dev": "sh scripts/backup-dev.sh",
     "mobile": "pnpm --filter mobile start",
+    "restore:dev": "sh scripts/restore-dev.sh",
     "seed": "pnpm --filter api seed"
   }
 }
