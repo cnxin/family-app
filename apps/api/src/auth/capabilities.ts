@@ -28,6 +28,7 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
   ]),
   member: new Set([
     'place_meal_order',
+    'update_meal_status',
     'manage_recipes',
     'manage_shopping',
     'manage_inventory',

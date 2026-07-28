@@ -190,14 +190,6 @@ try {
     'PATCH',
     { status: 'accepted' },
   );
-  assert(memberStatus.status === 403, '普通成员不能变更厨房状态');
-
-  const accepted = await request(
-    `/menu-items/${firstItem.id}`,
-    chefToken,
-    'PATCH',
-    { status: 'accepted' },
-  );
   const acceptedAgain = await request(
     `/menu-items/${firstItem.id}`,
     chefToken,
@@ -210,12 +202,15 @@ try {
     'PATCH',
     { status: 'done' },
   );
-  assert(accepted.status === 200 && acceptedAgain.status === 200, '重复提交当前状态保持幂等');
+  assert(
+    memberStatus.status === 200 && acceptedAgain.status === 200,
+    '所有家庭成员都能接单，重复提交当前状态保持幂等',
+  );
   assert(skipped.status === 409, '不能跳过制作状态直接完成');
 
   const cooking = await request(
     `/menu-items/${firstItem.id}`,
-    chefToken,
+    memberToken,
     'PATCH',
     { status: 'cooking' },
   );
@@ -236,6 +231,24 @@ try {
   const secondItem = secondOrder.body.data.items.find(
     (item) => item.dishId === dishes[1].id && item.status === 'pending',
   );
+  const rejected = await request(
+    `/menu-items/${secondItem.id}`,
+    memberToken,
+    'PATCH',
+    { status: 'rejected' },
+  );
+  const restored = await request(
+    `/menu-items/${secondItem.id}`,
+    chefToken,
+    'PATCH',
+    { status: 'pending' },
+  );
+  assert(
+    rejected.status === 200 &&
+      restored.status === 200 &&
+      restored.body.data.status === 'pending',
+    '划掉的菜可以恢复为待接单',
+  );
   await request(`/menu-items/${secondItem.id}`, chefToken, 'PATCH', {
     status: 'rejected',
   });
@@ -246,6 +259,28 @@ try {
     { items: [{ dishId: dishes[1].id }] },
   );
   assert(reordered.status === 201, '被拒绝后可以重新点同一道菜');
+  const conflictingRestore = await request(
+    `/menu-items/${secondItem.id}`,
+    memberToken,
+    'PATCH',
+    { status: 'pending' },
+  );
+  assert(
+    conflictingRestore.status === 409 &&
+      conflictingRestore.body.error.message ===
+        '已经重新点过这道菜，无需恢复旧记录',
+    '已有新点菜记录时，恢复旧记录会返回明确冲突',
+  );
+  currentMenu = (
+    await request(`/menus?date=${TEST_DATE}&mealType=dinner`, memberToken)
+  ).body.data;
+  assert(
+    currentMenu.items.filter(
+      (item) =>
+        item.dishId === dishes[1].id && item.status !== 'rejected',
+    ).length === 1,
+    '恢复冲突后仍只有一条有效点菜记录',
+  );
 
   const chefOrder = await request(
     `/menus/${menu.id}/items`,
@@ -262,7 +297,7 @@ try {
     'PATCH',
     { note: '不应写入' },
   );
-  assert(crossNote.status === 403, '普通成员不能修改其他人的点菜备注');
+  assert(crossNote.status === 403, '家庭成员不能修改其他人的点菜备注');
 
   const dishBefore = dishes.find((dish) => dish.ingredients.length >= 1);
   const ingredientsBefore = comparableIngredients(dishBefore);

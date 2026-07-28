@@ -115,7 +115,7 @@ export default function LoginScreen() {
                         <View style={styles.roleRow}>
                           <RoleIcon color={c.secondaryLabel} size={14} />
                           <Text style={[t.caption, { color: c.secondaryLabel }]}>
-                            {item.role === 'chef' ? '今日掌勺' : '家庭成员'}
+                            {item.role === 'chef' ? '经常掌勺' : '家庭成员'}
                           </Text>
                         </View>
                       </View>

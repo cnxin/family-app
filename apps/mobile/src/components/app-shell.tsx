@@ -162,7 +162,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {member?.name}
             </Text>
             <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
-              {member?.role === 'chef' ? '今日掌勺' : '家庭成员'}
+              {member?.role === 'chef' ? '经常掌勺' : '家庭成员'}
             </Text>
           </View>
           <UserRound color={c.tertiaryLabel} size={18} />

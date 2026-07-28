@@ -56,7 +56,7 @@ export default function ProfileScreen() {
           <View style={{ marginLeft: 14 }}>
             <Text style={[t.title2, { color: c.label }]}>{member?.name}</Text>
             <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 2 }]}>
-              {member?.role === 'chef' ? '掌勺的 👨‍🍳' : '点菜的 😋'}
+              {member?.role === 'chef' ? '经常掌勺 👨‍🍳' : '家庭成员'}
             </Text>
           </View>
         </Card>

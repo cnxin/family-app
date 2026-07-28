@@ -25,11 +25,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { DataSource, In, Not, Repository } from 'typeorm';
-import {
-  assertCapability,
-  hasCapability,
-  RequireCapabilities,
-} from '../auth/capabilities';
+import { assertCapability, RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { Dish, MealType, Menu, MenuItem, MenuItemStatus } from '../entities';
 
@@ -85,7 +81,7 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
   accepted: ['cooking', 'rejected'],
   cooking: ['done'],
   done: [],
-  rejected: [],
+  rejected: ['pending'],
 };
 
 function isUniqueViolation(error: unknown) {
@@ -222,45 +218,49 @@ export class MenusService {
   }
 
   async updateItem(id: string, dto: UpdateItemDto, user: JwtUser) {
-    return this.dataSource.transaction(async (manager) => {
-      const items = manager.getRepository(MenuItem);
-      const item = await items
-        .createQueryBuilder('item')
-        .innerJoin('item.menu', 'menu')
-        .where('item.id = :id', { id })
-        .andWhere('menu.householdId = :householdId', {
-          householdId: user.householdId,
-        })
-        .setLock('pessimistic_write')
-        .getOne();
-      if (!item) throw new NotFoundException('这道菜不在菜单里');
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const items = manager.getRepository(MenuItem);
+        const item = await items
+          .createQueryBuilder('item')
+          .innerJoin('item.menu', 'menu')
+          .where('item.id = :id', { id })
+          .andWhere('menu.householdId = :householdId', {
+            householdId: user.householdId,
+          })
+          .setLock('pessimistic_write')
+          .getOne();
+        if (!item) throw new NotFoundException('这道菜不在菜单里');
 
-      if (dto.status != null) {
-        assertCapability(user, 'update_meal_status');
-        if (
-          dto.status !== item.status &&
-          !ALLOWED_STATUS_TRANSITIONS[item.status].includes(dto.status)
-        ) {
-          throw new ConflictException(
-            `不能从「${item.status}」直接变更为「${dto.status}」`,
-          );
+        if (dto.status != null) {
+          assertCapability(user, 'update_meal_status');
+          if (
+            dto.status !== item.status &&
+            !ALLOWED_STATUS_TRANSITIONS[item.status].includes(dto.status)
+          ) {
+            throw new ConflictException(
+              `不能从「${item.status}」直接变更为「${dto.status}」`,
+            );
+          }
+          item.status = dto.status;
         }
-        item.status = dto.status;
-      }
-      if (dto.note != null) {
-        if (
-          item.requestedById !== user.memberId &&
-          !hasCapability(user, 'update_meal_status')
-        ) {
-          throw new ForbiddenException('只能修改自己点菜的备注');
+        if (dto.note != null) {
+          if (item.requestedById !== user.memberId) {
+            throw new ForbiddenException('只能修改自己点菜的备注');
+          }
+          item.note = dto.note;
         }
-        item.note = dto.note;
+        await items.save(item);
+        const saved = await items.findOne({ where: { id } });
+        if (!saved) throw new NotFoundException('这道菜不在菜单里');
+        return saved;
+      });
+    } catch (error) {
+      if (dto.status === 'pending' && isUniqueViolation(error)) {
+        throw new ConflictException('已经重新点过这道菜，无需恢复旧记录');
       }
-      await items.save(item);
-      const saved = await items.findOne({ where: { id } });
-      if (!saved) throw new NotFoundException('这道菜不在菜单里');
-      return saved;
-    });
+      throw error;
+    }
   }
 }
 
