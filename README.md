@@ -35,7 +35,7 @@
 | --- | --- |
 | 客户端 | Expo SDK 57、React Native、Expo Router、React Query、Lucide |
 | Web | Expo Web / React Native Web，响应式移动与桌面布局 |
-| API | NestJS 10、TypeORM、JWT |
+| API | NestJS 10、TypeORM、短时 JWT 与可撤销会话 |
 | 数据库 | PostgreSQL 16 |
 | 本地环境 | Docker Compose + pnpm monorepo |
 
@@ -69,12 +69,15 @@ API 安全相关配置：
 | 环境变量 | 本地默认值 | 作用 |
 | --- | --- | --- |
 | `JWT_SECRET` | 仅 Docker 演示密钥 | JWT 签名；生产环境必须显式配置 |
-| `JWT_EXPIRES_SECONDS` | `43200` | 登录令牌有效期，默认 12 小时 |
+| `JWT_EXPIRES_SECONDS` | `900` | 访问令牌有效期，默认 15 分钟 |
+| `REFRESH_TOKEN_EXPIRES_SECONDS` | `2592000` | 刷新会话有效期，默认 30 天并在每次续期时轮换 |
 | `LOGIN_RATE_LIMIT` | `5` | 单个来源在窗口内允许的登录次数 |
 | `LOGIN_RATE_WINDOW_MS` | `60000` | 登录限流窗口，默认 1 分钟 |
 | `CORS_ORIGINS` | 开发环境自动允许本机和私有局域网 | 逗号分隔的 Web 客户端来源白名单 |
 
 原生 Expo 请求没有浏览器 `Origin`，不受 CORS 白名单影响。生产环境不配置 `CORS_ORIGINS` 时不会授权任何浏览器来源。
+
+服务端只保存刷新令牌的 SHA-256 哈希；退出、成员角色变化或 PIN 变化会立即撤销旧会话。iOS/Android 使用 `SecureStore` 保存会话，当前 Web 演示使用 `localStorage`，因此 Web 端仍受同源脚本和 XSS 边界约束。正式外网部署必须使用 HTTPS、严格内容安全策略，并评估改为同站 `HttpOnly` Cookie 或可信反向代理会话。
 
 停止服务：
 

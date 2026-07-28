@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import pg from 'pg';
 
 const { Client } = pg;
@@ -28,6 +28,10 @@ function signToken(payload) {
   return `${content}.${signature}`;
 }
 
+function sha256(value) {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
 async function request(path, token, method = 'GET', body) {
   const response = await fetch(`${BASE}${path}`, {
     method,
@@ -44,6 +48,7 @@ async function request(path, token, method = 'GET', body) {
 const ids = {
   household: randomUUID(),
   member: randomUUID(),
+  session: randomUUID(),
   ingredient: randomUUID(),
   dish: randomUUID(),
   menu: randomUUID(),
@@ -71,6 +76,19 @@ try {
   await db.query(
     'INSERT INTO members (id, "householdId", name, "avatarEmoji", role) VALUES ($1, $2, $3, $4, $5)',
     [ids.member, ids.household, '隔离测试成员', 'T', 'member'],
+  );
+  await db.query(
+    `INSERT INTO auth_sessions
+       (id, "householdId", "memberId", "refreshTokenHash", "roleSnapshot",
+        "credentialSnapshot", "expiresAt")
+     VALUES ($1, $2, $3, $4, 'member', $5, now() + interval '10 minutes')`,
+    [
+      ids.session,
+      ids.household,
+      ids.member,
+      sha256('isolation-refresh-token'),
+      sha256('family-app-credential:no-pin'),
+    ],
   );
   await db.query(
     'INSERT INTO ingredients (id, "householdId", name, category, "defaultUnit") VALUES ($1, $2, $3, $4, $5)',
@@ -121,10 +139,17 @@ try {
     sub: ids.member,
     memberId: ids.member,
     householdId: ids.household,
+    sid: ids.session,
     name: '隔离测试成员',
     role: 'member',
   });
-  const oldToken = signToken({ sub: ids.member, name: '旧令牌', role: 'member' });
+  const oldToken = signToken({
+    sub: ids.member,
+    memberId: ids.member,
+    householdId: ids.household,
+    name: '旧令牌',
+    role: 'member',
+  });
 
   const defaultDishes = await request('/dishes', defaultToken);
   assert(
@@ -247,7 +272,7 @@ try {
   assert(crossInventory.status === 404, '不能更新其他家庭库存');
 
   const oldSession = await request('/dishes', oldToken);
-  assert(oldSession.status === 401, '缺少 householdId 的旧令牌会失效');
+  assert(oldSession.status === 401, '缺少会话 ID 的旧令牌会失效');
 
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
@@ -259,6 +284,7 @@ try {
   await db.query('DELETE FROM dish_ingredients WHERE "dishId" = $1', [ids.dish]);
   await db.query('DELETE FROM dishes WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM ingredients WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM auth_sessions WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM members WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM households WHERE id = $1', [ids.household]);
   await db.end();

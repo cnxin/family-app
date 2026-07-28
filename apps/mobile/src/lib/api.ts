@@ -16,15 +16,24 @@ function resolveBaseUrl(): string {
 
 export const BASE_URL = resolveBaseUrl();
 
+type AuthRefreshHandler = () => Promise<string | null>;
+
 let authToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
+let onAuthRefresh: AuthRefreshHandler | null = null;
+let refreshPromise: Promise<string | null> | null = null;
 
 export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
-export function setUnauthorizedHandler(fn: () => void) {
+export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
+}
+
+export function setAuthRefreshHandler(fn: AuthRefreshHandler | null) {
+  onAuthRefresh = fn;
+  refreshPromise = null;
 }
 
 export class ApiError extends Error {
@@ -37,25 +46,73 @@ export class ApiError extends Error {
   }
 }
 
+interface ApiOptions {
+  method?: string;
+  body?: unknown;
+  auth?: boolean;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!onAuthRefresh) return null;
+  if (!refreshPromise) {
+    const currentRefresh = onAuthRefresh;
+    const attempt = currentRefresh();
+    const tracked = attempt.finally(() => {
+      if (refreshPromise === tracked) refreshPromise = null;
+    });
+    refreshPromise = tracked;
+  }
+  return refreshPromise;
+}
+
+async function fetchWithSession(
+  url: string,
+  init: RequestInit,
+  useAuth: boolean,
+): Promise<Response> {
+  const execute = () => {
+    const headers = new Headers(init.headers);
+    if (useAuth && authToken) {
+      headers.set('Authorization', `Bearer ${authToken}`);
+    }
+    return fetch(url, { ...init, headers });
+  };
+
+  let response = await execute();
+  if (!useAuth || response.status !== 401) return response;
+
+  let refreshedToken: string | null;
+  try {
+    refreshedToken = await refreshAccessToken();
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) onUnauthorized?.();
+    throw error;
+  }
+
+  if (refreshedToken) response = await execute();
+  if (response.status === 401) onUnauthorized?.();
+  return response;
+}
+
 export async function api<T>(
   path: string,
-  options: { method?: string; body?: unknown } = {},
+  options: ApiOptions = {},
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: options.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+  const response = await fetchWithSession(
+    `${BASE_URL}${path}`,
+    {
+      method: options.method ?? 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      body: options.body != null ? JSON.stringify(options.body) : undefined,
     },
-    body: options.body != null ? JSON.stringify(options.body) : undefined,
-  });
-  const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    if (res.status === 401) onUnauthorized?.();
+    options.auth !== false,
+  );
+  const json = await response.json().catch(() => null);
+  if (!response.ok) {
     throw new ApiError(
       json?.error?.code ?? 'UNKNOWN',
-      json?.error?.message ?? `请求失败 (${res.status})`,
-      res.status,
+      json?.error?.message ?? `请求失败 (${response.status})`,
+      response.status,
     );
   }
   return json.data as T;
@@ -68,13 +125,15 @@ export async function uploadPhoto(uri: string): Promise<string> {
     name: 'photo.jpg',
     type: 'image/jpeg',
   } as unknown as Blob);
-  const res = await fetch(`${BASE_URL}/upload`, {
-    method: 'POST',
-    headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
-    body: form,
-  });
-  if (!res.ok) throw new ApiError('UPLOAD_FAILED', '照片上传失败', res.status);
-  const json = await res.json();
+  const response = await fetchWithSession(
+    `${BASE_URL}/upload`,
+    { method: 'POST', body: form },
+    true,
+  );
+  if (!response.ok) {
+    throw new ApiError('UPLOAD_FAILED', '照片上传失败', response.status);
+  }
+  const json = await response.json();
   return json.data.url as string;
 }
 

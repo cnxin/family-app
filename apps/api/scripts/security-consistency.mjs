@@ -52,6 +52,7 @@ const db = new Client({
 await db.connect();
 let memberId = null;
 let originalPinHash = null;
+let originalRole = null;
 let testHouseholdId = null;
 const transactionIds = {
   dishes: [randomUUID(), randomUUID()],
@@ -67,6 +68,7 @@ try {
   const member = initialMembers.body.data.find((item) => item.role === 'member');
   assert(chef && member, '成员权限角色和掌勺偏好已经分离');
   memberId = member.id;
+  originalRole = member.role;
 
   const pinRow = await db.query(
     'SELECT "pinHash" FROM members WHERE id = $1',
@@ -100,8 +102,20 @@ try {
     memberId: chef.id,
   });
   assert(memberLogin.status === 201 && chefLogin.status === 201, '正确凭据可登录');
-  const memberToken = memberLogin.body.data.token;
-  const chefToken = chefLogin.body.data.token;
+  const memberSession = memberLogin.body.data;
+  const chefSession = chefLogin.body.data;
+  let memberToken = memberSession.accessToken;
+  let memberRefreshToken = memberSession.refreshToken;
+  const chefToken = chefSession.accessToken;
+  assert(
+    memberSession.token === memberSession.accessToken &&
+      typeof memberSession.refreshToken === 'string',
+    '登录响应提供访问令牌、刷新令牌并保留 token 兼容字段',
+  );
+  assert(
+    memberLogin.headers.get('cache-control') === 'no-store',
+    '令牌响应明确禁止客户端或中间层缓存',
+  );
 
   const preferenceOff = await request(
     '/members/me/preferences',
@@ -126,8 +140,56 @@ try {
   const payload = JSON.parse(
     Buffer.from(memberToken.split('.')[1], 'base64url').toString('utf8'),
   );
-  assert(payload.memberId === member.id && payload.sub === member.id, 'JWT 包含明确成员身份');
-  assert(payload.exp - payload.iat <= 43_200, 'JWT 有效期不超过 12 小时');
+  assert(
+    payload.memberId === member.id &&
+      payload.sub === member.id &&
+      typeof payload.sid === 'string',
+    'JWT 包含明确成员身份和服务端会话 ID',
+  );
+  assert(payload.exp - payload.iat <= 900, '访问令牌有效期不超过 15 分钟');
+
+  const sessionRow = await db.query(
+    'SELECT "refreshTokenHash" FROM auth_sessions WHERE id = $1',
+    [payload.sid],
+  );
+  assert(
+    /^[a-f0-9]{64}$/.test(sessionRow.rows[0].refreshTokenHash) &&
+      sessionRow.rows[0].refreshTokenHash !== memberRefreshToken,
+    '数据库只保存刷新令牌的 SHA-256 哈希',
+  );
+
+  const firstRefresh = await request('/auth/refresh', null, 'POST', {
+    refreshToken: memberRefreshToken,
+  });
+  const replayedRefresh = await request('/auth/refresh', null, 'POST', {
+    refreshToken: memberRefreshToken,
+  });
+  assert(
+    firstRefresh.status === 200 &&
+      firstRefresh.body.data.refreshToken !== memberRefreshToken &&
+      firstRefresh.headers.get('cache-control') === 'no-store' &&
+      replayedRefresh.status === 401,
+    '刷新令牌续期后立即轮换且旧令牌不能复用',
+  );
+
+  const concurrentRefreshes = await Promise.all([
+    request('/auth/refresh', null, 'POST', {
+      refreshToken: firstRefresh.body.data.refreshToken,
+    }),
+    request('/auth/refresh', null, 'POST', {
+      refreshToken: firstRefresh.body.data.refreshToken,
+    }),
+  ]);
+  const successfulRefresh = concurrentRefreshes.find(
+    (response) => response.status === 200,
+  );
+  assert(
+    concurrentRefreshes.filter((response) => response.status === 200).length === 1 &&
+      concurrentRefreshes.filter((response) => response.status === 401).length === 1,
+    '并发使用同一刷新令牌时只有一次续期成功',
+  );
+  memberToken = successfulRefresh.body.data.accessToken;
+  memberRefreshToken = successfulRefresh.body.data.refreshToken;
 
   const invalidMenuDate = await request('/menus?date=not-a-date', memberToken);
   const invalidMealType = await request(
@@ -577,6 +639,89 @@ try {
   ).body.data;
   assert(currentMenu.items.some((item) => item.status === 'done'), '菜单最终状态可重新读取');
 
+  const crossSessionLogout = await request(
+    '/auth/logout',
+    chefToken,
+    'POST',
+    { sessionId: payload.sid },
+  );
+  const memberAfterCrossLogout = await request('/dishes', memberToken);
+  const chefAfterLogout = await request('/dishes', chefToken);
+  assert(
+    crossSessionLogout.status === 200 &&
+      memberAfterCrossLogout.status === 200 &&
+      chefAfterLogout.status === 401,
+    '登出只能撤销当前成员会话，不能指定并撤销其他成员会话',
+  );
+
+  const memberLogout = await request('/auth/logout', memberToken, 'POST');
+  const accessAfterLogout = await request('/dishes', memberToken);
+  const refreshAfterLogout = await request('/auth/refresh', null, 'POST', {
+    refreshToken: memberRefreshToken,
+  });
+  assert(
+    memberLogout.status === 200 &&
+      accessAfterLogout.status === 401 &&
+      refreshAfterLogout.status === 401,
+    '登出后访问令牌和刷新令牌都立即失效',
+  );
+
+  const roleSession = (
+    await request('/auth/login', null, 'POST', {
+      memberId: member.id,
+      pin: '2468',
+    })
+  ).body.data;
+  await db.query(`UPDATE members SET role = 'admin' WHERE id = $1`, [member.id]);
+  const changedRoleAccess = await request('/dishes', roleSession.accessToken);
+  await db.query(`UPDATE members SET role = 'member' WHERE id = $1`, [member.id]);
+  const restoredRoleAccess = await request('/dishes', roleSession.accessToken);
+  const changedRoleRefresh = await request('/auth/refresh', null, 'POST', {
+    refreshToken: roleSession.refreshToken,
+  });
+  assert(
+    changedRoleAccess.status === 401 &&
+      restoredRoleAccess.status === 401 &&
+      changedRoleRefresh.status === 401,
+    '角色变化会永久撤销旧会话，恢复原角色也必须重新登录',
+  );
+
+  const credentialSession = (
+    await request('/auth/login', null, 'POST', {
+      memberId: member.id,
+      pin: '2468',
+    })
+  ).body.data;
+  const temporaryPin = await db.query(
+    'SELECT "pinHash" FROM members WHERE id = $1',
+    [member.id],
+  );
+  await db.query('UPDATE members SET "pinHash" = $1 WHERE id = $2', [
+    await bcrypt.hash('1357', 12),
+    member.id,
+  ]);
+  const changedCredentialAccess = await request(
+    '/dishes',
+    credentialSession.accessToken,
+  );
+  await db.query('UPDATE members SET "pinHash" = $1 WHERE id = $2', [
+    temporaryPin.rows[0].pinHash,
+    member.id,
+  ]);
+  const restoredCredentialAccess = await request(
+    '/dishes',
+    credentialSession.accessToken,
+  );
+  const changedCredentialRefresh = await request('/auth/refresh', null, 'POST', {
+    refreshToken: credentialSession.refreshToken,
+  });
+  assert(
+    changedCredentialAccess.status === 401 &&
+      restoredCredentialAccess.status === 401 &&
+      changedCredentialRefresh.status === 401,
+    'PIN 凭据变化会永久撤销旧会话',
+  );
+
   console.log('\n认证、安全与业务一致性测试全部通过');
 } finally {
   if (testHouseholdId) {
@@ -596,8 +741,9 @@ try {
     [memberId, TEST_DATE, LOCK_TEST_DATE],
   );
   if (memberId) {
-    await db.query('UPDATE members SET "pinHash" = $1 WHERE id = $2', [
+    await db.query('UPDATE members SET "pinHash" = $1, role = $2 WHERE id = $3', [
       originalPinHash,
+      originalRole,
       memberId,
     ]);
   }

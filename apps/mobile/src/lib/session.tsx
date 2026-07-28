@@ -5,10 +5,17 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { Platform } from 'react-native';
-import { api, setAuthToken, setUnauthorizedHandler } from './api';
+import {
+  ApiError,
+  api,
+  setAuthRefreshHandler,
+  setAuthToken,
+  setUnauthorizedHandler,
+} from './api';
 import type { Member } from './types';
 
 interface Session {
@@ -19,9 +26,16 @@ interface Session {
   updateMember: (member: Member) => Promise<void>;
 }
 
+interface AuthSessionResponse {
+  accessToken: string;
+  refreshToken: string;
+  member: Member;
+}
+
 const SessionContext = createContext<Session>(null as unknown as Session);
 
-const TOKEN_KEY = 'family-app-token';
+const ACCESS_TOKEN_KEY = 'family-app-token';
+const REFRESH_TOKEN_KEY = 'family-app-refresh-token';
 const MEMBER_KEY = 'family-app-member';
 
 function getStoredItem(key: string): Promise<string | null> {
@@ -52,51 +66,113 @@ function deleteStoredItem(key: string): Promise<void> {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [member, setMember] = useState<Member | null>(null);
   const [ready, setReady] = useState(false);
+  const refreshTokenRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [token, memberJson] = await Promise.all([
-          getStoredItem(TOKEN_KEY),
-          getStoredItem(MEMBER_KEY),
-        ]);
-        if (token && memberJson) {
-          setAuthToken(token);
-          setMember(JSON.parse(memberJson));
-        }
-      } finally {
-        setReady(true);
-      }
-    })();
-  }, []);
-
-  const logout = useCallback(async () => {
+  const clearLocalSession = useCallback(async () => {
+    refreshTokenRef.current = null;
     setAuthToken(null);
     setMember(null);
     await Promise.all([
-      deleteStoredItem(TOKEN_KEY),
+      deleteStoredItem(ACCESS_TOKEN_KEY),
+      deleteStoredItem(REFRESH_TOKEN_KEY),
       deleteStoredItem(MEMBER_KEY),
     ]);
   }, []);
 
-  useEffect(() => {
-    setUnauthorizedHandler(() => {
-      void logout();
-    });
-  }, [logout]);
-
-  const login = useCallback(async (memberId: string, pin?: string) => {
-    const result = await api<{ token: string; member: Member }>('/auth/login', {
-      method: 'POST',
-      body: { memberId, pin },
-    });
-    setAuthToken(result.token);
+  const applySession = useCallback(async (result: AuthSessionResponse) => {
+    refreshTokenRef.current = result.refreshToken;
+    setAuthToken(result.accessToken);
     setMember(result.member);
     await Promise.all([
-      setStoredItem(TOKEN_KEY, result.token),
+      setStoredItem(ACCESS_TOKEN_KEY, result.accessToken),
+      setStoredItem(REFRESH_TOKEN_KEY, result.refreshToken),
       setStoredItem(MEMBER_KEY, JSON.stringify(result.member)),
     ]);
   }, []);
+
+  const refreshSession = useCallback(async () => {
+    const refreshToken =
+      refreshTokenRef.current ?? (await getStoredItem(REFRESH_TOKEN_KEY));
+    if (!refreshToken) return null;
+
+    const result = await api<AuthSessionResponse>('/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken },
+      auth: false,
+    });
+    await applySession(result);
+    return result.accessToken;
+  }, [applySession]);
+
+  useEffect(() => {
+    setAuthRefreshHandler(refreshSession);
+    setUnauthorizedHandler(() => {
+      void clearLocalSession();
+    });
+    return () => {
+      setAuthRefreshHandler(null);
+      setUnauthorizedHandler(null);
+    };
+  }, [clearLocalSession, refreshSession]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const [accessToken, refreshToken, memberJson] = await Promise.all([
+        getStoredItem(ACCESS_TOKEN_KEY),
+        getStoredItem(REFRESH_TOKEN_KEY),
+        getStoredItem(MEMBER_KEY),
+      ]);
+
+      if (!refreshToken || !memberJson) {
+        await clearLocalSession();
+        if (active) setReady(true);
+        return;
+      }
+
+      try {
+        const cachedMember = JSON.parse(memberJson) as Member;
+        refreshTokenRef.current = refreshToken;
+        setAuthToken(accessToken);
+        if (active) setMember(cachedMember);
+        await refreshSession();
+      } catch (error) {
+        if (
+          error instanceof SyntaxError ||
+          (error instanceof ApiError && error.status === 401)
+        ) {
+          await clearLocalSession();
+        }
+      } finally {
+        if (active) setReady(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [clearLocalSession, refreshSession]);
+
+  const logout = useCallback(async () => {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      // 本地退出不能被网络故障阻塞，服务端会话仍会按刷新期限失效。
+    } finally {
+      await clearLocalSession();
+    }
+  }, [clearLocalSession]);
+
+  const login = useCallback(
+    async (memberId: string, pin?: string) => {
+      const result = await api<AuthSessionResponse>('/auth/login', {
+        method: 'POST',
+        body: { memberId, pin },
+        auth: false,
+      });
+      await applySession(result);
+    },
+    [applySession],
+  );
 
   const updateMember = useCallback(async (nextMember: Member) => {
     setMember(nextMember);

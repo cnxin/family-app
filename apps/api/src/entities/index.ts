@@ -93,6 +93,64 @@ export class Member {
   createdAt: Date;
 }
 
+@Entity('auth_sessions')
+@Check(
+  'CHK_auth_sessions_role_snapshot',
+  `"roleSnapshot" IN ('owner', 'admin', 'member')`,
+)
+@Index('UQ_auth_sessions_refresh_token_hash', ['refreshTokenHash'], {
+  unique: true,
+})
+@Index('IDX_auth_sessions_member_status', ['memberId', 'revokedAt'])
+export class AuthSession {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_auth_sessions_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_auth_sessions_member',
+  })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  refreshTokenHash: string;
+
+  @Column({ type: 'varchar' })
+  roleSnapshot: MemberRole;
+
+  @Column({ type: 'varchar', length: 64 })
+  credentialSnapshot: string;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  revokedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastUsedAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('ingredients')
 @Unique('UQ_ingredients_household_name', ['householdId', 'name'])
 @Index('IDX_ingredients_household', ['householdId'])
@@ -505,6 +563,7 @@ export class InventoryItem {
 export const ALL_ENTITIES = [
   Household,
   Member,
+  AuthSession,
   Ingredient,
   Dish,
   DishIngredient,

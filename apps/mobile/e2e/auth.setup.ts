@@ -1,11 +1,23 @@
-import { expect, test as setup } from '@playwright/test';
+import {
+  expect,
+  test as setup,
+  type APIRequestContext,
+  type Page,
+} from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-const authFile = resolve(process.cwd(), 'e2e/.auth/member.json');
+const authFiles = {
+  mobile: resolve(process.cwd(), 'e2e/.auth/mobile.json'),
+  desktop: resolve(process.cwd(), 'e2e/.auth/desktop.json'),
+};
 const apiURL = process.env.FAMILY_API_URL ?? 'http://127.0.0.1:3100';
 
-setup('使用鼠标选择家庭成员并登录', async ({ page, request }) => {
+async function loginWithMouse(
+  page: Page,
+  request: APIRequestContext,
+  authFile: string,
+) {
   const apiHealth = await request.get(`${apiURL}/members`);
   expect(apiHealth.ok(), `API 未就绪：${apiURL}`).toBeTruthy();
 
@@ -32,4 +44,12 @@ setup('使用鼠标选择家庭成员并登录', async ({ page, request }) => {
 
   mkdirSync(dirname(authFile), { recursive: true });
   await page.context().storageState({ path: authFile });
+}
+
+setup('为移动视口使用鼠标登录', async ({ page, request }) => {
+  await loginWithMouse(page, request, authFiles.mobile);
+});
+
+setup('为桌面视口使用鼠标登录', async ({ page, request }) => {
+  await loginWithMouse(page, request, authFiles.desktop);
 });

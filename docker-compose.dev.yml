@@ -14,7 +14,8 @@ x-api-common: &api-common
     DB_PASSWORD: family123
     DB_NAME: family_app
     JWT_SECRET: family-app-local-web-demo-secret
-    JWT_EXPIRES_SECONDS: 43200
+    JWT_EXPIRES_SECONDS: 900
+    REFRESH_TOKEN_EXPIRES_SECONDS: 2592000
     LOGIN_RATE_LIMIT: 5
     LOGIN_RATE_WINDOW_MS: 60000
 

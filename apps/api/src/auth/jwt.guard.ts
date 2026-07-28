@@ -11,7 +11,8 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Request } from 'express';
 import { Repository } from 'typeorm';
-import { Member, MemberRole } from '../entities';
+import { AuthSession, Member, MemberRole } from '../entities';
+import { credentialSnapshot } from './session.tokens';
 
 export const IS_PUBLIC = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -20,6 +21,7 @@ export interface JwtUser {
   sub: string;
   memberId: string;
   householdId: string;
+  sid: string;
   name: string;
   role: MemberRole;
 }
@@ -35,6 +37,8 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
     @InjectRepository(Member) private readonly members: Repository<Member>,
+    @InjectRepository(AuthSession)
+    private readonly sessions: Repository<AuthSession>,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -51,7 +55,12 @@ export class JwtAuthGuard implements CanActivate {
     let user: JwtUser;
     try {
       user = await this.jwt.verifyAsync<JwtUser>(token);
-      if (!user.sub || user.memberId !== user.sub || !user.householdId) {
+      if (
+        !user.sub ||
+        user.memberId !== user.sub ||
+        !user.householdId ||
+        !user.sid
+      ) {
         throw new UnauthorizedException('登录信息已失效，请重新登录');
       }
     } catch (error) {
@@ -59,13 +68,44 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('登录已过期，请重新登录');
     }
 
-    const member = await this.members.findOneBy({
-      id: user.memberId,
-      householdId: user.householdId,
-    });
-    if (!member) {
-      throw new UnauthorizedException('成员已停用，请重新登录');
+    const [member, session] = await Promise.all([
+      this.members.findOne({
+        where: {
+          id: user.memberId,
+          householdId: user.householdId,
+        },
+        select: {
+          id: true,
+          householdId: true,
+          name: true,
+          role: true,
+          pinHash: true,
+        },
+      }),
+      this.sessions.findOneBy({
+        id: user.sid,
+        memberId: user.memberId,
+        householdId: user.householdId,
+      }),
+    ]);
+    if (
+      !member ||
+      !session ||
+      session.revokedAt ||
+      session.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new UnauthorizedException('登录会话已失效，请重新登录');
     }
+
+    if (
+      user.role !== session.roleSnapshot ||
+      member.role !== session.roleSnapshot ||
+      credentialSnapshot(member.pinHash) !== session.credentialSnapshot
+    ) {
+      await this.sessions.update(session.id, { revokedAt: new Date() });
+      throw new UnauthorizedException('成员权限或凭据已更新，请重新登录');
+    }
+
     req.user = {
       ...user,
       name: member.name,
