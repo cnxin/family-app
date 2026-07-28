@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { UtensilsCrossed } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,14 +11,15 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import { DateSelector } from '../../components/date-selector';
 import {
   Card,
   EmptyState,
   PressableScale,
   SectionHeader,
-  Segmented,
 } from '../../components/ui';
-import { todayStr } from '../../lib/cart';
+import { mealLabel, todayStr } from '../../lib/date';
 import {
   useGenerateShoppingList,
   useMenusOfDate,
@@ -57,7 +59,15 @@ function MenuItemRow({ item }: { item: MenuItem }) {
   const dimmed = item.status === 'rejected';
 
   return (
-    <View style={[styles.itemRow, { borderBottomColor: c.separator }]}>
+    <View
+      style={[
+        styles.itemRow,
+        {
+          borderBottomColor: c.separator,
+          backgroundColor: dimmed ? 'transparent' : c.tintSoft,
+        },
+      ]}
+    >
       <Text style={{ fontSize: 28 }}>
         {CATEGORY_EMOJI[item.dish.category] ?? '🍽️'}
       </Text>
@@ -123,8 +133,9 @@ function MenuItemRow({ item }: { item: MenuItem }) {
 
 export default function KitchenScreen() {
   const c = useTheme();
+  const desktop = useDesktopLayout();
   const [date, setDate] = useState(todayStr());
-  const { data: menus, isLoading, refetch } = useMenusOfDate(date);
+  const { data: menus, isLoading } = useMenusOfDate(date);
   const generate = useGenerateShoppingList();
 
   const totalItems =
@@ -150,60 +161,75 @@ export default function KitchenScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={[t.largeTitle, { color: c.label }]}>今日菜单</Text>
-      </View>
-
-      <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
-        <Segmented
-          options={[
-            { label: '今天', value: todayStr() },
-            { label: '明天', value: todayStr(1) },
-          ]}
-          value={date}
-          onChange={setDate}
-        />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
-        showsVerticalScrollIndicator={false}
+      <PageContainer
+        maxWidth={900}
+        style={[styles.page, desktop && styles.pageDesktop]}
       >
+        <View style={styles.header}>
+          <Text style={[t.largeTitle, { color: c.label }]}>菜单安排</Text>
+          <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>查看接单进度并准备购物清单</Text>
+        </View>
+
+        <View style={styles.dateControl}>
+          <DateSelector value={date} onChange={setDate} />
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
         {isLoading ? <ActivityIndicator style={{ marginTop: 48 }} /> : null}
 
-        {menus?.map((menu) => (
-          <View key={menu.id}>
-            <SectionHeader
-              title={menu.mealType === 'lunch' ? '午餐' : '晚餐'}
-            />
-            <Card>
-              {menu.items.length === 0 ? (
-                <Text
-                  style={[
-                    t.subhead,
-                    { color: c.tertiaryLabel, padding: 16, textAlign: 'center' },
-                  ]}
-                >
-                  还没人点菜
-                </Text>
-              ) : (
-                menu.items.map((item, i) => (
-                  <Animated.View
-                    key={item.id}
-                    entering={FadeInDown.delay(i * 40).springify().damping(18)}
+        {menus?.map((menu) => {
+          const activeCount = menu.items.filter((item) => item.status !== 'rejected').length;
+          return (
+            <View key={menu.id}>
+              <SectionHeader
+                title={mealLabel(menu.mealType)}
+                right={
+                  activeCount ? (
+                    <View style={[styles.orderedBadge, { backgroundColor: c.tint }]}>
+                      <UtensilsCrossed color="#FFFFFF" size={13} />
+                      <Text style={styles.orderedBadgeText}>已点 {activeCount} 道</Text>
+                    </View>
+                  ) : undefined
+                }
+              />
+              <Card
+                style={
+                  activeCount
+                    ? { borderColor: c.tint, borderWidth: 1.5, overflow: 'hidden' }
+                    : undefined
+                }
+              >
+                {menu.items.length === 0 ? (
+                  <Text
+                    style={[
+                      t.subhead,
+                      { color: c.tertiaryLabel, padding: 16, textAlign: 'center' },
+                    ]}
                   >
-                    <MenuItemRow item={item} />
-                  </Animated.View>
-                ))
-              )}
-            </Card>
-          </View>
-        ))}
+                    还没人点菜
+                  </Text>
+                ) : (
+                  menu.items.map((item, i) => (
+                    <Animated.View
+                      key={item.id}
+                      entering={FadeInDown.delay(i * 40).springify().damping(18)}
+                    >
+                      <MenuItemRow item={item} />
+                    </Animated.View>
+                  ))
+                )}
+              </Card>
+            </View>
+          );
+        })}
 
         {!isLoading && totalItems === 0 ? (
           <EmptyState
             emoji="🍳"
-            title="厨房今天很清闲"
+            title="这天还没有安排"
             hint="等家人去「点菜」页下单吧"
           />
         ) : null}
@@ -225,13 +251,18 @@ export default function KitchenScreen() {
             </PressableScale>
           </View>
         ) : null}
-      </ScrollView>
+        </ScrollView>
+      </PageContainer>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 16, paddingTop: 8 },
+  page: { flex: 1, paddingTop: 8 },
+  pageDesktop: { paddingTop: 22 },
+  header: { paddingTop: 0 },
+  dateControl: { marginTop: 14 },
+  scrollContent: { paddingBottom: 32 },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -244,6 +275,15 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: radius.full,
   },
+  orderedBadge: {
+    height: 26,
+    borderRadius: radius.full,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  orderedBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   generateBtn: {
     height: 50,
     borderRadius: radius.md,

@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import {
   Card,
   PressableScale,
@@ -19,6 +20,7 @@ import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../lib/theme';
 
 export default function ProfileScreen() {
   const c = useTheme();
+  const desktop = useDesktopLayout();
   const router = useRouter();
   const { member, logout } = useSession();
   const { data: dishes } = useDishes();
@@ -37,14 +39,18 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={[t.largeTitle, { color: c.label }]}>我的</Text>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
-        showsVerticalScrollIndicator={false}
+      <PageContainer
+        maxWidth={1040}
+        style={[styles.page, desktop && styles.pageDesktop]}
       >
+        <View style={styles.header}>
+          <Text style={[t.largeTitle, { color: c.label }]}>我的</Text>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
         <Card style={styles.profileCard}>
           <Text style={{ fontSize: 52 }}>{member?.avatarEmoji}</Text>
           <View style={{ marginLeft: 14 }}>
@@ -77,7 +83,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={[t.body, { color: c.label }]}>{dish.name}</Text>
                 <Text style={[t.footnote, { color: c.secondaryLabel }]}>
-                  {dish.category} · {dish.ingredients?.length ?? 0} 种食材
+                  {dish.category} · {dish.ingredients?.length ?? 0} 种食材 · {dish.recipeSteps?.length ?? 0} 步做法
                 </Text>
               </View>
               <PressableScale
@@ -121,13 +127,17 @@ export default function ProfileScreen() {
         >
           小管家 v0.1 · 家庭点菜模块
         </Text>
-      </ScrollView>
+        </ScrollView>
+      </PageContainer>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 16, paddingTop: 8 },
+  page: { flex: 1, paddingTop: 8 },
+  pageDesktop: { paddingTop: 22 },
+  header: { paddingTop: 0 },
+  scrollContent: { paddingBottom: 32 },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',

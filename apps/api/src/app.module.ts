@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { DishesModule } from './dishes/dishes.module';
 import { ALL_ENTITIES } from './entities';
+import { InventoryModule } from './inventory/inventory.module';
 import { MenusModule } from './menus/menus.module';
 import { ShoppingModule } from './shopping/shopping.module';
 import { UploadModule } from './upload/upload.module';
@@ -21,6 +22,7 @@ import { UploadModule } from './upload/upload.module';
     }),
     AuthModule,
     DishesModule,
+    InventoryModule,
     MenusModule,
     ShoppingModule,
     UploadModule,

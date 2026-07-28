@@ -53,6 +53,14 @@ class UpdateItemDto {
   note?: string;
 }
 
+class MenuDateRangeDto {
+  @IsISO8601()
+  start: string;
+
+  @IsISO8601()
+  end: string;
+}
+
 @Injectable()
 export class MenusService {
   constructor(
@@ -74,9 +82,32 @@ export class MenusService {
   }
 
   async listByDate(date: string) {
+    const breakfast = await this.findOrCreate(date, 'breakfast');
     const lunch = await this.findOrCreate(date, 'lunch');
     const dinner = await this.findOrCreate(date, 'dinner');
-    return [lunch, dinner];
+    return [breakfast, lunch, dinner];
+  }
+
+  async listDateCounts(start: string, end: string) {
+    const rows = await this.items
+      .createQueryBuilder('item')
+      .innerJoin('item.menu', 'menu')
+      .select('menu.date', 'date')
+      .addSelect('COUNT(item.id)', 'count')
+      .where('menu.date >= :start', { start })
+      .andWhere('menu.date <= :end', { end })
+      .andWhere('item.status != :rejected', { rejected: 'rejected' })
+      .groupBy('menu.date')
+      .orderBy('menu.date', 'ASC')
+      .getRawMany<{ date: string | Date; count: string }>();
+
+    return rows.map((row) => ({
+      date:
+        row.date instanceof Date
+          ? row.date.toISOString().slice(0, 10)
+          : String(row.date).slice(0, 10),
+      count: Number(row.count),
+    }));
   }
 
   async addItems(menuId: string, dto: AddItemsDto, userId: string) {
@@ -107,7 +138,12 @@ export class MenusService {
 export class MenusController {
   constructor(private readonly service: MenusService) {}
 
-  // GET /menus?date=2026-07-26 → [午餐, 晚餐]；带 mealType 只返回一个
+  @Get('menu-dates')
+  dateCounts(@Query() query: MenuDateRangeDto) {
+    return this.service.listDateCounts(query.start, query.end);
+  }
+
+  // GET /menus?date=2026-07-26 -> [早餐, 午餐, 晚餐]；带 mealType 只返回一个
   @Get('menus')
   async get(
     @Query('date') date: string,

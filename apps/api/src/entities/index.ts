@@ -7,13 +7,25 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
   Unique,
+  UpdateDateColumn,
 } from 'typeorm';
 
 export type MemberRole = 'chef' | 'member';
 export type DishCategory = '荤菜' | '素菜' | '汤' | '主食' | '甜品';
 export type IngredientCategory = '蔬菜' | '肉类' | '海鲜' | '蛋奶' | '调料' | '主食' | '其他';
-export type MealType = 'lunch' | 'dinner';
+export type MealType = 'breakfast' | 'lunch' | 'dinner';
 export type MenuItemStatus = 'pending' | 'accepted' | 'cooking' | 'done' | 'rejected';
+export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
+
+export interface DishRecipeStep {
+  text: string;
+  imageUrl?: string | null;
+}
+
+export interface DishReferenceLink {
+  title?: string;
+  url: string;
+}
 
 @Entity('members')
 export class Member {
@@ -76,6 +88,12 @@ export class Dish {
 
   @Column({ type: 'varchar', nullable: true })
   note: string | null;
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  recipeSteps: DishRecipeStep[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  referenceLinks: DishReferenceLink[];
 
   @Column({ default: true })
   isActive: boolean;
@@ -202,6 +220,37 @@ export class ShoppingItem {
   source: 'auto' | 'manual';
 }
 
+@Entity('inventory_items')
+@Unique(['name'])
+export class InventoryItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  name: string;
+
+  @Column({ type: 'varchar', default: '其他' })
+  category: InventoryCategory;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 0 })
+  quantity: string;
+
+  @Column({ type: 'varchar', default: '份' })
+  unit: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 1 })
+  lowStockThreshold: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 1 })
+  restockQuantity: string;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
 export const ALL_ENTITIES = [
   Member,
   Ingredient,
@@ -210,4 +259,5 @@ export const ALL_ENTITIES = [
   Menu,
   MenuItem,
   ShoppingItem,
+  InventoryItem,
 ];

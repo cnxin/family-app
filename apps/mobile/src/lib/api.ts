@@ -1,7 +1,15 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 // Expo Go 开发期：API 跑在起 dev server 的同一台电脑上，从 hostUri 取局域网 IP
 function resolveBaseUrl(): string {
+  const configuredUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (configuredUrl) return configuredUrl.replace(/\/+$/, '');
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `http://${window.location.hostname}:3100`;
+  }
+
   const host = Constants.expoConfig?.hostUri?.split(':')[0];
   return host ? `http://${host}:3100` : 'http://localhost:3100';
 }

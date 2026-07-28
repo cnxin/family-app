@@ -1,10 +1,15 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  Alert,
+  ImagePlus,
+  Link2,
+  Plus,
+  Trash2,
+} from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,6 +22,7 @@ import {
 import { PressableScale, PrimaryButton, SectionHeader } from '../components/ui';
 import { photoUri, uploadPhoto } from '../lib/api';
 import { useDishes, useUpsertDish } from '../lib/queries';
+import { useSession } from '../lib/session';
 import { radius, type as t, useTheme } from '../lib/theme';
 
 const CATEGORIES = ['荤菜', '素菜', '汤', '主食', '甜品'];
@@ -27,11 +33,28 @@ interface IngredientForm {
   unit: string;
 }
 
+interface RecipeStepForm {
+  text: string;
+  imageUrl: string | null;
+  localPhoto: string | null;
+}
+
+interface ReferenceLinkForm {
+  title: string;
+  url: string;
+}
+
+function normalizeReferenceUrl(value: string) {
+  const url = value.trim();
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
 export default function DishEditModal() {
   const c = useTheme();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { data: dishes } = useDishes();
+  const { member, ready } = useSession();
+  const { data: dishes } = useDishes(ready && Boolean(member));
   const editing = id ? dishes?.find((d) => d.id === id) : undefined;
   const upsert = useUpsertDish();
 
@@ -51,7 +74,53 @@ export default function DishEditModal() {
       unit: di.unit,
     })) ?? [],
   );
+  const [recipeSteps, setRecipeSteps] = useState<RecipeStepForm[]>(
+    editing?.recipeSteps?.map((step) => ({
+      text: step.text,
+      imageUrl: step.imageUrl ?? null,
+      localPhoto: null,
+    })) ?? [],
+  );
+  const [referenceLinks, setReferenceLinks] = useState<ReferenceLinkForm[]>(
+    editing?.referenceLinks?.map((link) => ({
+      title: link.title ?? '',
+      url: link.url,
+    })) ?? [],
+  );
+  const [hydratedId, setHydratedId] = useState(editing?.id ?? null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing || hydratedId === editing.id) return;
+    setName(editing.name);
+    setCategory(editing.category);
+    setDifficulty(editing.difficulty);
+    setEstMinutes(editing.estMinutes ? String(editing.estMinutes) : '');
+    setNote(editing.note ?? '');
+    setPhoto(editing.photoUrl);
+    setIngredients(
+      editing.ingredients?.map((di) => ({
+        name: di.ingredient.name,
+        quantity: String(Number(di.quantity)),
+        unit: di.unit,
+      })) ?? [],
+    );
+    setRecipeSteps(
+      editing.recipeSteps?.map((step) => ({
+        text: step.text,
+        imageUrl: step.imageUrl ?? null,
+        localPhoto: null,
+      })) ?? [],
+    );
+    setReferenceLinks(
+      editing.referenceLinks?.map((link) => ({
+        title: link.title ?? '',
+        url: link.url,
+      })) ?? [],
+    );
+    setHydratedId(editing.id);
+  }, [editing, hydratedId]);
 
   const pickPhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -65,21 +134,66 @@ export default function DishEditModal() {
     }
   };
 
+  const pickStepPhoto = async (index: number) => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.75,
+      allowsEditing: true,
+      aspect: [4, 3],
+    });
+    if (!result.canceled && result.assets[0]) {
+      setRecipeSteps((current) =>
+        current.map((step, stepIndex) =>
+          stepIndex === index
+            ? { ...step, localPhoto: result.assets[0].uri }
+            : step,
+        ),
+      );
+    }
+  };
+
   const updateIngredient = (i: number, patch: Partial<IngredientForm>) => {
     setIngredients((prev) =>
       prev.map((row, idx) => (idx === i ? { ...row, ...patch } : row)),
     );
   };
 
+  const updateRecipeStep = (index: number, patch: Partial<RecipeStepForm>) => {
+    setRecipeSteps((current) =>
+      current.map((step, stepIndex) =>
+        stepIndex === index ? { ...step, ...patch } : step,
+      ),
+    );
+  };
+
+  const updateReferenceLink = (index: number, patch: Partial<ReferenceLinkForm>) => {
+    setReferenceLinks((current) =>
+      current.map((link, linkIndex) =>
+        linkIndex === index ? { ...link, ...patch } : link,
+      ),
+    );
+  };
+
   const save = async () => {
     if (!name.trim()) {
-      Alert.alert('还没写菜名');
+      setSaveError('还没写菜名');
       return;
     }
     setSaving(true);
+    setSaveError(null);
     try {
       let photoUrl = photo ?? undefined;
       if (localPhoto) photoUrl = await uploadPhoto(localPhoto);
+      const savedRecipeSteps = [];
+      for (const step of recipeSteps) {
+        if (!step.text.trim() && !step.imageUrl && !step.localPhoto) continue;
+        let imageUrl = step.imageUrl ?? undefined;
+        if (step.localPhoto) imageUrl = await uploadPhoto(step.localPhoto);
+        savedRecipeSteps.push({
+          text: step.text.trim(),
+          imageUrl,
+        });
+      }
       await upsert.mutateAsync({
         id: editing?.id,
         name: name.trim(),
@@ -88,6 +202,13 @@ export default function DishEditModal() {
         estMinutes: estMinutes ? Number(estMinutes) : undefined,
         note: note.trim() || undefined,
         photoUrl,
+        recipeSteps: savedRecipeSteps,
+        referenceLinks: referenceLinks
+          .filter((link) => link.url.trim())
+          .map((link) => ({
+            title: link.title.trim() || undefined,
+            url: normalizeReferenceUrl(link.url),
+          })),
         ingredients: ingredients
           .filter((row) => row.name.trim())
           .map((row) => ({
@@ -99,13 +220,16 @@ export default function DishEditModal() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e) {
-      Alert.alert('保存失败', e instanceof Error ? e.message : '稍后再试');
+      setSaveError(e instanceof Error ? e.message : '保存失败，请稍后再试');
     } finally {
       setSaving(false);
     }
   };
 
   const displayPhoto = localPhoto ?? photoUri(photo);
+
+  if (!ready) return null;
+  if (!member) return <Redirect href="/login" />;
 
   return (
     <KeyboardAvoidingView
@@ -189,12 +313,93 @@ export default function DishEditModal() {
           </View>
           <TextInput
             style={[styles.input, { color: c.label, borderBottomWidth: 0 }]}
-            placeholder="备注（比如：孩子最爱）"
+            placeholder="口味特点（比如：酸甜、微辣）"
             placeholderTextColor={c.tertiaryLabel}
             value={note}
             onChangeText={setNote}
           />
         </View>
+
+        <SectionHeader
+          title="做法（图文）"
+          right={
+            <PressableScale
+              accessibilityLabel="添加做法步骤"
+              onPress={() =>
+                setRecipeSteps((current) => [
+                  ...current,
+                  { text: '', imageUrl: null, localPhoto: null },
+                ])
+              }
+            >
+              <View style={styles.sectionAction}>
+                <Plus color={c.tint} size={16} />
+                <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>添加步骤</Text>
+              </View>
+            </PressableScale>
+          }
+        />
+        {recipeSteps.length === 0 ? (
+          <View style={[styles.emptyRecipe, { backgroundColor: c.card, borderColor: c.separator }]}>
+            <ImagePlus color={c.tertiaryLabel} size={23} />
+            <Text style={[t.subhead, { color: c.secondaryLabel }]}>还没有记录做法</Text>
+          </View>
+        ) : null}
+        {recipeSteps.map((step, index) => {
+          const stepPhoto = step.localPhoto ?? photoUri(step.imageUrl);
+          return (
+            <View
+              key={index}
+              style={[styles.stepCard, { backgroundColor: c.card, borderColor: c.separator }]}
+            >
+              <View style={styles.stepHeader}>
+                <View style={[styles.stepNumber, { backgroundColor: c.tint }]}>
+                  <Text style={styles.stepNumberText}>{index + 1}</Text>
+                </View>
+                <Text style={[t.headline, { color: c.label, flex: 1 }]}>第 {index + 1} 步</Text>
+                <PressableScale
+                  accessibilityLabel={`删除第${index + 1}步`}
+                  haptic={false}
+                  onPress={() =>
+                    setRecipeSteps((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                  }
+                  style={styles.smallIconButton}
+                >
+                  <Trash2 color={c.red} size={17} />
+                </PressableScale>
+              </View>
+              <TextInput
+                accessibilityLabel={`第${index + 1}步做法`}
+                multiline
+                onChangeText={(text) => updateRecipeStep(index, { text })}
+                placeholder="写下火候、时间和关键动作"
+                placeholderTextColor={c.tertiaryLabel}
+                style={[
+                  styles.stepTextInput,
+                  t.body,
+                  { backgroundColor: c.fill, color: c.label },
+                ]}
+                textAlignVertical="top"
+                value={step.text}
+              />
+              <PressableScale
+                accessibilityLabel={`${stepPhoto ? '更换' : '添加'}第${index + 1}步图片`}
+                haptic={false}
+                onPress={() => void pickStepPhoto(index)}
+                style={styles.stepPhotoButton}
+              >
+                {stepPhoto ? (
+                  <Image source={{ uri: stepPhoto }} style={styles.stepPhoto} contentFit="cover" />
+                ) : (
+                  <View style={[styles.stepPhotoPlaceholder, { backgroundColor: c.fill }]}>
+                    <ImagePlus color={c.tint} size={20} />
+                    <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>添加步骤图片</Text>
+                  </View>
+                )}
+              </PressableScale>
+            </View>
+          );
+        })}
 
         <SectionHeader
           title="食材"
@@ -249,6 +454,70 @@ export default function DishEditModal() {
             </View>
           ))}
         </View>
+
+        <SectionHeader
+          title="参考链接"
+          right={
+            <PressableScale
+              accessibilityLabel="添加参考链接"
+              onPress={() =>
+                setReferenceLinks((current) => [...current, { title: '', url: '' }])
+              }
+            >
+              <View style={styles.sectionAction}>
+                <Link2 color={c.tint} size={16} />
+                <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>添加链接</Text>
+              </View>
+            </PressableScale>
+          }
+        />
+        <View style={[styles.formCard, { backgroundColor: c.card }]}>
+          {referenceLinks.length === 0 ? (
+            <Text style={[t.subhead, { color: c.tertiaryLabel, padding: 14, textAlign: 'center' }]}>
+              可以保存视频、文章或家人的做菜笔记链接
+            </Text>
+          ) : null}
+          {referenceLinks.map((link, index) => (
+            <View key={index} style={[styles.linkRow, { borderBottomColor: c.separator }]}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <TextInput
+                  accessibilityLabel={`第${index + 1}个链接标题`}
+                  onChangeText={(title) => updateReferenceLink(index, { title })}
+                  placeholder="标题（可选）"
+                  placeholderTextColor={c.tertiaryLabel}
+                  style={[styles.linkInput, t.subhead, { color: c.label }]}
+                  value={link.title}
+                />
+                <TextInput
+                  accessibilityLabel={`第${index + 1}个参考链接`}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  onChangeText={(url) => updateReferenceLink(index, { url })}
+                  placeholder="example.com/recipe"
+                  placeholderTextColor={c.tertiaryLabel}
+                  style={[styles.linkInput, t.footnote, { color: c.secondaryLabel }]}
+                  value={link.url}
+                />
+              </View>
+              <PressableScale
+                accessibilityLabel={`删除第${index + 1}个参考链接`}
+                haptic={false}
+                onPress={() =>
+                  setReferenceLinks((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                }
+                style={styles.smallIconButton}
+              >
+                <Trash2 color={c.red} size={17} />
+              </PressableScale>
+            </View>
+          ))}
+        </View>
+
+        {saveError ? (
+          <Text style={[t.subhead, { color: c.red, marginTop: 16, textAlign: 'center' }]}>
+            {saveError}
+          </Text>
+        ) : null}
 
         <View style={{ marginTop: 28 }}>
           <PrimaryButton title="保存" onPress={() => void save()} loading={saving} />
@@ -320,4 +589,53 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     textAlign: 'center',
   },
+  sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  emptyRecipe: {
+    minHeight: 86,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  stepCard: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+  },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  stepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  smallIconButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  stepTextInput: {
+    minHeight: 88,
+    borderRadius: radius.sm,
+    padding: 11,
+    marginTop: 10,
+  },
+  stepPhotoButton: { marginTop: 10 },
+  stepPhoto: { width: '100%', aspectRatio: 4 / 3, borderRadius: radius.sm },
+  stepPhotoPlaceholder: {
+    height: 54,
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  linkRow: {
+    minHeight: 74,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  linkInput: { minHeight: 32, paddingHorizontal: 2, paddingVertical: 4 },
 });

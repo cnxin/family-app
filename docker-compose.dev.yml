@@ -1,0 +1,64 @@
+name: family-app-dev
+
+x-api-common: &api-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: family-app-api:dev
+  environment:
+    NODE_ENV: development
+    PORT: 3100
+    DB_HOST: db
+    DB_PORT: 5432
+    DB_USER: family
+    DB_PASSWORD: family123
+    DB_NAME: family_app
+    JWT_SECRET: family-app-local-web-demo-secret
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: family
+      POSTGRES_PASSWORD: family123
+      POSTGRES_DB: family_app
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - family_app_pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U family -d family_app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  seed:
+    <<: *api-common
+    command: ["pnpm", "--filter", "api", "seed"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *api-common
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - family_app_uploads:/app/apps/api/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/members').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  family_app_pgdata_dev:
+  family_app_uploads:

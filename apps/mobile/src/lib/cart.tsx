@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { todayStr } from './date';
 import type { Dish, MealType } from './types';
 
 export interface CartEntry {
@@ -25,17 +26,11 @@ interface Cart {
 
 const CartContext = createContext<Cart>(null as unknown as Cart);
 
-export function todayStr(offsetDays = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
-// 过了下午 3 点默认点晚餐
+// 按当前时间给出更贴近日常使用的默认餐次。
 export function defaultMealType(): MealType {
-  return new Date().getHours() >= 15 ? 'dinner' : 'lunch';
+  const hour = new Date().getHours();
+  if (hour < 9) return 'breakfast';
+  return hour >= 15 ? 'dinner' : 'lunch';
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {

@@ -1,0 +1,16 @@
+.git
+.claude
+node_modules
+**/node_modules
+dist
+**/dist
+.expo
+**/.expo
+uploads
+**/uploads
+apps/mobile
+*.log
+**/*.log
+.env
+**/.env
+.DS_Store

@@ -1,64 +1,87 @@
 import { Redirect, Tabs } from 'expo-router';
-import { SymbolView, SFSymbol } from 'expo-symbols';
+import {
+  CookingPot,
+  LayoutDashboard,
+  ShoppingCart,
+  UserRound,
+  UtensilsCrossed,
+  type LucideIcon,
+} from 'lucide-react-native';
 import React from 'react';
-import { ColorValue, Platform, Text } from 'react-native';
+import { ColorValue } from 'react-native';
+import { AppShell, useDesktopLayout } from '../../components/app-shell';
 import { useSession } from '../../lib/session';
 import { useTheme } from '../../lib/theme';
 
 function TabIcon({
-  sf,
-  emoji,
+  icon: Icon,
   color,
 }: {
-  sf: SFSymbol;
-  emoji: string;
+  icon: LucideIcon;
   color: ColorValue;
 }) {
-  if (Platform.OS === 'ios') {
-    return <SymbolView name={sf} size={26} tintColor={color} />;
-  }
-  return <Text style={{ fontSize: 22 }}>{emoji}</Text>;
+  return <Icon color={color} size={22} strokeWidth={2.1} />;
 }
 
 export default function TabLayout() {
   const c = useTheme();
+  const desktop = useDesktopLayout();
   const { member, ready } = useSession();
 
-  if (ready && !member) return <Redirect href="/login" />;
+  if (!ready) return null;
+  if (!member) return <Redirect href="/login" />;
 
-  return (
+  const tabs = (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: c.tint,
         tabBarInactiveTintColor: c.secondaryLabel,
-        tabBarStyle: { backgroundColor: c.card, borderTopColor: c.separator },
+        tabBarStyle: desktop
+          ? { display: 'none' }
+          : {
+              backgroundColor: c.card,
+              borderTopColor: c.separator,
+              height: 68,
+              paddingTop: 7,
+              paddingBottom: 8,
+            },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
+          title: '首页',
+          tabBarIcon: ({ color }) => (
+            <TabIcon icon={LayoutDashboard} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="order"
+        options={{
           title: '点菜',
           tabBarIcon: ({ color }) => (
-            <TabIcon sf="fork.knife" emoji="🍽️" color={color} />
+            <TabIcon icon={UtensilsCrossed} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="kitchen"
         options={{
-          title: '今日菜单',
+          title: '菜单',
           tabBarIcon: ({ color }) => (
-            <TabIcon sf="frying.pan" emoji="🍳" color={color} />
+            <TabIcon icon={CookingPot} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="shopping"
         options={{
-          title: '购物清单',
+          title: '采购',
           tabBarIcon: ({ color }) => (
-            <TabIcon sf="cart" emoji="🛒" color={color} />
+            <TabIcon icon={ShoppingCart} color={color} />
           ),
         }}
       />
@@ -67,10 +90,12 @@ export default function TabLayout() {
         options={{
           title: '我的',
           tabBarIcon: ({ color }) => (
-            <TabIcon sf="person.crop.circle" emoji="👤" color={color} />
+            <TabIcon icon={UserRound} color={color} />
           ),
         }}
       />
     </Tabs>
   );
+
+  return <AppShell>{tabs}</AppShell>;
 }

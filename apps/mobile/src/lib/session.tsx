@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { Platform } from 'react-native';
 import { api, setAuthToken, setUnauthorizedHandler } from './api';
 import type { Member } from './types';
 
@@ -22,6 +23,31 @@ const SessionContext = createContext<Session>(null as unknown as Session);
 const TOKEN_KEY = 'family-app-token';
 const MEMBER_KEY = 'family-app-member';
 
+function getStoredItem(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return Promise.resolve(
+      typeof window === 'undefined' ? null : window.localStorage.getItem(key),
+    );
+  }
+  return SecureStore.getItemAsync(key);
+}
+
+function setStoredItem(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
+    return Promise.resolve();
+  }
+  return SecureStore.setItemAsync(key, value);
+}
+
+function deleteStoredItem(key: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(key);
+    return Promise.resolve();
+  }
+  return SecureStore.deleteItemAsync(key);
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [member, setMember] = useState<Member | null>(null);
   const [ready, setReady] = useState(false);
@@ -30,8 +56,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const [token, memberJson] = await Promise.all([
-          SecureStore.getItemAsync(TOKEN_KEY),
-          SecureStore.getItemAsync(MEMBER_KEY),
+          getStoredItem(TOKEN_KEY),
+          getStoredItem(MEMBER_KEY),
         ]);
         if (token && memberJson) {
           setAuthToken(token);
@@ -47,8 +73,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAuthToken(null);
     setMember(null);
     await Promise.all([
-      SecureStore.deleteItemAsync(TOKEN_KEY),
-      SecureStore.deleteItemAsync(MEMBER_KEY),
+      deleteStoredItem(TOKEN_KEY),
+      deleteStoredItem(MEMBER_KEY),
     ]);
   }, []);
 
@@ -66,8 +92,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAuthToken(result.token);
     setMember(result.member);
     await Promise.all([
-      SecureStore.setItemAsync(TOKEN_KEY, result.token),
-      SecureStore.setItemAsync(MEMBER_KEY, JSON.stringify(result.member)),
+      setStoredItem(TOKEN_KEY, result.token),
+      setStoredItem(MEMBER_KEY, JSON.stringify(result.member)),
     ]);
   }, []);
 

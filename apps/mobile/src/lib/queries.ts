@@ -6,10 +6,15 @@ import {
 import { api } from './api';
 import type {
   Dish,
+  DishRecipeStep,
+  DishReferenceLink,
   Ingredient,
+  InventoryCategory,
+  InventoryItem,
   Member,
   MealType,
   Menu,
+  MenuDateCount,
   MenuItem,
   MenuItemStatus,
   ShoppingItem,
@@ -23,10 +28,11 @@ export function useMembers(enabled = true) {
   });
 }
 
-export function useDishes() {
+export function useDishes(enabled = true) {
   return useQuery({
     queryKey: ['dishes'],
     queryFn: () => api<Dish[]>('/dishes'),
+    enabled,
   });
 }
 
@@ -51,6 +57,15 @@ export function useMenusOfDate(date: string) {
   });
 }
 
+export function useMenuDateCounts(start: string, end: string, enabled = true) {
+  return useQuery({
+    queryKey: ['menu-dates', start, end],
+    queryFn: () =>
+      api<MenuDateCount[]>(`/menu-dates?start=${start}&end=${end}`),
+    enabled,
+  });
+}
+
 export function useAddMenuItems() {
   const qc = useQueryClient();
   return useMutation({
@@ -65,6 +80,7 @@ export function useAddMenuItems() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['menu'] });
       void qc.invalidateQueries({ queryKey: ['menus'] });
+      void qc.invalidateQueries({ queryKey: ['menu-dates'] });
     },
   });
 }
@@ -80,6 +96,7 @@ export function useUpdateMenuItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['menu'] });
       void qc.invalidateQueries({ queryKey: ['menus'] });
+      void qc.invalidateQueries({ queryKey: ['menu-dates'] });
     },
   });
 }
@@ -118,9 +135,64 @@ export function useCheckShoppingItem() {
 export function useAddManualShoppingItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { date: string; customName: string }) =>
+    mutationFn: (input: {
+      date: string;
+      customName: string;
+      totalQty: number;
+      unit: string;
+    }) =>
       api<ShoppingItem>('/shopping-items', { method: 'POST', body: input }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['shopping'] }),
+  });
+}
+
+export function useDeleteShoppingItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; removed: true }>(`/shopping-items/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['shopping'] }),
+  });
+}
+
+export interface InventoryUpsertInput {
+  id?: string;
+  name: string;
+  category: InventoryCategory;
+  quantity: number;
+  unit: string;
+  lowStockThreshold: number;
+  restockQuantity: number;
+}
+
+export function useInventory() {
+  return useQuery({
+    queryKey: ['inventory'],
+    queryFn: () => api<InventoryItem[]>('/inventory'),
+  });
+}
+
+export function useUpsertInventoryItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: InventoryUpsertInput) =>
+      id
+        ? api<InventoryItem>(`/inventory-items/${id}`, { method: 'PATCH', body })
+        : api<InventoryItem>('/inventory-items', { method: 'POST', body }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['inventory'] }),
+  });
+}
+
+export function useDeleteInventoryItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; removed: true }>(`/inventory-items/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['inventory'] }),
   });
 }
 
@@ -132,6 +204,8 @@ export interface DishUpsertInput {
   estMinutes?: number;
   note?: string;
   photoUrl?: string;
+  recipeSteps: DishRecipeStep[];
+  referenceLinks: DishReferenceLink[];
   ingredients: { name: string; quantity: number; unit: string; category?: string }[];
 }
 

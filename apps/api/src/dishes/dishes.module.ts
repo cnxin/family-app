@@ -21,6 +21,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -49,6 +50,28 @@ class DishIngredientDto {
   unit: string;
 }
 
+class RecipeStepDto {
+  @IsString()
+  @MaxLength(2000)
+  text: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageUrl?: string;
+}
+
+class ReferenceLinkDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  title?: string;
+
+  @IsString()
+  @MaxLength(1000)
+  url: string;
+}
+
 class UpsertDishDto {
   @IsOptional()
   @IsString()
@@ -75,6 +98,18 @@ class UpsertDishDto {
   @IsOptional()
   @IsString()
   photoUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RecipeStepDto)
+  recipeSteps?: RecipeStepDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReferenceLinkDto)
+  referenceLinks?: ReferenceLinkDto[];
 
   @IsOptional()
   @IsBoolean()

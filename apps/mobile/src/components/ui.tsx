@@ -2,7 +2,9 @@ import * as Haptics from 'expo-haptics';
 import React from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   View,
@@ -24,12 +26,14 @@ export function PressableScale({
   style,
   haptic = true,
   disabled,
+  accessibilityLabel,
 }: {
   children: React.ReactNode;
   onPress?: () => void;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
   haptic?: boolean;
   disabled?: boolean;
+  accessibilityLabel?: string;
 }) {
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -37,6 +41,8 @@ export function PressableScale({
   }));
   return (
     <AnimatedPressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
       disabled={disabled}
       onPressIn={() => {
         scale.value = withSpring(0.97, { damping: 20, stiffness: 400 });
@@ -60,11 +66,21 @@ export function Card({
   style,
 }: {
   children: React.ReactNode;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
 }) {
   const c = useTheme();
   return (
-    <View style={[{ backgroundColor: c.card, borderRadius: radius.md }, style]}>
+    <View
+      style={[
+        {
+          backgroundColor: c.card,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: c.separator,
+        },
+        style,
+      ]}
+    >
       {children}
     </View>
   );
@@ -99,9 +115,15 @@ export function Segmented<T extends string>({
         return (
           <Pressable
             key={opt.value}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
             style={[
               styles.segment,
-              active && { backgroundColor: c.card, ...styles.segmentActive },
+              active && {
+                backgroundColor: c.card,
+                borderColor: c.separator,
+                ...styles.segmentActive,
+              },
             ]}
             onPress={() => {
               if (!active) {
@@ -131,12 +153,16 @@ export function PrimaryButton({
   loading,
   disabled,
   destructive,
+  icon,
+  style,
 }: {
   title: string;
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
   destructive?: boolean;
+  icon?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
 }) {
   const c = useTheme();
   const bg = destructive ? c.red : c.tint;
@@ -147,12 +173,16 @@ export function PrimaryButton({
       style={[
         styles.primaryButton,
         { backgroundColor: bg, opacity: disabled ? 0.4 : 1 },
+        style,
       ]}
     >
       {loading ? (
         <ActivityIndicator color="#FFF" />
       ) : (
-        <Text style={[t.headline, { color: '#FFF' }]}>{title}</Text>
+        <View style={styles.buttonContent}>
+          {icon}
+          <Text style={[t.headline, { color: '#FFF' }]}>{title}</Text>
+        </View>
       )}
     </PressableScale>
   );
@@ -170,6 +200,77 @@ export function EmptyState({ emoji, title, hint }: { emoji: string; title: strin
         </Text>
       ) : null}
     </View>
+  );
+}
+
+export function ConfirmDialog({
+  visible,
+  title,
+  message,
+  confirmLabel = '确认',
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  loading?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const c = useTheme();
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onCancel}
+      transparent
+      visible={visible}
+    >
+      <View style={styles.dialogOverlay}>
+        <Pressable
+          accessibilityLabel="关闭确认窗口"
+          accessibilityRole="button"
+          onPress={onCancel}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          accessibilityViewIsModal
+          style={[
+            styles.dialog,
+            { backgroundColor: c.card, borderColor: c.separator },
+          ]}
+        >
+          <Text style={[t.title2, { color: c.label }]}>{title}</Text>
+          <Text style={[t.subhead, styles.dialogMessage, { color: c.secondaryLabel }]}>
+            {message}
+          </Text>
+          <View style={styles.dialogActions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              onPress={onCancel}
+              style={[styles.dialogButton, { backgroundColor: c.fill }]}
+            >
+              <Text style={[t.headline, { color: c.label }]}>取消</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              onPress={onConfirm}
+              style={[styles.dialogButton, { backgroundColor: c.red }]}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={[t.headline, { color: '#FFFFFF' }]}>{confirmLabel}</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -192,13 +293,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     alignItems: 'center',
     borderRadius: 7,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   segmentActive: {
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
   primaryButton: {
     height: 50,
@@ -206,9 +304,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  buttonContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   empty: {
     alignItems: 'center',
     paddingVertical: 64,
     paddingHorizontal: 32,
+  },
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 25, 20, 0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  dialog: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 20,
+  },
+  dialogMessage: { marginTop: 8, lineHeight: 22 },
+  dialogActions: { flexDirection: 'row', gap: 10, marginTop: 22 },
+  dialogButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

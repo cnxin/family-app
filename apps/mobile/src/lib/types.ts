@@ -1,7 +1,18 @@
 export type MemberRole = 'chef' | 'member';
-export type MealType = 'lunch' | 'dinner';
+export type MealType = 'breakfast' | 'lunch' | 'dinner';
 export type MenuItemStatus = 'pending' | 'accepted' | 'cooking' | 'done' | 'rejected';
 export type DishCategory = '荤菜' | '素菜' | '汤' | '主食' | '甜品';
+export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
+
+export interface DishRecipeStep {
+  text: string;
+  imageUrl?: string | null;
+}
+
+export interface DishReferenceLink {
+  title?: string;
+  url: string;
+}
 
 export interface Member {
   id: string;
@@ -35,6 +46,8 @@ export interface Dish {
   difficulty: number;
   estMinutes: number | null;
   note: string | null;
+  recipeSteps: DishRecipeStep[];
+  referenceLinks: DishReferenceLink[];
   ingredients: DishIngredient[];
 }
 
@@ -64,4 +77,20 @@ export interface ShoppingItem {
   unit: string | null;
   checked: boolean;
   source: 'auto' | 'manual';
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: InventoryCategory;
+  quantity: string;
+  unit: string;
+  lowStockThreshold: string;
+  restockQuantity: string;
+  updatedAt: string;
+}
+
+export interface MenuDateCount {
+  date: string;
+  count: number;
 }

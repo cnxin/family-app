@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Injectable,
   Module,
@@ -17,6 +18,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Min,
 } from 'class-validator';
 import { In, Repository } from 'typeorm';
 import { Menu, ShoppingItem } from '../entities';
@@ -35,6 +37,7 @@ class ManualItemDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0.01)
   totalQty?: number;
 
   @IsOptional()
@@ -133,6 +136,12 @@ export class ShoppingService {
     item.checked = checked;
     return this.items.save(item);
   }
+
+  async remove(id: string) {
+    const result = await this.items.delete(id);
+    if (!result.affected) throw new NotFoundException('清单项不存在');
+    return { id, removed: true };
+  }
 }
 
 @Controller()
@@ -158,6 +167,11 @@ export class ShoppingController {
   @Patch('shopping-items/:id')
   check(@Param('id') id: string, @Body() dto: CheckDto) {
     return this.service.check(id, dto.checked);
+  }
+
+  @Delete('shopping-items/:id')
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
   }
 }
 
