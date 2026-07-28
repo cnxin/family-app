@@ -11,14 +11,17 @@
     "start:prod": "node dist/main.js",
     "seed": "ts-node -r dotenv/config src/seed.ts",
     "test:api": "node scripts/run-api-tests.mjs",
-    "test:isolation": "node scripts/household-isolation.mjs"
+    "test:isolation": "node scripts/household-isolation.mjs",
+    "test:schema": "ts-node scripts/check-schema-drift.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
     "@nestjs/core": "^10.4.15",
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/platform-express": "^10.4.15",
+    "@nestjs/throttler": "^6.4.0",
     "@nestjs/typeorm": "^10.0.2",
+    "bcryptjs": "^3.0.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "dotenv": "^16.4.7",

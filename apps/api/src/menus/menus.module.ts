@@ -1,6 +1,8 @@
 import {
   Body,
+  ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   Injectable,
   Module,
@@ -22,7 +24,12 @@ import {
   IsUUID,
   ValidateNested,
 } from 'class-validator';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
+import {
+  assertCapability,
+  hasCapability,
+  RequireCapabilities,
+} from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { Dish, MealType, Menu, MenuItem, MenuItemStatus } from '../entities';
 
@@ -61,12 +68,41 @@ class MenuDateRangeDto {
   end: string;
 }
 
+class MenuQueryDto {
+  @IsISO8601()
+  date: string;
+
+  @IsOptional()
+  @IsIn(['breakfast', 'lunch', 'dinner'])
+  mealType?: MealType;
+}
+
+const ALLOWED_STATUS_TRANSITIONS: Record<
+  MenuItemStatus,
+  readonly MenuItemStatus[]
+> = {
+  pending: ['accepted', 'rejected'],
+  accepted: ['cooking', 'rejected'],
+  cooking: ['done'],
+  done: [],
+  rejected: [],
+};
+
+function isUniqueViolation(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as {
+    code?: string;
+    driverError?: { code?: string };
+  };
+  return candidate.code === '23505' || candidate.driverError?.code === '23505';
+}
+
 @Injectable()
 export class MenusService {
   constructor(
     @InjectRepository(Menu) private readonly menus: Repository<Menu>,
     @InjectRepository(MenuItem) private readonly items: Repository<MenuItem>,
-    @InjectRepository(Dish) private readonly dishes: Repository<Dish>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async findOrCreate(householdId: string, date: string, mealType: MealType) {
@@ -76,10 +112,18 @@ export class MenusService {
       order: { items: { createdAt: 'ASC' } },
     });
     if (!menu) {
-      menu = await this.menus.save(
-        this.menus.create({ householdId, date, mealType }),
-      );
-      menu.items = [];
+      await this.menus
+        .createQueryBuilder()
+        .insert()
+        .values({ householdId, date, mealType })
+        .orIgnore()
+        .execute();
+      menu = await this.menus.findOne({
+        where: { householdId, date, mealType },
+        relations: { items: true },
+        order: { items: { createdAt: 'ASC' } },
+      });
+      if (!menu) throw new ConflictException('菜单创建失败，请重试');
     }
     return menu;
   }
@@ -120,38 +164,103 @@ export class MenusService {
     householdId: string,
     userId: string,
   ) {
-    const menu = await this.menus.findOneBy({ id: menuId, householdId });
-    if (!menu) throw new NotFoundException('菜单不存在');
+    let menuDate = '';
+    let menuMealType: MealType = 'dinner';
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const menus = manager.getRepository(Menu);
+        const items = manager.getRepository(MenuItem);
+        const dishes = manager.getRepository(Dish);
+        const menu = await menus.findOneBy({ id: menuId, householdId });
+        if (!menu) throw new NotFoundException('菜单不存在');
+        menuDate = menu.date;
+        menuMealType = menu.mealType;
 
-    const dishIds = [...new Set(dto.items.map((item) => item.dishId))];
-    const dishCount = await this.dishes.countBy({
-      id: In(dishIds),
-      householdId,
-    });
-    if (dishCount !== dishIds.length) {
-      throw new NotFoundException('菜品不存在');
-    }
+        const dishIds = [...new Set(dto.items.map((item) => item.dishId))];
+        if (dishIds.length !== dto.items.length) {
+          throw new ConflictException('一次点菜中不能重复选择同一道菜');
+        }
+        const dishCount = await dishes.countBy({
+          id: In(dishIds),
+          householdId,
+        });
+        if (dishCount !== dishIds.length) {
+          throw new NotFoundException('菜品不存在');
+        }
 
-    for (const item of dto.items) {
-      await this.items.save(
-        this.items.create({
-          menuId,
-          dishId: item.dishId,
-          requestedById: userId,
-          note: item.note ?? null,
-        }),
-      );
+        const existing = await items.findOne({
+          where: {
+            menuId,
+            dishId: In(dishIds),
+            requestedById: userId,
+            status: Not('rejected'),
+          },
+        });
+        if (existing) {
+          throw new ConflictException('这餐已经点过所选菜品，请勿重复提交');
+        }
+
+        await items.save(
+          dto.items.map((item) =>
+            items.create({
+              menuId,
+              dishId: item.dishId,
+              requestedById: userId,
+              note: item.note ?? null,
+            }),
+          ),
+        );
+      });
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('这餐已经点过所选菜品，请勿重复提交');
+      }
+      throw error;
     }
-    return this.findOrCreate(householdId, menu.date, menu.mealType);
+    return this.findOrCreate(householdId, menuDate, menuMealType);
   }
 
-  async updateItem(id: string, dto: UpdateItemDto, householdId: string) {
-    const item = await this.items.findOne({
-      where: { id, menu: { householdId } },
+  async updateItem(id: string, dto: UpdateItemDto, user: JwtUser) {
+    return this.dataSource.transaction(async (manager) => {
+      const items = manager.getRepository(MenuItem);
+      const item = await items
+        .createQueryBuilder('item')
+        .innerJoin('item.menu', 'menu')
+        .where('item.id = :id', { id })
+        .andWhere('menu.householdId = :householdId', {
+          householdId: user.householdId,
+        })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!item) throw new NotFoundException('这道菜不在菜单里');
+
+      if (dto.status != null) {
+        assertCapability(user, 'update_meal_status');
+        if (
+          dto.status !== item.status &&
+          !ALLOWED_STATUS_TRANSITIONS[item.status].includes(dto.status)
+        ) {
+          throw new ConflictException(
+            `不能从「${item.status}」直接变更为「${dto.status}」`,
+          );
+        }
+        item.status = dto.status;
+      }
+      if (dto.note != null) {
+        if (
+          item.requestedById !== user.memberId &&
+          !hasCapability(user, 'update_meal_status')
+        ) {
+          throw new ForbiddenException('只能修改自己点菜的备注');
+        }
+        item.note = dto.note;
+      }
+      await items.save(item);
+      const saved = await items.findOne({ where: { id } });
+      if (!saved) throw new NotFoundException('这道菜不在菜单里');
+      return saved;
     });
-    if (!item) throw new NotFoundException('这道菜不在菜单里');
-    Object.assign(item, dto);
-    return this.items.save(item);
   }
 }
 
@@ -166,17 +275,19 @@ export class MenusController {
 
   // GET /menus?date=2026-07-26 -> [早餐, 午餐, 晚餐]；带 mealType 只返回一个
   @Get('menus')
-  async get(
-    @CurrentUser() user: JwtUser,
-    @Query('date') date: string,
-    @Query('mealType') mealType?: MealType,
-  ) {
-    if (!date) throw new NotFoundException('date 必填 (YYYY-MM-DD)');
-    if (mealType) return this.service.findOrCreate(user.householdId, date, mealType);
-    return this.service.listByDate(user.householdId, date);
+  async get(@CurrentUser() user: JwtUser, @Query() query: MenuQueryDto) {
+    if (query.mealType) {
+      return this.service.findOrCreate(
+        user.householdId,
+        query.date,
+        query.mealType,
+      );
+    }
+    return this.service.listByDate(user.householdId, query.date);
   }
 
   @Post('menus/:id/items')
+  @RequireCapabilities('place_meal_order')
   addItems(
     @Param('id') id: string,
     @Body() dto: AddItemsDto,
@@ -191,12 +302,12 @@ export class MenusController {
     @Body() dto: UpdateItemDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updateItem(id, dto, user.householdId);
+    return this.service.updateItem(id, dto, user);
   }
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Menu, MenuItem, Dish])],
+  imports: [TypeOrmModule.forFeature([Menu, MenuItem])],
   controllers: [MenusController],
   providers: [MenusService],
   exports: [MenusService],

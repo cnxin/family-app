@@ -11,7 +11,14 @@ const testEnvironment = {
   ...process.env,
   API_URL,
   DB_NAME: TEST_DATABASE,
+  CORS_ORIGINS: 'http://localhost:8081,http://192.168.1.20:8081',
+  JWT_EXPIRES_SECONDS: '43200',
+  JWT_SECRET: 'family-app-api-test-secret',
+  LOGIN_RATE_LIMIT: '100',
+  LOGIN_RATE_WINDOW_MS: '60000',
+  NODE_ENV: 'test',
   PORT: String(API_PORT),
+  SMOKE_DATE: '2199-12-28',
 };
 
 function wait(milliseconds) {
@@ -47,6 +54,21 @@ function runScript(path) {
   return runProcess(process.execPath, [path]);
 }
 
+function startApi() {
+  return spawn(process.execPath, ['-r', 'ts-node/register', 'src/main.ts'], {
+    env: testEnvironment,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+}
+
+async function stopApi() {
+  if (api && api.exitCode == null) {
+    api.kill('SIGTERM');
+    await once(api, 'exit');
+  }
+  api = null;
+}
+
 const admin = new Client({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
@@ -66,25 +88,30 @@ try {
   await runProcess(process.execPath, [
     '-r',
     'ts-node/register',
-    'src/seed.ts',
+    'scripts/prepare-legacy-pin-migration.ts',
+  ]);
+  await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+  await runScript('scripts/verify-legacy-pin-migration.mjs');
+  await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+  await runProcess(process.execPath, [
+    '-r',
+    'ts-node/register',
+    'scripts/check-schema-drift.ts',
   ]);
 
-  api = spawn(
-    process.execPath,
-    ['-r', 'ts-node/register', 'src/main.ts'],
-    {
-      env: testEnvironment,
-      stdio: ['ignore', 'inherit', 'inherit'],
-    },
-  );
+  api = startApi();
   await waitForApi(api);
   await runScript('scripts/smoke.mjs');
   await runScript('scripts/household-isolation.mjs');
+  await runScript('scripts/security-consistency.mjs');
+
+  await stopApi();
+  testEnvironment.LOGIN_RATE_LIMIT = '3';
+  api = startApi();
+  await waitForApi(api);
+  await runScript('scripts/login-rate-limit.mjs');
 } finally {
-  if (api?.exitCode == null) {
-    api.kill('SIGTERM');
-    await once(api, 'exit');
-  }
+  await stopApi();
   if (databaseCreated) {
     await admin.query(
       'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',

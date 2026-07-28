@@ -1,4 +1,5 @@
 import {
+  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -75,7 +76,7 @@ export class Member {
   role: MemberRole;
 
   @Column({ type: 'varchar', nullable: true })
-  pin: string | null;
+  pinHash: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -227,6 +228,15 @@ export class Menu {
 }
 
 @Entity('menu_items')
+@Check(
+  'CHK_menu_items_status',
+  `"status" IN ('pending', 'accepted', 'cooking', 'done', 'rejected')`,
+)
+@Index(
+  'UQ_menu_items_active_order',
+  ['menuId', 'dishId', 'requestedById'],
+  { unique: true, where: `"status" <> 'rejected'` },
+)
 export class MenuItem {
   @PrimaryGeneratedColumn('uuid')
   id: string;

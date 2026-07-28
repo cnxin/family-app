@@ -20,11 +20,17 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { In, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { Menu, ShoppingItem } from '../entities';
 
 class GenerateDto {
+  @IsISO8601()
+  date: string;
+}
+
+class ShoppingDateDto {
   @IsISO8601()
   date: string;
 }
@@ -56,7 +62,7 @@ export class ShoppingService {
   constructor(
     @InjectRepository(ShoppingItem)
     private readonly items: Repository<ShoppingItem>,
-    @InjectRepository(Menu) private readonly menus: Repository<Menu>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async list(householdId: string, date: string) {
@@ -73,52 +79,59 @@ export class ShoppingService {
   }
 
   async generate(householdId: string, date: string) {
-    const menus = await this.menus.find({
-      where: { householdId, date },
-      relations: { items: { dish: { ingredients: { ingredient: true } } } },
-    });
-    const wanted = menus
-      .flatMap((m) => m.items)
-      .filter((i) => i.status === 'accepted' || i.status === 'cooking');
+    await this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `shopping-list:${householdId}:${date}`,
+      ]);
+      const items = manager.getRepository(ShoppingItem);
+      const menus = await manager.getRepository(Menu).find({
+        where: { householdId, date },
+        relations: { items: { dish: { ingredients: { ingredient: true } } } },
+      });
+      const wanted = menus
+        .flatMap((menu) => menu.items)
+        .filter((item) => item.status === 'accepted' || item.status === 'cooking');
 
-    // 合并：同食材同单位数量相加，常备调料不进清单
-    const merged = new Map<string, { ingredientId: string; unit: string; qty: number }>();
-    for (const item of wanted) {
-      for (const di of item.dish.ingredients ?? []) {
-        if (di.ingredient.isPantryStaple) continue;
-        const key = `${di.ingredientId}|${di.unit}`;
-        const prev = merged.get(key);
-        merged.set(key, {
-          ingredientId: di.ingredientId,
-          unit: di.unit,
-          qty: (prev?.qty ?? 0) + Number(di.quantity),
-        });
+      const merged = new Map<
+        string,
+        { ingredientId: string; unit: string; qty: number }
+      >();
+      for (const item of wanted) {
+        for (const dishIngredient of item.dish.ingredients ?? []) {
+          if (dishIngredient.ingredient.isPantryStaple) continue;
+          const key = `${dishIngredient.ingredientId}|${dishIngredient.unit}`;
+          const previous = merged.get(key);
+          merged.set(key, {
+            ingredientId: dishIngredient.ingredientId,
+            unit: dishIngredient.unit,
+            qty: (previous?.qty ?? 0) + Number(dishIngredient.quantity),
+          });
+        }
       }
-    }
 
-    // 保留旧 auto 项的勾选状态后重建
-    const oldAuto = await this.items.find({
-      where: { householdId, date, source: 'auto' },
-    });
-    const checkedKeys = new Set(
-      oldAuto.filter((i) => i.checked).map((i) => `${i.ingredientId}|${i.unit}`),
-    );
-    if (oldAuto.length) {
-      await this.items.delete({ id: In(oldAuto.map((i) => i.id)) });
-    }
-    for (const entry of merged.values()) {
-      await this.items.save(
-        this.items.create({
-          householdId,
-          date,
-          ingredientId: entry.ingredientId,
-          totalQty: String(entry.qty),
-          unit: entry.unit,
-          checked: checkedKeys.has(`${entry.ingredientId}|${entry.unit}`),
-          source: 'auto',
-        }),
+      const oldAuto = await items.find({
+        where: { householdId, date, source: 'auto' },
+      });
+      const checkedKeys = new Set(
+        oldAuto
+          .filter((item) => item.checked)
+          .map((item) => `${item.ingredientId}|${item.unit}`),
       );
-    }
+      await items.delete({ householdId, date, source: 'auto' });
+      await items.save(
+        [...merged.values()].map((entry) =>
+          items.create({
+            householdId,
+            date,
+            ingredientId: entry.ingredientId,
+            totalQty: String(entry.qty),
+            unit: entry.unit,
+            checked: checkedKeys.has(`${entry.ingredientId}|${entry.unit}`),
+            source: 'auto',
+          }),
+        ),
+      );
+    });
     return this.list(householdId, date);
   }
 
@@ -154,22 +167,24 @@ export class ShoppingController {
   constructor(private readonly service: ShoppingService) {}
 
   @Get('shopping-list')
-  list(@Query('date') date: string, @CurrentUser() user: JwtUser) {
-    if (!date) throw new NotFoundException('date 必填 (YYYY-MM-DD)');
-    return this.service.list(user.householdId, date);
+  list(@Query() query: ShoppingDateDto, @CurrentUser() user: JwtUser) {
+    return this.service.list(user.householdId, query.date);
   }
 
   @Post('shopping-list/generate')
+  @RequireCapabilities('manage_shopping')
   generate(@Body() dto: GenerateDto, @CurrentUser() user: JwtUser) {
     return this.service.generate(user.householdId, dto.date);
   }
 
   @Post('shopping-items')
+  @RequireCapabilities('manage_shopping')
   addManual(@Body() dto: ManualItemDto, @CurrentUser() user: JwtUser) {
     return this.service.addManual(dto, user.householdId);
   }
 
   @Patch('shopping-items/:id')
+  @RequireCapabilities('manage_shopping')
   check(
     @Param('id') id: string,
     @Body() dto: CheckDto,
@@ -179,13 +194,14 @@ export class ShoppingController {
   }
 
   @Delete('shopping-items/:id')
+  @RequireCapabilities('manage_shopping')
   remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.service.remove(id, user.householdId);
   }
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ShoppingItem, Menu])],
+  imports: [TypeOrmModule.forFeature([ShoppingItem])],
   controllers: [ShoppingController],
   providers: [ShoppingService],
 })

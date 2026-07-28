@@ -25,7 +25,8 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { Dish, DishCategory, DishIngredient, Ingredient } from '../entities';
 
@@ -127,8 +128,7 @@ export class DishesService {
   constructor(
     @InjectRepository(Dish) private readonly dishes: Repository<Dish>,
     @InjectRepository(Ingredient) private readonly ingredients: Repository<Ingredient>,
-    @InjectRepository(DishIngredient)
-    private readonly dishIngredients: Repository<DishIngredient>,
+    private readonly dataSource: DataSource,
   ) {}
 
   list(householdId: string) {
@@ -148,9 +148,11 @@ export class DishesService {
   private async resolveIngredient(
     dto: DishIngredientDto,
     householdId: string,
+    manager: EntityManager,
   ): Promise<Ingredient> {
+    const ingredients = manager.getRepository(Ingredient);
     if (dto.ingredientId) {
-      const found = await this.ingredients.findOneBy({
+      const found = await ingredients.findOneBy({
         id: dto.ingredientId,
         householdId,
       });
@@ -158,12 +160,13 @@ export class DishesService {
       return found;
     }
     if (!dto.name) throw new NotFoundException('食材需要 ingredientId 或 name');
-    const existing = await this.ingredients.findOneBy({ householdId, name: dto.name });
+    const name = dto.name.trim();
+    const existing = await ingredients.findOneBy({ householdId, name });
     if (existing) return existing;
-    return this.ingredients.save(
-      this.ingredients.create({
+    return ingredients.save(
+      ingredients.create({
         householdId,
-        name: dto.name,
+        name,
         category: (dto.category as Ingredient['category']) || '其他',
         defaultUnit: dto.unit,
       }),
@@ -174,12 +177,14 @@ export class DishesService {
     dish: Dish,
     items: DishIngredientDto[],
     householdId: string,
+    manager: EntityManager,
   ) {
-    await this.dishIngredients.delete({ dishId: dish.id });
+    const dishIngredients = manager.getRepository(DishIngredient);
+    await dishIngredients.delete({ dishId: dish.id });
     for (const item of items) {
-      const ingredient = await this.resolveIngredient(item, householdId);
-      await this.dishIngredients.save(
-        this.dishIngredients.create({
+      const ingredient = await this.resolveIngredient(item, householdId, manager);
+      await dishIngredients.save(
+        dishIngredients.create({
           dishId: dish.id,
           ingredientId: ingredient.id,
           quantity: String(item.quantity),
@@ -191,19 +196,24 @@ export class DishesService {
 
   async create(dto: UpsertDishDto, householdId: string, userId: string) {
     if (!dto.name) throw new NotFoundException('菜名必填');
-    const { ingredients, ...fields } = dto;
-    const dish = await this.dishes.save(
-      this.dishes.create({
-        ...fields,
-        householdId,
-        name: dto.name,
-        createdBy: userId,
-      }),
-    );
-    if (ingredients?.length) {
-      await this.buildIngredients(dish, ingredients, householdId);
-    }
-    return this.get(dish.id, householdId);
+    return this.dataSource.transaction(async (manager) => {
+      const dishes = manager.getRepository(Dish);
+      const { ingredients, ...fields } = dto;
+      const dish = await dishes.save(
+        dishes.create({
+          ...fields,
+          householdId,
+          name: dto.name!,
+          createdBy: userId,
+        }),
+      );
+      if (ingredients?.length) {
+        await this.buildIngredients(dish, ingredients, householdId, manager);
+      }
+      const saved = await dishes.findOneBy({ id: dish.id, householdId });
+      if (!saved) throw new NotFoundException('菜品不存在');
+      return saved;
+    });
   }
 
   async get(id: string, householdId: string) {
@@ -213,12 +223,25 @@ export class DishesService {
   }
 
   async update(id: string, dto: UpsertDishDto, householdId: string) {
-    const dish = await this.get(id, householdId);
-    const { ingredients, ...fields } = dto;
-    Object.assign(dish, fields);
-    await this.dishes.save(dish);
-    if (ingredients) await this.buildIngredients(dish, ingredients, householdId);
-    return this.get(id, householdId);
+    return this.dataSource.transaction(async (manager) => {
+      const dishes = manager.getRepository(Dish);
+      const dish = await dishes
+        .createQueryBuilder('dish')
+        .where('dish.id = :id', { id })
+        .andWhere('dish.householdId = :householdId', { householdId })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!dish) throw new NotFoundException('菜品不存在');
+      const { ingredients, ...fields } = dto;
+      Object.assign(dish, fields);
+      await dishes.save(dish);
+      if (ingredients) {
+        await this.buildIngredients(dish, ingredients, householdId, manager);
+      }
+      const saved = await dishes.findOneBy({ id, householdId });
+      if (!saved) throw new NotFoundException('菜品不存在');
+      return saved;
+    });
   }
 
   async remove(id: string, householdId: string) {
@@ -244,11 +267,13 @@ export class DishesController {
   }
 
   @Post('dishes')
+  @RequireCapabilities('manage_recipes')
   create(@Body() dto: UpsertDishDto, @CurrentUser() user: JwtUser) {
     return this.service.create(dto, user.householdId, user.sub);
   }
 
   @Patch('dishes/:id')
+  @RequireCapabilities('manage_recipes')
   update(
     @Param('id') id: string,
     @Body() dto: UpsertDishDto,
@@ -258,13 +283,14 @@ export class DishesController {
   }
 
   @Delete('dishes/:id')
+  @RequireCapabilities('manage_recipes')
   remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.service.remove(id, user.householdId);
   }
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Dish, Ingredient, DishIngredient])],
+  imports: [TypeOrmModule.forFeature([Dish, Ingredient])],
   controllers: [DishesController],
   providers: [DishesService],
 })

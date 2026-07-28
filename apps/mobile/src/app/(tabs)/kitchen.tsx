@@ -25,6 +25,7 @@ import {
   useMenusOfDate,
   useUpdateMenuItem,
 } from '../../lib/queries';
+import { useSession } from '../../lib/session';
 import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../lib/theme';
 import type { MenuItem, MenuItemStatus } from '../../lib/types';
 
@@ -52,7 +53,13 @@ const ACTIONS: Partial<Record<MenuItemStatus, { label: string; to: MenuItemStatu
   cooking: [{ label: '上桌 ✓', to: 'done' }],
 };
 
-function MenuItemRow({ item }: { item: MenuItem }) {
+function MenuItemRow({
+  item,
+  canUpdateStatus,
+}: {
+  item: MenuItem;
+  canUpdateStatus: boolean;
+}) {
   const c = useTheme();
   const update = useUpdateMenuItem();
   const meta = STATUS_META[item.status];
@@ -92,40 +99,43 @@ function MenuItemRow({ item }: { item: MenuItem }) {
         <Text style={[t.caption, { color: c[meta.colorKey], fontWeight: '600' }]}>
           {meta.label}
         </Text>
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          {(ACTIONS[item.status] ?? []).map((action) => (
-            <PressableScale
-              key={action.to}
-              onPress={() => {
-                if (action.to === 'done') {
-                  void Haptics.notificationAsync(
-                    Haptics.NotificationFeedbackType.Success,
-                  );
-                }
-                update.mutate({ id: item.id, status: action.to });
-              }}
-              style={[
-                styles.actionBtn,
-                {
-                  backgroundColor:
-                    action.to === 'rejected' ? c.fill : c.tint,
-                },
-              ]}
-            >
-              <Text
+        {canUpdateStatus ? (
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {(ACTIONS[item.status] ?? []).map((action) => (
+              <PressableScale
+                key={action.to}
+                onPress={() => {
+                  if (action.to === 'done') {
+                    void Haptics.notificationAsync(
+                      Haptics.NotificationFeedbackType.Success,
+                    );
+                  }
+                  update.mutate({ id: item.id, status: action.to });
+                }}
                 style={[
-                  t.footnote,
+                  styles.actionBtn,
                   {
-                    color: action.to === 'rejected' ? c.secondaryLabel : '#FFF',
-                    fontWeight: '600',
+                    backgroundColor:
+                      action.to === 'rejected' ? c.fill : c.tint,
                   },
                 ]}
               >
-                {action.label}
-              </Text>
-            </PressableScale>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    t.footnote,
+                    {
+                      color:
+                        action.to === 'rejected' ? c.secondaryLabel : '#FFF',
+                      fontWeight: '600',
+                    },
+                  ]}
+                >
+                  {action.label}
+                </Text>
+              </PressableScale>
+            ))}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -134,6 +144,7 @@ function MenuItemRow({ item }: { item: MenuItem }) {
 export default function KitchenScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const { member } = useSession();
   const [date, setDate] = useState(todayStr());
   const { data: menus, isLoading } = useMenusOfDate(date);
   const generate = useGenerateShoppingList();
@@ -217,7 +228,10 @@ export default function KitchenScreen() {
                       key={item.id}
                       entering={FadeInDown.delay(i * 40).springify().damping(18)}
                     >
-                      <MenuItemRow item={item} />
+                      <MenuItemRow
+                        item={item}
+                        canUpdateStatus={member?.role === 'chef'}
+                      />
                     </Animated.View>
                   ))
                 )}

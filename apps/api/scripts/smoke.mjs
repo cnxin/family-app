@@ -1,6 +1,6 @@
 // 冒烟测试：妈妈点 3 道菜 → 爸爸接单 2 道 → 生成购物清单 → 验证合并与常备过滤
 const BASE = process.env.API_URL || 'http://localhost:3100';
-const today = new Date().toISOString().slice(0, 10);
+const today = process.env.SMOKE_DATE || new Date().toISOString().slice(0, 10);
 
 let token = null;
 async function api(path, method = 'GET', body) {
@@ -59,7 +59,15 @@ assert(menuAfter.items.some((i) => i.note === '少辣'), '备注「少辣」已�
 
 console.log('2. 爸爸登录接单');
 ({ token } = await api('/auth/login', 'POST', { memberId: dad.id }));
-const ours = menuAfter.items.slice(-3);
+const ours = pick.map((dish) =>
+  menuAfter.items.find(
+    (item) =>
+      item.dishId === dish.id &&
+      item.requestedBy.id === mom.id &&
+      item.status === 'pending',
+  ),
+);
+assert(ours.every(Boolean), '按菜品和点菜成员找到本次 3 条点菜记录');
 await api(`/menu-items/${ours[0].id}`, 'PATCH', { status: 'accepted' });
 await api(`/menu-items/${ours[1].id}`, 'PATCH', { status: 'accepted' });
 await api(`/menu-items/${ours[2].id}`, 'PATCH', { status: 'rejected' });

@@ -22,6 +22,7 @@ import {
   Min,
 } from 'class-validator';
 import { Repository } from 'typeorm';
+import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { InventoryCategory, InventoryItem } from '../entities';
 
@@ -167,11 +168,13 @@ export class InventoryController {
   }
 
   @Post('inventory-items')
+  @RequireCapabilities('manage_inventory')
   create(@Body() dto: CreateInventoryItemDto, @CurrentUser() user: JwtUser) {
     return this.service.create(dto, user.householdId);
   }
 
   @Patch('inventory-items/:id')
+  @RequireCapabilities('manage_inventory')
   update(
     @Param('id') id: string,
     @Body() dto: UpdateInventoryItemDto,
@@ -181,6 +184,7 @@ export class InventoryController {
   }
 
   @Delete('inventory-items/:id')
+  @RequireCapabilities('manage_inventory')
   remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.service.remove(id, user.householdId);
   }

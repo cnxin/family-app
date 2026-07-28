@@ -112,6 +112,7 @@ try {
 
   const foreignToken = signToken({
     sub: ids.member,
+    memberId: ids.member,
     householdId: ids.household,
     name: '隔离测试成员',
     role: 'member',
