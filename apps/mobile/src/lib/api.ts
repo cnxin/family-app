@@ -70,16 +70,29 @@ async function fetchWithSession(
   init: RequestInit,
   useAuth: boolean,
 ): Promise<Response> {
-  const execute = () => {
+  const execute = async () => {
+    const requestToken = useAuth ? authToken : null;
     const headers = new Headers(init.headers);
-    if (useAuth && authToken) {
-      headers.set('Authorization', `Bearer ${authToken}`);
+    if (requestToken) {
+      headers.set('Authorization', `Bearer ${requestToken}`);
     }
-    return fetch(url, { ...init, headers });
+    return {
+      requestToken,
+      response: await fetch(url, { ...init, headers }),
+    };
   };
 
-  let response = await execute();
-  if (!useAuth || response.status !== 401) return response;
+  let attempt = await execute();
+  if (!useAuth || attempt.response.status !== 401) return attempt.response;
+
+  if (attempt.requestToken !== authToken) {
+    if (!authToken) {
+      onUnauthorized?.();
+      return attempt.response;
+    }
+    attempt = await execute();
+    if (attempt.response.status !== 401) return attempt.response;
+  }
 
   let refreshedToken: string | null;
   try {
@@ -89,9 +102,9 @@ async function fetchWithSession(
     throw error;
   }
 
-  if (refreshedToken) response = await execute();
-  if (response.status === 401) onUnauthorized?.();
-  return response;
+  if (refreshedToken) attempt = await execute();
+  if (attempt.response.status === 401) onUnauthorized?.();
+  return attempt.response;
 }
 
 export async function api<T>(

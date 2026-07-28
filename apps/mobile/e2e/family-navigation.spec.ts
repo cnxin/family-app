@@ -71,11 +71,14 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
 
   let forcedUnauthorized = 0;
   let refreshRequests = 0;
+  const presentedRefreshTokens: string[] = [];
   let rejectedAuthorization: string | undefined;
   simulatingUnauthorized = true;
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/auth/refresh') {
       refreshRequests += 1;
+      const body = request.postDataJSON() as { refreshToken?: string } | null;
+      if (body?.refreshToken) presentedRefreshTokens.push(body.refreshToken);
     }
   });
   await page.route(/\/(dishes|menus|shopping-list)(\?|$)/, async (route) => {
@@ -104,7 +107,11 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     page.getByText('家庭今日概览', { exact: true }),
   ).toBeVisible();
   expect(forcedUnauthorized).toBe(2);
-  expect(refreshRequests).toBe(1);
+  expect(refreshRequests).toBeGreaterThanOrEqual(1);
+  expect(refreshRequests).toBeLessThanOrEqual(2);
+  expect(new Set(presentedRefreshTokens).size).toBe(
+    presentedRefreshTokens.length,
+  );
   await page.waitForLoadState('networkidle');
   simulatingUnauthorized = false;
   expect(runtimeErrors).toEqual([]);

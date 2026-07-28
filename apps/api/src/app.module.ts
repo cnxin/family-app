@@ -6,6 +6,7 @@ import { DishesModule } from './dishes/dishes.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { MenusModule } from './menus/menus.module';
 import { ShoppingModule } from './shopping/shopping.module';
+import { SystemModule } from './system/system.module';
 import { UploadModule } from './upload/upload.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { UploadModule } from './upload/upload.module';
     InventoryModule,
     MenusModule,
     ShoppingModule,
+    SystemModule,
     UploadModule,
   ],
 })

@@ -3,7 +3,10 @@ dist/
 .expo/
 uploads/
 backups/
+backups-production/
 restore-preview/
+deploy/.env.production
+deploy/secrets/
 *.log
 .env
 .DS_Store

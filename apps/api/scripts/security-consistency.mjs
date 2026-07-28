@@ -227,7 +227,13 @@ try {
     '未配置的 Web 来源不会获得跨域授权',
   );
 
-  const dishesResponse = await request('/dishes', memberToken);
+  const dishesResponse = await request('/dishes', memberToken, 'GET', null, {
+    'X-Request-ID': 'family-test-auth-0001',
+  });
+  assert(
+    dishesResponse.headers.get('x-request-id') === 'family-test-auth-0001',
+    '已登录请求保留调用方请求 ID',
+  );
   const dishes = dishesResponse.body.data;
   assert(dishes.length >= 3, '一致性测试有足够菜品');
   const menuResponse = await request(
@@ -240,6 +246,7 @@ try {
     memberToken,
     'PATCH',
     { chefId: member.id },
+    { 'X-Request-ID': 'family-test-route-0001' },
   );
   assert(
     assignedMenu.status === 200 && assignedMenu.body.data.chef.id === member.id,
@@ -623,12 +630,19 @@ try {
     chefToken,
     'POST',
     { date: SHOPPING_TRANSACTION_DATE },
+    { 'X-Request-ID': 'family-test-error-5001' },
   );
   const preservedShoppingItem = await db.query(
     'SELECT checked FROM shopping_items WHERE id = $1',
     [transactionIds.shoppingItem],
   );
-  assert(failedShoppingGeneration.status === 500, '采购数量溢出会让清单重建失败');
+  assert(
+    failedShoppingGeneration.status === 500 &&
+      failedShoppingGeneration.headers.get('x-request-id') ===
+        'family-test-error-5001' &&
+      failedShoppingGeneration.body.requestId === 'family-test-error-5001',
+    '采购数量溢出返回带请求 ID 的 500 错误',
+  );
   assert(
     preservedShoppingItem.rows[0]?.checked === true,
     '购物清单重建失败后旧清单及勾选状态完整回滚',

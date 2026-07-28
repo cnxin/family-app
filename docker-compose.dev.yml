@@ -58,7 +58,7 @@ services:
       - ./apps/api/src:/app/apps/api/src
       - family_app_uploads:/app/apps/api/uploads
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/members').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health/ready').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 10

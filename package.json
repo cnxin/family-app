@@ -5,6 +5,7 @@
   "scripts": {
     "api": "corepack pnpm --filter api start:dev",
     "backup:dev": "sh scripts/backup-dev.sh",
+    "backup:prod": "sh scripts/backup-prod.sh",
     "lint": "corepack pnpm --filter mobile lint",
     "mobile": "corepack pnpm --filter mobile start",
     "restore:dev": "sh scripts/restore-dev.sh",

@@ -32,7 +32,7 @@ async function waitForApi(processHandle) {
       throw new Error(`API 提前退出，状态码 ${processHandle.exitCode}`);
     }
     try {
-      const response = await fetch(`${API_URL}/members`);
+      const response = await fetch(`${API_URL}/health/ready`);
       if (response.ok) return;
     } catch {
       // API is still starting.
@@ -56,10 +56,94 @@ function runScript(path) {
 }
 
 function startApi() {
-  return spawn(process.execPath, ['-r', 'ts-node/register', 'src/main.ts'], {
+  activeApiOutput = '';
+  const child = spawn(process.execPath, ['-r', 'ts-node/register', 'src/main.ts'], {
     env: testEnvironment,
-    stdio: ['ignore', 'inherit', 'inherit'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    activeApiOutput += chunk;
+    process.stdout.write(chunk);
+  });
+  child.stderr.on('data', (chunk) => {
+    activeApiOutput += chunk;
+    process.stderr.write(chunk);
+  });
+  return child;
+}
+
+function assertApiLogs(output) {
+  const records = output
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('{'))
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line)];
+      } catch {
+        return [];
+      }
+    });
+  const requests = records.filter((record) => record.event === 'http_request');
+  const authenticated = requests.find(
+    (record) => record.requestId === 'family-test-auth-0001',
+  );
+  if (
+    !authenticated ||
+    typeof authenticated.householdId !== 'string' ||
+    typeof authenticated.memberId !== 'string' ||
+    typeof authenticated.durationMs !== 'number' ||
+    authenticated.statusCode !== 200
+  ) {
+    throw new Error('断言失败: 结构化访问日志缺少已登录家庭上下文');
+  }
+
+  const dynamicRoute = requests.find(
+    (record) => record.requestId === 'family-test-route-0001',
+  );
+  if (dynamicRoute?.path !== '/menus/:id/chef') {
+    throw new Error('断言失败: 访问日志没有使用脱敏后的路由模板');
+  }
+
+  const serverError = requests.find(
+    (record) => record.requestId === 'family-test-error-5001',
+  );
+  const exception = records.find(
+    (record) =>
+      record.event === 'unhandled_exception' &&
+      record.requestId === 'family-test-error-5001',
+  );
+  if (
+    serverError?.statusCode !== 500 ||
+    serverError.errorCode !== 'INTERNAL_ERROR' ||
+    !exception
+  ) {
+    throw new Error('断言失败: 500 访问日志与异常日志没有共享请求 ID');
+  }
+
+  if (requests.some((record) => record.requestId === 'family-test-health-0001')) {
+    throw new Error('断言失败: 成功的健康轮询不应写入访问日志');
+  }
+
+  const sensitiveMarkers = [
+    'body-sensitive-marker-2468',
+    'query-sensitive-marker-9081',
+    'header-sensitive-marker-1357',
+  ];
+  if (sensitiveMarkers.some((marker) => output.includes(marker))) {
+    throw new Error('断言失败: API 日志包含请求中的敏感标记');
+  }
+  if (
+    /\b(?:authorization|password|pin|refresh[_-]?token|access[_-]?token)\b/i.test(
+      output,
+    )
+  ) {
+    throw new Error('断言失败: API 日志包含敏感字段名称');
+  }
+
+  console.log('  ✓ 结构化日志关联请求、家庭上下文与 500 异常');
+  console.log('  ✓ 路由、健康轮询和敏感信息日志策略符合预期');
 }
 
 async function stopApi() {
@@ -79,6 +163,7 @@ const admin = new Client({
 });
 let api = null;
 let databaseCreated = false;
+let activeApiOutput = '';
 
 try {
   await admin.connect();
@@ -102,9 +187,12 @@ try {
 
   api = startApi();
   await waitForApi(api);
+  await runScript('scripts/observability.mjs');
   await runScript('scripts/smoke.mjs');
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');
+  await wait(50);
+  assertApiLogs(activeApiOutput);
 
   await stopApi();
   testEnvironment.LOGIN_RATE_LIMIT = '3';

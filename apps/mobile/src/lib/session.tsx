@@ -67,6 +67,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [member, setMember] = useState<Member | null>(null);
   const [ready, setReady] = useState(false);
   const refreshTokenRef = useRef<string | null>(null);
+  const refreshSessionPromiseRef = useRef<Promise<string | null> | null>(null);
 
   const clearLocalSession = useCallback(async () => {
     refreshTokenRef.current = null;
@@ -90,18 +91,31 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     ]);
   }, []);
 
-  const refreshSession = useCallback(async () => {
-    const refreshToken =
-      refreshTokenRef.current ?? (await getStoredItem(REFRESH_TOKEN_KEY));
-    if (!refreshToken) return null;
+  const refreshSession = useCallback((): Promise<string | null> => {
+    if (refreshSessionPromiseRef.current) {
+      return refreshSessionPromiseRef.current;
+    }
 
-    const result = await api<AuthSessionResponse>('/auth/refresh', {
-      method: 'POST',
-      body: { refreshToken },
-      auth: false,
+    const attempt = (async () => {
+      const refreshToken =
+        refreshTokenRef.current ?? (await getStoredItem(REFRESH_TOKEN_KEY));
+      if (!refreshToken) return null;
+
+      const result = await api<AuthSessionResponse>('/auth/refresh', {
+        method: 'POST',
+        body: { refreshToken },
+        auth: false,
+      });
+      await applySession(result);
+      return result.accessToken;
+    })();
+    const tracked = attempt.finally(() => {
+      if (refreshSessionPromiseRef.current === tracked) {
+        refreshSessionPromiseRef.current = null;
+      }
     });
-    await applySession(result);
-    return result.accessToken;
+    refreshSessionPromiseRef.current = tracked;
+    return tracked;
   }, [applySession]);
 
   useEffect(() => {

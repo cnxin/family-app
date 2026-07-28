@@ -25,6 +25,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
+import { jwtSecret } from '../common/config';
 import { verifyPin } from '../common/pin';
 import { DEFAULT_HOUSEHOLD_ID } from '../database/database.constants';
 import { AuthSession, Member } from '../entities';
@@ -69,15 +70,6 @@ class RefreshDto {
 class UpdatePreferencesDto {
   @IsBoolean()
   prefersCooking: boolean;
-}
-
-function jwtSecret() {
-  const configured = process.env.JWT_SECRET?.trim();
-  if (configured) return configured;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('生产环境必须配置 JWT_SECRET');
-  }
-  return 'family-app-dev-secret';
 }
 
 function memberProfile(member: Member) {

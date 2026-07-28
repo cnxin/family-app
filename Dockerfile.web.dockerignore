@@ -1,5 +1,7 @@
 .git
 .claude
+.agents
+.codex
 node_modules
 **/node_modules
 dist
@@ -11,9 +13,12 @@ uploads
 backups
 backups-production
 restore-preview
+apps/api
+apps/mobile/e2e/.auth
+apps/mobile/playwright-report
+apps/mobile/test-results
 deploy/.env.production
 deploy/secrets
-apps/mobile
 *.log
 **/*.log
 .env

@@ -59,6 +59,8 @@ npx expo start --web --port 8081
 
 - Web：<http://localhost:8081>
 - API：<http://localhost:3100>
+- API 存活检查：<http://localhost:3100/health/live>
+- API 就绪检查：<http://localhost:3100/health/ready>
 
 同一局域网的其他电脑可以将 `localhost` 换为运行项目电脑的局域网 IP。Web 客户端会根据当前页面主机名连接同一主机的 `3100` 端口。
 
@@ -69,15 +71,20 @@ API 安全相关配置：
 | 环境变量 | 本地默认值 | 作用 |
 | --- | --- | --- |
 | `JWT_SECRET` | 仅 Docker 演示密钥 | JWT 签名；生产环境必须显式配置 |
+| `JWT_SECRET_FILE` | 无 | JWT 密钥文件；配置时优先于 `JWT_SECRET` |
+| `DB_PASSWORD_FILE` | 无 | 数据库密码文件；配置时优先于 `DB_PASSWORD` |
 | `JWT_EXPIRES_SECONDS` | `900` | 访问令牌有效期，默认 15 分钟 |
 | `REFRESH_TOKEN_EXPIRES_SECONDS` | `2592000` | 刷新会话有效期，默认 30 天并在每次续期时轮换 |
 | `LOGIN_RATE_LIMIT` | `5` | 单个来源在窗口内允许的登录次数 |
 | `LOGIN_RATE_WINDOW_MS` | `60000` | 登录限流窗口，默认 1 分钟 |
 | `CORS_ORIGINS` | 开发环境自动允许本机和私有局域网 | 逗号分隔的 Web 客户端来源白名单 |
+| `TRUST_PROXY_HOPS` | `0` | 可信反向代理层数；生产 Caddy 部署为 `1` |
 
 原生 Expo 请求没有浏览器 `Origin`，不受 CORS 白名单影响。生产环境不配置 `CORS_ORIGINS` 时不会授权任何浏览器来源。
 
-服务端只保存刷新令牌的 SHA-256 哈希；退出、成员角色变化或 PIN 变化会立即撤销旧会话。iOS/Android 使用 `SecureStore` 保存会话，当前 Web 演示使用 `localStorage`，因此 Web 端仍受同源脚本和 XSS 边界约束。正式外网部署必须使用 HTTPS、严格内容安全策略，并评估改为同站 `HttpOnly` Cookie 或可信反向代理会话。
+服务端只保存刷新令牌的 SHA-256 哈希；退出、成员角色变化或 PIN 变化会立即撤销旧会话。启动续期和并发 `401` 共享单飞续期，并会跳过已被新令牌取代的过期响应。iOS/Android 使用 `SecureStore` 保存会话，当前 Web 演示使用 `localStorage`，因此 Web 端仍受同源脚本和 XSS 边界约束。正式外网部署必须使用 HTTPS、严格内容安全策略，并评估改为同站 `HttpOnly` Cookie 或可信反向代理会话。
+
+API 会为每个请求回传 `X-Request-ID`。结构化日志只保留路由模板、状态、耗时和已认证的家庭/成员 UUID，不记录请求体、查询值、姓名、IP、PIN 或令牌；错误响应体也包含同一个请求 ID，便于定位问题。
 
 停止服务：
 
@@ -100,6 +107,8 @@ docker compose -f docker-compose.dev.yml down
 ```
 
 完整的文件说明、异机备份建议和恢复演练流程见 [本地开发数据备份与恢复](docs/backup-restore.md)。
+
+家庭长期运行使用固定 API/Web 镜像、Docker secrets、Caddy 自动 HTTPS 和不暴露数据库端口的独立 Compose。配置与更新步骤见 [家庭长期运行部署](docs/production-deployment.md)。生产编排不会自动执行演示种子数据。
 
 ## Expo Go
 
@@ -136,7 +145,8 @@ npx pnpm --filter api test:isolation
 npx pnpm --filter api test:schema
 
 # 自动创建临时数据库和 API，验证迁移、PIN、CORS、权限、限流、
-# 家庭隔离、菜单协作、通知、审计、锁定、唯一约束和事务回滚，结束后自动清理
+# 家庭隔离、菜单协作、通知、审计、健康检查、请求日志、敏感信息保护、
+# 唯一约束和事务回滚，结束后自动清理
 docker compose -f docker-compose.dev.yml run --rm --no-deps api \
   pnpm --filter api test:api
 

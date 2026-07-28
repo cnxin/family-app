@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.FAMILY_WEB_URL ?? 'http://127.0.0.1:8081';
+const baseURL = process.env.FAMILY_WEB_URL ?? 'http://localhost:8081';
 const authState = {
   mobile: 'e2e/.auth/mobile.json',
   desktop: 'e2e/.auth/desktop.json',
