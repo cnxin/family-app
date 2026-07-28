@@ -1,79 +1,133 @@
 # 小管家 · family-app
 
-家庭管理 App。用娱乐需求驱动家庭协作，长期目标是作业管理、积分商城、AI 故事馆等模块（蓝图见私有计划文档），当前已实现第一个模块：**点菜**。
+面向家庭成员的生活协作平台。当前已完成点菜、菜单、菜谱、购物清单和家庭库存的本地 Web 演示版，后续将扩展家庭日历、任务与投票、观影、访客和家庭资产等模块。
 
-> 家人从菜谱库点菜 → 掌勺的人接单开做 → 购物清单按食材自动合并 → 买菜勾选
+> 当前可用流程：家人按日期和餐次点菜 -> 掌勺的人接单开做 -> 生成购物清单 -> 管理家庭库存与补货
+
+完整的产品边界、数据模型、MoviePilot/Plex/Emby 连接方式、访客系统、网络设备接入和实施路线见 [家庭管理平台总体方案](docs/family-platform-plan.md)。
+
+## 当前功能
+
+- **点菜**：按日期选择早餐、午餐或晚餐，分类与搜索菜品，填写口味备注并提交菜单。
+- **日历**：支持跨月提前安排；有点菜的日期显示有效菜品数量。
+- **厨房菜单**：按餐次查看点菜，接单、制作、完成或拒绝；有点菜的菜单高亮显示。
+- **菜谱**：维护分类、难度、耗时、食材、口味、图文步骤和参考链接。
+- **购物清单**：菜单食材自动合并，也可手动填写物品、数量和单位；支持勾选与删除。
+- **家庭库存**：维护调料、主食、饮料、零食和日用品余量，低库存提示并一键加入采购。
+- **Web 移动端模拟**：在桌面浏览器中以移动端布局完成全部常用流程，无需键盘快捷键。
+- **原生基础**：Expo 项目仍可通过 Expo Go 在手机上运行。
+
+## 规划模块
+
+- 家庭、成员、权限、数据库迁移和备份恢复
+- 统一日历、提醒、家务、投票、积分与奖励
+- 家庭片单、观影投票和排期
+- MoviePilot、Plex、Emby 媒体连接器
+- 访客邀请、临时权限和访客 Wi-Fi
+- 中兴或其他家庭网络设备连接器
+- 家庭资产、维护周期和知识资料
+- 按真实家庭阶段增加儿童能力，不提前建设空模块
 
 ## 技术栈
 
 | 端 | 技术 |
-|---|---|
-| 手机 App | Expo SDK 57 / React Native + expo-router，iOS 风格（明暗双主题、SF Symbols、原生 formSheet、弹簧动效 + haptics） |
-| API | NestJS 10 + TypeORM + PostgreSQL 16，JWT 选人登录（可选 PIN） |
-| 工程 | pnpm monorepo（`apps/api` + `apps/mobile`），UI 品味约束来自 [emilkowalski/skills](https://github.com/emilkowalski/skills)（`.claude/skills/`） |
+| --- | --- |
+| 客户端 | Expo SDK 57、React Native、Expo Router、React Query、Lucide |
+| Web | Expo Web / React Native Web，响应式移动与桌面布局 |
+| API | NestJS 10、TypeORM、JWT |
+| 数据库 | PostgreSQL 16 |
+| 本地环境 | Docker Compose + pnpm monorepo |
 
-## 功能一览
+## 本地 Web 演示
 
-- **点菜**：分类/搜索过滤的菜品卡片网格，点开原生底部抽屉看食材、写口味备注（"少辣"），加入菜篮后一次提交到某天的午餐/晚餐
-- **今日菜单**（掌勺视角）：看谁点了什么，接单 → 开做 → 上桌 的状态流转，不想做的可以划掉
-- **购物清单**：按已接单的菜自动汇总食材，同食材数量合并，葱姜蒜等常备调料自动过滤；按分类分组勾选，支持手动加项；重新生成时保留勾选状态
-- **菜谱管理**：增改菜品（拍照/相册上传、难度、耗时、食材表），下架不删数据
-
-## 快速开始
-
-前置：Node 20+、本机 PostgreSQL（或用根目录 `docker-compose.yml` 起一个）。pnpm 不在 PATH 时用 `npx pnpm`。
+前置环境：Docker Desktop、Node.js 20+。仓库根目录执行：
 
 ```bash
+# 安装工作区依赖（首次运行或依赖变更后）
 npx pnpm install
 
-# 1. 准备数据库：建一个空库和账号（示例）
-#    CREATE ROLE family LOGIN PASSWORD '...';
-#    CREATE DATABASE family_app OWNER family;
+# 启动 PostgreSQL、种子任务和 API
+docker compose -f docker-compose.dev.yml up --build
 
-# 2. 配置 API
-cp apps/api/.env.example apps/api/.env   # 填数据库密码和 JWT_SECRET
-
-# 3. 建表 + 种子数据（2 个成员 + 40 种食材 + 16 道家常菜）
-npx pnpm seed
-
-# 4. 启动
-npx pnpm api      # API → http://localhost:3100
-npx pnpm mobile   # Expo dev server（另开一个终端）
+# 另开终端启动 Expo Web
+cd apps/mobile
+npx expo start --web --port 8081
 ```
 
-手机装 [Expo Go](https://expo.dev/go)，和电脑连**同一个 WiFi**，扫终端里的二维码即可。App 会自动从 Expo 的 hostUri 推导出电脑的局域网 IP 去连 API，无需手动配地址。
+浏览器访问：
 
-## 测试
+- Web：<http://localhost:8081>
+- API：<http://localhost:3100>
+
+同一局域网的其他电脑可以将 `localhost` 换为运行项目电脑的局域网 IP。Web 客户端会根据当前页面主机名连接同一主机的 `3100` 端口。
+
+`docker-compose.dev.yml` 中的密码和 JWT 密钥只用于本地开发，不应直接用于长期家庭部署。
+
+停止服务：
 
 ```bash
-# 全流程冒烟（需 API 已启动）：点菜 → 接单 → 清单合并/过滤 → 勾选保留
-node apps/api/scripts/smoke.mjs
+docker compose -f docker-compose.dev.yml down
+```
 
-# 类型检查
-cd apps/api && npx tsc --noEmit
-cd apps/mobile && npx tsc --noEmit
+命名卷保存数据库和上传文件；`down` 不会删除数据。不要执行 `down -v`，除非明确要删除本地数据。
+
+## Expo Go
+
+API 运行后，在仓库根目录执行：
+
+```bash
+npx pnpm --filter mobile start
+```
+
+手机安装 Expo Go，并与开发电脑连接同一 Wi-Fi。客户端会优先使用 `EXPO_PUBLIC_API_URL`，否则从 Expo 的 `hostUri` 推导 API 地址。
+
+## 验证
+
+```bash
+# API 与客户端类型检查
+(cd apps/api && ./node_modules/.bin/tsc --noEmit)
+(cd apps/mobile && ./node_modules/.bin/tsc --noEmit)
+
+# Expo 依赖版本检查
+(cd apps/mobile && ./node_modules/.bin/expo install --check)
+
+# Compose 配置检查（仓库根目录）
+docker compose -f docker-compose.dev.yml config --quiet
+
+# 现有 API 冒烟流程（API 已启动）
+node apps/api/scripts/smoke.mjs
 ```
 
 ## 项目结构
 
-```
+```text
 apps/
 ├── api/
-│   ├── src/entities/        # 7 张表：成员/食材/菜品/菜品食材/菜单/菜单项/购物项
-│   ├── src/auth/            # 选人 + PIN 登录，JWT 全局守卫
-│   ├── src/dishes|menus|shopping|upload/   # 业务模块（controller+service+module 单文件）
-│   ├── src/seed.ts          # 种子数据
-│   └── scripts/smoke.mjs    # 冒烟测试
+│   ├── src/auth/          # JWT 登录与全局守卫
+│   ├── src/dishes/        # 菜谱、图文步骤和食材
+│   ├── src/inventory/     # 家庭库存
+│   ├── src/menus/         # 菜单、点菜状态和日期汇总
+│   ├── src/shopping/      # 购物清单
+│   ├── src/upload/        # 图片上传
+│   └── src/entities/      # 当前 TypeORM 实体
 └── mobile/
     └── src/
-        ├── app/             # expo-router：login / (tabs)四页 / dish/[id] 抽屉 / dish-edit 弹窗
-        ├── components/ui.tsx # PressableScale/Segmented/Card 等 iOS 风格组件
-        └── lib/             # api client / react-query hooks / 会话 / 菜篮 / 主题 tokens
+        ├── app/           # Expo Router 页面
+        ├── components/    # 应用外壳、日历、库存和通用 UI
+        └── lib/           # API、查询、会话、菜篮、日期和主题
+
+docs/
+└── family-platform-plan.md # 家庭管理平台总体方案
 ```
 
 ## 路线图
 
-- [x] M1 点菜模块（本仓库当前状态）
-- [ ] M2 成员管理界面、体验打磨
-- [ ] M3 积分系统（谁做饭谁得分）
-- [ ] M4+ 作业管理、AI 故事馆（等娃出生 😄）
+- [x] M1：点菜本地演示版
+- [ ] M2：家庭数据边界、迁移、备份、安全和自动化测试
+- [ ] M3：统一日历、提醒、任务和投票
+- [ ] M4：观影 MVP 与 MoviePilot/Plex/Emby 连接器
+- [ ] M5：访客与家庭网络
+- [ ] M6：库存采购闭环、家庭资产和积分
+- [ ] M7：按真实需求扩展儿童、健康、出行等模块
+
+详细范围与验收标准见 [总体方案的分阶段路线图](docs/family-platform-plan.md#21-分阶段路线图)。
