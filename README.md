@@ -111,9 +111,11 @@ npx pnpm --filter mobile start
 ## 验证
 
 ```bash
-# API 与客户端类型检查
-(cd apps/api && ./node_modules/.bin/tsc --noEmit)
-(cd apps/mobile && ./node_modules/.bin/tsc --noEmit)
+# API、客户端和 Playwright 测试代码的类型检查
+corepack pnpm typecheck
+
+# Expo 官方规则静态检查
+corepack pnpm lint
 
 # Expo 依赖版本检查
 (cd apps/mobile && ./node_modules/.bin/expo install --check)
@@ -134,7 +136,13 @@ npx pnpm --filter api test:schema
 # 家庭隔离、菜单协作、通知、审计、锁定、唯一约束和事务回滚，结束后自动清理
 docker compose -f docker-compose.dev.yml run --rm --no-deps api \
   pnpm --filter api test:api
+
+# 固定 Chrome 回归：鼠标登录、390px 移动视口、1440px 桌面视口和核心导航
+# 运行前保持 API/数据库健康；测试不点菜、不改状态/偏好，也不修改库存
+corepack pnpm test:web
 ```
+
+Playwright 直接使用本机安装的 Google Chrome，不会额外下载浏览器。失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。
 
 ## 项目结构
 
@@ -149,6 +157,8 @@ apps/
 │   ├── src/upload/        # 图片上传
 │   └── src/entities/      # 当前 TypeORM 实体
 └── mobile/
+    ├── e2e/               # Playwright 登录与双视口 Web 回归
+    ├── playwright.config.ts
     └── src/
         ├── app/           # Expo Router 页面
         ├── components/    # 应用外壳、日历、库存和通用 UI

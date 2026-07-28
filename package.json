@@ -3,10 +3,13 @@
   "private": true,
   "packageManager": "pnpm@10.34.5",
   "scripts": {
-    "api": "pnpm --filter api start:dev",
+    "api": "corepack pnpm --filter api start:dev",
     "backup:dev": "sh scripts/backup-dev.sh",
-    "mobile": "pnpm --filter mobile start",
+    "lint": "corepack pnpm --filter mobile lint",
+    "mobile": "corepack pnpm --filter mobile start",
     "restore:dev": "sh scripts/restore-dev.sh",
-    "seed": "pnpm --filter api seed"
+    "seed": "corepack pnpm --filter api seed",
+    "test:web": "corepack pnpm --filter mobile test:web",
+    "typecheck": "corepack pnpm --filter api exec tsc --noEmit && corepack pnpm --filter mobile typecheck"
   }
 }

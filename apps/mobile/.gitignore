@@ -9,6 +9,11 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Browser tests
+e2e/.auth/
+playwright-report/
+test-results/
+
 # Native
 .kotlin/
 *.orig.*
