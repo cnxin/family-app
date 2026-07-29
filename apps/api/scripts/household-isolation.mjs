@@ -512,12 +512,20 @@ try {
     defaultToken,
     'DELETE',
   );
+  const crossMediaPoll = await request('/polls', defaultToken, 'POST', {
+    title: '不应关联其他家庭的影视',
+    category: 'movie',
+    options: [{ label: '想看' }, { label: '不看' }],
+    sourceModule: 'media',
+    sourceId: ids.householdMedia,
+  });
   assert(
     foreignMedia.status === 200 &&
       foreignMedia.body.data.some((entry) => entry.id === ids.householdMedia) &&
       crossMediaUpdate.status === 404 &&
-      crossMediaDelete.status === 404,
-    '不能跨家庭读取、修改或删除观影片单',
+      crossMediaDelete.status === 404 &&
+      crossMediaPoll.status === 404,
+    '不能跨家庭读取、修改、删除观影片单或建立来源投票',
   );
 
   const foreignTasks = await request(

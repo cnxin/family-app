@@ -4,6 +4,7 @@ import {
   BellPlus,
   Check,
   Clock3,
+  Film,
   LockKeyhole,
   Pencil,
   Plus,
@@ -54,6 +55,7 @@ import type {
 
 type PollFilter = PollStatus | 'all';
 type PendingAction = { type: 'close' | 'archive'; poll: HouseholdPoll } | null;
+type PollSource = { module: 'media'; id: string; title: string };
 
 const CATEGORY_LABELS: Record<PollCategory, string> = {
   general: '家庭',
@@ -116,11 +118,13 @@ function PollForm({
   visible,
   onClose,
   onSaved,
+  source,
 }: {
   poll: HouseholdPoll | null;
   visible: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (saved: HouseholdPoll) => void;
+  source: PollSource | null;
 }) {
   const c = useTheme();
   const save = useUpsertPoll();
@@ -139,17 +143,20 @@ function PollForm({
   useEffect(() => {
     if (!visible) return;
     const deadline = deadlineParts(poll?.closesAt ?? null);
-    setTitle(poll?.title ?? '');
+    setTitle(poll?.title ?? (source ? `要一起看《${source.title}》吗？` : ''));
     setDescription(poll?.description ?? '');
-    setCategory(poll?.category ?? 'general');
+    setCategory(poll?.category ?? (source ? 'movie' : 'general'));
     setVoteMode(poll?.voteMode ?? 'single');
     setMaxChoices(String(poll?.maxChoices ?? 2));
     setHasDeadline(Boolean(poll?.closesAt));
     setClosesOn(deadline.date);
     setClosesTime(deadline.time);
-    setOptions(poll?.options.map((option) => option.label) ?? ['', '']);
+    setOptions(
+      poll?.options.map((option) => option.label) ??
+        (source ? ['想看', '这次先不看'] : ['', '']),
+    );
     setMessage(null);
-  }, [poll, visible]);
+  }, [poll, source, visible]);
 
   const updateOption = (index: number, value: string) => {
     setOptions((current) =>
@@ -189,7 +196,7 @@ function PollForm({
 
     setMessage(null);
     try {
-      await save.mutateAsync({
+      const saved = await save.mutateAsync({
         id: poll?.id,
         title: normalizedTitle,
         description: description.trim() || null,
@@ -202,9 +209,12 @@ function PollForm({
               options: normalizedOptions.map((label) => ({ label })),
             }
           : {}),
+        ...(!poll && source
+          ? { sourceModule: source.module, sourceId: source.id }
+          : {}),
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onSaved();
+      onSaved(saved);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存失败，请稍后再试');
     }
@@ -262,17 +272,26 @@ function PollForm({
 
             <View style={styles.field}>
               <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>分类</Text>
-              <Segmented<PollCategory>
-                onChange={setCategory}
-                options={[
-                  { label: '家庭', value: 'general' },
-                  { label: '吃什么', value: 'meal' },
-                  { label: '活动', value: 'activity' },
-                  { label: '观影', value: 'movie' },
-                  { label: '采购', value: 'shopping' },
-                ]}
-                value={category}
-              />
+              {source ? (
+                <View style={[styles.sourceNotice, { backgroundColor: c.accentSoft }]}>
+                  <Film color={c.accent} size={17} />
+                  <Text numberOfLines={2} style={[t.subhead, { color: c.accent, flex: 1, fontWeight: '600' }]}>
+                    来自家庭片单 · {source.title}
+                  </Text>
+                </View>
+              ) : (
+                <Segmented<PollCategory>
+                  onChange={setCategory}
+                  options={[
+                    { label: '家庭', value: 'general' },
+                    { label: '吃什么', value: 'meal' },
+                    { label: '活动', value: 'activity' },
+                    { label: '观影', value: 'movie' },
+                    { label: '采购', value: 'shopping' },
+                  ]}
+                  value={category}
+                />
+              )}
             </View>
 
             <View style={styles.field}>
@@ -451,6 +470,7 @@ function PollCard({
   onArchive,
   onClose,
   onEdit,
+  onOpenSource,
   onRemind,
   onReopen,
 }: {
@@ -459,6 +479,7 @@ function PollCard({
   onArchive: () => void;
   onClose: () => void;
   onEdit: () => void;
+  onOpenSource: () => void;
   onRemind: () => void;
   onReopen: () => void;
 }) {
@@ -595,20 +616,36 @@ function PollCard({
         ) : null}
       </View>
 
-      {poll.status === 'open' ? (
-        <Pressable
-          accessibilityLabel={`提醒投票${poll.title}`}
-          accessibilityRole="button"
-          onPress={onRemind}
-          style={({ pressed }) => [
-            styles.reminderButton,
-            { backgroundColor: pressed ? c.tintSoft : c.fill },
-          ]}
-        >
-          <BellPlus color={c.tint} size={16} />
-          <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>设置提醒</Text>
-        </Pressable>
-      ) : null}
+      <View style={styles.utilityActions}>
+        {poll.sourceModule === 'media' && poll.sourceId ? (
+          <Pressable
+            accessibilityLabel={`查看${poll.title}关联的片单条目`}
+            accessibilityRole="button"
+            onPress={onOpenSource}
+            style={({ pressed }) => [
+              styles.reminderButton,
+              { backgroundColor: pressed ? c.accentSoft : c.fill },
+            ]}
+          >
+            <Film color={c.accent} size={16} />
+            <Text style={[t.footnote, { color: c.accent, fontWeight: '700' }]}>查看片单条目</Text>
+          </Pressable>
+        ) : null}
+        {poll.status === 'open' ? (
+          <Pressable
+            accessibilityLabel={`提醒投票${poll.title}`}
+            accessibilityRole="button"
+            onPress={onRemind}
+            style={({ pressed }) => [
+              styles.reminderButton,
+              { backgroundColor: pressed ? c.tintSoft : c.fill },
+            ]}
+          >
+            <BellPlus color={c.tint} size={16} />
+            <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>设置提醒</Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       {poll.description ? (
         <Text style={[t.subhead, styles.pollDescription, { color: c.secondaryLabel }]}>
@@ -715,13 +752,26 @@ export default function PollsScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
-  const params = useLocalSearchParams<{ pollId?: string }>();
+  const params = useLocalSearchParams<{
+    pollId?: string;
+    sourceModule?: string;
+    sourceId?: string;
+    sourceTitle?: string;
+  }>();
   const focusedPollId = firstParam(params.pollId);
+  const sourceModule = firstParam(params.sourceModule);
+  const sourceId = firstParam(params.sourceId);
+  const sourceTitle = firstParam(params.sourceTitle);
+  const source =
+    sourceModule === 'media' && sourceId && sourceTitle
+      ? { module: 'media' as const, id: sourceId, title: sourceTitle }
+      : null;
   const { data: polls, isLoading, error } = usePolls();
   const [filter, setFilter] = useState<PollFilter>('open');
   const [formOpen, setFormOpen] = useState(false);
   const [editingPoll, setEditingPoll] = useState<HouseholdPoll | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const openedSource = React.useRef<string | null>(null);
   const setStatus = useSetPollStatus();
   const archive = useArchivePoll();
 
@@ -731,6 +781,15 @@ export default function PollsScreen() {
       if (focused?.status === 'closed') setFilter('all');
     }
   }, [focusedPollId, polls]);
+
+  useEffect(() => {
+    if (!source) return;
+    const key = `${source.module}:${source.id}`;
+    if (openedSource.current === key) return;
+    openedSource.current = key;
+    setEditingPoll(null);
+    setFormOpen(true);
+  }, [source]);
 
   const visiblePolls = useMemo(
     () =>
@@ -811,6 +870,13 @@ export default function PollsScreen() {
                     setEditingPoll(poll);
                     setFormOpen(true);
                   }}
+                  onOpenSource={() => {
+                    if (!poll.sourceId) return;
+                    router.push({
+                      pathname: '/media',
+                      params: { mediaId: poll.sourceId },
+                    });
+                  }}
                   onReopen={() => reopen(poll)}
                   onRemind={() =>
                     router.push({
@@ -836,8 +902,14 @@ export default function PollsScreen() {
 
       <PollForm
         onClose={() => setFormOpen(false)}
-        onSaved={() => setFormOpen(false)}
+        onSaved={(saved) => {
+          setFormOpen(false);
+          if (source) {
+            router.replace({ pathname: '/polls', params: { pollId: saved.id } });
+          }
+        }}
         poll={editingPoll}
+        source={!editingPoll ? source : null}
         visible={formOpen}
       />
 
@@ -936,15 +1008,19 @@ const styles = StyleSheet.create({
   pollMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 5 },
   manageActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5, maxWidth: 70 },
   reminderButton: {
-    alignSelf: 'flex-start',
     minHeight: 36,
     borderRadius: radius.sm,
-    marginHorizontal: 16,
-    marginBottom: 10,
     paddingHorizontal: 11,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  utilityActions: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   smallIconButton: {
     width: 32,
@@ -1029,6 +1105,14 @@ const styles = StyleSheet.create({
   formContent: { paddingHorizontal: 20, paddingBottom: 20, gap: 16 },
   field: { gap: 7 },
   fieldLabel: { fontWeight: '600' },
+  sourceNotice: {
+    minHeight: 46,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   input: { height: 46, borderRadius: radius.sm, paddingHorizontal: 12 },
   descriptionInput: {
     minHeight: 78,

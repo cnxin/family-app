@@ -33,8 +33,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import { recordActivity } from '../activities/activity-log';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
+  HouseholdMedia,
   Member,
   Notification,
   Poll,
@@ -95,6 +97,14 @@ class CreatePollDto {
   @ValidateNested({ each: true })
   @Type(() => PollOptionDto)
   options: PollOptionDto[];
+
+  @IsOptional()
+  @IsIn(['media'])
+  sourceModule?: 'media';
+
+  @IsOptional()
+  @IsUUID('4')
+  sourceId?: string;
 }
 
 class UpdatePollDto {
@@ -212,6 +222,7 @@ export class PollsService {
     if (!title) throw new BadRequestException('投票标题不能为空');
 
     const id = await this.dataSource.transaction(async (manager) => {
+      const source = await this.prepareSource(dto, user, manager);
       const polls = manager.getRepository(Poll);
       const pollOptions = manager.getRepository(PollOption);
       const poll = await polls.save(
@@ -219,13 +230,13 @@ export class PollsService {
           householdId: user.householdId,
           title,
           description: dto.description?.trim() || null,
-          category: dto.category ?? 'general',
+          category: source?.module === 'media' ? 'movie' : (dto.category ?? 'general'),
           voteMode,
           maxChoices,
           closesAt,
           status: 'open',
-          sourceModule: null,
-          sourceId: null,
+          sourceModule: source?.module ?? null,
+          sourceId: source?.id ?? null,
           createdById: user.memberId,
         }),
       );
@@ -241,6 +252,23 @@ export class PollsService {
         'poll_created',
         `${user.name}发起了「${poll.title}」`,
       );
+      if (source?.module === 'media') {
+        if (source.entry.status === 'watchlist') {
+          source.entry.status = 'voting';
+          source.entry.scheduledFor = null;
+          await manager.getRepository(HouseholdMedia).save(source.entry);
+        }
+        await recordActivity(manager, user, {
+          module: 'media',
+          action: 'media_poll_started',
+          summary: `${user.name} 为「${source.entry.mediaTitle.title}」发起了家庭投票`,
+          targetPath: `/polls?pollId=${poll.id}`,
+          metadata: {
+            mediaId: source.entry.id,
+            pollId: poll.id,
+          },
+        });
+      }
       return poll.id;
     });
     return this.get(id, user);
@@ -350,6 +378,7 @@ export class PollsService {
       poll.closedAt = new Date();
       poll.closedById = user.memberId;
       await manager.getRepository(Poll).save(poll);
+      await this.syncMediaSource(manager, poll, user, 'closed');
       await this.notifyHousehold(
         manager,
         poll,
@@ -363,16 +392,28 @@ export class PollsService {
 
   async reopen(id: string, user: JwtUser) {
     await this.dataSource.transaction(async (manager) => {
+      const preview = await manager.getRepository(Poll).findOneBy({
+        id,
+        householdId: user.householdId,
+        isArchived: false,
+      });
+      if (!preview) throw new NotFoundException('家庭投票不存在');
+      await this.lockMediaPollSource(manager, preview);
       const poll = await this.lockPoll(id, user, manager);
       this.assertManageable(poll, user);
       if (poll.closesAt && poll.closesAt.getTime() <= Date.now()) {
         throw new ConflictException('请先把截止时间修改到未来再重新开启');
       }
-      if (poll.status === 'open') return;
+      if (poll.status === 'open' && effectiveStatus(poll) === 'open') {
+        await this.syncMediaSource(manager, poll, user, 'reopened');
+        return;
+      }
+      await this.assertNoOtherActiveMediaPoll(manager, poll);
       poll.status = 'open';
       poll.closedAt = null;
       poll.closedById = null;
       await manager.getRepository(Poll).save(poll);
+      await this.syncMediaSource(manager, poll, user, 'reopened');
       await this.notifyHousehold(
         manager,
         poll,
@@ -390,6 +431,7 @@ export class PollsService {
       this.assertManageable(poll, user);
       poll.isArchived = true;
       await manager.getRepository(Poll).save(poll);
+      await this.syncMediaSource(manager, poll, user, 'archived');
     });
     return { id, archived: true as const };
   }
@@ -476,6 +518,168 @@ export class PollsService {
   private assertManageable(poll: Poll, user: JwtUser) {
     if (poll.createdById !== user.memberId && !isAdmin(user)) {
       throw new ForbiddenException('只能管理自己发起的投票');
+    }
+  }
+
+  private async prepareSource(
+    dto: CreatePollDto,
+    user: JwtUser,
+    manager: EntityManager,
+  ) {
+    if (Boolean(dto.sourceModule) !== Boolean(dto.sourceId)) {
+      throw new BadRequestException('投票来源模块和来源 ID 必须同时提供');
+    }
+    if (!dto.sourceModule || !dto.sourceId) return null;
+
+    await manager.query(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [`poll-source:${user.householdId}:${dto.sourceModule}:${dto.sourceId}`],
+    );
+    const entry = await manager
+      .getRepository(HouseholdMedia)
+      .createQueryBuilder('entry')
+      .innerJoinAndSelect('entry.mediaTitle', 'mediaTitle')
+      .where('entry.id = :id AND entry.householdId = :householdId', {
+        id: dto.sourceId,
+        householdId: user.householdId,
+      })
+      .setLock('pessimistic_write')
+      .getOne();
+    if (!entry) throw new NotFoundException('观影片单不存在');
+    if (entry.status !== 'watchlist' && entry.status !== 'voting') {
+      throw new ConflictException('只有想看或投票中的影视可以发起投票');
+    }
+
+    const pollRepository = manager.getRepository(Poll);
+    const existing = await pollRepository.find({
+      where: {
+        householdId: user.householdId,
+        sourceModule: 'media',
+        sourceId: entry.id,
+        status: 'open',
+        isArchived: false,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    for (const poll of existing) {
+      if (effectiveStatus(poll) === 'open') {
+        throw new ConflictException('这部影视已经有进行中的家庭投票');
+      }
+      poll.status = 'closed';
+      poll.closedAt = poll.closesAt ?? new Date();
+      await pollRepository.save(poll);
+    }
+    return { module: 'media' as const, id: entry.id, entry };
+  }
+
+  private async syncMediaSource(
+    manager: EntityManager,
+    poll: Poll,
+    user: JwtUser,
+    action: 'closed' | 'reopened' | 'archived',
+  ) {
+    if (poll.sourceModule !== 'media' || !poll.sourceId) return;
+    const entry = await manager
+      .getRepository(HouseholdMedia)
+      .createQueryBuilder('entry')
+      .innerJoinAndSelect('entry.mediaTitle', 'mediaTitle')
+      .where('entry.id = :id AND entry.householdId = :householdId', {
+        id: poll.sourceId,
+        householdId: user.householdId,
+      })
+      .setLock('pessimistic_write')
+      .getOne();
+    if (!entry) {
+      if (action === 'reopened') {
+        throw new ConflictException('来源片单已不存在，不能重新开启投票');
+      }
+      return;
+    }
+
+    if (action === 'reopened') {
+      if (entry.status !== 'watchlist' && entry.status !== 'voting') {
+        throw new ConflictException('当前观影状态不能重新开启投票');
+      }
+      if (entry.status === 'watchlist') {
+        entry.status = 'voting';
+        entry.scheduledFor = null;
+        await manager.getRepository(HouseholdMedia).save(entry);
+      }
+    } else if (
+      entry.status === 'voting' &&
+      !(await this.hasOtherActiveMediaPoll(manager, poll))
+    ) {
+      entry.status = 'watchlist';
+      entry.scheduledFor = null;
+      await manager.getRepository(HouseholdMedia).save(entry);
+    }
+
+    await recordActivity(manager, user, {
+      module: 'media',
+      action: `media_poll_${action}`,
+      summary:
+        action === 'reopened'
+          ? `${user.name} 重新开启了「${entry.mediaTitle.title}」的家庭投票`
+          : `${user.name} ${action === 'closed' ? '结束' : '移除'}了「${entry.mediaTitle.title}」的家庭投票`,
+      targetPath: `/media?mediaId=${entry.id}`,
+      metadata: { mediaId: entry.id, pollId: poll.id },
+    });
+  }
+
+  private async hasOtherActiveMediaPoll(
+    manager: EntityManager,
+    poll: Poll,
+  ) {
+    if (poll.sourceModule !== 'media' || !poll.sourceId) return false;
+    const other = await manager
+      .getRepository(Poll)
+      .createQueryBuilder('poll')
+      .where('poll.householdId = :householdId', {
+        householdId: poll.householdId,
+      })
+      .andWhere('poll.sourceModule = :sourceModule', { sourceModule: 'media' })
+      .andWhere('poll.sourceId = :sourceId', { sourceId: poll.sourceId })
+      .andWhere('poll.id <> :id', { id: poll.id })
+      .andWhere('poll.status = :status', { status: 'open' })
+      .andWhere('poll.isArchived = false')
+      .orderBy('poll.createdAt', 'DESC')
+      .getOne();
+    return Boolean(other && effectiveStatus(other) === 'open');
+  }
+
+  private async lockMediaPollSource(manager: EntityManager, poll: Poll) {
+    if (poll.sourceModule !== 'media' || !poll.sourceId) return;
+    await manager.query(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [`poll-source:${poll.householdId}:media:${poll.sourceId}`],
+    );
+  }
+
+  private async assertNoOtherActiveMediaPoll(
+    manager: EntityManager,
+    poll: Poll,
+  ) {
+    if (poll.sourceModule !== 'media' || !poll.sourceId) return;
+    const repository = manager.getRepository(Poll);
+    const others = await repository
+      .createQueryBuilder('poll')
+      .where('poll.householdId = :householdId', {
+        householdId: poll.householdId,
+      })
+      .andWhere('poll.sourceModule = :sourceModule', { sourceModule: 'media' })
+      .andWhere('poll.sourceId = :sourceId', { sourceId: poll.sourceId })
+      .andWhere('poll.id <> :id', { id: poll.id })
+      .andWhere('poll.status = :status', { status: 'open' })
+      .andWhere('poll.isArchived = false')
+      .orderBy('poll.createdAt', 'DESC')
+      .getMany();
+    for (const other of others) {
+      if (effectiveStatus(other) === 'open') {
+        throw new ConflictException('这部影视已经有另一个进行中的家庭投票');
+      }
+      other.status = 'closed';
+      other.closedAt = other.closesAt ?? new Date();
+      await repository.save(other);
     }
   }
 
@@ -584,6 +788,7 @@ export class PollsController {
       PollVote,
       Member,
       Notification,
+      HouseholdMedia,
     ]),
   ],
   controllers: [PollsController],

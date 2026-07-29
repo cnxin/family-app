@@ -1271,6 +1271,14 @@ export class Notification {
   'status',
   'createdAt',
 ])
+@Index(
+  'UQ_polls_active_media_source',
+  ['householdId', 'sourceModule', 'sourceId'],
+  {
+    unique: true,
+    where: `"sourceModule" = 'media' AND "isArchived" = false AND "status" = 'open'`,
+  },
+)
 export class Poll {
   @PrimaryGeneratedColumn('uuid')
   id: string;

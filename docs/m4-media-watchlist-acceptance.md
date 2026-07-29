@@ -73,5 +73,5 @@ DELETE /media/:id
 
 1. 确认 Plex 或 Emby 的主播放来源，实现第一个 `MediaLibraryProvider`。
 2. 接入元数据搜索，保留手动录入作为离线回退。
-3. 复用通用投票的来源关联，加入从片单发起投票的快捷流程。
+3. 从片单发起通用投票的来源关联已在 M4-B 完成，见 [观影片单关联投票验收](m4-media-polls-acceptance.md)。
 4. 确认 MoviePilot API 后实现请求、订阅状态、失败重试与媒体就绪通知。

@@ -39,6 +39,7 @@ import {
   MediaExternalRef,
   MediaTitle,
   MediaType,
+  Poll,
 } from '../entities';
 
 const MEDIA_STATUSES: HouseholdMediaStatus[] = [
@@ -421,6 +422,13 @@ export class MediaService {
           `不能从“${STATUS_LABELS[oldStatus]}”直接改为“${STATUS_LABELS[nextStatus]}”`,
         );
       }
+      if (
+        oldStatus === 'voting' &&
+        nextStatus !== 'voting' &&
+        (await this.hasActivePoll(manager, entry.id, user.householdId))
+      ) {
+        throw new ConflictException('请先结束这部影视的家庭投票，再修改观影状态');
+      }
 
       if (Object.prototype.hasOwnProperty.call(dto, 'scheduledFor')) {
         entry.scheduledFor = parseDateOnly(dto.scheduledFor);
@@ -485,6 +493,9 @@ export class MediaService {
         .setLock('pessimistic_write')
         .getOne();
       if (!entry) throw new NotFoundException('观影片单不存在');
+      if (await this.hasActivePoll(manager, entry.id, user.householdId)) {
+        throw new ConflictException('请先结束或删除这部影视的家庭投票，再移出片单');
+      }
       await recordActivity(manager, user, {
         module: 'media',
         action: 'media_removed',
@@ -533,6 +544,26 @@ export class MediaService {
       updatedAt: entry.updatedAt,
     };
   }
+
+  private async hasActivePoll(
+    manager: EntityManager,
+    mediaId: string,
+    householdId: string,
+  ) {
+    const poll = await manager.getRepository(Poll).findOne({
+      where: {
+        householdId,
+        sourceModule: 'media',
+        sourceId: mediaId,
+        status: 'open',
+        isArchived: false,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    return Boolean(
+      poll && (!poll.closesAt || poll.closesAt.getTime() > Date.now()),
+    );
+  }
 }
 
 @Controller('media')
@@ -570,6 +601,7 @@ class MediaController {
       HouseholdMedia,
       MediaTitle,
       MediaExternalRef,
+      Poll,
     ]),
   ],
   controllers: [MediaController],

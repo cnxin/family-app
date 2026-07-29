@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Trash2,
+  Vote,
   X,
 } from 'lucide-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -40,12 +41,14 @@ import {
   useCreateMedia,
   useDeleteMedia,
   useMedia,
+  usePolls,
   useUpdateMedia,
 } from '../../lib/queries';
 import { radius, type as t, useTheme } from '../../lib/theme';
 import type {
   HouseholdMedia,
   HouseholdMediaStatus,
+  HouseholdPoll,
   MediaType,
 } from '../../lib/types';
 
@@ -137,10 +140,14 @@ function MediaCard({
   entry,
   onDelete,
   onEdit,
+  onPoll,
+  poll,
 }: {
   entry: HouseholdMedia;
   onDelete: () => void;
   onEdit: () => void;
+  onPoll: () => void;
+  poll: HouseholdPoll | null;
 }) {
   const c = useTheme();
   const colors = statusColors(entry.status, c);
@@ -202,6 +209,19 @@ function MediaCard({
             ))}
           </View>
           <View style={styles.cardActions}>
+            {poll || entry.status === 'watchlist' || entry.status === 'voting' ? (
+              <Pressable
+                accessibilityLabel={`${poll ? '查看' : '发起'}${entry.mediaTitle.title}的家庭投票`}
+                accessibilityRole="button"
+                onPress={onPoll}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  { backgroundColor: pressed ? c.accentSoft : c.fill },
+                ]}
+              >
+                <Vote color={c.accent} size={17} />
+              </Pressable>
+            ) : null}
             <Pressable
               accessibilityLabel={`编辑${entry.mediaTitle.title}`}
               accessibilityRole="button"
@@ -645,7 +665,22 @@ export default function MediaScreen() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const openedParameter = useRef<string | null>(null);
   const { data: entries, error, isLoading } = useMedia(filter, debouncedSearch);
+  const { data: polls } = usePolls();
   const remove = useDeleteMedia();
+
+  const pollByMediaId = useMemo(() => {
+    const result = new Map<string, HouseholdPoll>();
+    for (const poll of polls ?? []) {
+      if (
+        poll.status === 'open' &&
+        poll.sourceModule === 'media' &&
+        poll.sourceId
+      ) {
+        result.set(poll.sourceId, poll);
+      }
+    }
+    return result;
+  }, [polls]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedSearch(search), 250);
@@ -795,6 +830,22 @@ export default function MediaScreen() {
                       setEditingEntry(entry);
                       setFormOpen(true);
                     }}
+                    onPoll={() => {
+                      const poll = pollByMediaId.get(entry.id);
+                      router.push(
+                        poll
+                          ? { pathname: '/polls', params: { pollId: poll.id } }
+                          : {
+                              pathname: '/polls',
+                              params: {
+                                sourceModule: 'media',
+                                sourceId: entry.id,
+                                sourceTitle: entry.mediaTitle.title,
+                              },
+                            },
+                      );
+                    }}
+                    poll={pollByMediaId.get(entry.id) ?? null}
                   />
                 </View>
               ))}

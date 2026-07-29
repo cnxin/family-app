@@ -483,6 +483,8 @@ export interface PollInput {
   maxChoices?: number;
   closesAt?: string | null;
   options?: { label: string; description?: string | null }[];
+  sourceModule?: 'media';
+  sourceId?: string;
 }
 
 export function useUpsertPoll() {
@@ -497,6 +499,7 @@ export function useUpsertPoll() {
       void qc.invalidateQueries({ queryKey: ['notifications'] });
       void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
       void qc.invalidateQueries({ queryKey: ['reminders'] });
+      void qc.invalidateQueries({ queryKey: ['media'] });
     },
   });
 }
@@ -523,6 +526,7 @@ export function useSetPollStatus() {
       void qc.invalidateQueries({ queryKey: ['notifications'] });
       void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
       void qc.invalidateQueries({ queryKey: ['reminders'] });
+      void qc.invalidateQueries({ queryKey: ['media'] });
     },
   });
 }
@@ -536,6 +540,7 @@ export function useArchivePoll() {
       void qc.invalidateQueries({ queryKey: ['polls'] });
       void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
       void qc.invalidateQueries({ queryKey: ['reminders'] });
+      void qc.invalidateQueries({ queryKey: ['media'] });
     },
   });
 }

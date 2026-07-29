@@ -123,6 +123,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   expect(runtimeErrors).toEqual([]);
 
   const mediaRoute = /\/media(\?|$)/;
+  const linkedPollRoute = /\/polls(\?|$)/;
+  let linkedPollFixture: Record<string, unknown> | null = null;
   await page.route(mediaRoute, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
@@ -136,8 +138,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
           {
             id: 'media-browser-fixture-1',
             householdId: 'household-browser-fixture',
-            status: 'scheduled',
-            scheduledFor: '2199-12-29',
+            status: 'watchlist',
+            scheduledFor: null,
             note: '周末家庭观影',
             mediaTitle: {
               id: 'title-browser-fixture-1',
@@ -181,6 +183,70 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       }),
     });
   });
+  await page.route(linkedPollRoute, async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: linkedPollFixture ? [linkedPollFixture] : [] }),
+      });
+      return;
+    }
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const body = route.request().postDataJSON() as {
+      title: string;
+      description: string | null;
+      category: string;
+      voteMode: string;
+      maxChoices: number;
+      sourceModule: string;
+      sourceId: string;
+      options: { label: string }[];
+    };
+    expect(body.sourceModule).toBe('media');
+    expect(body.sourceId).toBe('media-browser-fixture-1');
+    linkedPollFixture = {
+      id: 'poll-browser-fixture-media-1',
+      title: body.title,
+      description: body.description,
+      category: 'movie',
+      voteMode: body.voteMode,
+      maxChoices: body.maxChoices,
+      closesAt: null,
+      status: 'open',
+      sourceModule: 'media',
+      sourceId: body.sourceId,
+      createdById: 'member-browser-fixture',
+      createdBy: { id: 'member-browser-fixture', name: '爸爸', avatarEmoji: '👨' },
+      closedById: null,
+      closedBy: null,
+      closedAt: null,
+      createdAt: '2099-01-01T00:00:00.000Z',
+      updatedAt: '2099-01-01T00:00:00.000Z',
+      canManage: true,
+      canVote: true,
+      totalVoters: 0,
+      totalVotes: 0,
+      selectedOptionIds: [],
+      options: body.options.map((option, index) => ({
+        id: `poll-browser-fixture-option-${index + 1}`,
+        label: option.label,
+        description: null,
+        sortOrder: index,
+        voteCount: 0,
+        percentage: 0,
+        voters: [],
+      })),
+    };
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: linkedPollFixture }),
+    });
+  });
 
   const mediaLink =
     testInfo.project.name === 'mobile-chrome'
@@ -196,8 +262,33 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByText('加入家庭片单', { exact: true })).toBeVisible();
   await expect(page.getByLabel('影视名称')).toBeVisible();
   await expect(page.getByLabel('安排观影日期')).toBeVisible();
-  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '关闭', exact: true }).last().click();
   await expect(page.getByText('加入家庭片单', { exact: true })).not.toBeVisible();
+  await page
+    .getByRole('button', {
+      name: '发起家庭电影回归样例的家庭投票',
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(/\/polls\?.*sourceModule=media/);
+  await expect(page.getByText('来自家庭片单 · 家庭电影回归样例')).toBeVisible();
+  await expect(page.getByLabel('投票标题')).toHaveValue(
+    '要一起看《家庭电影回归样例》吗？',
+  );
+  await expect(
+    page.getByRole('textbox', { name: '候选项1', exact: true }),
+  ).toHaveValue('想看');
+  await expect(
+    page.getByRole('textbox', { name: '候选项2', exact: true }),
+  ).toHaveValue('这次先不看');
+  await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
+  await expect(page).toHaveURL(/\/polls\?pollId=poll-browser-fixture-media-1/);
+  await expect(page.getByRole('checkbox', { name: '选择想看' })).toBeVisible();
+  await page.getByRole('button', { name: /关联的片单条目/ }).click();
+  await expect(page).toHaveURL(/\/media\?mediaId=media-browser-fixture-1/);
+  await expect(page.getByText('编辑观影安排', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '关闭', exact: true }).first().click();
+  await expect(page.getByText('编辑观影安排', { exact: true })).not.toBeVisible();
   if (testInfo.project.name === 'mobile-chrome') {
     await expect(page.getByRole('tab')).toHaveCount(6);
   }
@@ -212,6 +303,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   } else {
     await openSection(page, testInfo.project.name, 'home');
   }
+  await page.unroute(linkedPollRoute);
   await page.unroute(mediaRoute);
 
   const tasksLink =

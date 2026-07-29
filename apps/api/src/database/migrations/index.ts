@@ -11,6 +11,7 @@ import { AddHouseholdPolls1785227300000 } from './1785227300000-add-household-po
 import { AddConfigurableReminders1785227400000 } from './1785227400000-add-configurable-reminders';
 import { AddMembersAndActivity1785227500000 } from './1785227500000-add-members-and-activity';
 import { AddMediaWatchlist1785227600000 } from './1785227600000-add-media-watchlist';
+import { LinkMediaPolls1785227700000 } from './1785227700000-link-media-polls';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -26,4 +27,5 @@ export const ALL_MIGRATIONS = [
   AddConfigurableReminders1785227400000,
   AddMembersAndActivity1785227500000,
   AddMediaWatchlist1785227600000,
+  LinkMediaPolls1785227700000,
 ];

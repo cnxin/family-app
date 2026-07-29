@@ -32,6 +32,7 @@ console.log('1. 独立家庭片单与排期校验');
 const mom = await login('妈妈');
 const dad = await login('爸爸');
 const createdIds = [];
+const createdPollIds = [];
 const suffix = Date.now().toString(36);
 const tmdbId = `m4-tmdb-${suffix}`;
 const imdbId = `tt-m4-${suffix}`;
@@ -208,8 +209,164 @@ try {
     '移除片单保留不可变家庭活动记录',
   );
 
+  console.log('4. 片单关联家庭投票');
+  const linkedPoll = await request('/polls', mom.token, 'POST', {
+    title: `要一起看家庭剧集测试 ${suffix} 吗？`,
+    category: 'movie',
+    voteMode: 'single',
+    options: [{ label: '想看' }, { label: '这次先不看' }],
+    sourceModule: 'media',
+    sourceId: second.data.id,
+  });
+  assert(
+    linkedPoll.status === 201 &&
+      linkedPoll.data.category === 'movie' &&
+      linkedPoll.data.sourceModule === 'media' &&
+      linkedPoll.data.sourceId === second.data.id,
+    '可以从家庭片单发起带真实来源关联的观影投票',
+  );
+  createdPollIds.push(linkedPoll.data.id);
+
+  const votingEntry = await request(
+    `/media?status=voting&search=${encodeURIComponent(suffix)}`,
+    dad.token,
+  );
+  const duplicatePoll = await request('/polls', dad.token, 'POST', {
+    title: '不应重复创建的观影投票',
+    options: [{ label: '想看' }, { label: '不看' }],
+    sourceModule: 'media',
+    sourceId: second.data.id,
+  });
+  const changeDuringPoll = await request(
+    `/media/${second.data.id}`,
+    dad.token,
+    'PATCH',
+    { status: 'dropped' },
+  );
+  const removeDuringPoll = await request(
+    `/media/${second.data.id}`,
+    dad.token,
+    'DELETE',
+  );
+  assert(
+    votingEntry.data.some(
+      (entry) => entry.id === second.data.id && entry.status === 'voting',
+    ) &&
+      duplicatePoll.status === 409 &&
+      changeDuringPoll.status === 409 &&
+      removeDuringPoll.status === 409,
+    '发起投票后同步投票中状态，并阻止重复投票和绕过投票修改片单',
+  );
+
+  const closedPoll = await request(
+    `/polls/${linkedPoll.data.id}/close`,
+    dad.token,
+    'POST',
+  );
+  const afterClose = await request(
+    `/media?status=watchlist&search=${encodeURIComponent(suffix)}`,
+    mom.token,
+  );
+  const reopenedPoll = await request(
+    `/polls/${linkedPoll.data.id}/reopen`,
+    dad.token,
+    'POST',
+  );
+  const afterReopen = await request(
+    `/media?status=voting&search=${encodeURIComponent(suffix)}`,
+    mom.token,
+  );
+  const closedAgain = await request(
+    `/polls/${linkedPoll.data.id}/close`,
+    dad.token,
+    'POST',
+  );
+  const successorPoll = await request('/polls', dad.token, 'POST', {
+    title: `第二轮家庭剧集投票 ${suffix}`,
+    options: [{ label: '想看' }, { label: '稍后再看' }],
+    sourceModule: 'media',
+    sourceId: second.data.id,
+  });
+  createdPollIds.push(successorPoll.data.id);
+  const reopenOldPoll = await request(
+    `/polls/${linkedPoll.data.id}/reopen`,
+    mom.token,
+    'POST',
+  );
+  const archivedOldPoll = await request(
+    `/polls/${linkedPoll.data.id}`,
+    mom.token,
+    'DELETE',
+  );
+  createdPollIds.splice(createdPollIds.indexOf(linkedPoll.data.id), 1);
+  const afterOldArchive = await request(
+    `/media?status=voting&search=${encodeURIComponent(suffix)}`,
+    dad.token,
+  );
+  const archivedSuccessor = await request(
+    `/polls/${successorPoll.data.id}`,
+    dad.token,
+    'DELETE',
+  );
+  createdPollIds.splice(createdPollIds.indexOf(successorPoll.data.id), 1);
+  const afterFinalArchive = await request(
+    `/media?status=watchlist&search=${encodeURIComponent(suffix)}`,
+    dad.token,
+  );
+  assert(
+    closedPoll.data.status === 'closed' &&
+      afterClose.data.some((entry) => entry.id === second.data.id) &&
+      reopenedPoll.data.status === 'open' &&
+      afterReopen.data.some((entry) => entry.id === second.data.id) &&
+      closedAgain.data.status === 'closed' &&
+      successorPoll.data.status === 'open' &&
+      reopenOldPoll.status === 409 &&
+      archivedOldPoll.data.archived === true &&
+      afterOldArchive.data.some((entry) => entry.id === second.data.id) &&
+      archivedSuccessor.data.archived === true &&
+      afterFinalArchive.data.some((entry) => entry.id === second.data.id),
+    '顺序投票会阻止旧投票重开，归档旧记录不覆盖当前观影状态',
+  );
+
+  const concurrentPayload = {
+    title: `并发观影投票 ${suffix}`,
+    options: [{ label: '想看' }, { label: '不看' }],
+    sourceModule: 'media',
+    sourceId: readded.data.id,
+  };
+  const concurrentPolls = await Promise.all([
+    request('/polls', mom.token, 'POST', concurrentPayload),
+    request('/polls', dad.token, 'POST', concurrentPayload),
+  ]);
+  const concurrentWinner = concurrentPolls.find(
+    (response) => response.status === 201,
+  );
+  assert(
+    concurrentWinner &&
+      concurrentPolls.filter((response) => response.status === 201).length === 1 &&
+      concurrentPolls.filter((response) => response.status === 409).length === 1,
+    '同一片单并发发起投票时只创建一条，其余请求返回明确冲突',
+  );
+  createdPollIds.push(concurrentWinner.data.id);
+  await request(`/polls/${concurrentWinner.data.id}`, dad.token, 'DELETE');
+  createdPollIds.splice(createdPollIds.indexOf(concurrentWinner.data.id), 1);
+
+  const pollActivity = await request('/activities?limit=100', mom.token);
+  assert(
+    pollActivity.data.some(
+      (activity) =>
+        activity.module === 'media' &&
+        activity.action === 'media_poll_started' &&
+        activity.metadata.pollId === linkedPoll.data.id,
+    ),
+    '观影投票操作写入家庭活动记录',
+  );
+
   console.log('\n家庭观影测试全部通过');
 } finally {
+  for (const id of createdPollIds) {
+    await request(`/polls/${id}`, dad.token, 'DELETE');
+  }
   for (const id of createdIds) {
     await request(`/media/${id}`, dad.token, 'DELETE');
   }
