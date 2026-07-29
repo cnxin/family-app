@@ -29,6 +29,14 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - `APP_VERSION` 建议使用发布版本或 Git 提交短哈希，不要长期依赖 `latest`。
 - 根据主机内存调整资源限制。默认值适合小型家庭实例的起点，不等于容量承诺。
 
+可选媒体连接器：
+
+- `PLEX_BASE_URL`、`EMBY_BASE_URL`、`MOVIEPILOT_BASE_URL` 填 API 容器可访问的 NAS 地址，不要填写带 `/web/index.html` 或 Token 的浏览器详情页链接。
+- Plex 使用 `PLEX_TOKEN_FILE`，Emby 使用 `EMBY_API_KEY_FILE`，MoviePilot v2 使用 `MOVIEPILOT_API_KEY_FILE`。建议统一放在 `/run/integration-secrets/`，该目录由编排只读挂载。
+- `MEDIA_PRIMARY_LIBRARY=plex` 或 `emby` 只设置默认播放入口；Plex 与 Emby 可以同时启用。
+- 例如先创建 `deploy/secrets/plex_token.txt`，再设置 `PLEX_TOKEN_FILE=/run/integration-secrets/plex_token.txt`。密钥文件权限保持 `600`。
+- API 镜像以内置 `node` 用户（UID 1000）运行。在 Linux/NAS 上应将连接器密钥文件属主设为 UID 1000，或使用只授予该 UID 读取权限的 ACL；不要通过放宽为全员可读来绕过权限问题。启动后用连接器状态接口确认文件可读。
+
 环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥以及未来的连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效。
 
 ## 3. 校验并启动
@@ -68,7 +76,7 @@ curl https://family.example.com/api/health/ready
 
 ## 4. 网络与安全边界
 
-- 宿主机只映射 Caddy 的 80/443；PostgreSQL 与 API 没有宿主机端口。
+- 宿主机只映射 Caddy 的 80/443；PostgreSQL 与 API 没有宿主机端口。API 同时接入无入站端口的 `integrations` 网络，以便主动访问 NAS 上的媒体服务。
 - Caddy 为前端和 API 设置基础安全响应头；关闭含客户端地址和完整 URI 的访问日志，只保留轮转后的运行与错误日志。
 - API 只记录请求 ID、路由模板、状态、耗时和账号/成员/家庭 UUID，不记录请求体、查询值、姓名、IP、密码或令牌。
 - `TRUST_PROXY_HOPS=1` 只信任紧邻 API 的 Caddy。改变代理层数时必须同步调整，不能使用无边界的代理信任。

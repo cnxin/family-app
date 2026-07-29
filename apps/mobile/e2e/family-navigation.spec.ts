@@ -123,6 +123,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   expect(runtimeErrors).toEqual([]);
 
   const mediaRoute = /\/media(\?|$)/;
+  const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;
+  const mediaAvailabilityRoute = /\/media\/library-availability(\?|$)/;
   const linkedPollRoute = /\/polls(\?|$)/;
   let linkedPollFixture: Record<string, unknown> | null = null;
   await page.route(mediaRoute, async (route) => {
@@ -180,6 +182,73 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
             updatedAt: '2099-01-01T00:00:00.000Z',
           },
         ],
+      }),
+    });
+  });
+  await page.route(mediaConnectorsRoute, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            key: 'plex',
+            kind: 'plex',
+            name: 'Plex',
+            role: 'library',
+            primary: true,
+            state: 'online',
+            available: true,
+            message: 'Plex 1.43.0',
+            checkedAt: '2099-01-01T00:00:00.000Z',
+          },
+          {
+            key: 'emby',
+            kind: 'emby',
+            name: 'Emby',
+            role: 'library',
+            primary: false,
+            state: 'not_configured',
+            available: false,
+            message: '未配置服务地址',
+            checkedAt: null,
+          },
+          {
+            key: 'moviepilot',
+            kind: 'moviepilot',
+            name: 'MoviePilot',
+            role: 'automation',
+            primary: false,
+            state: 'needs_credential',
+            available: false,
+            message: '等待配置 API Key',
+            checkedAt: null,
+          },
+        ],
+      }),
+    });
+  });
+  await page.route(mediaAvailabilityRoute, async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      mediaIds: ['media-browser-fixture-1', 'media-browser-fixture-2'],
+    });
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          'media-browser-fixture-1': [
+            {
+              connectorKey: 'plex',
+              provider: 'plex',
+              name: 'Plex',
+              primary: true,
+              libraryItemId: '242',
+              playbackUrl: 'http://plex.test/web/index.html#!/details?key=242',
+            },
+          ],
+          'media-browser-fixture-2': [],
+        },
       }),
     });
   });
@@ -256,6 +325,15 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await mediaLink.click();
   await expect(page).toHaveURL(/\/media$/);
   await expect(page.getByText('家庭观影', { exact: true }).first()).toBeVisible();
+  await expect(page.getByLabel('媒体连接状态')).toBeVisible();
+  await expect(page.getByText('Plex · Plex 1.43.0', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('MoviePilot · 等待配置 API Key', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Emby · 未配置服务地址', { exact: true })).not.toBeVisible();
+  await expect(
+    page.getByRole('link', { name: '用Plex播放家庭电影回归样例' }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: '加入片单', exact: true }).first()).toBeVisible();
   await expect(page.getByLabel('搜索家庭片单')).toBeVisible();
   await page.getByRole('button', { name: '加入片单', exact: true }).first().click();
@@ -303,6 +381,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   } else {
     await openSection(page, testInfo.project.name, 'home');
   }
+  await page.unroute(mediaAvailabilityRoute);
+  await page.unroute(mediaConnectorsRoute);
   await page.unroute(linkedPollRoute);
   await page.unroute(mediaRoute);
 

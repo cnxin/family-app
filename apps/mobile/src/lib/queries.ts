@@ -22,6 +22,8 @@ import type {
   HouseholdActivity,
   HouseholdMedia,
   HouseholdMediaStatus,
+  MediaConnectorSummary,
+  MediaLibraryAvailability,
   InventoryCategory,
   InventoryItem,
   Member,
@@ -191,6 +193,28 @@ export function useMedia(
       return api<HouseholdMedia[]>(`/media?${params.toString()}`);
     },
     enabled,
+  });
+}
+
+export function useMediaConnectors() {
+  return useQuery({
+    queryKey: ['media-connectors'],
+    queryFn: () => api<MediaConnectorSummary[]>('/media/connectors'),
+    staleTime: 30_000,
+  });
+}
+
+export function useMediaLibraryAvailability(mediaIds: string[]) {
+  const normalizedIds = [...mediaIds].sort();
+  return useQuery({
+    queryKey: ['media-library-availability', normalizedIds.join(',')],
+    queryFn: () =>
+      api<MediaLibraryAvailability>('/media/library-availability', {
+        method: 'POST',
+        body: { mediaIds: normalizedIds },
+      }),
+    enabled: normalizedIds.length > 0,
+    staleTime: 60_000,
   });
 }
 

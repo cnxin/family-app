@@ -38,6 +38,19 @@ const tmdbId = `m4-tmdb-${suffix}`;
 const imdbId = `tt-m4-${suffix}`;
 
 try {
+  const connectors = await request('/media/connectors', mom.token);
+  assert(
+    connectors.status === 200 &&
+      connectors.data.length === 3 &&
+      connectors.data.every(
+        (connector) =>
+          connector.state === 'not_configured' &&
+          !Object.hasOwn(connector, 'credential') &&
+          !Object.hasOwn(connector, 'baseUrl'),
+      ),
+    '未配置连接器时返回明确状态且不暴露地址或凭据',
+  );
+
   const missingSchedule = await request('/media', mom.token, 'POST', {
     type: 'movie',
     title: `缺少日期的排期 ${suffix}`,
@@ -66,6 +79,19 @@ try {
   );
   createdIds.push(created.data.id);
   const originalMediaTitleId = created.data.mediaTitle.id;
+
+  const availability = await request(
+    '/media/library-availability',
+    dad.token,
+    'POST',
+    { mediaIds: [created.data.id] },
+  );
+  assert(
+    availability.status === 201 &&
+      Array.isArray(availability.data[created.data.id]) &&
+      availability.data[created.data.id].length === 0,
+    '媒体连接器未配置或离线时不阻断片单并返回空媒体库匹配',
+  );
 
   const list = await request(
     `/media?status=scheduled&search=${encodeURIComponent(suffix)}`,

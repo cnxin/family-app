@@ -21,6 +21,12 @@ const testEnvironment = {
   LOGIN_RATE_WINDOW_MS: '60000',
   NODE_ENV: 'test',
   PORT: String(API_PORT),
+  PLEX_BASE_URL: '',
+  PLEX_TOKEN: '',
+  EMBY_BASE_URL: '',
+  EMBY_API_KEY: '',
+  MOVIEPILOT_BASE_URL: '',
+  MOVIEPILOT_API_KEY: '',
   SMOKE_DATE: '2199-12-28',
 };
 
@@ -170,6 +176,11 @@ let activeApiOutput = '';
 
 try {
   await admin.connect();
+  await runProcess(process.execPath, [
+    '-r',
+    'ts-node/register',
+    'scripts/media-connectors.contract.ts',
+  ]);
   await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
   databaseCreated = true;
   console.log(`临时测试数据库：${TEST_DATABASE}`);

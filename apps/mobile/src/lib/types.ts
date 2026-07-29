@@ -317,6 +317,36 @@ export interface HouseholdMedia {
   updatedAt: string;
 }
 
+export type MediaConnectorKind = 'plex' | 'emby' | 'moviepilot';
+export type MediaConnectorState =
+  | 'not_configured'
+  | 'needs_credential'
+  | 'online'
+  | 'offline';
+
+export interface MediaConnectorSummary {
+  key: string;
+  kind: MediaConnectorKind;
+  name: string;
+  role: 'library' | 'automation';
+  primary: boolean;
+  state: MediaConnectorState;
+  available: boolean;
+  message: string;
+  checkedAt: string | null;
+}
+
+export interface MediaLibraryMatch {
+  connectorKey: string;
+  provider: 'plex' | 'emby';
+  name: string;
+  primary: boolean;
+  libraryItemId: string;
+  playbackUrl: string | null;
+}
+
+export type MediaLibraryAvailability = Record<string, MediaLibraryMatch[]>;
+
 export interface CalendarEvent {
   id: string;
   householdId: string;

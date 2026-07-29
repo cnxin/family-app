@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -41,6 +42,7 @@ import {
   MediaType,
   Poll,
 } from '../entities';
+import { MediaConnectorsService } from './media-connectors.service';
 
 const MEDIA_STATUSES: HouseholdMediaStatus[] = [
   'watchlist',
@@ -157,6 +159,13 @@ class UpdateMediaDto {
   note?: string | null;
 }
 
+class MediaAvailabilityDto {
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
+  mediaIds: string[];
+}
+
 function normalizeText(value: string) {
   return value.normalize('NFKC').trim().replace(/\s+/g, ' ');
 }
@@ -206,6 +215,7 @@ export class MediaService {
     @InjectRepository(HouseholdMedia)
     private readonly householdMedia: Repository<HouseholdMedia>,
     private readonly dataSource: DataSource,
+    private readonly connectors: MediaConnectorsService,
   ) {}
 
   async list(query: MediaQueryDto, user: JwtUser) {
@@ -244,6 +254,29 @@ export class MediaService {
     });
     if (!entry) throw new NotFoundException('观影片单不存在');
     return this.present(entry);
+  }
+
+  connectorStatus(refresh = false) {
+    return this.connectors.status(refresh);
+  }
+
+  async libraryAvailability(mediaIds: string[], user: JwtUser) {
+    if (!mediaIds.length) return {};
+    const entries = await this.householdMedia.find({
+      where: mediaIds.map((id) => ({ id, householdId: user.householdId })),
+      relations: { mediaTitle: { externalRefs: true } },
+    });
+    return this.connectors.availability(
+      entries.map((entry) => ({
+        id: entry.id,
+        externalRefs: (entry.mediaTitle.externalRefs ?? []).map((ref) => ({
+          provider: ref.provider,
+          mediaType: ref.mediaType,
+          externalId: ref.externalId,
+          connectorKey: ref.connectorKey ?? undefined,
+        })),
+      })),
+    );
   }
 
   async create(dto: CreateMediaDto, user: JwtUser) {
@@ -575,6 +608,19 @@ class MediaController {
     return this.service.list(query, user);
   }
 
+  @Get('connectors')
+  connectors(@Query('refresh') refresh?: string) {
+    return this.service.connectorStatus(refresh === 'true');
+  }
+
+  @Post('library-availability')
+  libraryAvailability(
+    @Body() dto: MediaAvailabilityDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.libraryAvailability(dto.mediaIds, user);
+  }
+
   @Post()
   create(@Body() dto: CreateMediaDto, @CurrentUser() user: JwtUser) {
     return this.service.create(dto, user);
@@ -605,7 +651,7 @@ class MediaController {
     ]),
   ],
   controllers: [MediaController],
-  providers: [MediaService],
-  exports: [MediaService],
+  providers: [MediaService, MediaConnectorsService],
+  exports: [MediaService, MediaConnectorsService],
 })
 export class MediaModule {}

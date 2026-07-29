@@ -258,7 +258,7 @@ flowchart TB
 | --- | --- |
 | 家庭片单、投票、排期、评论 | 小管家 |
 | 搜索与订阅自动化状态 | MoviePilot |
-| 是否入库、媒体版本、播放进度 | Plex 或 Emby |
+| 是否入库、媒体版本、播放进度 | Plex 和/或 Emby |
 | 海报、简介、演职员和分级 | TMDB 等元数据服务的本地快照 |
 
 目标表：
@@ -279,7 +279,7 @@ flowchart TB
 - `MediaAutomationProvider`：MoviePilot 订阅、状态和取消。
 - `MediaLibraryProvider`：Plex/Emby 媒体库、播放入口和进度。
 
-一个家庭可以配置多个媒体库连接器，但应指定一个主要播放来源；通过 TMDB/IMDb 等外部 ID 去重，不使用 Plex 或 Emby ID 作为本系统主键。
+一个家庭可以同时配置 Plex、Emby 或多个媒体库实例。主要播放来源是可选的默认路由偏好，只影响同一影片存在于多个媒体库时的入口排序，不关闭其他来源；通过 TMDB/IMDb 等外部 ID 去重，不使用 Plex 或 Emby ID 作为本系统主键。
 
 同步优先使用 Webhook，缺少 Webhook 时使用低频增量轮询。所有外部事件通过提供方事件 ID 或内容哈希实现幂等处理，并保存同步游标与失败原因。
 
@@ -288,6 +288,10 @@ MoviePilot 采用 GPLv3。小管家只借鉴自动化流程并通过公开 API �
 M4-A 已落地连接器无关的 `media_titles`、`media_external_refs` 与 `household_media`。TMDB 按电影/剧集编号空间去重，IMDb 按全局编号去重；家庭片单状态、排期和备注不依赖任何外部服务。观影排期已进入统一日历，片单变更已进入家庭活动。三个连接器接口已经冻结为契约，但在主媒体库与 API 参数确认前不实现具体提供方。详细边界见 [M4-A 家庭观影片单验收](m4-media-watchlist-acceptance.md)。
 
 M4-B 已复用通用投票的 `sourceModule/sourceId` 建立片单来源关联。一部片单条目只能有一个进行中的家庭投票；发起、结束、重开和删除会同步 `watchlist/voting` 状态，活动、通知、权限与透明结果继续使用通用能力。跨家庭来源、并发重复和投票期间绕过状态修改均由服务端约束。详细边界见 [M4-B 观影片单关联投票验收](m4-media-polls-acceptance.md)。
+
+M4-C 已实现可并存的 Plex/Emby `MediaLibraryProvider`、使用官方 `X-API-KEY` 的 MoviePilot `MediaAutomationProvider`、连接器健康状态、外部 ID 媒体库匹配和无凭据播放入口。连接器凭据仅从环境变量或密钥文件注入，错误与超时不会阻断家庭片单。MoviePilot 请求状态持久化、权限和界面操作仍留在后续批次。详细边界见 [M4-C 媒体连接器验收](m4-media-connectors-acceptance.md)。
+
+MoviePilot 插件市场的现有实现确认了两条可复用的事件路径：整理完成由 `TransferComplete` 事件触发，Plex/Emby/Jellyfin 的入库、播放开始和播放停止统一进入 `WebhookMessage`。后续同步采用“MoviePilot 负责自动化与整理完成、Plex/Emby 负责实际播放状态”的边界，不要求家庭成员安装或操作 MoviePilot 插件。通用 Webhook 插件会转发全部事件且不提供签名或自定义认证头，因此不能直接作为可信入口；接收端必须增加事件白名单、独立随机密钥、来源限制、幂等键和脱敏日志。
 
 ## 11. 访客系统
 
@@ -540,10 +544,11 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 - [x] `MediaMetadataProvider`、`MediaAutomationProvider`、`MediaLibraryProvider` 契约。
 - [x] 统一日历、家庭活动和移动/桌面观影页面。
 - [x] 从片单发起家庭投票、来源回链与状态同步。
+- [x] Plex 与 Emby 可并存的健康检查、媒体匹配和播放入口。
+- [x] MoviePilot 官方 API Key 认证、订阅与取消适配器契约。
 - [ ] 在线元数据搜索与多片候选投票。
-- 先接入实际作为主媒体库的 Plex 或 Emby。
-- 再接入 MoviePilot 请求与订阅状态。
-- 播放入口、观看记录和通知。
+- [ ] MoviePilot 请求状态持久化、家庭权限与订阅界面。
+- [ ] 播放进度、观看记录和媒体就绪通知。
 
 验收标准：家庭片单不依赖外部系统存在；同一影片在多个外部系统中可正确去重；连接器离线不影响家庭数据。
 
@@ -574,21 +579,21 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 
 ## 22. 下一次实施范围
 
-前端质量门禁可以通过 `corepack pnpm lint`、`corepack pnpm typecheck` 和 `corepack pnpm test:web` 重复执行。M2、M3 已冻结，M4-A/B 的家庭片单、排期、日历、活动和来源投票已经完成。下一次实施范围：
+前端质量门禁可以通过 `corepack pnpm lint`、`corepack pnpm typecheck` 和 `corepack pnpm test:web` 重复执行。M2、M3 已冻结，M4-A/B/C 的家庭片单、排期、来源投票和媒体连接器基础已经完成。下一次实施范围：
 
-1. 确认 Plex 或 Emby 中哪个是家庭主播放来源，并收集只读测试账号、地址和版本。
-2. 实现第一个 `MediaLibraryProvider` 契约测试、健康状态和媒体匹配，不让连接器故障阻断家庭片单。
+1. 使用轮换后的 Plex Token 和 MoviePilot API Key 完成 NAS 真实数据只读验收；Emby 部署后复用同一契约验收。
+2. 为 MoviePilot 请求增加家庭权限、状态持久化和界面操作，并记录订阅审计活动。
 3. 选定影视元数据来源并接入搜索；手动录入继续作为离线回退。
 4. 在线搜索确定结构化候选影片后，再扩展多片候选投票，不以纯文字保存媒体关联。
-5. MoviePilot 请求与订阅继续等待部署地址、认证方式和 API 版本确认。
+5. 以 MoviePilot `TransferComplete` 接入媒体就绪通知，以 Plex/Emby 播放 Webhook 接入观看记录；统一做事件白名单、认证、幂等和本地快照。
 
 访客系统继续使用独立临时权限模型，不与正式家庭成员或媒体连接器凭据混用。
 
 ## 23. 待确认事项
 
 - 中兴网络设备型号、硬件版本、固件版本和设备角色。
-- Plex 与 Emby 中哪个作为主要播放来源。
-- MoviePilot 的部署地址、认证方式和可用 API 版本。
+- 轮换后的 Plex 限权 Token 与 MoviePilot API Key。
+- Emby 的部署地址、版本和只读 API Key（启用时）。
 - 家庭长期运行主机与备份目的地。
 - 外网访问采用 VPN 还是反向代理。
 - 影视元数据服务及 API 凭据来源。

@@ -6,8 +6,10 @@ import {
   CalendarDays,
   Film,
   Pencil,
+  Play,
   Plus,
   Search,
+  Server,
   Trash2,
   Vote,
   X,
@@ -15,6 +17,7 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -41,6 +44,8 @@ import {
   useCreateMedia,
   useDeleteMedia,
   useMedia,
+  useMediaConnectors,
+  useMediaLibraryAvailability,
   usePolls,
   useUpdateMedia,
 } from '../../lib/queries';
@@ -49,6 +54,8 @@ import type {
   HouseholdMedia,
   HouseholdMediaStatus,
   HouseholdPoll,
+  MediaConnectorSummary,
+  MediaLibraryMatch,
   MediaType,
 } from '../../lib/types';
 
@@ -136,17 +143,66 @@ function Poster({ entry }: { entry: HouseholdMedia }) {
   );
 }
 
+function ConnectorStrip({ connectors }: { connectors: MediaConnectorSummary[] }) {
+  const c = useTheme();
+  const visible = connectors.filter(
+    (connector) => connector.state !== 'not_configured',
+  );
+  if (!visible.length) return null;
+
+  return (
+    <View
+      accessibilityLabel="媒体连接状态"
+      style={[
+        styles.connectorStrip,
+        { backgroundColor: c.card, borderColor: c.separator },
+      ]}
+    >
+      <Server color={c.secondaryLabel} size={18} />
+      <View style={styles.connectorItems}>
+        {visible.map((connector) => {
+          const statusColor = connector.available
+            ? c.green
+            : connector.state === 'offline'
+              ? c.red
+              : c.orange;
+          return (
+            <View
+              key={connector.key}
+              style={[styles.connectorStatus, { backgroundColor: c.fill }]}
+            >
+              <View
+                style={[styles.connectorDot, { backgroundColor: statusColor }]}
+              />
+              <Text
+                numberOfLines={1}
+                style={[t.caption, { color: c.label, fontWeight: '600' }]}
+              >
+                {connector.name} · {connector.message}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function MediaCard({
   entry,
   onDelete,
   onEdit,
+  onPlay,
   onPoll,
+  libraries,
   poll,
 }: {
   entry: HouseholdMedia;
   onDelete: () => void;
   onEdit: () => void;
+  onPlay: (match: MediaLibraryMatch) => void;
   onPoll: () => void;
+  libraries: MediaLibraryMatch[];
   poll: HouseholdPoll | null;
 }) {
   const c = useTheme();
@@ -198,6 +254,35 @@ function MediaCard({
           <Text numberOfLines={2} style={[t.caption, { color: c.secondaryLabel }]}> 
             {entry.note}
           </Text>
+        ) : null}
+
+        {libraries.length ? (
+          <View style={styles.playbackActions}>
+            {libraries.map((match) => (
+              <Pressable
+                accessibilityLabel={`用${match.name}播放${entry.mediaTitle.title}`}
+                accessibilityRole="link"
+                disabled={!match.playbackUrl}
+                key={`${match.connectorKey}:${match.libraryItemId}`}
+                onPress={() => onPlay(match)}
+                style={({ pressed }) => [
+                  styles.playbackButton,
+                  {
+                    backgroundColor: pressed ? c.green : c.tint,
+                    opacity: match.playbackUrl ? 1 : 0.45,
+                  },
+                ]}
+              >
+                <Play color="#FFFFFF" fill="#FFFFFF" size={13} />
+                <Text
+                  numberOfLines={1}
+                  style={[t.caption, { color: '#FFFFFF', fontWeight: '700' }]}
+                >
+                  {match.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         ) : null}
 
         <View style={styles.mediaFooter}>
@@ -665,6 +750,9 @@ export default function MediaScreen() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const openedParameter = useRef<string | null>(null);
   const { data: entries, error, isLoading } = useMedia(filter, debouncedSearch);
+  const { data: connectors } = useMediaConnectors();
+  const mediaIds = useMemo(() => (entries ?? []).map((entry) => entry.id), [entries]);
+  const { data: availability } = useMediaLibraryAvailability(mediaIds);
   const { data: polls } = usePolls();
   const remove = useDeleteMedia();
 
@@ -746,6 +834,8 @@ export default function MediaScreen() {
             </Text>
           </Pressable>
         </View>
+
+        <ConnectorStrip connectors={connectors ?? []} />
 
         <View style={styles.toolbar}>
           <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.separator }]}> 
@@ -830,6 +920,11 @@ export default function MediaScreen() {
                       setEditingEntry(entry);
                       setFormOpen(true);
                     }}
+                    onPlay={(match) => {
+                      if (!match.playbackUrl) return;
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      void Linking.openURL(match.playbackUrl);
+                    }}
                     onPoll={() => {
                       const poll = pollByMediaId.get(entry.id);
                       router.push(
@@ -845,6 +940,7 @@ export default function MediaScreen() {
                             },
                       );
                     }}
+                    libraries={availability?.[entry.id] ?? []}
                     poll={pollByMediaId.get(entry.id) ?? null}
                   />
                 </View>
@@ -932,6 +1028,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
+  connectorStrip: {
+    minHeight: 48,
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    overflow: 'hidden',
+  },
+  connectorItems: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  connectorStatus: {
+    minHeight: 30,
+    maxWidth: 260,
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  connectorDot: { width: 7, height: 7, borderRadius: radius.full },
   toolbar: { gap: 12, marginTop: 16 },
   searchBox: {
     height: 44,
@@ -986,6 +1109,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+  },
+  playbackActions: {
+    marginTop: 9,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  playbackButton: {
+    minWidth: 76,
+    height: 32,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   mediaFooter: {
     flex: 1,
