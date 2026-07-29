@@ -24,7 +24,7 @@ class NotificationQueryDto {
   includeRead?: 'true' | 'false';
 
   @IsOptional()
-  @IsIn(['menu', 'task', 'poll', 'calendar', 'system'])
+  @IsIn(['menu', 'task', 'poll', 'calendar', 'reminder', 'system'])
   module?: SourceModule;
 }
 

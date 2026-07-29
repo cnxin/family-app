@@ -50,6 +50,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   { page, request },
   testInfo,
 ) => {
+  test.setTimeout(60_000);
   const runtimeErrors: string[] = [];
   let simulatingUnauthorized = false;
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
@@ -275,7 +276,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   }
   await expectNoHorizontalOverflow(page);
 
-  const eventTitle = `日历回归-${testInfo.project.name}`;
+  const eventTitle = `日历回归-${testInfo.project.name}-${Date.now().toString(36)}`;
   await page.getByRole('button', { name: '添加事件', exact: true }).first().click();
   await expect(page.getByText('新建家庭事件', { exact: true })).toBeVisible();
   await page.getByLabel('事件名称').fill(eventTitle);
@@ -286,7 +287,47 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.getByRole('button', { name: `编辑${eventTitle}` }).click();
   await page.getByLabel('事件备注').fill('浏览器端已编辑');
   await page.getByRole('button', { name: '保存修改', exact: true }).click();
-  await expect(page.getByText('浏览器端已编辑', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('事件备注')).not.toBeVisible();
+  const eventRow = page
+    .getByRole('button', { name: `提醒${eventTitle}` })
+    .locator('..');
+  await expect(eventRow.getByText('浏览器端已编辑', { exact: true })).toBeVisible();
+
+  await eventRow.getByRole('button', { name: `提醒${eventTitle}` }).click();
+  await expect(page).toHaveURL(/\/reminders\?sourceModule=calendar&sourceId=/);
+  await expect(page.getByText('新建提醒', { exact: true }).last()).toBeVisible();
+  await page.getByRole('button', { name: `选择${eventTitle}` }).click();
+  await page.getByRole('button', { name: '明天', exact: true }).click();
+  await page.getByLabel('提醒时间').fill('18:30');
+  const remindDad = page.getByRole('checkbox', { name: '提醒爸爸', exact: true });
+  const remindMom = page.getByRole('checkbox', { name: '提醒妈妈', exact: true });
+  await expect(remindDad).toHaveAttribute('aria-checked', 'true');
+  await remindMom.click();
+  await expect(remindMom).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: '设置提醒', exact: true }).click();
+  await expect(page.getByLabel('提醒时间')).not.toBeVisible();
+  const reminderCard = page
+    .getByRole('button', { name: `编辑提醒${eventTitle}` })
+    .locator('../../..');
+  await expect(reminderCard.getByText(eventTitle, { exact: true })).toBeVisible();
+  await expect(reminderCard.getByText('爸爸、妈妈', { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await reminderCard.getByRole('button', { name: `编辑提醒${eventTitle}` }).click();
+  await expect(page.getByText('编辑提醒', { exact: true })).toBeVisible();
+  await page.getByLabel('提醒时间').fill('19:00');
+  await page.getByRole('button', { name: '保存提醒', exact: true }).click();
+  await expect(page.getByLabel('提醒时间')).not.toBeVisible();
+  await expect(reminderCard.getByText(/19:00/)).toBeVisible();
+
+  await page.getByRole('button', { name: `取消提醒${eventTitle}` }).click();
+  await expect(page.getByText('取消这个提醒？', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '取消提醒', exact: true }).last().click();
+  await page.getByRole('button', { name: '已取消', exact: true }).click();
+  await expect(page.getByRole('link').filter({ hasText: eventTitle })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await openSection(page, testInfo.project.name, 'calendar');
 
   await page.getByRole('button', { name: `删除${eventTitle}` }).click();
   await expect(page.getByText('删除这个事件？', { exact: true })).toBeVisible();

@@ -12,6 +12,7 @@ import type {
   CreatedHouseholdInvitation,
   Dish,
   HouseholdPoll,
+  HouseholdReminder,
   DishRecipeVariant,
   DishRecipeStep,
   DishReferenceLink,
@@ -31,6 +32,9 @@ import type {
   PollCategory,
   PollVoteMode,
   RecipeDish,
+  ReminderSource,
+  ReminderSourceModule,
+  ReminderStatus,
   ShoppingItem,
   TaskInstanceStatus,
   TaskOccurrence,
@@ -127,7 +131,11 @@ export function useUpsertCalendarEvent() {
             body,
           })
         : api<CalendarEvent>('/calendar-events', { method: 'POST', body }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
+    },
   });
 }
 
@@ -138,7 +146,11 @@ export function useDeleteCalendarEvent() {
       api<{ id: string; removed: true }>(`/calendar-events/${id}`, {
         method: 'DELETE',
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
+    },
   });
 }
 
@@ -172,6 +184,8 @@ export function useUpsertTask() {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
       void qc.invalidateQueries({ queryKey: ['calendar'] });
       void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }
@@ -186,6 +200,8 @@ export function useArchiveTask() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
       void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }
@@ -210,6 +226,8 @@ export function useUpdateTaskOccurrence() {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
       void qc.invalidateQueries({ queryKey: ['calendar'] });
       void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }
@@ -246,6 +264,62 @@ export function useMarkAllNotificationsRead() {
   });
 }
 
+export function useReminderSources(start: string, end: string, enabled = true) {
+  return useQuery({
+    queryKey: ['reminder-sources', start, end],
+    queryFn: () =>
+      api<ReminderSource[]>(`/reminder-sources?start=${start}&end=${end}`),
+    enabled,
+  });
+}
+
+export function useReminders(
+  status: ReminderStatus | 'all' = 'all',
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['reminders', status],
+    queryFn: () => api<HouseholdReminder[]>(`/reminders?status=${status}`),
+    enabled,
+    refetchInterval: status === 'scheduled' || status === 'all' ? 15_000 : false,
+  });
+}
+
+export interface ReminderInput {
+  id?: string;
+  sourceModule?: ReminderSourceModule;
+  sourceId?: string;
+  occurrenceDate?: string | null;
+  remindAt: string;
+  recipientIds: string[];
+}
+
+export function useUpsertReminder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: ReminderInput) =>
+      id
+        ? api<HouseholdReminder>(`/reminders/${id}`, {
+            method: 'PATCH',
+            body: { remindAt: body.remindAt, recipientIds: body.recipientIds },
+          })
+        : api<HouseholdReminder>('/reminders', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useCancelReminder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<HouseholdReminder>(`/reminders/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['reminders'] }),
+  });
+}
+
 export function usePolls(enabled = true) {
   return useQuery({
     queryKey: ['polls'],
@@ -275,6 +349,8 @@ export function useUpsertPoll() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['polls'] });
       void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }
@@ -299,6 +375,8 @@ export function useSetPollStatus() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['polls'] });
       void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }
@@ -308,7 +386,11 @@ export function useArchivePoll() {
   return useMutation({
     mutationFn: (id: string) =>
       api<{ id: string; archived: true }>(`/polls/${id}`, { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['polls'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['polls'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
+    },
   });
 }
 
@@ -329,6 +411,8 @@ export function useAddMenuItems() {
       void qc.invalidateQueries({ queryKey: ['menu-dates'] });
       void qc.invalidateQueries({ queryKey: ['menu-events'] });
       void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }
@@ -360,6 +444,8 @@ export function useUpdateMenuItem() {
       void qc.invalidateQueries({ queryKey: ['menu-dates'] });
       void qc.invalidateQueries({ queryKey: ['menu-events'] });
       void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }
@@ -391,6 +477,8 @@ export function useCompleteMenu() {
       void qc.invalidateQueries({ queryKey: ['menus'] });
       void qc.invalidateQueries({ queryKey: ['menu-events'] });
       void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });
 }

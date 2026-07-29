@@ -1,5 +1,6 @@
 import {
   Bell,
+  BellRing,
   CalendarDays,
   BookOpenText,
   CookingPot,
@@ -69,6 +70,7 @@ interface NavItem {
     | '/calendar'
     | '/tasks'
     | '/notifications'
+    | '/reminders'
     | '/polls'
     | '/shopping'
     | '/profile';
@@ -82,6 +84,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '菜单安排', href: '/kitchen', icon: CookingPot },
   { label: '家庭任务', href: '/tasks', icon: ListTodo },
   { label: '家庭投票', href: '/polls', icon: Vote },
+  { label: '提醒中心', href: '/reminders', icon: BellRing },
   { label: '家庭日历', href: '/calendar', icon: CalendarDays },
   { label: '采购与库存', href: '/shopping', icon: ShoppingCart },
   { label: '我的', href: '/profile', icon: UserRound },

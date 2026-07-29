@@ -9,6 +9,7 @@ import { MenusModule } from './menus/menus.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PollsModule } from './polls/polls.module';
 import { RecipesModule } from './recipes/recipes.module';
+import { RemindersModule } from './reminders/reminders.module';
 import { ShoppingModule } from './shopping/shopping.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
@@ -25,6 +26,7 @@ import { UploadModule } from './upload/upload.module';
     NotificationsModule,
     PollsModule,
     RecipesModule,
+    RemindersModule,
     ShoppingModule,
     SystemModule,
     TasksModule,

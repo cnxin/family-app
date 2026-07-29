@@ -310,7 +310,13 @@ export interface TaskOccurrence {
   task: HouseholdTask;
 }
 
-export type NotificationModule = 'menu' | 'task' | 'poll' | 'calendar' | 'system';
+export type NotificationModule =
+  | 'menu'
+  | 'task'
+  | 'poll'
+  | 'calendar'
+  | 'reminder'
+  | 'system';
 
 export interface AppNotification {
   id: string;
@@ -365,4 +371,44 @@ export interface HouseholdPoll {
   totalVotes: number;
   selectedOptionIds: string[];
   options: PollOptionResult[];
+}
+
+export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
+export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
+
+export interface ReminderSource {
+  module: ReminderSourceModule;
+  sourceId: string;
+  occurrenceDate: string | null;
+  title: string;
+  summary: string | null;
+  date: string | null;
+  startsAt: string | null;
+  targetPath: string;
+  status: string;
+}
+
+export interface ReminderRecipient {
+  id: string;
+  member: Member;
+  deliveredAt: string | null;
+}
+
+export interface HouseholdReminder {
+  id: string;
+  sourceModule: ReminderSourceModule;
+  sourceId: string;
+  occurrenceDate: string | null;
+  remindAt: string;
+  status: ReminderStatus;
+  source: ReminderSource | null;
+  createdById: string;
+  createdBy: Member;
+  recipients: ReminderRecipient[];
+  sentAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  canManage: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

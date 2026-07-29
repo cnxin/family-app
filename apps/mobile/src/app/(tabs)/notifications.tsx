@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import {
   Bell,
+  BellRing,
   CalendarDays,
   Check,
   CheckCheck,
@@ -37,6 +38,7 @@ const MODULE_LABELS: Record<NotificationModule, string> = {
   task: '任务',
   poll: '投票',
   calendar: '日历',
+  reminder: '提醒',
   system: '系统',
 };
 
@@ -56,6 +58,7 @@ function NotificationIcon({ module }: { module: NotificationModule }) {
   if (module === 'task') return <ListTodo {...props} color={c.blue} />;
   if (module === 'poll') return <Vote {...props} color={c.accent} />;
   if (module === 'calendar') return <CalendarDays {...props} />;
+  if (module === 'reminder') return <BellRing {...props} />;
   return <Bell {...props} />;
 }
 

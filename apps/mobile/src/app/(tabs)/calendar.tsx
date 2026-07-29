@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import {
+  BellPlus,
   CalendarDays,
   ChevronRight,
   Clock3,
@@ -330,12 +331,14 @@ function ScheduleRow({
   onEdit,
   onOpenMenu,
   onOpenTask,
+  onRemind,
 }: {
   entry: CalendarEntry;
   onDelete: () => void;
   onEdit: () => void;
   onOpenMenu: () => void;
   onOpenTask: () => void;
+  onRemind: () => void;
 }) {
   const c = useTheme();
   const isMenu = entry.module === 'menu';
@@ -343,75 +346,98 @@ function ScheduleRow({
   const isCalendar = entry.module === 'calendar';
   const canManage = isCalendar && Boolean(entry.metadata.canManage);
   const interactive = isMenu || isTask;
+  const canRemind =
+    entry.date >= todayStr() &&
+    (isCalendar ||
+      (isMenu && entry.status === 'open') ||
+      (isTask && entry.status === 'pending'));
 
   return (
-    <Pressable
-      accessibilityRole={interactive ? 'button' : undefined}
-      onPress={isMenu ? onOpenMenu : isTask ? onOpenTask : undefined}
-      style={({ pressed }) => [
-        styles.scheduleRow,
-        { borderBottomColor: c.separator },
-        pressed && interactive && { backgroundColor: c.fill },
-      ]}
-    >
-      <View
-        style={[
-          styles.scheduleIcon,
-          {
-            backgroundColor: isMenu
-              ? c.orangeSoft
-              : isTask
-                ? c.blueSoft
-                : c.tintSoft,
-          },
+    <View style={[styles.scheduleRow, { borderBottomColor: c.separator }]}>
+      <Pressable
+        accessibilityRole={interactive ? 'button' : undefined}
+        disabled={!interactive}
+        onPress={isMenu ? onOpenMenu : isTask ? onOpenTask : undefined}
+        style={({ pressed }) => [
+          styles.scheduleMain,
+          pressed && interactive && { backgroundColor: c.fill },
         ]}
       >
-        {isMenu ? (
-          <CookingPot color={c.orange} size={19} />
-        ) : isTask ? (
-          <ListTodo color={c.blue} size={19} />
-        ) : (
-          <CalendarDays color={c.tint} size={19} />
-        )}
-      </View>
-      <View style={styles.scheduleBody}>
-        <View style={styles.scheduleTitleRow}>
-          <Text
-            numberOfLines={1}
-            style={[t.subhead, { color: c.label, flex: 1, fontWeight: '700' }]}
-          >
-            {entry.title}
-          </Text>
-          <Text style={[t.caption, { color: c.secondaryLabel }]}>
-            {isMenu
-              ? entry.summary
-              : isTask
-                ? entry.status === 'done'
-                  ? '已完成'
-                  : entry.status === 'skipped'
-                    ? '已跳过'
-                    : entry.metadata.assigneeName ?? '待认领'
-                : eventTime(entry)}
-          </Text>
+        <View
+          style={[
+            styles.scheduleIcon,
+            {
+              backgroundColor: isMenu
+                ? c.orangeSoft
+                : isTask
+                  ? c.blueSoft
+                  : c.tintSoft,
+            },
+          ]}
+        >
+          {isMenu ? (
+            <CookingPot color={c.orange} size={19} />
+          ) : isTask ? (
+            <ListTodo color={c.blue} size={19} />
+          ) : (
+            <CalendarDays color={c.tint} size={19} />
+          )}
         </View>
-        {!isMenu && entry.summary ? (
-          <Text
-            numberOfLines={2}
-            style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}
-          >
-            {entry.summary}
-          </Text>
-        ) : null}
-        {isCalendar ? (
-          <View style={styles.creatorRow}>
-            <UserRound color={c.tertiaryLabel} size={12} />
-            <Text style={[t.caption, { color: c.tertiaryLabel }]}>
-              {entry.metadata.createdByName ?? '家庭成员'}创建
+        <View style={styles.scheduleBody}>
+          <View style={styles.scheduleTitleRow}>
+            <Text
+              numberOfLines={1}
+              style={[t.subhead, { color: c.label, flex: 1, fontWeight: '700' }]}
+            >
+              {entry.title}
+            </Text>
+            <Text style={[t.caption, { color: c.secondaryLabel }]}>
+              {isMenu
+                ? entry.summary
+                : isTask
+                  ? entry.status === 'done'
+                    ? '已完成'
+                    : entry.status === 'skipped'
+                      ? '已跳过'
+                      : entry.metadata.assigneeName ?? '待认领'
+                  : eventTime(entry)}
             </Text>
           </View>
-        ) : null}
-      </View>
-      {interactive ? <ChevronRight color={c.tertiaryLabel} size={18} /> : null}
+          {!isMenu && entry.summary ? (
+            <Text
+              numberOfLines={2}
+              style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}
+            >
+              {entry.summary}
+            </Text>
+          ) : null}
+          {isCalendar ? (
+            <View style={styles.creatorRow}>
+              <UserRound color={c.tertiaryLabel} size={12} />
+              <Text style={[t.caption, { color: c.tertiaryLabel }]}>
+                {entry.metadata.createdByName ?? '家庭成员'}创建
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        {interactive ? <ChevronRight color={c.tertiaryLabel} size={18} /> : null}
+      </Pressable>
+      {canRemind ? (
+        <Pressable
+          accessibilityLabel={`提醒${entry.title}`}
+          accessibilityRole="button"
+          onPress={(event) => {
+            event.stopPropagation();
+            onRemind();
+          }}
+          style={({ pressed }) => [
+            styles.smallIconButton,
+            { backgroundColor: pressed ? c.tintSoft : c.fill },
+          ]}
+        >
+          <BellPlus color={c.tint} size={15} />
+        </Pressable>
+      ) : null}
       {canManage ? (
         <View style={styles.rowActions}>
           <Pressable
@@ -438,7 +464,7 @@ function ScheduleRow({
           </Pressable>
         </View>
       ) : null}
-    </Pressable>
+    </View>
   );
 }
 
@@ -573,6 +599,18 @@ export default function CalendarScreen() {
                       }}
                       onOpenMenu={() => openMenu(entry)}
                       onOpenTask={() => openTask(entry)}
+                      onRemind={() =>
+                        router.push({
+                          pathname: '/reminders',
+                          params: {
+                            sourceModule: entry.module,
+                            sourceId: entry.sourceId,
+                            ...(entry.module === 'task'
+                              ? { occurrenceDate: entry.date }
+                              : {}),
+                          },
+                        })
+                      }
                     />
                   ))
                 ) : (
@@ -671,7 +709,16 @@ const styles = StyleSheet.create({
   scheduleRow: {
     minHeight: 76,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 14,
+    gap: 6,
+  },
+  scheduleMain: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 75,
+    paddingLeft: 14,
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',

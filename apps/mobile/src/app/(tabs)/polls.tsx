@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  BellPlus,
   Check,
   Clock3,
   LockKeyhole,
@@ -450,6 +451,7 @@ function PollCard({
   onArchive,
   onClose,
   onEdit,
+  onRemind,
   onReopen,
 }: {
   poll: HouseholdPoll;
@@ -457,6 +459,7 @@ function PollCard({
   onArchive: () => void;
   onClose: () => void;
   onEdit: () => void;
+  onRemind: () => void;
   onReopen: () => void;
 }) {
   const c = useTheme();
@@ -592,6 +595,21 @@ function PollCard({
         ) : null}
       </View>
 
+      {poll.status === 'open' ? (
+        <Pressable
+          accessibilityLabel={`提醒投票${poll.title}`}
+          accessibilityRole="button"
+          onPress={onRemind}
+          style={({ pressed }) => [
+            styles.reminderButton,
+            { backgroundColor: pressed ? c.tintSoft : c.fill },
+          ]}
+        >
+          <BellPlus color={c.tint} size={16} />
+          <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>设置提醒</Text>
+        </Pressable>
+      ) : null}
+
       {poll.description ? (
         <Text style={[t.subhead, styles.pollDescription, { color: c.secondaryLabel }]}>
           {poll.description}
@@ -696,6 +714,7 @@ function PollCard({
 export default function PollsScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const router = useRouter();
   const params = useLocalSearchParams<{ pollId?: string }>();
   const focusedPollId = firstParam(params.pollId);
   const { data: polls, isLoading, error } = usePolls();
@@ -793,6 +812,12 @@ export default function PollsScreen() {
                     setFormOpen(true);
                   }}
                   onReopen={() => reopen(poll)}
+                  onRemind={() =>
+                    router.push({
+                      pathname: '/reminders',
+                      params: { sourceModule: 'poll', sourceId: poll.id },
+                    })
+                  }
                   poll={poll}
                 />
               ))
@@ -910,6 +935,17 @@ const styles = StyleSheet.create({
   statusPill: { minHeight: 24, borderRadius: radius.sm, paddingHorizontal: 8, justifyContent: 'center' },
   pollMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 5 },
   manageActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5, maxWidth: 70 },
+  reminderButton: {
+    alignSelf: 'flex-start',
+    minHeight: 36,
+    borderRadius: radius.sm,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   smallIconButton: {
     width: 32,
     height: 32,

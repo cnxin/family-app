@@ -16,6 +16,7 @@ const testEnvironment = {
   JWT_EXPIRES_SECONDS: '900',
   JWT_SECRET: 'family-app-api-test-secret',
   REFRESH_TOKEN_EXPIRES_SECONDS: '2592000',
+  REMINDER_POLL_INTERVAL_MS: '200',
   LOGIN_RATE_LIMIT: '100',
   LOGIN_RATE_WINDOW_MS: '60000',
   NODE_ENV: 'test',
@@ -207,6 +208,7 @@ try {
   await runScript('scripts/calendar.mjs');
   await runScript('scripts/tasks.mjs');
   await runScript('scripts/polls.mjs');
+  await runScript('scripts/reminders.mjs');
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');
   await wait(50);

@@ -8,6 +8,7 @@ import { AddUnifiedCalendar1785227000000 } from './1785227000000-add-unified-cal
 import { AddRecipeVariants1785227100000 } from './1785227100000-add-recipe-variants';
 import { AddHouseholdTasks1785227200000 } from './1785227200000-add-household-tasks';
 import { AddHouseholdPolls1785227300000 } from './1785227300000-add-household-polls';
+import { AddConfigurableReminders1785227400000 } from './1785227400000-add-configurable-reminders';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -20,4 +21,5 @@ export const ALL_MIGRATIONS = [
   AddRecipeVariants1785227100000,
   AddHouseholdTasks1785227200000,
   AddHouseholdPolls1785227300000,
+  AddConfigurableReminders1785227400000,
 ];

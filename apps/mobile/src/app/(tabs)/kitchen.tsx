@@ -1,7 +1,8 @@
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Bell,
+  BellPlus,
   BookOpenText,
   Check,
   ChefHat,
@@ -496,10 +497,12 @@ function MealMenuSection({
   member,
   members,
   menu,
+  onRemind,
 }: {
   member: Member;
   members: Member[];
   menu: Menu;
+  onRemind: () => void;
 }) {
   const c = useTheme();
   const assignChef = useAssignMenuChef();
@@ -533,17 +536,32 @@ function MealMenuSection({
       <View>
         <SectionHeader
           right={
-            locked ? (
-              <View style={[styles.lockedBadge, { backgroundColor: c.fill }]}>
-                <LockKeyhole color={c.secondaryLabel} size={13} />
-                <Text style={[styles.badgeText, { color: c.secondaryLabel }]}>已结束</Text>
-              </View>
-            ) : activeItems.length ? (
-              <View style={[styles.orderedBadge, { backgroundColor: c.tint }]}>
-                <UtensilsCrossed color="#FFFFFF" size={13} />
-                <Text style={styles.orderedBadgeText}>已点 {activeItems.length} 道</Text>
-              </View>
-            ) : undefined
+            <View style={styles.sectionHeaderActions}>
+              {!locked && activeItems.length && menu.date >= todayStr() ? (
+                <Pressable
+                  accessibilityLabel={`提醒${mealLabel(menu.mealType)}菜单`}
+                  accessibilityRole="button"
+                  onPress={onRemind}
+                  style={({ pressed }) => [
+                    styles.headerReminderButton,
+                    { backgroundColor: pressed ? c.tintSoft : c.fill },
+                  ]}
+                >
+                  <BellPlus color={c.tint} size={15} />
+                </Pressable>
+              ) : null}
+              {locked ? (
+                <View style={[styles.lockedBadge, { backgroundColor: c.fill }]}>
+                  <LockKeyhole color={c.secondaryLabel} size={13} />
+                  <Text style={[styles.badgeText, { color: c.secondaryLabel }]}>已结束</Text>
+                </View>
+              ) : activeItems.length ? (
+                <View style={[styles.orderedBadge, { backgroundColor: c.tint }]}>
+                  <UtensilsCrossed color="#FFFFFF" size={13} />
+                  <Text style={styles.orderedBadgeText}>已点 {activeItems.length} 道</Text>
+                </View>
+              ) : null}
+            </View>
           }
           title={mealLabel(menu.mealType)}
         />
@@ -769,6 +787,7 @@ function NotificationPanel({ notifications }: { notifications: AppNotification[]
 export default function KitchenScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const router = useRouter();
   const { member } = useSession();
   const params = useLocalSearchParams<{ date?: string | string[] }>();
   const parameterDate = Array.isArray(params.date) ? params.date[0] : params.date;
@@ -857,6 +876,12 @@ export default function KitchenScreen() {
                   member={member}
                   members={members ?? []}
                   menu={menu}
+                  onRemind={() =>
+                    router.push({
+                      pathname: '/reminders',
+                      params: { sourceModule: 'menu', sourceId: menu.id },
+                    })
+                  }
                 />
               ))
             : null}
@@ -970,6 +995,14 @@ const styles = StyleSheet.create({
     minHeight: 30,
     borderRadius: radius.full,
     paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  headerReminderButton: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },

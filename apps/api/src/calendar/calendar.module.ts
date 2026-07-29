@@ -352,5 +352,6 @@ export class CalendarController {
   imports: [TypeOrmModule.forFeature([CalendarEvent, Menu]), TasksModule],
   controllers: [CalendarController],
   providers: [CalendarService],
+  exports: [CalendarService],
 })
 export class CalendarModule {}

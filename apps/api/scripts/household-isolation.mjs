@@ -63,6 +63,8 @@ const ids = {
   pollOption: randomUUID(),
   pollVote: randomUUID(),
   pollNotification: randomUUID(),
+  reminder: randomUUID(),
+  reminderRecipient: randomUUID(),
   shoppingItem: randomUUID(),
   inventoryItem: randomUUID(),
 };
@@ -165,6 +167,18 @@ try {
       '隔离测试通知',
       `/tasks?date=${TEST_DATE}&taskId=${ids.task}`,
     ],
+  );
+  await db.query(
+    `INSERT INTO reminders
+       (id, "householdId", "sourceModule", "sourceId", "remindAt", "createdById")
+     VALUES ($1, $2, 'calendar', $3, '2199-12-30T12:00:00.000Z', $4)`,
+    [ids.reminder, ids.household, ids.calendarEvent, ids.member],
+  );
+  await db.query(
+    `INSERT INTO reminder_recipients
+       (id, "householdId", "reminderId", "memberId")
+     VALUES ($1, $2, $3, $4)`,
+    [ids.reminderRecipient, ids.household, ids.reminder, ids.member],
   );
   await db.query(
     `INSERT INTO polls
@@ -322,6 +336,11 @@ try {
   );
   const defaultPolls = await request('/polls?status=all', defaultToken);
   const defaultNotifications = await request('/notifications', defaultToken);
+  const defaultReminders = await request('/reminders?status=all', defaultToken);
+  const defaultReminderSources = await request(
+    `/reminder-sources?start=${TEST_DATE}&end=${TEST_DATE}`,
+    defaultToken,
+  );
   assert(
     defaultTasks.status === 200 &&
       defaultTasks.body.data.every((item) => item.taskId !== ids.task) &&
@@ -331,8 +350,17 @@ try {
       defaultNotifications.body.data.every(
         (item) =>
           item.id !== ids.notification && item.id !== ids.pollNotification,
+      ) &&
+      defaultReminders.status === 200 &&
+      defaultReminders.body.data.every((item) => item.id !== ids.reminder) &&
+      defaultReminderSources.status === 200 &&
+      defaultReminderSources.body.data.every(
+        (item) =>
+          item.sourceId !== ids.calendarEvent &&
+          item.sourceId !== ids.task &&
+          item.sourceId !== ids.poll,
       ),
-    '任务、投票和通用通知只返回当前家庭数据',
+    '任务、投票、提醒和通用通知只返回当前家庭数据',
   );
 
   const foreignMenu = await request(
@@ -479,6 +507,38 @@ try {
     '不能跨家庭读取、修改、参与或结束投票及处理投票通知',
   );
 
+  const foreignReminders = await request('/reminders?status=all', foreignToken);
+  const crossReminderEdit = await request(
+    `/reminders/${ids.reminder}`,
+    defaultToken,
+    'PATCH',
+    { remindAt: '2199-12-30T13:00:00.000Z' },
+  );
+  const crossReminderCancel = await request(
+    `/reminders/${ids.reminder}`,
+    defaultToken,
+    'DELETE',
+  );
+  const crossReminderCreate = await request(
+    '/reminders',
+    defaultToken,
+    'POST',
+    {
+      sourceModule: 'calendar',
+      sourceId: ids.calendarEvent,
+      remindAt: '2199-12-30T13:00:00.000Z',
+      recipientIds: [members.body.data[0].id],
+    },
+  );
+  assert(
+    foreignReminders.status === 200 &&
+      foreignReminders.body.data.some((item) => item.id === ids.reminder) &&
+      crossReminderEdit.status === 404 &&
+      crossReminderCancel.status === 404 &&
+      crossReminderCreate.status === 404,
+    '提醒来源、列表、编辑和取消均遵守家庭边界',
+  );
+
   const crossShopping = await request(
     `/shopping-items/${ids.shoppingItem}`,
     defaultToken,
@@ -500,6 +560,7 @@ try {
 
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
+  await db.query('DELETE FROM reminders WHERE id = $1', [ids.reminder]);
   await db.query('DELETE FROM notifications WHERE id = $1', [ids.pollNotification]);
   await db.query('DELETE FROM notifications WHERE id = $1', [ids.notification]);
   await db.query('DELETE FROM poll_votes WHERE id = $1', [ids.pollVote]);

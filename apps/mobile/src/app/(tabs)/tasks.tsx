@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  BellPlus,
   CalendarCheck2,
   Check,
   Circle,
@@ -380,6 +381,7 @@ function TaskRow({
   onArchive,
   onAssign,
   onEdit,
+  onRemind,
   onStatus,
 }: {
   entry: TaskOccurrence;
@@ -388,6 +390,7 @@ function TaskRow({
   onArchive: () => void;
   onAssign: (memberId: string | null) => void;
   onEdit: () => void;
+  onRemind: () => void;
   onStatus: (status: TaskInstanceStatus) => void;
 }) {
   const c = useTheme();
@@ -463,6 +466,19 @@ function TaskRow({
       </View>
 
       <View style={styles.taskActions}>
+        {pending && entry.dueDate >= todayStr() ? (
+          <Pressable
+            accessibilityLabel={`提醒${entry.task.title}`}
+            accessibilityRole="button"
+            onPress={onRemind}
+            style={({ pressed }) => [
+              styles.smallIconButton,
+              { backgroundColor: pressed ? c.tintSoft : c.fill },
+            ]}
+          >
+            <BellPlus color={c.tint} size={15} />
+          </Pressable>
+        ) : null}
         {pending && entry.canUpdate ? (
           <Pressable
             accessibilityLabel={`跳过${entry.task.title}`}
@@ -523,6 +539,7 @@ function TaskRow({
 export default function TasksScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const router = useRouter();
   const params = useLocalSearchParams<{ date?: string; taskId?: string }>();
   const parameterDate = validDate(firstParam(params.date));
   const parameterTaskId = firstParam(params.taskId);
@@ -652,6 +669,16 @@ export default function TasksScreen() {
                     setEditingEntry(entry);
                     setFormOpen(true);
                   }}
+                  onRemind={() =>
+                    router.push({
+                      pathname: '/reminders',
+                      params: {
+                        sourceModule: 'task',
+                        sourceId: entry.taskId,
+                        occurrenceDate: entry.dueDate,
+                      },
+                    })
+                  }
                   onStatus={(status) => changeOccurrence(entry, { status })}
                 />
               ))

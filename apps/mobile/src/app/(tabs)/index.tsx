@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   Bell,
+  BellRing,
   BookOpenText,
   CheckCircle2,
   Clock3,
@@ -30,6 +31,7 @@ import {
   useMenusOfDate,
   useNotifications,
   usePolls,
+  useReminders,
   useShoppingList,
   useTasks,
 } from '../../lib/queries';
@@ -51,6 +53,16 @@ function fullDate() {
     day: 'numeric',
     weekday: 'long',
   }).format(new Date());
+}
+
+function reminderTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value));
 }
 
 function MetricCard({
@@ -136,6 +148,7 @@ export default function HomeScreen() {
   const { data: tasks, isLoading: tasksLoading } = useTasks(date, date);
   const { data: notifications } = useNotifications();
   const { data: polls, isLoading: pollsLoading } = usePolls();
+  const { data: reminders, isLoading: remindersLoading } = useReminders('scheduled');
 
   const menuItems =
     menus?.reduce(
@@ -152,6 +165,7 @@ export default function HomeScreen() {
   const pendingTasks = tasks?.filter((entry) => entry.status === 'pending') ?? [];
   const unreadCount = notifications?.length ?? 0;
   const openPolls = polls?.filter((poll) => poll.status === 'open') ?? [];
+  const upcomingReminders = reminders ?? [];
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -311,6 +325,68 @@ export default function HomeScreen() {
                   <CheckCircle2 color={c.tint} size={24} />
                   <Text style={[t.subhead, { color: c.secondaryLabel }]}>今天没有待办任务</Text>
                 </View>
+              )}
+            </Card>
+          </View>
+
+          <View style={styles.remindersSection}>
+            <View style={styles.sectionTitleRow}>
+              <View>
+                <Text style={[t.title2, { color: c.label }]}>近期提醒</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>菜单、任务、日程与家庭决定</Text>
+              </View>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => router.push('/reminders')}
+                style={styles.textLink}
+              >
+                <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>提醒中心</Text>
+                <ArrowRight color={c.tint} size={16} />
+              </Pressable>
+            </View>
+            <Card style={styles.remindersCard}>
+              {remindersLoading ? (
+                <ActivityIndicator color={c.tint} style={styles.taskLoader} />
+              ) : upcomingReminders.length ? (
+                upcomingReminders.slice(0, 3).map((reminder) => (
+                  <Pressable
+                    accessibilityRole="link"
+                    key={reminder.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/reminders',
+                        params: { reminderId: reminder.id },
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.reminderSummaryRow,
+                      { borderBottomColor: c.separator },
+                      pressed && { backgroundColor: c.fill },
+                    ]}
+                  >
+                    <View style={[styles.reminderSummaryIcon, { backgroundColor: c.tintSoft }]}>
+                      <BellRing color={c.tint} size={18} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
+                        {reminder.source?.title ?? '原事项已不可用'}
+                      </Text>
+                      <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                        {reminderTime(reminder.remindAt)} · {reminder.recipients.map((recipient) => recipient.member.name).join('、')}
+                      </Text>
+                    </View>
+                    <ArrowRight color={c.tertiaryLabel} size={16} />
+                  </Pressable>
+                ))
+              ) : (
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => router.push('/reminders')}
+                  style={styles.emptyTasks}
+                >
+                  <BellRing color={c.tint} size={24} />
+                  <Text style={[t.subhead, { color: c.secondaryLabel }]}>还没有待发送提醒</Text>
+                </Pressable>
               )}
             </Card>
           </View>
@@ -525,7 +601,24 @@ const styles = StyleSheet.create({
   tasksSection: { marginTop: 30 },
   pollsSection: { marginTop: 30 },
   tasksCard: { overflow: 'hidden', minHeight: 76 },
+  remindersCard: { overflow: 'hidden', minHeight: 76 },
   pollsCard: { overflow: 'hidden', minHeight: 76 },
+  remindersSection: { marginTop: 28 },
+  reminderSummaryRow: {
+    minHeight: 66,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+  },
+  reminderSummaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   taskLoader: { marginVertical: 24 },
   taskSummaryRow: {
     minHeight: 64,
