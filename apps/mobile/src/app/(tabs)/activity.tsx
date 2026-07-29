@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   CalendarClock,
   ChevronRight,
+  Film,
   History,
   MailPlus,
   Settings2,
@@ -169,6 +170,9 @@ function activityVisual(module: ActivityModule, c: ReturnType<typeof useTheme>) 
   }
   if (module === 'invitation') {
     return { icon: MailPlus, color: c.blue, backgroundColor: c.blueSoft };
+  }
+  if (module === 'media') {
+    return { icon: Film, color: c.accent, backgroundColor: c.accentSoft };
   }
   if (module === 'system') {
     return { icon: Settings2, color: c.secondaryLabel, backgroundColor: c.fill };

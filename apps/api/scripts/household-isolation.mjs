@@ -68,6 +68,9 @@ const ids = {
   reminderRecipient: randomUUID(),
   shoppingItem: randomUUID(),
   inventoryItem: randomUUID(),
+  mediaTitle: randomUUID(),
+  mediaExternalRef: randomUUID(),
+  householdMedia: randomUUID(),
 };
 
 const db = new Client({
@@ -231,6 +234,24 @@ try {
     'INSERT INTO inventory_items (id, "householdId", name, category) VALUES ($1, $2, $3, $4)',
     [ids.inventoryItem, ids.household, '隔离测试库存', '其他'],
   );
+  await db.query(
+    `INSERT INTO media_titles
+       (id, type, title, year, "dedupeKey")
+     VALUES ($1, 'movie', $2, 2099, $3)`,
+    [ids.mediaTitle, '隔离测试影片', `movie:2099:isolation-${ids.mediaTitle}`],
+  );
+  await db.query(
+    `INSERT INTO media_external_refs
+       (id, "mediaTitleId", provider, "mediaType", "externalId")
+     VALUES ($1, $2, 'tmdb', 'movie', $3)`,
+    [ids.mediaExternalRef, ids.mediaTitle, `isolation-${ids.mediaTitle}`],
+  );
+  await db.query(
+    `INSERT INTO household_media
+       (id, "householdId", "mediaTitleId", status, "scheduledFor", "createdById")
+     VALUES ($1, $2, $3, 'scheduled', $4, $5)`,
+    [ids.householdMedia, ids.household, ids.mediaTitle, TEST_DATE, ids.member],
+  );
 
   const anonymousMembers = await request('/members');
   assert(anonymousMembers.status === 401, '匿名请求不能枚举家庭成员');
@@ -343,9 +364,18 @@ try {
     defaultCalendar.status === 200 &&
       defaultCalendar.body.data.every(
         (entry) =>
-          entry.sourceId !== ids.calendarEvent && entry.sourceId !== ids.task,
+          entry.sourceId !== ids.calendarEvent &&
+          entry.sourceId !== ids.task &&
+          entry.sourceId !== ids.householdMedia,
       ),
-    '统一日历不读取其他家庭事件或任务',
+    '统一日历不读取其他家庭事件、任务或观影安排',
+  );
+
+  const defaultMedia = await request('/media?status=all', defaultToken);
+  assert(
+    defaultMedia.status === 200 &&
+      defaultMedia.body.data.every((entry) => entry.id !== ids.householdMedia),
+    '家庭片单不读取其他家庭的观影记录',
   );
 
   const defaultTasks = await request(
@@ -463,8 +493,31 @@ try {
         (entry) => entry.sourceId === ids.calendarEvent,
       ) &&
       foreignCalendar.body.data.some((entry) => entry.sourceId === ids.task) &&
+      foreignCalendar.body.data.some(
+        (entry) => entry.sourceId === ids.householdMedia,
+      ) &&
       crossCalendar.status === 404,
-    '家庭事件与任务只对所属家庭可见且不能被跨家庭修改',
+    '家庭事件、任务与观影排期只对所属家庭可见',
+  );
+
+  const foreignMedia = await request('/media?status=all', foreignToken);
+  const crossMediaUpdate = await request(
+    `/media/${ids.householdMedia}`,
+    defaultToken,
+    'PATCH',
+    { status: 'watching' },
+  );
+  const crossMediaDelete = await request(
+    `/media/${ids.householdMedia}`,
+    defaultToken,
+    'DELETE',
+  );
+  assert(
+    foreignMedia.status === 200 &&
+      foreignMedia.body.data.some((entry) => entry.id === ids.householdMedia) &&
+      crossMediaUpdate.status === 404 &&
+      crossMediaDelete.status === 404,
+    '不能跨家庭读取、修改或删除观影片单',
   );
 
   const foreignTasks = await request(
@@ -598,6 +651,9 @@ try {
   await db.query('DELETE FROM menu_items WHERE id = $1', [ids.menuItem]);
   await db.query('DELETE FROM shopping_items WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM inventory_items WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM household_media WHERE id = $1', [ids.householdMedia]);
+  await db.query('DELETE FROM media_external_refs WHERE id = $1', [ids.mediaExternalRef]);
+  await db.query('DELETE FROM media_titles WHERE id = $1', [ids.mediaTitle]);
   await db.query('DELETE FROM menus WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM dish_ingredients WHERE "dishId" = $1', [ids.dish]);
   await db.query('DELETE FROM dishes WHERE "householdId" = $1', [ids.household]);

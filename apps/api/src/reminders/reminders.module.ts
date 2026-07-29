@@ -216,6 +216,7 @@ export class RemindersService
       }));
 
     const calendarSources = calendarEntries
+      .filter((entry) => entry.module !== 'media')
       .filter((entry) => {
         if (entry.module === 'menu') return entry.status === 'open';
         if (entry.module === 'task') return entry.status === 'pending';

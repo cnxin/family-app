@@ -136,6 +136,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="media"
+        options={{
+          title: '观影',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="shopping"
         options={{
           title: '采购',

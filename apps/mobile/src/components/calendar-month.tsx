@@ -67,11 +67,17 @@ export function CalendarMonth({
   const markers = useMemo(() => {
     const result = new Map<
       string,
-      { eventCount: number; menuCount: number; taskCount: number }
+      {
+        eventCount: number;
+        mediaCount: number;
+        menuCount: number;
+        taskCount: number;
+      }
     >();
     for (const entry of entries) {
       const current = result.get(entry.date) ?? {
         eventCount: 0,
+        mediaCount: 0,
         menuCount: 0,
         taskCount: 0,
       };
@@ -79,6 +85,8 @@ export function CalendarMonth({
         current.menuCount += entry.metadata.itemCount ?? 0;
       } else if (entry.module === 'task') {
         current.taskCount += 1;
+      } else if (entry.module === 'media') {
+        current.mediaCount += 1;
       } else {
         current.eventCount += 1;
       }
@@ -167,6 +175,7 @@ export function CalendarMonth({
             marker?.menuCount ? `已有${marker.menuCount}道菜` : '',
             marker?.eventCount ? `有${marker.eventCount}个家庭事件` : '',
             marker?.taskCount ? `有${marker.taskCount}个家庭任务` : '',
+            marker?.mediaCount ? `有${marker.mediaCount}个观影安排` : '',
           ]
             .filter(Boolean)
             .join('，');
@@ -242,6 +251,14 @@ export function CalendarMonth({
                     ]}
                   />
                 ) : null}
+                {marker?.mediaCount ? (
+                  <View
+                    style={[
+                      styles.mediaDot,
+                      { backgroundColor: selected ? '#FFFFFF' : c.accent },
+                    ]}
+                  />
+                ) : null}
               </Pressable>
             </View>
           );
@@ -311,5 +328,13 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 2,
+  },
+  mediaDot: {
+    position: 'absolute',
+    bottom: 4,
+    right: 5,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
   },
 });

@@ -4,6 +4,7 @@ import {
   CalendarDays,
   BookOpenText,
   CookingPot,
+  Film,
   House,
   History,
   LayoutDashboard,
@@ -75,6 +76,7 @@ interface NavItem {
     | '/reminders'
     | '/activity'
     | '/members'
+    | '/media'
     | '/polls'
     | '/shopping'
     | '/profile';
@@ -89,6 +91,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '菜单安排', href: '/kitchen', icon: CookingPot },
   { label: '家庭任务', href: '/tasks', icon: ListTodo },
   { label: '家庭投票', href: '/polls', icon: Vote },
+  { label: '家庭观影', href: '/media', icon: Film },
   { label: '提醒中心', href: '/reminders', icon: BellRing },
   { label: '家庭活动', href: '/activity', icon: History },
   {

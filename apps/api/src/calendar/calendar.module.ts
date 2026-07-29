@@ -22,7 +22,7 @@ import {
 } from 'class-validator';
 import { Between, Repository } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { CalendarEvent, MealType, Menu } from '../entities';
+import { CalendarEvent, HouseholdMedia, MealType, Menu } from '../entities';
 import { TasksModule, TasksService } from '../tasks/tasks.module';
 
 class CalendarRangeDto {
@@ -154,6 +154,8 @@ export class CalendarService {
     @InjectRepository(CalendarEvent)
     private readonly events: Repository<CalendarEvent>,
     @InjectRepository(Menu) private readonly menus: Repository<Menu>,
+    @InjectRepository(HouseholdMedia)
+    private readonly householdMedia: Repository<HouseholdMedia>,
     private readonly tasks: TasksService,
   ) {}
 
@@ -167,7 +169,7 @@ export class CalendarService {
       throw new BadRequestException('单次最多查询 371 天');
     }
 
-    const [events, menuRows, taskRows] = await Promise.all([
+    const [events, menuRows, taskRows, mediaRows] = await Promise.all([
       this.events.find({
         where: { householdId: user.householdId, date: Between(start, end) },
         order: { date: 'ASC', startsAt: 'ASC', createdAt: 'ASC' },
@@ -199,6 +201,14 @@ export class CalendarService {
           itemCount: string;
         }>(),
       this.tasks.list(start, end, user),
+      this.householdMedia.find({
+        where: {
+          householdId: user.householdId,
+          scheduledFor: Between(start, end),
+        },
+        relations: { mediaTitle: true },
+        order: { scheduledFor: 'ASC', updatedAt: 'DESC' },
+      }),
     ]);
 
     const rows = [
@@ -261,13 +271,35 @@ export class CalendarService {
           canUpdate: occurrence.canUpdate,
         },
       })),
+      ...mediaRows.map((entry) => ({
+        id: `media:${entry.id}`,
+        sourceId: entry.id,
+        module: 'media' as const,
+        date: entry.scheduledFor as string,
+        startsAt: null,
+        endsAt: null,
+        title: entry.mediaTitle.title,
+        summary: [
+          entry.mediaTitle.type === 'movie' ? '电影' : '剧集',
+          entry.mediaTitle.year ? String(entry.mediaTitle.year) : null,
+          entry.note,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        status: entry.status,
+        targetPath: `/media?mediaId=${entry.id}`,
+        metadata: {
+          mediaType: entry.mediaTitle.type,
+          year: entry.mediaTitle.year,
+        },
+      })),
     ];
 
     return rows.sort((left, right) => {
       const dateOrder = left.date.localeCompare(right.date);
       if (dateOrder) return dateOrder;
       if (left.module !== right.module) {
-        const moduleOrder = { calendar: 0, task: 1, menu: 2 };
+        const moduleOrder = { calendar: 0, task: 1, media: 2, menu: 3 };
         return moduleOrder[left.module] - moduleOrder[right.module];
       }
       if (left.module === 'menu' && right.module === 'menu') {
@@ -349,7 +381,10 @@ export class CalendarController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CalendarEvent, Menu]), TasksModule],
+  imports: [
+    TypeOrmModule.forFeature([CalendarEvent, Menu, HouseholdMedia]),
+    TasksModule,
+  ],
   controllers: [CalendarController],
   providers: [CalendarService],
   exports: [CalendarService],

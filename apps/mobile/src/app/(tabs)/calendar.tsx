@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Clock3,
   CookingPot,
+  Film,
   ListTodo,
   Pencil,
   Plus,
@@ -330,6 +331,7 @@ function ScheduleRow({
   onDelete,
   onEdit,
   onOpenMenu,
+  onOpenMedia,
   onOpenTask,
   onRemind,
 }: {
@@ -337,6 +339,7 @@ function ScheduleRow({
   onDelete: () => void;
   onEdit: () => void;
   onOpenMenu: () => void;
+  onOpenMedia: () => void;
   onOpenTask: () => void;
   onRemind: () => void;
 }) {
@@ -344,8 +347,9 @@ function ScheduleRow({
   const isMenu = entry.module === 'menu';
   const isTask = entry.module === 'task';
   const isCalendar = entry.module === 'calendar';
+  const isMedia = entry.module === 'media';
   const canManage = isCalendar && Boolean(entry.metadata.canManage);
-  const interactive = isMenu || isTask;
+  const interactive = isMenu || isTask || isMedia;
   const canRemind =
     entry.date >= todayStr() &&
     (isCalendar ||
@@ -357,7 +361,9 @@ function ScheduleRow({
       <Pressable
         accessibilityRole={interactive ? 'button' : undefined}
         disabled={!interactive}
-        onPress={isMenu ? onOpenMenu : isTask ? onOpenTask : undefined}
+        onPress={
+          isMenu ? onOpenMenu : isTask ? onOpenTask : isMedia ? onOpenMedia : undefined
+        }
         style={({ pressed }) => [
           styles.scheduleMain,
           pressed && interactive && { backgroundColor: c.fill },
@@ -371,6 +377,8 @@ function ScheduleRow({
                 ? c.orangeSoft
                 : isTask
                   ? c.blueSoft
+                  : isMedia
+                    ? c.accentSoft
                   : c.tintSoft,
             },
           ]}
@@ -379,6 +387,8 @@ function ScheduleRow({
             <CookingPot color={c.orange} size={19} />
           ) : isTask ? (
             <ListTodo color={c.blue} size={19} />
+          ) : isMedia ? (
+            <Film color={c.accent} size={19} />
           ) : (
             <CalendarDays color={c.tint} size={19} />
           )}
@@ -400,6 +410,12 @@ function ScheduleRow({
                     : entry.status === 'skipped'
                       ? '已跳过'
                       : entry.metadata.assigneeName ?? '待认领'
+                  : isMedia
+                    ? entry.status === 'completed'
+                      ? '已看完'
+                      : entry.status === 'watching'
+                        ? '观看中'
+                        : '观影安排'
                   : eventTime(entry)}
             </Text>
           </View>
@@ -528,6 +544,13 @@ export default function CalendarScreen() {
     });
   };
 
+  const openMedia = (entry: CalendarEntry) => {
+    router.push({
+      pathname: '/media',
+      params: { mediaId: entry.sourceId },
+    });
+  };
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -598,6 +621,7 @@ export default function CalendarScreen() {
                         setFormOpen(true);
                       }}
                       onOpenMenu={() => openMenu(entry)}
+                      onOpenMedia={() => openMedia(entry)}
                       onOpenTask={() => openTask(entry)}
                       onRemind={() =>
                         router.push({

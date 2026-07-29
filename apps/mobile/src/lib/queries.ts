@@ -20,11 +20,14 @@ import type {
   Ingredient,
   HouseholdInvitation,
   HouseholdActivity,
+  HouseholdMedia,
+  HouseholdMediaStatus,
   InventoryCategory,
   InventoryItem,
   Member,
   ManagedMember,
   MealType,
+  MediaType,
   Menu,
   MenuDateCount,
   MenuEvent,
@@ -172,6 +175,86 @@ export function useCalendarEntries(start: string, end: string, enabled = true) {
     queryFn: () =>
       api<CalendarEntry[]>(`/calendar?start=${start}&end=${end}`),
     enabled,
+  });
+}
+
+export function useMedia(
+  status: HouseholdMediaStatus | 'all' = 'all',
+  search = '',
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['media', status, search],
+    queryFn: () => {
+      const params = new URLSearchParams({ status });
+      if (search.trim()) params.set('search', search.trim());
+      return api<HouseholdMedia[]>(`/media?${params.toString()}`);
+    },
+    enabled,
+  });
+}
+
+export interface CreateMediaInput {
+  type: MediaType;
+  title: string;
+  originalTitle?: string | null;
+  year?: number | null;
+  overview?: string | null;
+  posterUrl?: string | null;
+  status?: HouseholdMediaStatus;
+  scheduledFor?: string | null;
+  note?: string | null;
+  externalRefs?: {
+    provider: 'tmdb' | 'imdb';
+    externalId: string;
+  }[];
+}
+
+export function useCreateMedia() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateMediaInput) =>
+      api<HouseholdMedia>('/media', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['media'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useUpdateMedia() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      status?: HouseholdMediaStatus;
+      scheduledFor?: string | null;
+      note?: string | null;
+    }) => api<HouseholdMedia>(`/media/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['media'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useDeleteMedia() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; removed: true }>(`/media/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['media'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
   });
 }
 

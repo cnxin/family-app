@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   CookingPot,
+  Film,
   ListTodo,
   ShoppingCart,
   UtensilsCrossed,
@@ -269,6 +270,27 @@ export default function HomeScreen() {
               />
             </Pressable>
           </View>
+
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => router.push('/media')}
+            style={({ pressed }) => [
+              styles.mediaShortcut,
+              {
+                backgroundColor: pressed ? c.cardPressed : c.card,
+                borderColor: c.separator,
+              },
+            ]}
+          >
+            <View style={[styles.mediaShortcutIcon, { backgroundColor: c.accentSoft }]}>
+              <Film color={c.accent} size={22} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[t.headline, { color: c.label }]}>家庭观影</Text>
+              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>片单、排期与观看进度</Text>
+            </View>
+            <ArrowRight color={c.tertiaryLabel} size={18} />
+          </Pressable>
 
           <View style={styles.tasksSection}>
             <View style={styles.sectionTitleRow}>
@@ -588,6 +610,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   metricValue: { fontSize: 25, fontWeight: '700', marginTop: 12 },
+  mediaShortcut: {
+    minHeight: 72,
+    marginTop: 18,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mediaShortcutIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   mainGrid: { gap: 24, marginTop: 32 },
   mainGridDesktop: { flexDirection: 'row', alignItems: 'stretch' },
   menuColumn: { flex: 1.65, minWidth: 0 },

@@ -51,6 +51,7 @@ export type ActivityModule =
   | 'shopping'
   | 'inventory'
   | 'recipe'
+  | 'media'
   | 'system';
 
 export interface HouseholdActivity {
@@ -277,6 +278,45 @@ export interface MenuDateCount {
   count: number;
 }
 
+export type MediaType = 'movie' | 'series';
+export type HouseholdMediaStatus =
+  | 'watchlist'
+  | 'voting'
+  | 'scheduled'
+  | 'watching'
+  | 'completed'
+  | 'dropped';
+
+export interface MediaExternalRef {
+  id: string;
+  provider: 'tmdb' | 'imdb' | 'plex' | 'emby' | 'moviepilot';
+  externalId: string;
+  connectorKey: string | null;
+}
+
+export interface MediaTitle {
+  id: string;
+  type: MediaType;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  overview: string | null;
+  posterUrl: string | null;
+  externalRefs: MediaExternalRef[];
+}
+
+export interface HouseholdMedia {
+  id: string;
+  householdId: string;
+  status: HouseholdMediaStatus;
+  scheduledFor: string | null;
+  note: string | null;
+  mediaTitle: MediaTitle;
+  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CalendarEvent {
   id: string;
   householdId: string;
@@ -294,13 +334,19 @@ export interface CalendarEvent {
 export interface CalendarEntry {
   id: string;
   sourceId: string;
-  module: 'menu' | 'calendar' | 'task';
+  module: 'menu' | 'calendar' | 'task' | 'media';
   date: string;
   startsAt: string | null;
   endsAt: string | null;
   title: string;
   summary: string | null;
-  status: 'open' | 'done' | 'scheduled' | 'pending' | 'skipped';
+  status:
+    | 'open'
+    | 'done'
+    | 'scheduled'
+    | 'pending'
+    | 'skipped'
+    | HouseholdMediaStatus;
   targetPath: string;
   metadata: {
     mealType?: MealType;
@@ -312,6 +358,8 @@ export interface CalendarEntry {
     assigneeId?: string | null;
     assigneeName?: string | null;
     recurrence?: TaskRecurrence;
+    mediaType?: MediaType;
+    year?: number | null;
   };
 }
 

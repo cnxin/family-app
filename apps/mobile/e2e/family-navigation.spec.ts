@@ -75,7 +75,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   let refreshRequests = 0;
   const presentedRefreshTokens: string[] = [];
   let rejectedAuthorization: string | undefined;
-  const staleAccessRoute = /\/(dishes|menus|shopping-list)(\?|$)/;
+  const staleAccessRoute =
+    /\/(dishes|menus|shopping-list|tasks|polls|reminders|notifications)(\?|$)/;
   simulatingUnauthorized = true;
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/auth/refresh') {
@@ -120,6 +121,98 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.unroute(staleAccessRoute);
   simulatingUnauthorized = false;
   expect(runtimeErrors).toEqual([]);
+
+  const mediaRoute = /\/media(\?|$)/;
+  await page.route(mediaRoute, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            id: 'media-browser-fixture-1',
+            householdId: 'household-browser-fixture',
+            status: 'scheduled',
+            scheduledFor: '2199-12-29',
+            note: '周末家庭观影',
+            mediaTitle: {
+              id: 'title-browser-fixture-1',
+              type: 'movie',
+              title: '家庭电影回归样例',
+              originalTitle: 'Family Movie Fixture',
+              year: 2099,
+              overview: '用于验证移动端和桌面端片单卡片、状态与排期的稳定布局。',
+              posterUrl: null,
+              externalRefs: [
+                { id: 'ref-browser-fixture-1', provider: 'tmdb', externalId: '999001' },
+              ],
+            },
+            createdBy: { id: 'member-browser-fixture', name: '爸爸', avatarEmoji: '👨' },
+            createdAt: '2099-01-01T00:00:00.000Z',
+            updatedAt: '2099-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'media-browser-fixture-2',
+            householdId: 'household-browser-fixture',
+            status: 'completed',
+            scheduledFor: null,
+            note: '全家已看完',
+            mediaTitle: {
+              id: 'title-browser-fixture-2',
+              type: 'series',
+              title: '家庭剧集回归样例',
+              originalTitle: null,
+              year: 2098,
+              overview: '用于验证没有海报和排期时的稳定回退状态。',
+              posterUrl: null,
+              externalRefs: [
+                { id: 'ref-browser-fixture-2', provider: 'imdb', externalId: 'tt999002' },
+              ],
+            },
+            createdBy: { id: 'member-browser-fixture', name: '爸爸', avatarEmoji: '👨' },
+            createdAt: '2099-01-01T00:00:00.000Z',
+            updatedAt: '2099-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+  });
+
+  const mediaLink =
+    testInfo.project.name === 'mobile-chrome'
+      ? page.getByRole('link').filter({ hasText: '家庭观影' })
+      : page.getByRole('link', { name: '家庭观影', exact: true });
+  await expect(mediaLink).toBeVisible();
+  await mediaLink.click();
+  await expect(page).toHaveURL(/\/media$/);
+  await expect(page.getByText('家庭观影', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '加入片单', exact: true }).first()).toBeVisible();
+  await expect(page.getByLabel('搜索家庭片单')).toBeVisible();
+  await page.getByRole('button', { name: '加入片单', exact: true }).first().click();
+  await expect(page.getByText('加入家庭片单', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('影视名称')).toBeVisible();
+  await expect(page.getByLabel('安排观影日期')).toBeVisible();
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByText('加入家庭片单', { exact: true })).not.toBeVisible();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect(page.getByRole('tab')).toHaveCount(6);
+  }
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('media-page.png'),
+    fullPage: true,
+  });
+  if (testInfo.project.name === 'mobile-chrome') {
+    await page.getByRole('button', { name: '返回家庭首页', exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+  } else {
+    await openSection(page, testInfo.project.name, 'home');
+  }
+  await page.unroute(mediaRoute);
 
   const tasksLink =
     testInfo.project.name === 'mobile-chrome'
