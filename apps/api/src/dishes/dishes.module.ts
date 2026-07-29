@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Injectable,
   Module,
@@ -28,7 +29,16 @@ import {
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { Dish, DishCategory, DishIngredient, Ingredient } from '../entities';
+import {
+  Dish,
+  DishCategory,
+  DishIngredient,
+  DishRecipeVariant,
+  DishRecipeVariantIngredient,
+  DishRecipeVariantLink,
+  DishRecipeVariantStep,
+  Ingredient,
+} from '../entities';
 
 class DishIngredientDto {
   @IsOptional()
@@ -194,6 +204,95 @@ export class DishesService {
     }
   }
 
+  private async syncDefaultRecipe(
+    dish: Dish,
+    dto: UpsertDishDto,
+    householdId: string,
+    manager: EntityManager,
+  ) {
+    const variants = manager.getRepository(DishRecipeVariant);
+    let variant = await variants.findOneBy({
+      householdId,
+      dishId: dish.id,
+      isDefault: true,
+      isArchived: false,
+    });
+    const isNew = !variant;
+    if (!variant) {
+      variant = variants.create({
+        householdId,
+        dishId: dish.id,
+        authorMemberId: null,
+        name: '家庭默认',
+        isDefault: true,
+        isArchived: false,
+        note: dish.note,
+        estMinutes: dish.estMinutes,
+      });
+    }
+    if (dto.note !== undefined || isNew) variant.note = dish.note;
+    if (dto.estMinutes !== undefined || isNew) {
+      variant.estMinutes = dish.estMinutes;
+    }
+    variant = await variants.save(variant);
+
+    if (dto.recipeSteps !== undefined || isNew) {
+      const steps = manager.getRepository(DishRecipeVariantStep);
+      await steps.delete({ variantId: variant.id });
+      await steps.save(
+        (dish.recipeSteps ?? [])
+          .map((step, index) => ({ step, index }))
+          .filter(({ step }) => step.text.trim())
+          .map(({ step, index }) =>
+            steps.create({
+              variantId: variant.id,
+              position: index + 1,
+              text: step.text.trim(),
+              imageUrl: step.imageUrl?.trim() || null,
+            }),
+          ),
+      );
+    }
+
+    if (dto.referenceLinks !== undefined || isNew) {
+      const links = manager.getRepository(DishRecipeVariantLink);
+      await links.delete({ variantId: variant.id });
+      await links.save(
+        (dish.referenceLinks ?? [])
+          .map((link, index) => ({ link, index }))
+          .filter(({ link }) => link.url.trim())
+          .map(({ link, index }) =>
+            links.create({
+              variantId: variant.id,
+              position: index + 1,
+              title: link.title?.trim() || null,
+              url: link.url.trim(),
+            }),
+          ),
+      );
+    }
+
+    if (dto.ingredients !== undefined || isNew) {
+      const recipeIngredients = manager.getRepository(
+        DishRecipeVariantIngredient,
+      );
+      const legacyIngredients = await manager
+        .getRepository(DishIngredient)
+        .findBy({ dishId: dish.id });
+      await recipeIngredients.delete({ variantId: variant.id });
+      await recipeIngredients.save(
+        legacyIngredients.map((item) =>
+          recipeIngredients.create({
+            variantId: variant!.id,
+            ingredientId: item.ingredientId,
+            quantity: item.quantity,
+            unit: item.unit,
+          }),
+        ),
+      );
+    }
+  }
+
   async create(dto: UpsertDishDto, householdId: string, userId: string) {
     if (!dto.name) throw new NotFoundException('菜名必填');
     return this.dataSource.transaction(async (manager) => {
@@ -210,6 +309,7 @@ export class DishesService {
       if (ingredients?.length) {
         await this.buildIngredients(dish, ingredients, householdId, manager);
       }
+      await this.syncDefaultRecipe(dish, dto, householdId, manager);
       const saved = await dishes.findOneBy({ id: dish.id, householdId });
       if (!saved) throw new NotFoundException('菜品不存在');
       return saved;
@@ -238,6 +338,7 @@ export class DishesService {
       if (ingredients) {
         await this.buildIngredients(dish, ingredients, householdId, manager);
       }
+      await this.syncDefaultRecipe(dish, dto, householdId, manager);
       const saved = await dishes.findOneBy({ id, householdId });
       if (!saved) throw new NotFoundException('菜品不存在');
       return saved;
@@ -279,6 +380,20 @@ export class DishesController {
     @Body() dto: UpsertDishDto,
     @CurrentUser() user: JwtUser,
   ) {
+    const changesDefaultRecipe = [
+      'note',
+      'estMinutes',
+      'recipeSteps',
+      'referenceLinks',
+      'ingredients',
+    ].some((field) => Object.prototype.hasOwnProperty.call(dto, field));
+    if (
+      changesDefaultRecipe &&
+      user.role !== 'owner' &&
+      user.role !== 'admin'
+    ) {
+      throw new ForbiddenException('只有家庭管理员可以维护默认做法');
+    }
     return this.service.update(id, dto, user.householdId);
   }
 

@@ -97,14 +97,22 @@ export class ShoppingService {
         { ingredientId: string; unit: string; qty: number }
       >();
       for (const item of wanted) {
-        for (const dishIngredient of item.dish.ingredients ?? []) {
-          if (dishIngredient.ingredient.isPantryStaple) continue;
-          const key = `${dishIngredient.ingredientId}|${dishIngredient.unit}`;
+        const recipeIngredients = item.recipeSnapshot
+          ? item.recipeSnapshot.ingredients
+          : (item.dish.ingredients ?? []).map((dishIngredient) => ({
+              ingredientId: dishIngredient.ingredientId,
+              isPantryStaple: dishIngredient.ingredient.isPantryStaple,
+              quantity: Number(dishIngredient.quantity),
+              unit: dishIngredient.unit,
+            }));
+        for (const ingredient of recipeIngredients) {
+          if (ingredient.isPantryStaple) continue;
+          const key = `${ingredient.ingredientId}|${ingredient.unit}`;
           const previous = merged.get(key);
           merged.set(key, {
-            ingredientId: dishIngredient.ingredientId,
-            unit: dishIngredient.unit,
-            qty: (previous?.qty ?? 0) + Number(dishIngredient.quantity),
+            ingredientId: ingredient.ingredientId,
+            unit: ingredient.unit,
+            qty: (previous?.qty ?? 0) + Number(ingredient.quantity),
           });
         }
       }

@@ -10,8 +10,10 @@ import type {
   CalendarEvent,
   CreatedHouseholdInvitation,
   Dish,
+  DishRecipeVariant,
   DishRecipeStep,
   DishReferenceLink,
+  DishSkillLevel,
   Ingredient,
   HouseholdInvitation,
   InventoryCategory,
@@ -23,6 +25,8 @@ import type {
   MenuEvent,
   MenuItem,
   MenuItemStatus,
+  MemberDishSkill,
+  RecipeDish,
   ShoppingItem,
 } from './types';
 
@@ -39,6 +43,22 @@ export function useDishes(enabled = true) {
     queryKey: ['dishes'],
     queryFn: () => api<Dish[]>('/dishes'),
     enabled,
+  });
+}
+
+export function useRecipes(enabled = true) {
+  return useQuery({
+    queryKey: ['recipes'],
+    queryFn: () => api<RecipeDish[]>('/recipes'),
+    enabled,
+  });
+}
+
+export function useRecipe(dishId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['recipes', dishId],
+    queryFn: () => api<RecipeDish>(`/recipes/${dishId}`),
+    enabled: enabled && Boolean(dishId),
   });
 }
 
@@ -145,6 +165,7 @@ export function useUpdateMenuItem() {
       note?: string;
       assignedToId?: string | null;
       reason?: string;
+      recipeVariantId?: string;
     }) =>
       api<MenuItem>(`/menu-items/${input.id}`, {
         method: 'PATCH',
@@ -153,6 +174,7 @@ export function useUpdateMenuItem() {
           note: input.note,
           assignedToId: input.assignedToId,
           reason: input.reason,
+          recipeVariantId: input.recipeVariantId,
         },
       }),
     onSuccess: () => {
@@ -391,6 +413,95 @@ export interface DishUpsertInput {
   ingredients: { name: string; quantity: number; unit: string; category?: string }[];
 }
 
+export interface RecipeVariantInput {
+  id?: string;
+  dishId: string;
+  name: string;
+  isDefault?: boolean;
+  note?: string | null;
+  estMinutes?: number | null;
+  ingredients: {
+    ingredientId?: string;
+    name?: string;
+    category?: string;
+    quantity: number;
+    unit: string;
+  }[];
+  steps: { text: string; imageUrl?: string | null }[];
+  referenceLinks: { title?: string | null; url: string }[];
+}
+
+export function useUpsertRecipeVariant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dishId, ...body }: RecipeVariantInput) =>
+      id
+        ? api<DishRecipeVariant>(`/recipe-variants/${id}`, {
+            method: 'PATCH',
+            body,
+          })
+        : api<DishRecipeVariant>(`/dishes/${dishId}/recipe-variants`, {
+            method: 'POST',
+            body,
+          }),
+    onSuccess: (_data, input) => {
+      void qc.invalidateQueries({ queryKey: ['recipes'] });
+      void qc.invalidateQueries({ queryKey: ['recipes', input.dishId] });
+      void qc.invalidateQueries({ queryKey: ['dishes'] });
+    },
+  });
+}
+
+export function useArchiveRecipeVariant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; dishId: string }) =>
+      api<{ id: string; archived: true }>(`/recipe-variants/${input.id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (_data, input) => {
+      void qc.invalidateQueries({ queryKey: ['recipes'] });
+      void qc.invalidateQueries({ queryKey: ['recipes', input.dishId] });
+    },
+  });
+}
+
+export function useUpsertDishSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      dishId: string;
+      memberId?: string;
+      preferredRecipeId?: string | null;
+      level?: DishSkillLevel;
+      note?: string | null;
+    }) =>
+      api<MemberDishSkill>('/member-dish-skills', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: (_data, input) => {
+      void qc.invalidateQueries({ queryKey: ['recipes'] });
+      void qc.invalidateQueries({ queryKey: ['recipes', input.dishId] });
+    },
+  });
+}
+
+export function useRemoveDishSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { memberId: string; dishId: string }) =>
+      api<{ removed: true }>(
+        `/members/${input.memberId}/dish-skills/${input.dishId}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: (_data, input) => {
+      void qc.invalidateQueries({ queryKey: ['recipes'] });
+      void qc.invalidateQueries({ queryKey: ['recipes', input.dishId] });
+    },
+  });
+}
+
 export function useUpsertDish() {
   const qc = useQueryClient();
   return useMutation({
@@ -398,7 +509,10 @@ export function useUpsertDish() {
       id
         ? api<Dish>(`/dishes/${id}`, { method: 'PATCH', body })
         : api<Dish>('/dishes', { method: 'POST', body }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dishes'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['dishes'] });
+      void qc.invalidateQueries({ queryKey: ['recipes'] });
+    },
   });
 }
 
@@ -406,6 +520,9 @@ export function useRemoveDish() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api(`/dishes/${id}`, { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dishes'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['dishes'] });
+      void qc.invalidateQueries({ queryKey: ['recipes'] });
+    },
   });
 }

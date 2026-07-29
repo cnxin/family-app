@@ -79,6 +79,57 @@ export interface DishIngredient {
   unit: string;
 }
 
+export type DishSkillLevel = 'learning' | 'can_cook' | 'signature';
+
+export interface DishRecipeVariantStep {
+  id: string;
+  position: number;
+  text: string;
+  imageUrl: string | null;
+}
+
+export interface DishRecipeVariantLink {
+  id: string;
+  position: number;
+  title: string | null;
+  url: string;
+}
+
+export interface DishRecipeVariantIngredient {
+  id: string;
+  ingredientId: string;
+  ingredient: Ingredient;
+  quantity: string;
+  unit: string;
+}
+
+export interface DishRecipeVariant {
+  id: string;
+  dishId: string;
+  name: string;
+  authorMemberId: string | null;
+  author: Member | null;
+  isDefault: boolean;
+  note: string | null;
+  estMinutes: number | null;
+  ingredients: DishRecipeVariantIngredient[];
+  steps: DishRecipeVariantStep[];
+  referenceLinks: DishRecipeVariantLink[];
+  canManage: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemberDishSkill {
+  id: string;
+  memberId: string;
+  member: Member;
+  dishId: string;
+  preferredRecipeId: string | null;
+  level: DishSkillLevel;
+  note: string | null;
+}
+
 export interface Dish {
   id: string;
   name: string;
@@ -92,6 +143,30 @@ export interface Dish {
   ingredients: DishIngredient[];
 }
 
+export interface RecipeDish extends Dish {
+  recipeVariants: DishRecipeVariant[];
+  skills: MemberDishSkill[];
+}
+
+export interface DishRecipeSnapshot {
+  variantId: string;
+  name: string;
+  authorMemberId: string | null;
+  authorName: string | null;
+  note: string | null;
+  estMinutes: number | null;
+  ingredients: {
+    ingredientId: string;
+    name: string;
+    category: string;
+    isPantryStaple: boolean;
+    quantity: number;
+    unit: string;
+  }[];
+  steps: DishRecipeStep[];
+  referenceLinks: DishReferenceLink[];
+}
+
 export interface MenuItem {
   id: string;
   dishId: string;
@@ -102,6 +177,8 @@ export interface MenuItem {
   note: string | null;
   status: MenuItemStatus;
   statusReason: string | null;
+  recipeVariantId: string | null;
+  recipeSnapshot: DishRecipeSnapshot | null;
   createdAt: string;
 }
 

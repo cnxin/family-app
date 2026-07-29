@@ -203,6 +203,7 @@ try {
   await waitForApi(api);
   await runScript('scripts/observability.mjs');
   await runScript('scripts/smoke.mjs');
+  await runScript('scripts/recipes.mjs');
   await runScript('scripts/calendar.mjs');
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');

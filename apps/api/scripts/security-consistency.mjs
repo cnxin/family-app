@@ -632,7 +632,7 @@ try {
   const ingredientsBefore = comparableIngredients(dishBefore);
   const failedDishUpdate = await request(
     `/dishes/${dishBefore.id}`,
-    memberToken,
+    chefToken,
     'PATCH',
     {
       note: `不应保存-${randomUUID()}`,

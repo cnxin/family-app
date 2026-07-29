@@ -12,6 +12,8 @@ import {
   Dish,
   DishCategory,
   DishIngredient,
+  DishRecipeVariant,
+  DishRecipeVariantIngredient,
   Household,
   Ingredient,
   IngredientCategory,
@@ -162,6 +164,45 @@ async function main() {
     created++;
   }
   console.log(`菜品 ✓ 新增 ${created} 道`);
+
+  const recipeVariants = AppDataSource.getRepository(DishRecipeVariant);
+  const recipeIngredients = AppDataSource.getRepository(
+    DishRecipeVariantIngredient,
+  );
+  let defaultRecipesCreated = 0;
+  for (const dish of await dishes.findBy({ householdId: household.id })) {
+    const existing = await recipeVariants.findOneBy({
+      householdId: household.id,
+      dishId: dish.id,
+      isDefault: true,
+      isArchived: false,
+    });
+    if (existing) continue;
+    const variant = await recipeVariants.save(
+      recipeVariants.create({
+        householdId: household.id,
+        dishId: dish.id,
+        authorMemberId: null,
+        name: '家庭默认',
+        isDefault: true,
+        isArchived: false,
+        note: dish.note,
+        estMinutes: dish.estMinutes,
+      }),
+    );
+    await recipeIngredients.save(
+      (dish.ingredients ?? []).map((item) =>
+        recipeIngredients.create({
+          variantId: variant.id,
+          ingredientId: item.ingredientId,
+          quantity: item.quantity,
+          unit: item.unit,
+        }),
+      ),
+    );
+    defaultRecipesCreated += 1;
+  }
+  console.log(`默认做法 ✓ 新增 ${defaultRecipesCreated} 份`);
   await AppDataSource.destroy();
 }
 

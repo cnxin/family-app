@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
+  BookOpenText,
   Check,
   Clock3,
   LockKeyhole,
@@ -275,6 +276,20 @@ export default function OrderScreen() {
               {member?.name}，这顿想吃点什么？
             </Text>
           </View>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => router.push('/recipes')}
+            style={({ pressed }) => [
+              styles.recipeLink,
+              {
+                backgroundColor: pressed ? c.fill : c.card,
+                borderColor: c.separator,
+              },
+            ]}
+          >
+            <BookOpenText color={c.tint} size={17} />
+            <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>菜谱</Text>
+          </Pressable>
           <View style={[styles.dishCount, { backgroundColor: c.card, borderColor: c.separator }]}>
             <UtensilsCrossed color={c.tint} size={17} />
             <Text style={[t.footnote, { color: c.secondaryLabel }]}>共 {dishes?.length ?? 0} 道家常菜</Text>
@@ -462,6 +477,16 @@ const styles = StyleSheet.create({
   contentDesktop: { paddingTop: 22, paddingBottom: 20 },
   header: { gap: 12 },
   headerDesktop: { flexDirection: 'row', alignItems: 'center' },
+  recipeLink: {
+    height: 36,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
   dishCount: {
     height: 36,
     borderRadius: radius.sm,

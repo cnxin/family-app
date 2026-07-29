@@ -5,6 +5,7 @@ import { AddKitchenCollaboration1785226700000 } from './1785226700000-add-kitche
 import { AddRevocableAuthSessions1785226800000 } from './1785226800000-add-revocable-auth-sessions';
 import { SeparateAccountsAndInvitations1785226900000 } from './1785226900000-separate-accounts-and-invitations';
 import { AddUnifiedCalendar1785227000000 } from './1785227000000-add-unified-calendar';
+import { AddRecipeVariants1785227100000 } from './1785227100000-add-recipe-variants';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -14,4 +15,5 @@ export const ALL_MIGRATIONS = [
   AddRevocableAuthSessions1785226800000,
   SeparateAccountsAndInvitations1785226900000,
   AddUnifiedCalendar1785227000000,
+  AddRecipeVariants1785227100000,
 ];

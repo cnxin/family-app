@@ -32,6 +32,7 @@ function RootStack() {
         }}
       />
       <Stack.Screen name="dish-edit" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="recipe-edit" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }

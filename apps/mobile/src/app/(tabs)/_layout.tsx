@@ -78,6 +78,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="recipes"
+        options={{
+          title: '菜谱',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
           title: '日历',

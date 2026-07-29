@@ -185,6 +185,26 @@ try {
     '菜谱列表只返回当前家庭数据',
   );
 
+  const defaultRecipes = await request('/recipes', defaultToken);
+  assert(
+    defaultRecipes.status === 200 &&
+      defaultRecipes.body.data.every(
+        (dish) => dish.householdId === defaultHouseholdId,
+      ),
+    '独立菜谱只返回当前家庭数据',
+  );
+  const crossRecipe = await request(`/recipes/${ids.dish}`, defaultToken);
+  const crossVariant = await request(
+    `/dishes/${ids.dish}/recipe-variants`,
+    defaultToken,
+    'POST',
+    { name: '不应创建' },
+  );
+  assert(
+    crossRecipe.status === 404 && crossVariant.status === 404,
+    '不能读取或新增其他家庭的做法',
+  );
+
   const defaultIngredients = await request('/ingredients', defaultToken);
   assert(
     defaultIngredients.status === 200 &&

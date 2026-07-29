@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BookOpenText,
   CheckCircle2,
   Clock3,
   CookingPot,
@@ -176,13 +177,19 @@ export default function HomeScreen() {
               value={shoppingPending}
               label="待购物"
             />
-            <MetricCard
-              icon={CheckCircle2}
-              iconColor={c.blue}
-              iconBackground={c.blueSoft}
-              value={dishes?.length ?? 0}
-              label="家庭菜谱"
-            />
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/recipes')}
+              style={styles.metricLink}
+            >
+              <MetricCard
+                icon={BookOpenText}
+                iconColor={c.blue}
+                iconBackground={c.blueSoft}
+                value={dishes?.length ?? 0}
+                label="家庭菜谱"
+              />
+            </Pressable>
           </View>
 
           <View style={[styles.mainGrid, desktop && styles.mainGridDesktop]}>
@@ -293,6 +300,7 @@ const styles = StyleSheet.create({
   },
   metrics: { flexDirection: 'row', gap: 12, marginTop: 24 },
   metricCard: { flex: 1, minWidth: 0, minHeight: 116, padding: 14 },
+  metricLink: { flex: 1, minWidth: 0 },
   metricIcon: {
     width: 34,
     height: 34,

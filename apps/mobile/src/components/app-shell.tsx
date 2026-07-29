@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  BookOpenText,
   CookingPot,
   House,
   LayoutDashboard,
@@ -56,13 +57,21 @@ export function PageContainer({
 
 interface NavItem {
   label: string;
-  href: '/' | '/order' | '/kitchen' | '/calendar' | '/shopping' | '/profile';
+  href:
+    | '/'
+    | '/order'
+    | '/recipes'
+    | '/kitchen'
+    | '/calendar'
+    | '/shopping'
+    | '/profile';
   icon: LucideIcon;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: '家庭首页', href: '/', icon: LayoutDashboard },
   { label: '点菜', href: '/order', icon: UtensilsCrossed },
+  { label: '家庭菜谱', href: '/recipes', icon: BookOpenText },
   { label: '菜单安排', href: '/kitchen', icon: CookingPot },
   { label: '家庭日历', href: '/calendar', icon: CalendarDays },
   { label: '采购与库存', href: '/shopping', icon: ShoppingCart },

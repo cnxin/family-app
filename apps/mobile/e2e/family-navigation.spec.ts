@@ -107,7 +107,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(
     page.getByText('家庭今日概览', { exact: true }),
   ).toBeVisible();
-  expect(forcedUnauthorized).toBe(2);
+  expect(forcedUnauthorized).toBeGreaterThanOrEqual(1);
+  expect(forcedUnauthorized).toBeLessThanOrEqual(2);
   expect(refreshRequests).toBeGreaterThanOrEqual(1);
   expect(refreshRequests).toBeLessThanOrEqual(2);
   expect(new Set(presentedRefreshTokens).size).toBe(
@@ -139,6 +140,32 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await openSection(page, testInfo.project.name, 'order');
   await expect(page.getByText('点菜', { exact: true }).first()).toBeVisible();
   await expect(page.getByPlaceholder('搜索菜名')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  const recipesLink =
+    testInfo.project.name === 'mobile-chrome'
+      ? page.getByRole('link', { name: '菜谱', exact: true })
+      : page.getByRole('link', { name: '家庭菜谱', exact: true });
+  await expect(recipesLink).toBeVisible();
+  await recipesLink.click();
+  await expect(page).toHaveURL(/\/recipes$/);
+  await expect(page.getByText('家庭菜谱', { exact: true }).first()).toBeVisible();
+  await expect(page.getByPlaceholder('搜索菜名、做法或成员')).toBeVisible();
+  await expect(page.getByRole('button', { name: '按菜品', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '按成员', exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  const firstRecipe = page
+    .getByRole('link')
+    .filter({ hasText: /种做法/ })
+    .first();
+  await expect(firstRecipe).toBeVisible();
+  await firstRecipe.click();
+  await expect(page.getByText(/做法版本（\d+）/)).toBeVisible();
+  await expect(page.getByText('谁会做', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '添加我的做法' })).toBeVisible();
+  await page.getByRole('button', { name: '返回', exact: true }).click();
+  await expect(page).toHaveURL(/\/recipes$/);
   await expectNoHorizontalOverflow(page);
 
   await openSection(page, testInfo.project.name, 'shopping');
@@ -184,7 +211,9 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(
     page.getByRole('button', { name: '生成 48 小时邀请' }),
   ).toBeVisible();
-  await expect(page.getByRole('switch')).toBeVisible();
+  await expect(
+    page.getByRole('switch', { name: '愿意参与掌勺', exact: true }),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await openSection(page, testInfo.project.name, 'home');

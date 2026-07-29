@@ -1,5 +1,12 @@
 import { useRouter } from 'expo-router';
-import { KeyRound, Share2, Trash2, UserPlus } from 'lucide-react-native';
+import {
+  BookOpenText,
+  ChevronRight,
+  KeyRound,
+  Share2,
+  Trash2,
+  UserPlus,
+} from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -23,15 +30,13 @@ import {
 import { memberSubtitle } from '../../lib/member';
 import {
   useCreateHouseholdInvitation,
-  useDishes,
   useHouseholdInvitations,
-  useRemoveDish,
   useRevokeHouseholdInvitation,
   useUpdateCookingPreference,
   useUpdatePassword,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
-import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../lib/theme';
+import { radius, type as t, useTheme } from '../../lib/theme';
 import type { CreatedHouseholdInvitation } from '../../lib/types';
 
 type InviteRole = 'admin' | 'member';
@@ -41,8 +46,6 @@ export default function ProfileScreen() {
   const desktop = useDesktopLayout();
   const router = useRouter();
   const { account, member, logout, updateAccount, updateMember } = useSession();
-  const { data: dishes } = useDishes();
-  const removeDish = useRemoveDish();
   const updatePreference = useUpdateCookingPreference();
   const updatePassword = useUpdatePassword();
   const canManageMembers = member?.role === 'owner' || member?.role === 'admin';
@@ -58,17 +61,6 @@ export default function ProfileScreen() {
   const [inviteRole, setInviteRole] = useState<InviteRole>('member');
   const [createdInvitation, setCreatedInvitation] =
     useState<CreatedHouseholdInvitation | null>(null);
-
-  const confirmRemove = (id: string, name: string) => {
-    Alert.alert('下架菜品', `「${name}」将不再出现在点菜列表里`, [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '下架',
-        style: 'destructive',
-        onPress: () => removeDish.mutate(id),
-      },
-    ]);
-  };
 
   const savePassword = () => {
     if (newPassword !== confirmPassword) {
@@ -165,6 +157,7 @@ export default function ProfileScreen() {
                 </Text>
               </View>
               <Switch
+                accessibilityLabel="愿意参与掌勺"
                 disabled={!member || updatePreference.isPending}
                 onValueChange={(prefersCooking) => {
                   updatePreference.mutate(prefersCooking, {
@@ -327,38 +320,25 @@ export default function ProfileScreen() {
             </>
           ) : null}
 
-          <SectionHeader title={`菜谱管理（${dishes?.length ?? 0} 道）`} right={
-            <PressableScale onPress={() => router.push('/dish-edit')}>
-              <Text style={[t.subhead, { color: c.tint, fontWeight: '600' }]}>＋ 新增菜品</Text>
-            </PressableScale>
-          } />
+          <SectionHeader title="家庭内容" />
           <Card>
-            {(dishes ?? []).map((dish) => (
-              <View
-                key={dish.id}
-                style={[styles.dishRow, { borderBottomColor: c.separator }]}
-              >
-                <Text style={{ fontSize: 24 }}>{CATEGORY_EMOJI[dish.category] ?? '🍽️'}</Text>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={[t.body, { color: c.label }]}>{dish.name}</Text>
-                  <Text style={[t.footnote, { color: c.secondaryLabel }]}>
-                    {dish.category} · {dish.ingredients?.length ?? 0} 种食材 · {dish.recipeSteps?.length ?? 0} 步做法
-                  </Text>
-                </View>
-                <PressableScale
-                  onPress={() => router.push(`/dish-edit?id=${dish.id}`)}
-                  style={styles.rowButton}
-                >
-                  <Text style={[t.subhead, { color: c.tint }]}>编辑</Text>
-                </PressableScale>
-                <PressableScale
-                  onPress={() => confirmRemove(dish.id, dish.name)}
-                  style={styles.rowButton}
-                >
-                  <Text style={[t.subhead, { color: c.red }]}>下架</Text>
-                </PressableScale>
+            <PressableScale
+              accessibilityLabel="打开家庭菜谱"
+              haptic={false}
+              onPress={() => router.push('/recipes')}
+              style={styles.recipeRow}
+            >
+              <View style={[styles.recipeIcon, { backgroundColor: c.tintSoft }]}>
+                <BookOpenText color={c.tint} size={20} />
               </View>
-            ))}
+              <View style={{ flex: 1 }}>
+                <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>家庭菜谱</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>
+                  管理菜品、成员做法和会做的菜
+                </Text>
+              </View>
+              <ChevronRight color={c.tertiaryLabel} size={19} />
+            </PressableScale>
           </Card>
 
           <SectionHeader title="账号" />
@@ -492,13 +472,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dishRow: {
+  recipeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    minHeight: 72,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
   },
-  rowButton: { paddingHorizontal: 8, paddingVertical: 6 },
+  recipeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   version: { textAlign: 'center', marginTop: 24 },
 });

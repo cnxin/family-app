@@ -31,17 +31,24 @@ import { assertCapability, RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   Dish,
+  DishRecipeVariant,
   MealType,
   Member,
+  MemberDishSkill,
   Menu,
   MenuEvent,
   MenuItem,
   MenuItemStatus,
 } from '../entities';
+import { buildRecipeSnapshot } from '../recipes/recipe.snapshot';
 
 class OrderItemDto {
   @IsUUID()
   dishId: string;
+
+  @IsOptional()
+  @IsUUID()
+  recipeVariantId?: string;
 
   @IsOptional()
   @IsString()
@@ -75,6 +82,10 @@ class UpdateItemDto {
   @IsString()
   @MaxLength(200)
   reason?: string;
+
+  @IsOptional()
+  @IsUUID()
+  recipeVariantId?: string;
 }
 
 class AssignChefDto {
@@ -202,6 +213,7 @@ export class MenusService {
         const menus = manager.getRepository(Menu);
         const items = manager.getRepository(MenuItem);
         const dishes = manager.getRepository(Dish);
+        const variants = manager.getRepository(DishRecipeVariant);
         const events = manager.getRepository(MenuEvent);
         const menu = await menus
           .createQueryBuilder('menu')
@@ -225,6 +237,32 @@ export class MenusService {
         if (dishCount !== dishIds.length) {
           throw new NotFoundException('菜品不存在');
         }
+        const availableVariants = await variants.find({
+          where: {
+            householdId,
+            dishId: In(dishIds),
+            isArchived: false,
+          },
+        });
+        const selectedRecipes = new Map<string, DishRecipeVariant>();
+        for (const input of dto.items) {
+          const selected = input.recipeVariantId
+            ? availableVariants.find(
+                (variant) =>
+                  variant.id === input.recipeVariantId &&
+                  variant.dishId === input.dishId,
+              )
+            : availableVariants.find(
+                (variant) =>
+                  variant.dishId === input.dishId && variant.isDefault,
+              );
+          if (!selected) {
+            throw new NotFoundException(
+              input.recipeVariantId ? '所选做法不存在' : '菜品缺少家庭默认做法',
+            );
+          }
+          selectedRecipes.set(input.dishId, selected);
+        }
 
         const existing = await items.findOne({
           where: {
@@ -239,14 +277,17 @@ export class MenusService {
         }
 
         const savedItems = await items.save(
-          dto.items.map((item) =>
-            items.create({
+          dto.items.map((item) => {
+            const recipe = selectedRecipes.get(item.dishId)!;
+            return items.create({
               menuId,
               dishId: item.dishId,
               requestedById: userId,
               note: item.note?.trim() || null,
-            }),
-          ),
+              recipeVariantId: recipe.id,
+              recipeSnapshot: buildRecipeSnapshot(recipe),
+            });
+          }),
         );
         await events.save(
           savedItems.map((item) =>
@@ -276,6 +317,8 @@ export class MenusService {
       return await this.dataSource.transaction(async (manager) => {
         const items = manager.getRepository(MenuItem);
         const members = manager.getRepository(Member);
+        const variants = manager.getRepository(DishRecipeVariant);
+        const skills = manager.getRepository(MemberDishSkill);
         const events = manager.getRepository(MenuEvent);
         const item = await items
           .createQueryBuilder('item')
@@ -349,6 +392,37 @@ export class MenusService {
         if (nextStatus === 'rejected' || nextStatus === 'pending') {
           nextAssigneeId = null;
           nextAssigneeName = null;
+        }
+
+        const recipeProvided = Object.prototype.hasOwnProperty.call(
+          dto,
+          'recipeVariantId',
+        );
+        let nextRecipeId = recipeProvided ? dto.recipeVariantId : undefined;
+        if (
+          !recipeProvided &&
+          nextAssigneeId &&
+          nextAssigneeId !== previousAssigneeId
+        ) {
+          const skill = await skills.findOneBy({
+            householdId: user.householdId,
+            memberId: nextAssigneeId,
+            dishId: item.dishId,
+          });
+          nextRecipeId = skill?.preferredRecipeId ?? undefined;
+        }
+        if (nextRecipeId) {
+          const recipe = await variants.findOne({
+            where: {
+              id: nextRecipeId,
+              householdId: user.householdId,
+              dishId: item.dishId,
+              isArchived: false,
+            },
+          });
+          if (!recipe) throw new NotFoundException('所选做法不存在');
+          item.recipeVariantId = recipe.id;
+          item.recipeSnapshot = buildRecipeSnapshot(recipe);
         }
 
         const pendingEvents: MenuEvent[] = [];

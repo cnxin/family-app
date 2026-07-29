@@ -25,6 +25,7 @@ export type MenuEventType =
   | 'meal_chef_assigned'
   | 'menu_completed';
 export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
+export type DishSkillLevel = 'learning' | 'can_cook' | 'signature';
 
 export interface DishRecipeStep {
   text: string;
@@ -34,6 +35,25 @@ export interface DishRecipeStep {
 export interface DishReferenceLink {
   title?: string;
   url: string;
+}
+
+export interface DishRecipeSnapshot {
+  variantId: string;
+  name: string;
+  authorMemberId: string | null;
+  authorName: string | null;
+  note: string | null;
+  estMinutes: number | null;
+  ingredients: {
+    ingredientId: string;
+    name: string;
+    category: IngredientCategory;
+    isPantryStaple: boolean;
+    quantity: number;
+    unit: string;
+  }[];
+  steps: DishRecipeStep[];
+  referenceLinks: DishReferenceLink[];
 }
 
 @Entity('accounts')
@@ -349,6 +369,9 @@ export class Dish {
   @OneToMany(() => DishIngredient, (di) => di.dish, { cascade: true, eager: true })
   ingredients: DishIngredient[];
 
+  @OneToMany(() => DishRecipeVariant, (variant) => variant.dish)
+  recipeVariants: DishRecipeVariant[];
+
   @CreateDateColumn()
   createdAt: Date;
 }
@@ -383,6 +406,254 @@ export class DishIngredient {
 
   @Column({ default: '份' })
   unit: string;
+}
+
+@Entity('dish_recipe_variants')
+@Index('IDX_dish_recipe_variants_household_dish', [
+  'householdId',
+  'dishId',
+  'isArchived',
+])
+@Index('UQ_dish_recipe_variants_default', ['dishId'], {
+  unique: true,
+  where: '"isDefault" = true AND "isArchived" = false',
+})
+export class DishRecipeVariant {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_dish_recipe_variants_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Dish, (dish) => dish.recipeVariants, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'dishId',
+    foreignKeyConstraintName: 'FK_dish_recipe_variants_dish',
+  })
+  dish: Dish;
+
+  @Column('uuid')
+  dishId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  name: string;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'authorMemberId',
+    foreignKeyConstraintName: 'FK_dish_recipe_variants_author',
+  })
+  author: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  authorMemberId: string | null;
+
+  @Column({ default: false })
+  isDefault: boolean;
+
+  @Column({ default: false })
+  isArchived: boolean;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  estMinutes: number | null;
+
+  @OneToMany(() => DishRecipeVariantStep, (step) => step.variant, {
+    eager: true,
+  })
+  steps: DishRecipeVariantStep[];
+
+  @OneToMany(() => DishRecipeVariantLink, (link) => link.variant, {
+    eager: true,
+  })
+  referenceLinks: DishRecipeVariantLink[];
+
+  @OneToMany(
+    () => DishRecipeVariantIngredient,
+    (ingredient) => ingredient.variant,
+    { eager: true },
+  )
+  ingredients: DishRecipeVariantIngredient[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('dish_recipe_variant_steps')
+@Unique('UQ_dish_recipe_variant_steps_position', ['variantId', 'position'])
+export class DishRecipeVariantStep {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => DishRecipeVariant, (variant) => variant.steps, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'variantId',
+    foreignKeyConstraintName: 'FK_dish_recipe_variant_steps_variant',
+  })
+  variant: DishRecipeVariant;
+
+  @Column('uuid')
+  variantId: string;
+
+  @Column({ type: 'int' })
+  position: number;
+
+  @Column({ type: 'varchar', length: 2000 })
+  text: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  imageUrl: string | null;
+}
+
+@Entity('dish_recipe_variant_links')
+@Unique('UQ_dish_recipe_variant_links_position', ['variantId', 'position'])
+export class DishRecipeVariantLink {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => DishRecipeVariant, (variant) => variant.referenceLinks, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'variantId',
+    foreignKeyConstraintName: 'FK_dish_recipe_variant_links_variant',
+  })
+  variant: DishRecipeVariant;
+
+  @Column('uuid')
+  variantId: string;
+
+  @Column({ type: 'int' })
+  position: number;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  title: string | null;
+
+  @Column({ type: 'varchar', length: 1000 })
+  url: string;
+}
+
+@Entity('dish_recipe_variant_ingredients')
+@Unique('UQ_dish_recipe_variant_ingredients_item', [
+  'variantId',
+  'ingredientId',
+  'unit',
+])
+export class DishRecipeVariantIngredient {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => DishRecipeVariant, (variant) => variant.ingredients, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'variantId',
+    foreignKeyConstraintName: 'FK_dish_recipe_variant_ingredients_variant',
+  })
+  variant: DishRecipeVariant;
+
+  @Column('uuid')
+  variantId: string;
+
+  @ManyToOne(() => Ingredient, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'ingredientId',
+    foreignKeyConstraintName: 'FK_dish_recipe_variant_ingredients_ingredient',
+  })
+  ingredient: Ingredient;
+
+  @Column('uuid')
+  ingredientId: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantity: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  unit: string;
+}
+
+@Entity('member_dish_skills')
+@Check(
+  'CHK_member_dish_skills_level',
+  `"level" IN ('learning', 'can_cook', 'signature')`,
+)
+@Unique('UQ_member_dish_skills_member_dish', [
+  'householdId',
+  'memberId',
+  'dishId',
+])
+@Index('IDX_member_dish_skills_household_member', ['householdId', 'memberId'])
+export class MemberDishSkill {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_member_dish_skills_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_member_dish_skills_member',
+  })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @ManyToOne(() => Dish, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'dishId',
+    foreignKeyConstraintName: 'FK_member_dish_skills_dish',
+  })
+  dish: Dish;
+
+  @Column('uuid')
+  dishId: string;
+
+  @ManyToOne(() => DishRecipeVariant, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'preferredRecipeId',
+    foreignKeyConstraintName: 'FK_member_dish_skills_preferred_recipe',
+  })
+  preferredRecipe: DishRecipeVariant | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  preferredRecipeId: string | null;
+
+  @Column({ type: 'varchar', default: 'can_cook' })
+  level: DishSkillLevel;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  note: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
 }
 
 @Entity('menus')
@@ -504,6 +775,19 @@ export class MenuItem {
 
   @Column({ type: 'uuid', nullable: true })
   assignedToId: string | null;
+
+  @ManyToOne(() => DishRecipeVariant, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'recipeVariantId',
+    foreignKeyConstraintName: 'FK_menu_items_recipe_variant',
+  })
+  recipeVariant: DishRecipeVariant | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  recipeVariantId: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  recipeSnapshot: DishRecipeSnapshot | null;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -736,6 +1020,11 @@ export const ALL_ENTITIES = [
   Ingredient,
   Dish,
   DishIngredient,
+  DishRecipeVariant,
+  DishRecipeVariantStep,
+  DishRecipeVariantLink,
+  DishRecipeVariantIngredient,
+  MemberDishSkill,
   Menu,
   MenuItem,
   MenuEvent,

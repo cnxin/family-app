@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams } from 'expo-router';
 import {
   Bell,
+  BookOpenText,
   Check,
   ChefHat,
   ChevronDown,
@@ -40,6 +41,7 @@ import {
   useGenerateShoppingList,
   useMarkMenuNotificationRead,
   useMembers,
+  useRecipe,
   useMenuEvents,
   useMenuNotifications,
   useMenusOfDate,
@@ -224,6 +226,11 @@ function MenuItemRow({
   const c = useTheme();
   const update = useUpdateMenuItem();
   const [confirmingReject, setConfirmingReject] = useState(false);
+  const [choosingRecipe, setChoosingRecipe] = useState(false);
+  const { data: recipeDish, isLoading: recipesLoading } = useRecipe(
+    item.dishId,
+    choosingRecipe,
+  );
   const meta = STATUS_META[item.status];
   const dimmed = item.status === 'rejected';
   const actions = actionsFor(item, member.id, locked);
@@ -232,6 +239,7 @@ function MenuItemRow({
     status?: MenuItemStatus;
     assignedToId?: string;
     reason?: string;
+    recipeVariantId?: string;
   }) => {
     try {
       await update.mutateAsync({ id: item.id, ...input });
@@ -240,6 +248,7 @@ function MenuItemRow({
           Haptics.NotificationFeedbackType.Success,
         );
       }
+      if (input.recipeVariantId) setChoosingRecipe(false);
     } catch (error) {
       Alert.alert(
         '操作失败',
@@ -304,6 +313,25 @@ function MenuItemRow({
               {item.assignedTo.avatarEmoji} {item.assignedTo.name} 负责
             </Text>
           ) : null}
+          {item.recipeSnapshot ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={locked}
+              onPress={() => setChoosingRecipe(true)}
+              style={styles.recipeChoice}
+            >
+              <BookOpenText color={c.secondaryLabel} size={14} />
+              <Text
+                numberOfLines={1}
+                style={[t.caption, { color: c.secondaryLabel, flex: 1 }]}
+              >
+                {item.recipeSnapshot.authorName
+                  ? `${item.recipeSnapshot.authorName} · ${item.recipeSnapshot.name}`
+                  : `家庭默认 · ${item.recipeSnapshot.name}`}
+              </Text>
+              {!locked ? <ChevronDown color={c.tertiaryLabel} size={14} /> : null}
+            </Pressable>
+          ) : null}
         </View>
         <View style={styles.itemStatus}>
           <Text
@@ -357,6 +385,73 @@ function MenuItemRow({
         }
         visible={confirmingReject}
       />
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setChoosingRecipe(false)}
+        transparent
+        visible={choosingRecipe}
+      >
+        <View style={styles.dialogOverlay}>
+          <Pressable
+            accessibilityLabel="关闭做法选择"
+            accessibilityRole="button"
+            onPress={() => setChoosingRecipe(false)}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            accessibilityViewIsModal
+            style={[
+              styles.recipeDialog,
+              { backgroundColor: c.card, borderColor: c.separator },
+            ]}
+          >
+            <Text style={[t.title2, { color: c.label }]}>选择「{item.dish.name}」的做法</Text>
+            <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 6 }]}>
+              本餐采购会按所选做法中的食材计算
+            </Text>
+            {recipesLoading ? (
+              <ActivityIndicator color={c.tint} style={{ marginVertical: 28 }} />
+            ) : (
+              <ScrollView style={styles.recipeOptions}>
+                {(recipeDish?.recipeVariants ?? []).map((variant) => {
+                  const active = item.recipeVariantId === variant.id;
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      disabled={update.isPending}
+                      key={variant.id}
+                      onPress={() =>
+                        void applyChange({ recipeVariantId: variant.id })
+                      }
+                      style={[
+                        styles.recipeOption,
+                        {
+                          backgroundColor: active ? c.tintSoft : c.bg,
+                          borderColor: active ? c.tint : c.separator,
+                        },
+                      ]}
+                    >
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[t.headline, { color: c.label }]}>
+                          {variant.isDefault
+                            ? '家庭默认'
+                            : `${variant.author?.avatarEmoji ?? '👤'} ${variant.author?.name ?? '家庭成员'}`}
+                        </Text>
+                        <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>
+                          {variant.name}
+                          {variant.estMinutes ? ` · 约 ${variant.estMinutes} 分钟` : ''}
+                        </Text>
+                      </View>
+                      {active ? <Check color={c.tint} size={19} /> : null}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -808,6 +903,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   itemDetails: { flex: 1, minWidth: 0, marginLeft: 10 },
+  recipeChoice: {
+    minHeight: 28,
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: 260,
+  },
   itemStatus: { alignItems: 'flex-end', gap: 7, marginLeft: 8, maxWidth: 154 },
   itemActions: {
     flexDirection: 'row',
@@ -821,6 +924,25 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  recipeDialog: {
+    width: '100%',
+    maxWidth: 440,
+    maxHeight: '72%',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: 18,
+  },
+  recipeOptions: { marginTop: 14 },
+  recipeOption: {
+    minHeight: 62,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: 11,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   chefRow: {
     minHeight: 54,
