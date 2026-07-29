@@ -51,7 +51,8 @@ const db = new Client({
 
 await db.connect();
 let memberId = null;
-let originalPinHash = null;
+let memberAccountId = null;
+let originalPasswordHash = null;
 let originalRole = null;
 let testHouseholdId = null;
 const transactionIds = {
@@ -61,7 +62,30 @@ const transactionIds = {
 };
 
 try {
-  const initialMembers = await request('/members');
+  const anonymousMembers = await request('/members');
+  assert(anonymousMembers.status === 401, '成员目录需要登录后才能访问');
+
+  const unknownAccount = await request('/auth/login', null, 'POST', {
+    loginName: '不存在的账号',
+    password: 'wrong-password',
+  });
+  const wrongOwnerPassword = await request('/auth/login', null, 'POST', {
+    loginName: '爸爸',
+    password: 'wrong-password',
+  });
+  assert(
+    unknownAccount.status === 401 && wrongOwnerPassword.status === 401,
+    '未知账号和错误密码返回相同认证失败',
+  );
+
+  const chefLogin = await request('/auth/login', null, 'POST', {
+    loginName: '爸爸',
+    password: 'family1234',
+  });
+  assert(chefLogin.status === 201, '家庭所有者账号可登录');
+  const chefSession = chefLogin.body.data;
+  const chefToken = chefSession.accessToken;
+  const initialMembers = await request('/members', chefToken);
   const chef = initialMembers.body.data.find(
     (member) => member.role === 'owner' && member.prefersCooking,
   );
@@ -70,47 +94,55 @@ try {
   memberId = member.id;
   originalRole = member.role;
 
-  const pinRow = await db.query(
-    'SELECT "pinHash" FROM members WHERE id = $1',
+  const accountRow = await db.query(
+    `SELECT account.id, account."passwordHash"
+     FROM accounts account
+     JOIN members member ON member."accountId" = account.id
+     WHERE member.id = $1`,
     [member.id],
   );
-  originalPinHash = pinRow.rows[0].pinHash;
-  await db.query('UPDATE members SET "pinHash" = $1 WHERE id = $2', [
-    await bcrypt.hash('2468', 12),
-    member.id,
+  memberAccountId = accountRow.rows[0].id;
+  originalPasswordHash = accountRow.rows[0].passwordHash;
+  await db.query('UPDATE accounts SET "passwordHash" = $1 WHERE id = $2', [
+    await bcrypt.hash('member-password-2468', 12),
+    memberAccountId,
   ]);
 
-  const publicMembers = await request('/members');
-  const publicMember = publicMembers.body.data.find((item) => item.id === member.id);
-  assert(publicMember.hasPin === true, '公开成员列表只暴露 hasPin');
-  assert(!('pinHash' in publicMember), '公开成员列表不泄露 PIN 哈希');
-
-  const missingPin = await request('/auth/login', null, 'POST', {
-    memberId: member.id,
+  const missingPassword = await request('/auth/login', null, 'POST', {
+    loginName: '妈妈',
   });
-  const wrongPin = await request('/auth/login', null, 'POST', {
-    memberId: member.id,
-    pin: '0000',
+  const wrongPassword = await request('/auth/login', null, 'POST', {
+    loginName: '妈妈',
+    password: 'wrong-password',
   });
-  assert(missingPin.status === 401 && wrongPin.status === 401, '缺少或错误 PIN 无法登录');
+  assert(
+    missingPassword.status === 401 && wrongPassword.status === 401,
+    '缺少或错误账号密码无法登录',
+  );
 
   const memberLogin = await request('/auth/login', null, 'POST', {
-    memberId: member.id,
-    pin: '2468',
+    loginName: '妈妈',
+    password: 'member-password-2468',
   });
-  const chefLogin = await request('/auth/login', null, 'POST', {
-    memberId: chef.id,
-  });
-  assert(memberLogin.status === 201 && chefLogin.status === 201, '正确凭据可登录');
+  assert(memberLogin.status === 201, '正确账号密码可登录');
   const memberSession = memberLogin.body.data;
-  const chefSession = chefLogin.body.data;
   let memberToken = memberSession.accessToken;
   let memberRefreshToken = memberSession.refreshToken;
-  const chefToken = chefSession.accessToken;
   assert(
     memberSession.token === memberSession.accessToken &&
-      typeof memberSession.refreshToken === 'string',
-    '登录响应提供访问令牌、刷新令牌并保留 token 兼容字段',
+      typeof memberSession.refreshToken === 'string' &&
+      memberSession.account.id === memberAccountId &&
+      memberSession.account.loginName === '妈妈',
+    '登录响应提供账号、成员、访问令牌和轮换刷新令牌',
+  );
+  assert(
+    initialMembers.body.data.every(
+      (profile) =>
+        !('accountId' in profile) &&
+        !('passwordHash' in profile) &&
+        !('pinHash' in profile),
+    ),
+    '家庭成员目录不泄露账号关联或凭据摘要',
   );
   assert(
     memberLogin.headers.get('cache-control') === 'no-store',
@@ -142,9 +174,11 @@ try {
   );
   assert(
     payload.memberId === member.id &&
-      payload.sub === member.id &&
+      payload.accountId === memberAccountId &&
+      payload.sub === memberAccountId &&
+      payload.sub !== payload.memberId &&
       typeof payload.sid === 'string',
-    'JWT 包含明确成员身份和服务端会话 ID',
+    'JWT 区分登录账号、当前家庭成员身份和服务端会话',
   );
   assert(payload.exp - payload.iat <= 900, '访问令牌有效期不超过 15 分钟');
 
@@ -190,6 +224,39 @@ try {
   );
   memberToken = successfulRefresh.body.data.accessToken;
   memberRefreshToken = successfulRefresh.body.data.refreshToken;
+
+  const parallelPasswordSession = (
+    await request('/auth/login', null, 'POST', {
+      loginName: '妈妈',
+      password: 'member-password-2468',
+    })
+  ).body.data;
+  const updatedPassword = await request(
+    '/accounts/me/password',
+    memberToken,
+    'PATCH',
+    {
+      currentPassword: 'member-password-2468',
+      newPassword: 'member-password-updated-8642',
+    },
+  );
+  const currentAfterPasswordUpdate = await request('/dishes', memberToken);
+  const parallelAfterPasswordUpdate = await request(
+    '/dishes',
+    parallelPasswordSession.accessToken,
+  );
+  const oldPasswordLogin = await request('/auth/login', null, 'POST', {
+    loginName: '妈妈',
+    password: 'member-password-2468',
+  });
+  assert(
+    updatedPassword.status === 200 &&
+      updatedPassword.body.data.requiresPasswordSetup === false &&
+      currentAfterPasswordUpdate.status === 200 &&
+      parallelAfterPasswordUpdate.status === 401 &&
+      oldPasswordLogin.status === 401,
+    '更新账号密码保留当前会话并撤销账号的其他会话',
+  );
 
   const invalidMenuDate = await request('/menus?date=not-a-date', memberToken);
   const invalidMealType = await request(
@@ -261,11 +328,14 @@ try {
   );
   assert(firstOrder.status === 201, '普通成员可以点菜');
   assert(
-    !('pinHash' in firstOrder.body.data.chef) &&
+    !('accountId' in firstOrder.body.data.chef) &&
+      !('passwordHash' in firstOrder.body.data.chef) &&
       firstOrder.body.data.items.every(
-        (item) => !('pinHash' in item.requestedBy),
+        (item) =>
+          !('accountId' in item.requestedBy) &&
+          !('passwordHash' in item.requestedBy),
       ),
-    '菜单成员关系不会泄露 PIN 哈希',
+    '菜单成员关系不会泄露账号关联或密码哈希',
   );
 
   const duplicate = await request(
@@ -682,8 +752,8 @@ try {
 
   const roleSession = (
     await request('/auth/login', null, 'POST', {
-      memberId: member.id,
-      pin: '2468',
+      loginName: '妈妈',
+      password: 'member-password-updated-8642',
     })
   ).body.data;
   await db.query(`UPDATE members SET role = 'admin' WHERE id = $1`, [member.id]);
@@ -702,25 +772,25 @@ try {
 
   const credentialSession = (
     await request('/auth/login', null, 'POST', {
-      memberId: member.id,
-      pin: '2468',
+      loginName: '妈妈',
+      password: 'member-password-updated-8642',
     })
   ).body.data;
-  const temporaryPin = await db.query(
-    'SELECT "pinHash" FROM members WHERE id = $1',
-    [member.id],
+  const temporaryPassword = await db.query(
+    'SELECT "passwordHash" FROM accounts WHERE id = $1',
+    [memberAccountId],
   );
-  await db.query('UPDATE members SET "pinHash" = $1 WHERE id = $2', [
-    await bcrypt.hash('1357', 12),
-    member.id,
+  await db.query('UPDATE accounts SET "passwordHash" = $1 WHERE id = $2', [
+    await bcrypt.hash('changed-password-1357', 12),
+    memberAccountId,
   ]);
   const changedCredentialAccess = await request(
     '/dishes',
     credentialSession.accessToken,
   );
-  await db.query('UPDATE members SET "pinHash" = $1 WHERE id = $2', [
-    temporaryPin.rows[0].pinHash,
-    member.id,
+  await db.query('UPDATE accounts SET "passwordHash" = $1 WHERE id = $2', [
+    temporaryPassword.rows[0].passwordHash,
+    memberAccountId,
   ]);
   const restoredCredentialAccess = await request(
     '/dishes',
@@ -733,7 +803,7 @@ try {
     changedCredentialAccess.status === 401 &&
       restoredCredentialAccess.status === 401 &&
       changedCredentialRefresh.status === 401,
-    'PIN 凭据变化会永久撤销旧会话',
+    '账号密码变化会永久撤销旧会话',
   );
 
   console.log('\n认证、安全与业务一致性测试全部通过');
@@ -755,10 +825,15 @@ try {
     [memberId, TEST_DATE, LOCK_TEST_DATE],
   );
   if (memberId) {
-    await db.query('UPDATE members SET "pinHash" = $1, role = $2 WHERE id = $3', [
-      originalPinHash,
+    await db.query('UPDATE members SET role = $1 WHERE id = $2', [
       originalRole,
       memberId,
+    ]);
+  }
+  if (memberAccountId) {
+    await db.query('UPDATE accounts SET "passwordHash" = $1 WHERE id = $2', [
+      originalPasswordHash,
+      memberAccountId,
     ]);
   }
   await db.end();

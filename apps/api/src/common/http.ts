@@ -74,6 +74,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       requestId,
       method: request.method,
       path: normalizedRequestPath(request),
+      accountId: request.user?.accountId,
       householdId: request.user?.householdId,
       memberId: request.user?.memberId,
       summary: summarizeException(exception),

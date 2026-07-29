@@ -22,12 +22,19 @@ function assert(cond, msg) {
   console.log(`  ✓ ${msg}`);
 }
 
+({ token } = await api('/auth/login', 'POST', {
+  loginName: '爸爸',
+  password: 'family1234',
+}));
 const members = await api('/members');
 const mom = members.find((m) => m.name === '妈妈');
 const dad = members.find((m) => m.prefersCooking) ?? members[0];
 
 console.log('0. 清场：划掉今天已有的菜（保证可重复跑）');
-({ token } = await api('/auth/login', 'POST', { memberId: dad.id }));
+({ token } = await api('/auth/login', 'POST', {
+  loginName: '爸爸',
+  password: 'family1234',
+}));
 for (const meal of await api(`/menus?date=${today}`)) {
   for (const item of meal.items) {
     if (item.status !== 'rejected' && item.status !== 'done') {
@@ -43,7 +50,10 @@ for (const meal of await api(`/menus?date=${today}`)) {
 }
 
 console.log('1. 妈妈登录点菜');
-({ token } = await api('/auth/login', 'POST', { memberId: mom.id }));
+({ token } = await api('/auth/login', 'POST', {
+  loginName: '妈妈',
+  password: 'family1234',
+}));
 const dishes = await api('/dishes');
 assert(dishes.length >= 15, `菜谱库有 ${dishes.length} 道菜`);
 
@@ -63,8 +73,11 @@ const menuAfter = await api(`/menus?date=${today}&mealType=dinner`);
 assert(menuAfter.items.length >= 3, `晚餐菜单有 ${menuAfter.items.length} 道菜`);
 assert(menuAfter.items.some((i) => i.note === '少辣'), '备注「少辣」已保存');
 
-console.log('2. 家庭成员登录认领');
-({ token } = await api('/auth/login', 'POST', { memberId: dad.id }));
+console.log('2. 爸爸账号登录认领');
+({ token } = await api('/auth/login', 'POST', {
+  loginName: '爸爸',
+  password: 'family1234',
+}));
 const ours = pick.map((dish) =>
   menuAfter.items.find(
     (item) =>

@@ -5,10 +5,13 @@ import {
 } from '@tanstack/react-query';
 import { api } from './api';
 import type {
+  AccountProfile,
+  CreatedHouseholdInvitation,
   Dish,
   DishRecipeStep,
   DishReferenceLink,
   Ingredient,
+  HouseholdInvitation,
   InventoryCategory,
   InventoryItem,
   Member,
@@ -179,6 +182,55 @@ export function useUpdateCookingPreference() {
         body: { prefersCooking },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['members'] }),
+  });
+}
+
+export function useUpdatePassword() {
+  return useMutation({
+    mutationFn: (input: { currentPassword?: string; newPassword: string }) =>
+      api<AccountProfile>('/accounts/me/password', {
+        method: 'PATCH',
+        body: input,
+      }),
+  });
+}
+
+export function useHouseholdInvitations(enabled = true) {
+  return useQuery({
+    queryKey: ['household-invitations'],
+    queryFn: () =>
+      api<HouseholdInvitation[]>('/household/invitations'),
+    enabled,
+  });
+}
+
+export function useCreateHouseholdInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      memberName: string;
+      avatarEmoji?: string;
+      role: 'admin' | 'member';
+      expiresInHours?: number;
+    }) =>
+      api<CreatedHouseholdInvitation>('/household/invitations', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['household-invitations'] }),
+  });
+}
+
+export function useRevokeHouseholdInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<HouseholdInvitation>(`/household/invitations/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['household-invitations'] }),
   });
 }
 

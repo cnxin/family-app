@@ -6,7 +6,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const UUID_PATH_PATTERN =
   /\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?=\/|$)/gi;
 const SENSITIVE_TEXT_PATTERN =
-  /\b(?:authorization|bearer|password|passwd|pin|refresh[_-]?token|access[_-]?token|jwt[_-]?secret|db[_-]?password)\b(?:\s*[:=]?\s*[^\s,;]*)?/gi;
+  /\b(?:authorization|bearer|password|passwd|pin|refresh[_-]?token|access[_-]?token|invitation[_-]?token|bootstrap[_-]?secret|jwt[_-]?secret|db[_-]?password)\b(?:\s*[:=]?\s*[^\s,;]*)?/gi;
 const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 
 export interface RequestContext {
@@ -17,6 +17,7 @@ export interface RequestContext {
 export type ObservedRequest = Request & {
   requestContext?: RequestContext;
   user?: {
+    accountId?: string;
     householdId?: string;
     memberId?: string;
   };
@@ -158,6 +159,7 @@ export function requestContextMiddleware(
         statusCode: response.statusCode,
         durationMs: Number(durationMs.toFixed(2)),
         errorCode: observedRequest.requestContext?.errorCode,
+        accountId: observedRequest.user?.accountId,
         householdId: observedRequest.user?.householdId,
         memberId: observedRequest.user?.memberId,
       });

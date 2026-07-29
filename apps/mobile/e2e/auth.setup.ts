@@ -12,30 +12,54 @@ const authFiles = {
   desktop: resolve(process.cwd(), 'e2e/.auth/desktop.json'),
 };
 const apiURL = process.env.FAMILY_API_URL ?? 'http://127.0.0.1:3100';
+const e2eLoginName = process.env.E2E_LOGIN_NAME ?? '爸爸';
+const configuredPassword = process.env.E2E_ACCOUNT_PASSWORD;
+const passwordCandidates =
+  configuredPassword === undefined
+    ? ['family1234', '']
+    : [configuredPassword];
 
 async function loginWithMouse(
   page: Page,
   request: APIRequestContext,
   authFile: string,
 ) {
-  const apiHealth = await request.get(`${apiURL}/members`);
+  const apiHealth = await request.get(`${apiURL}/health/ready`);
   expect(apiHealth.ok(), `API 未就绪：${apiURL}`).toBeTruthy();
 
   await page.goto('/login');
   await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
 
-  const memberButton = page
-    .getByRole('button')
-    .filter({ hasText: /爸爸|妈妈/ })
-    .first();
-  await expect(memberButton).toBeVisible();
-  await memberButton.click();
+  const loginName = page.getByPlaceholder('输入账号');
+  await expect(loginName).toBeVisible();
+  await loginName.fill(e2eLoginName);
 
-  const enterButton = page.getByRole('button', {
-    name: /以.+身份进入/,
-  });
-  await expect(enterButton).toBeEnabled();
-  await enterButton.click();
+  const password = page.getByPlaceholder('输入密码');
+  await expect(password).toBeVisible();
+
+  const loginButton = page.getByRole('button', { name: '登录', exact: true });
+  await expect(loginButton).toBeEnabled();
+
+  let authenticated = false;
+  for (const [index, candidate] of passwordCandidates.entries()) {
+    await password.fill(candidate);
+    await loginButton.click();
+    try {
+      await page.waitForURL((url) => !/\/login\/?$/.test(url.pathname), {
+        timeout: 5_000,
+      });
+      authenticated = true;
+      break;
+    } catch {
+      if (index < passwordCandidates.length - 1) {
+        await expect(loginButton).toBeEnabled();
+      }
+    }
+  }
+  expect(
+    authenticated,
+    '测试账号登录失败；已补设密码时请配置 E2E_ACCOUNT_PASSWORD',
+  ).toBeTruthy();
 
   await expect(page).not.toHaveURL(/\/login$/);
   await expect(

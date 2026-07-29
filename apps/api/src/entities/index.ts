@@ -36,6 +36,33 @@ export interface DishReferenceLink {
   url: string;
 }
 
+@Entity('accounts')
+@Index('UQ_accounts_login_name_normalized', ['loginNameNormalized'], {
+  unique: true,
+})
+export class Account {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  loginName: string;
+
+  @Column({ type: 'varchar', length: 64, select: false })
+  loginNameNormalized: string;
+
+  @Column({ type: 'varchar', nullable: true, select: false })
+  passwordHash: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  disabledAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('households')
 export class Household {
   @PrimaryGeneratedColumn('uuid')
@@ -60,6 +87,8 @@ export class Household {
 @Entity('members')
 @Check('CHK_members_role', `"role" IN ('owner', 'admin', 'member')`)
 @Index('IDX_members_household', ['householdId'])
+@Index('IDX_members_account', ['accountId'])
+@Unique('UQ_members_household_account', ['householdId', 'accountId'])
 export class Member {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -74,6 +103,16 @@ export class Member {
   @Column('uuid')
   householdId: string;
 
+  @ManyToOne(() => Account, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'accountId',
+    foreignKeyConstraintName: 'FK_members_account',
+  })
+  account: Account | null;
+
+  @Column({ type: 'uuid', nullable: true, select: false })
+  accountId: string | null;
+
   @Column()
   name: string;
 
@@ -85,9 +124,6 @@ export class Member {
 
   @Column({ default: false })
   prefersCooking: boolean;
-
-  @Column({ type: 'varchar', nullable: true, select: false })
-  pinHash: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -102,6 +138,7 @@ export class Member {
   unique: true,
 })
 @Index('IDX_auth_sessions_member_status', ['memberId', 'revokedAt'])
+@Index('IDX_auth_sessions_account_status', ['accountId', 'revokedAt'])
 export class AuthSession {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -115,6 +152,16 @@ export class AuthSession {
 
   @Column('uuid')
   householdId: string;
+
+  @ManyToOne(() => Account, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'accountId',
+    foreignKeyConstraintName: 'FK_auth_sessions_account',
+  })
+  account: Account;
+
+  @Column('uuid')
+  accountId: string;
 
   @ManyToOne(() => Member, { onDelete: 'CASCADE' })
   @JoinColumn({
@@ -149,6 +196,78 @@ export class AuthSession {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
+}
+
+@Entity('household_invitations')
+@Check(
+  'CHK_household_invitations_role',
+  `"role" IN ('admin', 'member')`,
+)
+@Index('UQ_household_invitations_token_hash', ['tokenHash'], {
+  unique: true,
+})
+@Index('IDX_household_invitations_household_status', [
+  'householdId',
+  'acceptedAt',
+  'revokedAt',
+])
+export class HouseholdInvitation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_household_invitations_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 64, select: false })
+  tokenHash: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  memberName: string;
+
+  @Column({ type: 'varchar', length: 16, default: '🙂' })
+  avatarEmoji: string;
+
+  @Column({ type: 'varchar', default: 'member' })
+  role: Exclude<MemberRole, 'owner'>;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'invitedById',
+    foreignKeyConstraintName: 'FK_household_invitations_invited_by',
+  })
+  invitedBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  invitedById: string | null;
+
+  @ManyToOne(() => Account, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'acceptedByAccountId',
+    foreignKeyConstraintName: 'FK_household_invitations_accepted_by_account',
+  })
+  acceptedByAccount: Account | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  acceptedByAccountId: string | null;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  acceptedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  revokedAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
 }
 
 @Entity('ingredients')
@@ -561,9 +680,11 @@ export class InventoryItem {
 }
 
 export const ALL_ENTITIES = [
+  Account,
   Household,
   Member,
   AuthSession,
+  HouseholdInvitation,
   Ingredient,
   Dish,
   DishIngredient,

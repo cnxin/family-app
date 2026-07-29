@@ -11,7 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Request } from 'express';
 import { Repository } from 'typeorm';
-import { AuthSession, Member, MemberRole } from '../entities';
+import { Account, AuthSession, Member, MemberRole } from '../entities';
 import { credentialSnapshot } from './session.tokens';
 
 export const IS_PUBLIC = 'isPublic';
@@ -19,6 +19,7 @@ export const Public = () => SetMetadata(IS_PUBLIC, true);
 
 export interface JwtUser {
   sub: string;
+  accountId: string;
   memberId: string;
   householdId: string;
   sid: string;
@@ -36,6 +37,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
+    @InjectRepository(Account) private readonly accounts: Repository<Account>,
     @InjectRepository(Member) private readonly members: Repository<Member>,
     @InjectRepository(AuthSession)
     private readonly sessions: Repository<AuthSession>,
@@ -57,7 +59,8 @@ export class JwtAuthGuard implements CanActivate {
       user = await this.jwt.verifyAsync<JwtUser>(token);
       if (
         !user.sub ||
-        user.memberId !== user.sub ||
+        user.accountId !== user.sub ||
+        !user.memberId ||
         !user.householdId ||
         !user.sid
       ) {
@@ -68,10 +71,19 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('登录已过期，请重新登录');
     }
 
-    const [member, session] = await Promise.all([
+    const [account, member, session] = await Promise.all([
+      this.accounts.findOne({
+        where: { id: user.accountId },
+        select: {
+          id: true,
+          passwordHash: true,
+          disabledAt: true,
+        },
+      }),
       this.members.findOne({
         where: {
           id: user.memberId,
+          accountId: user.accountId,
           householdId: user.householdId,
         },
         select: {
@@ -79,16 +91,18 @@ export class JwtAuthGuard implements CanActivate {
           householdId: true,
           name: true,
           role: true,
-          pinHash: true,
         },
       }),
       this.sessions.findOneBy({
         id: user.sid,
+        accountId: user.accountId,
         memberId: user.memberId,
         householdId: user.householdId,
       }),
     ]);
     if (
+      !account ||
+      account.disabledAt ||
       !member ||
       !session ||
       session.revokedAt ||
@@ -100,7 +114,7 @@ export class JwtAuthGuard implements CanActivate {
     if (
       user.role !== session.roleSnapshot ||
       member.role !== session.roleSnapshot ||
-      credentialSnapshot(member.pinHash) !== session.credentialSnapshot
+      credentialSnapshot(account.passwordHash) !== session.credentialSnapshot
     ) {
       await this.sessions.update(session.id, { revokedAt: new Date() });
       throw new UnauthorizedException('成员权限或凭据已更新，请重新登录');

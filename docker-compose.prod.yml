@@ -57,12 +57,14 @@ services:
       REFRESH_TOKEN_EXPIRES_SECONDS: ${REFRESH_TOKEN_EXPIRES_SECONDS:-2592000}
       LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-5}
       LOGIN_RATE_WINDOW_MS: ${LOGIN_RATE_WINDOW_MS:-60000}
+      BOOTSTRAP_SECRET_FILE: /run/secrets/bootstrap_secret
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       TZ: ${TZ:-Asia/Shanghai}
     secrets:
       - db_password
       - jwt_secret
+      - bootstrap_secret
     volumes:
       - family_app_uploads_prod:/app/apps/api/uploads
     tmpfs:
@@ -136,6 +138,8 @@ secrets:
     file: ${DB_PASSWORD_SECRET_PATH:-./deploy/secrets/db_password.txt}
   jwt_secret:
     file: ${JWT_SECRET_PATH:-./deploy/secrets/jwt_secret.txt}
+  bootstrap_secret:
+    file: ${BOOTSTRAP_SECRET_PATH:-./deploy/secrets/bootstrap_secret.txt}
 
 volumes:
   family_app_pgdata_prod:

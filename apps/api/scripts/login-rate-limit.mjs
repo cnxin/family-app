@@ -5,17 +5,12 @@ function assert(condition, message) {
   console.log(`  ✓ ${message}`);
 }
 
-const membersResponse = await fetch(`${BASE}/members`);
-const members = (await membersResponse.json()).data;
-const member = members.find((item) => !item.hasPin);
-assert(member, '存在无需 PIN 的限流测试成员');
-
 const statuses = [];
 for (let attempt = 0; attempt < 4; attempt += 1) {
   const response = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ memberId: member.id }),
+    body: JSON.stringify({ loginName: '爸爸', password: 'family1234' }),
   });
   statuses.push(response.status);
 }

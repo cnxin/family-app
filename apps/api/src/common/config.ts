@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 
 function readConfiguredSecret(
-  name: 'DB_PASSWORD' | 'JWT_SECRET',
+  name: 'BOOTSTRAP_SECRET' | 'DB_PASSWORD' | 'JWT_SECRET',
   developmentFallback: string,
 ) {
   const fileVariable = `${name}_FILE`;
@@ -33,6 +33,13 @@ export function jwtSecret() {
   return readConfiguredSecret('JWT_SECRET', 'family-app-dev-secret');
 }
 
+export function bootstrapSecret() {
+  return readConfiguredSecret(
+    'BOOTSTRAP_SECRET',
+    'family-app-local-bootstrap-secret',
+  );
+}
+
 export function trustProxyHops() {
   const rawValue = process.env.TRUST_PROXY_HOPS?.trim();
   if (!rawValue) return 0;
@@ -46,6 +53,7 @@ export function trustProxyHops() {
 export function validateRuntimeConfiguration() {
   databasePassword();
   jwtSecret();
+  bootstrapSecret();
   trustProxyHops();
   if (
     process.env.NODE_ENV === 'production' &&

@@ -23,13 +23,17 @@ export function createRefreshToken(): string {
   return randomBytes(48).toString('base64url');
 }
 
+export function createInvitationToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
 export function hashRefreshToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
-export function credentialSnapshot(pinHash: string | null): string {
+export function credentialSnapshot(passwordHash: string | null): string {
   return createHash('sha256')
-    .update(`family-app-credential:${pinHash ?? 'no-pin'}`, 'utf8')
+    .update(`family-app-credential:${passwordHash ?? 'no-pin'}`, 'utf8')
     .digest('hex');
 }
 

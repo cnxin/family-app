@@ -28,7 +28,39 @@ export interface Member {
   avatarEmoji: string;
   role: MemberRole;
   prefersCooking: boolean;
-  hasPin?: boolean;
+}
+
+export interface AccountProfile {
+  id: string;
+  loginName: string;
+  requiresPasswordSetup: boolean;
+}
+
+export interface AuthSetupStatus {
+  initialized: boolean;
+}
+
+export interface HouseholdInvitation {
+  id: string;
+  memberName: string;
+  avatarEmoji: string;
+  role: Exclude<MemberRole, 'owner'>;
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreatedHouseholdInvitation extends HouseholdInvitation {
+  invitationToken: string;
+}
+
+export interface InvitationPreview {
+  householdName: string;
+  memberName: string;
+  avatarEmoji: string;
+  role: Exclude<MemberRole, 'owner'>;
+  expiresAt: string;
 }
 
 export interface Ingredient {

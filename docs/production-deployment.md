@@ -18,6 +18,7 @@ cp deploy/.env.production.example deploy/.env.production
 mkdir -p deploy/secrets
 openssl rand -base64 48 > deploy/secrets/db_password.txt
 openssl rand -hex 64 > deploy/secrets/jwt_secret.txt
+openssl rand -hex 32 > deploy/secrets/bootstrap_secret.txt
 chmod 600 deploy/.env.production deploy/secrets/*.txt
 ```
 
@@ -28,7 +29,7 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - `APP_VERSION` 建议使用发布版本或 Git 提交短哈希，不要长期依赖 `latest`。
 - 根据主机内存调整资源限制。默认值适合小型家庭实例的起点，不等于容量承诺。
 
-环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥以及未来的连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效。
+环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥以及未来的连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效。
 
 ## 3. 校验并启动
 
@@ -43,7 +44,18 @@ docker compose --env-file deploy/.env.production \
   -f docker-compose.prod.yml up -d
 ```
 
-首次启动会在空数据库上执行 TypeORM 迁移，但不会创建“爸爸/妈妈”等演示数据。已有家庭数据应从经过校验的备份恢复；正式的首户注册流程会在后续账号模型批次实现。
+首次启动会在空数据库上执行 TypeORM 迁移，但不会创建“爸爸/妈妈”等演示数据。打开站点后，初始化页面要求填写家庭名称、首位管理员、登录账号、至少 8 位密码，以及 `deploy/secrets/bootstrap_secret.txt` 中的初始化密钥。初始化使用数据库事务与互斥锁，只有数据库完全未建户时可成功一次；之后同一密钥不能再创建家庭。
+
+首位所有者可在“我的 -> 成员邀请”生成 48 小时邀请码。邀请码只在创建响应中出现明文，服务端只保存摘要；领取、过期或撤销后不能复用。`owner/admin` 可以创建和撤销邀请，普通成员不能管理邀请。
+
+已有家庭数据应先从经过校验的备份恢复。账号迁移会为每个现有成员建立独立账号，账号名默认沿用成员名，重复名称追加数字后缀，并把原 PIN 哈希迁入账号。没有 PIN 的旧账号可暂时用空密码登录，随后必须在“账号安全”补设密码。需要核对迁移生成的账号名时，可执行：
+
+```bash
+docker compose --env-file deploy/.env.production \
+  -f docker-compose.prod.yml exec db \
+  psql -U family -d family_app \
+  -c 'SELECT "loginName" FROM accounts ORDER BY "createdAt";'
+```
 
 健康检查：
 
@@ -58,9 +70,9 @@ curl https://family.example.com/api/health/ready
 
 - 宿主机只映射 Caddy 的 80/443；PostgreSQL 与 API 没有宿主机端口。
 - Caddy 为前端和 API 设置基础安全响应头；关闭含客户端地址和完整 URI 的访问日志，只保留轮转后的运行与错误日志。
-- API 只记录请求 ID、路由模板、状态、耗时和成员/家庭 UUID，不记录请求体、查询值、姓名、IP、PIN 或令牌。
+- API 只记录请求 ID、路由模板、状态、耗时和账号/成员/家庭 UUID，不记录请求体、查询值、姓名、IP、密码或令牌。
 - `TRUST_PROXY_HOPS=1` 只信任紧邻 API 的 Caddy。改变代理层数时必须同步调整，不能使用无边界的代理信任。
-- Web 会话当前仍保存在 `localStorage`，因此 HTTPS 不能消除 XSS 风险。对外开放前应保持依赖更新，并在账号模型稳定后评估同站 `HttpOnly` Cookie。
+- Web 会话当前仍保存在 `localStorage`，因此 HTTPS 不能消除 XSS 风险。对外开放前应保持依赖更新，并评估改用同站 `HttpOnly` Cookie。
 
 ## 5. 备份与更新
 
@@ -70,7 +82,7 @@ curl https://family.example.com/api/health/ready
 ./scripts/backup-prod.sh
 ```
 
-备份包含 PostgreSQL 自定义格式导出、上传附件压缩包、迁移与 Git 版本清单及 SHA-256 校验和，默认写入 `backups-production/`。密钥文件故意不进入业务备份，必须另存一份加密保护的副本。至少保留一个不在当前主机上的备份，并定期在空数据库中演练恢复。
+备份包含 PostgreSQL 自定义格式导出、上传附件压缩包、迁移与 Git 版本清单及 SHA-256 校验和，默认写入 `backups-production/`。数据库、JWT 和初始化密钥文件故意不进入业务备份，必须另存一份加密保护的副本。至少保留一个不在当前主机上的备份，并定期在空数据库中演练恢复。
 
 更新前先备份，再构建并启动固定版本：
 

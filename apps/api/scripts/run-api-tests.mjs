@@ -10,6 +10,7 @@ const TEST_DATABASE = `family_app_test_${randomUUID().replaceAll('-', '')}`;
 const testEnvironment = {
   ...process.env,
   API_URL,
+  BOOTSTRAP_SECRET: 'family-app-api-test-bootstrap-secret',
   DB_NAME: TEST_DATABASE,
   CORS_ORIGINS: 'http://localhost:8081,http://192.168.1.20:8081',
   JWT_EXPIRES_SECONDS: '900',
@@ -91,6 +92,7 @@ function assertApiLogs(output) {
   );
   if (
     !authenticated ||
+    typeof authenticated.accountId !== 'string' ||
     typeof authenticated.householdId !== 'string' ||
     typeof authenticated.memberId !== 'string' ||
     typeof authenticated.durationMs !== 'number' ||
@@ -170,6 +172,18 @@ try {
   await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
   databaseCreated = true;
   console.log(`临时测试数据库：${TEST_DATABASE}`);
+
+  api = startApi();
+  await waitForApi(api);
+  await runScript('scripts/bootstrap-invitations.mjs');
+  await stopApi();
+  await admin.query(
+    'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',
+    [TEST_DATABASE],
+  );
+  await admin.query(`DROP DATABASE "${TEST_DATABASE}"`);
+  await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
+  console.log('  ✓ 全新数据库初始化演练完成，已重建业务测试库');
 
   await runProcess(process.execPath, [
     '-r',

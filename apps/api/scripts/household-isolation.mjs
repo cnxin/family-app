@@ -47,6 +47,7 @@ async function request(path, token, method = 'GET', body) {
 
 const ids = {
   household: randomUUID(),
+  account: randomUUID(),
   member: randomUUID(),
   session: randomUUID(),
   ingredient: randomUUID(),
@@ -70,21 +71,28 @@ await db.connect();
 
 try {
   await db.query(
+    `INSERT INTO accounts
+       (id, "loginName", "loginNameNormalized")
+     VALUES ($1, $2, $3)`,
+    [ids.account, '隔离测试账号', `isolation-${ids.account}`],
+  );
+  await db.query(
     'INSERT INTO households (id, name, slug) VALUES ($1, $2, $3)',
     [ids.household, '隔离测试家庭', `isolation-${ids.household}`],
   );
   await db.query(
-    'INSERT INTO members (id, "householdId", name, "avatarEmoji", role) VALUES ($1, $2, $3, $4, $5)',
-    [ids.member, ids.household, '隔离测试成员', 'T', 'member'],
+    'INSERT INTO members (id, "householdId", "accountId", name, "avatarEmoji", role) VALUES ($1, $2, $3, $4, $5, $6)',
+    [ids.member, ids.household, ids.account, '隔离测试成员', 'T', 'member'],
   );
   await db.query(
     `INSERT INTO auth_sessions
-       (id, "householdId", "memberId", "refreshTokenHash", "roleSnapshot",
+       (id, "householdId", "accountId", "memberId", "refreshTokenHash", "roleSnapshot",
         "credentialSnapshot", "expiresAt")
-     VALUES ($1, $2, $3, $4, 'member', $5, now() + interval '10 minutes')`,
+     VALUES ($1, $2, $3, $4, $5, 'member', $6, now() + interval '10 minutes')`,
     [
       ids.session,
       ids.household,
+      ids.account,
       ids.member,
       sha256('isolation-refresh-token'),
       sha256('family-app-credential:no-pin'),
@@ -121,22 +129,26 @@ try {
     [ids.inventoryItem, ids.household, '隔离测试库存', '其他'],
   );
 
-  const members = await request('/members');
-  assert(members.status === 200 && members.body.data.length > 0, '默认家庭成员可登录');
-  assert(
-    members.body.data.every((member) => member.householdId !== ids.household),
-    '公开成员列表不泄露其他家庭成员',
-  );
+  const anonymousMembers = await request('/members');
+  assert(anonymousMembers.status === 401, '匿名请求不能枚举家庭成员');
 
   const login = await request('/auth/login', null, 'POST', {
-    memberId: members.body.data[0].id,
+    loginName: '爸爸',
+    password: 'family1234',
   });
-  assert(login.status === 201, '默认家庭登录成功');
+  assert(login.status === 201, '默认家庭账号登录成功');
   const defaultToken = login.body.data.token;
   const defaultHouseholdId = login.body.data.member.householdId;
+  const members = await request('/members', defaultToken);
+  assert(members.status === 200 && members.body.data.length > 0, '登录后可读取本家庭成员');
+  assert(
+    members.body.data.every((member) => member.householdId !== ids.household),
+    '成员列表不泄露其他家庭成员',
+  );
 
   const foreignToken = signToken({
-    sub: ids.member,
+    sub: ids.account,
+    accountId: ids.account,
     memberId: ids.member,
     householdId: ids.household,
     sid: ids.session,
@@ -144,7 +156,8 @@ try {
     role: 'member',
   });
   const oldToken = signToken({
-    sub: ids.member,
+    sub: ids.account,
+    accountId: ids.account,
     memberId: ids.member,
     householdId: ids.household,
     name: '旧令牌',
@@ -287,5 +300,6 @@ try {
   await db.query('DELETE FROM auth_sessions WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM members WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM households WHERE id = $1', [ids.household]);
+  await db.query('DELETE FROM accounts WHERE id = $1', [ids.account]);
   await db.end();
 }

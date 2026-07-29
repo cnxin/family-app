@@ -5,7 +5,10 @@ import {
   DEFAULT_HOUSEHOLD_SLUG,
 } from './database/database.constants';
 import AppDataSource from './database/data-source';
+import { normalizeLoginName } from './auth/account.credentials';
+import { hashPin } from './common/pin';
 import {
+  Account,
   Dish,
   DishCategory,
   DishIngredient,
@@ -72,22 +75,42 @@ async function main() {
 
   const members = AppDataSource.getRepository(Member);
   if ((await members.countBy({ householdId: household.id })) === 0) {
-    await members.save([
-      members.create({
-        householdId: household.id,
+    const accounts = AppDataSource.getRepository(Account);
+    const demoPasswordHash = await hashPin(
+      process.env.SEED_ACCOUNT_PASSWORD || 'family1234',
+    );
+    const demoMembers = [
+      {
         name: '爸爸',
         avatarEmoji: '👨‍🍳',
-        role: 'owner',
+        role: 'owner' as const,
         prefersCooking: true,
-      }),
-      members.create({
-        householdId: household.id,
+      },
+      {
         name: '妈妈',
         avatarEmoji: '👩',
-        role: 'member',
-      }),
-    ]);
-    console.log('成员 ✓ 爸爸(家庭管理员，经常掌勺) / 妈妈');
+        role: 'member' as const,
+        prefersCooking: false,
+      },
+    ];
+    for (const profile of demoMembers) {
+      const account = await accounts.save(
+        accounts.create({
+          loginName: profile.name,
+          loginNameNormalized: normalizeLoginName(profile.name),
+          passwordHash: demoPasswordHash,
+          disabledAt: null,
+        }),
+      );
+      await members.save(
+        members.create({
+          householdId: household.id,
+          accountId: account.id,
+          ...profile,
+        }),
+      );
+    }
+    console.log('成员 ✓ 爸爸(家庭管理员，经常掌勺) / 妈妈（均已创建开发账号）');
   }
 
   const ingredients = AppDataSource.getRepository(Ingredient);

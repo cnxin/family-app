@@ -13,7 +13,9 @@ backups-production
 restore-preview
 deploy/.env.production
 deploy/secrets
-apps/mobile
+apps/mobile/e2e/.auth
+apps/mobile/playwright-report
+apps/mobile/test-results
 *.log
 **/*.log
 .env

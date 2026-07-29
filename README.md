@@ -12,6 +12,7 @@
 - **日历**：支持跨月提前安排；有点菜的日期显示有效菜品数量。
 - **厨房协作**：每餐可指定主厨，每道菜可由不同成员认领；支持制作进度、划掉原因、点菜人提醒、操作历史、恢复和完成锁定。
 - **成员边界**：家庭权限使用 `owner/admin/member`，经常掌勺是可独立修改的成员偏好，不再决定厨房权限。
+- **家庭账号**：登录账号与家庭成员档案独立保存；支持首户安全初始化、密码更新和限时成员邀请。
 - **菜谱**：维护分类、难度、耗时、食材、口味、图文步骤和参考链接。
 - **购物清单**：菜单食材自动合并，也可手动填写物品、数量和单位；支持勾选与删除。
 - **家庭库存**：维护调料、主食、饮料、零食和日用品余量，低库存提示并一键加入采购。
@@ -66,12 +67,15 @@ npx expo start --web --port 8081
 
 `docker-compose.dev.yml` 中的密码和 JWT 密钥只用于本地开发，不应直接用于长期家庭部署。
 
+全新开发卷会创建账号“爸爸”和“妈妈”，开发密码均为 `family1234`。已有开发卷升级后，账号名沿用成员名，原 PIN 作为账号密码；原来没有 PIN 的账号第一次登录可留空密码，进入“我的 -> 账号安全”后应立即补设至少 8 位密码。
+
 API 安全相关配置：
 
 | 环境变量 | 本地默认值 | 作用 |
 | --- | --- | --- |
 | `JWT_SECRET` | 仅 Docker 演示密钥 | JWT 签名；生产环境必须显式配置 |
 | `JWT_SECRET_FILE` | 无 | JWT 密钥文件；配置时优先于 `JWT_SECRET` |
+| `BOOTSTRAP_SECRET_FILE` | 无 | 首户初始化密钥文件；生产环境必须配置 |
 | `DB_PASSWORD_FILE` | 无 | 数据库密码文件；配置时优先于 `DB_PASSWORD` |
 | `JWT_EXPIRES_SECONDS` | `900` | 访问令牌有效期，默认 15 分钟 |
 | `REFRESH_TOKEN_EXPIRES_SECONDS` | `2592000` | 刷新会话有效期，默认 30 天并在每次续期时轮换 |
@@ -82,9 +86,9 @@ API 安全相关配置：
 
 原生 Expo 请求没有浏览器 `Origin`，不受 CORS 白名单影响。生产环境不配置 `CORS_ORIGINS` 时不会授权任何浏览器来源。
 
-服务端只保存刷新令牌的 SHA-256 哈希；退出、成员角色变化或 PIN 变化会立即撤销旧会话。启动续期和并发 `401` 共享单飞续期，并会跳过已被新令牌取代的过期响应。iOS/Android 使用 `SecureStore` 保存会话，当前 Web 演示使用 `localStorage`，因此 Web 端仍受同源脚本和 XSS 边界约束。正式外网部署必须使用 HTTPS、严格内容安全策略，并评估改为同站 `HttpOnly` Cookie 或可信反向代理会话。
+服务端只保存刷新令牌和成员邀请码的 SHA-256 哈希；退出、家庭角色变化或账号密码变化会立即撤销对应旧会话。启动续期和并发 `401` 共享单飞续期，并会跳过已被新令牌取代的过期响应。iOS/Android 使用 `SecureStore` 保存会话，当前 Web 演示使用 `localStorage`，因此 Web 端仍受同源脚本和 XSS 边界约束。正式外网部署必须使用 HTTPS、严格内容安全策略，并评估改为同站 `HttpOnly` Cookie 或可信反向代理会话。
 
-API 会为每个请求回传 `X-Request-ID`。结构化日志只保留路由模板、状态、耗时和已认证的家庭/成员 UUID，不记录请求体、查询值、姓名、IP、PIN 或令牌；错误响应体也包含同一个请求 ID，便于定位问题。
+API 会为每个请求回传 `X-Request-ID`。结构化日志只保留路由模板、状态、耗时和已认证的账号/家庭/成员 UUID，不记录请求体、查询值、姓名、IP、密码或令牌；错误响应体也包含同一个请求 ID，便于定位问题。
 
 停止服务：
 
@@ -144,7 +148,7 @@ npx pnpm --filter api test:isolation
 # 检查实体元数据与已执行迁移是否一致
 npx pnpm --filter api test:schema
 
-# 自动创建临时数据库和 API，验证迁移、PIN、CORS、权限、限流、
+# 自动创建临时数据库和 API，验证首户初始化、账号迁移、邀请、CORS、权限、限流、
 # 家庭隔离、菜单协作、通知、审计、健康检查、请求日志、敏感信息保护、
 # 唯一约束和事务回滚，结束后自动清理
 docker compose -f docker-compose.dev.yml run --rm --no-deps api \
@@ -155,7 +159,7 @@ docker compose -f docker-compose.dev.yml run --rm --no-deps api \
 corepack pnpm test:web
 ```
 
-Playwright 直接使用本机安装的 Google Chrome，不会额外下载浏览器。失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。
+Playwright 默认依次兼容全新开发卷密码 `family1234` 和旧库迁移出的空密码。账号已经补设其他密码时，使用 `E2E_ACCOUNT_PASSWORD='<测试密码>' corepack pnpm test:web`；也可通过 `E2E_LOGIN_NAME` 指定测试账号。它直接使用本机安装的 Google Chrome，不会额外下载浏览器。失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。
 
 ## 项目结构
 
@@ -184,7 +188,7 @@ docs/
 ## 路线图
 
 - [x] M1：点菜本地演示版
-- [ ] M2：家庭数据边界、迁移、备份、安全和自动化测试
+- [x] M2：家庭数据边界、账号、迁移、备份、安全和自动化测试
 - [ ] M3：统一日历、提醒、任务和投票
 - [ ] M4：观影 MVP 与 MoviePilot/Plex/Emby 连接器
 - [ ] M5：访客与家庭网络

@@ -125,7 +125,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(
     page
       .getByText('暂无记录', { exact: true })
-      .or(page.getByText(/点了「/).first()),
+      .or(
+        page
+          .getByText(
+            /点了「|交给|取消了「|更新了「|将本餐主厨设为|清除了本餐主厨|结束并锁定了本餐|认领了「|开始制作「|标记为上桌|恢复了「|划掉了「/,
+          )
+          .first(),
+      ),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
@@ -144,6 +150,12 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
 
   await openSection(page, testInfo.project.name, 'profile');
   await expect(page.getByText('家庭偏好', { exact: true })).toBeVisible();
+  await expect(page.getByText('账号安全', { exact: true })).toBeVisible();
+  await expect(page.getByText('成员邀请', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '更新密码' })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '生成 48 小时邀请' }),
+  ).toBeVisible();
   await expect(page.getByRole('switch')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 

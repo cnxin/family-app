@@ -1,6 +1,11 @@
 import { Redirect } from 'expo-router';
-import { ArrowRight, Check, ChefHat, House, UserRound } from 'lucide-react-native';
-import React, { useState } from 'react';
+import {
+  House,
+  KeyRound,
+  LogIn,
+  UserPlus,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,38 +19,123 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDesktopLayout } from '../components/app-shell';
-import { PressableScale, PrimaryButton } from '../components/ui';
-import { memberSubtitle } from '../lib/member';
-import { useMembers } from '../lib/queries';
+import { PressableScale, PrimaryButton, Segmented } from '../components/ui';
+import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { radius, type as t, useTheme } from '../lib/theme';
-import type { Member } from '../lib/types';
+import type {
+  AuthSetupStatus,
+  InvitationPreview,
+} from '../lib/types';
+
+type LoginMode = 'login' | 'join';
 
 export default function LoginScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
-  const { member, ready, login } = useSession();
-  const { data: members, isLoading, error } = useMembers(ready && !member);
-  const [selected, setSelected] = useState<Member | null>(null);
-  const [pin, setPin] = useState('');
+  const {
+    member,
+    ready,
+    login,
+    bootstrap,
+    redeemInvitation,
+  } = useSession();
+  const [setupStatus, setSetupStatus] = useState<AuthSetupStatus | null>(null);
+  const [statusError, setStatusError] = useState(false);
+  const [mode, setMode] = useState<LoginMode>('login');
+  const [loginName, setLoginName] = useState('');
+  const [password, setPassword] = useState('');
+  const [householdSlug, setHouseholdSlug] = useState('');
+  const [invitationToken, setInvitationToken] = useState('');
+  const [invitePreview, setInvitePreview] = useState<InvitationPreview | null>(null);
+  const [householdName, setHouseholdName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [bootstrapKey, setBootstrapKey] = useState('');
   const [busy, setBusy] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const loadSetupStatus = useCallback(async () => {
+    setStatusError(false);
+    try {
+      setSetupStatus(
+        await api<AuthSetupStatus>('/auth/setup/status', { auth: false }),
+      );
+    } catch {
+      setStatusError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (ready && !member) void loadSetupStatus();
+  }, [loadSetupStatus, member, ready]);
 
   if (!ready) return null;
   if (member) return <Redirect href="/(tabs)" />;
 
   const submit = async () => {
-    if (!selected) return;
     setBusy(true);
     setMessage(null);
     try {
-      await login(selected.id, pin || undefined);
-    } catch (loginError) {
-      setMessage(loginError instanceof Error ? loginError.message : '登录失败');
+      if (!setupStatus?.initialized) {
+        await bootstrap({
+          bootstrapSecret: bootstrapKey,
+          householdName,
+          ownerName,
+          loginName,
+          password,
+        });
+      } else if (mode === 'join') {
+        await redeemInvitation({ invitationToken, loginName, password });
+      } else {
+        await login(
+          loginName,
+          password || undefined,
+          householdSlug || undefined,
+        );
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '操作失败');
     } finally {
       setBusy(false);
     }
   };
+
+  const previewInvitation = async () => {
+    setPreviewBusy(true);
+    setMessage(null);
+    try {
+      setInvitePreview(
+        await api<InvitationPreview>('/auth/invitations/preview', {
+          method: 'POST',
+          body: { invitationToken },
+          auth: false,
+        }),
+      );
+    } catch (error) {
+      setInvitePreview(null);
+      setMessage(error instanceof Error ? error.message : '邀请码无效');
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
+  const initialized = setupStatus?.initialized ?? false;
+  const canSubmit = !initialized
+    ? Boolean(
+        bootstrapKey.length >= 16 &&
+          householdName.trim() &&
+          ownerName.trim() &&
+          loginName.trim().length >= 2 &&
+          password.length >= 8,
+      )
+    : mode === 'join'
+      ? Boolean(
+          invitationToken.trim().length >= 32 &&
+            loginName.trim().length >= 2 &&
+            password.length >= 1,
+        )
+      : Boolean(loginName.trim());
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]}>
@@ -58,7 +148,10 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.frame, desktop && styles.frameDesktop]}>
+          <Animated.View
+            entering={FadeInDown.duration(320)}
+            style={[styles.frame, desktop && styles.frameDesktop]}
+          >
             <View style={styles.brandRow}>
               <View style={[styles.brandMark, { backgroundColor: c.tint }]}>
                 <House color="#FFFFFF" size={25} strokeWidth={2.2} />
@@ -69,108 +162,225 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            <View style={styles.heading}>
-              <Text style={[t.largeTitle, { color: c.label }]}>欢迎回家</Text>
-              <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 7 }]}>选择你的家庭成员身份</Text>
-            </View>
+            {!setupStatus && !statusError ? (
+              <ActivityIndicator color={c.tint} style={styles.loader} />
+            ) : null}
 
-            {isLoading ? <ActivityIndicator color={c.tint} style={{ marginVertical: 40 }} /> : null}
-            {error ? (
-              <View style={[styles.errorBox, { backgroundColor: c.redSoft }]}>
-                <Text style={[t.subhead, { color: c.red, textAlign: 'center' }]}>
-                  连不上家里的服务器，请检查 API 服务
-                </Text>
+            {statusError ? (
+              <View style={styles.statusState}>
+                <Text style={[t.headline, { color: c.label }]}>服务器暂时不可用</Text>
+                <PressableScale onPress={() => void loadSetupStatus()} style={styles.retryButton}>
+                  <Text style={[t.subhead, { color: c.tint, fontWeight: '600' }]}>重新连接</Text>
+                </PressableScale>
               </View>
             ) : null}
 
-            <View style={[styles.memberGrid, desktop && styles.memberGridDesktop]}>
-              {members?.map((item, index) => {
-                const active = selected?.id === item.id;
-                const RoleIcon = item.prefersCooking ? ChefHat : UserRound;
-                return (
-                  <Animated.View
-                    key={item.id}
-                    entering={FadeInDown.delay(index * 70).springify().damping(19)}
-                    style={[styles.memberCell, desktop && styles.memberCellDesktop]}
-                  >
-                    <PressableScale
-                      haptic={false}
-                      onPress={() => {
-                        setSelected(item);
-                        setPin('');
-                        setMessage(null);
-                      }}
-                      style={[
-                        styles.memberCard,
-                        {
-                          backgroundColor: active ? c.tintSoft : c.card,
-                          borderColor: active ? c.tint : c.separator,
-                        },
-                      ]}
-                    >
-                      <View style={[styles.memberAvatar, { backgroundColor: c.orangeSoft }]}>
-                        <Text style={{ fontSize: 30 }}>{item.avatarEmoji}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[t.headline, { color: c.label }]}>{item.name}</Text>
-                        <View style={styles.roleRow}>
-                          <RoleIcon color={c.secondaryLabel} size={14} />
-                          <Text style={[t.caption, { color: c.secondaryLabel }]}>
-                            {memberSubtitle(item)}
-                          </Text>
-                        </View>
-                      </View>
-                      <View
-                        style={[
-                          styles.selection,
-                          {
-                            backgroundColor: active ? c.tint : 'transparent',
-                            borderColor: active ? c.tint : c.fillStrong,
-                          },
-                        ]}
-                      >
-                        {active ? <Check color="#FFFFFF" size={14} strokeWidth={3} /> : null}
-                      </View>
-                    </PressableScale>
-                  </Animated.View>
-                );
-              })}
-            </View>
+            {setupStatus ? (
+              <>
+                <View style={styles.heading}>
+                  <Text style={[t.largeTitle, { color: c.label }]}>
+                    {initialized
+                      ? mode === 'login'
+                        ? '欢迎回家'
+                        : '加入家庭'
+                      : '建立家庭空间'}
+                  </Text>
+                  <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 7 }]}>
+                    {initialized
+                      ? mode === 'login'
+                        ? '使用家庭账号登录'
+                        : '领取家庭成员邀请'
+                      : '创建首位家庭管理员'}
+                  </Text>
+                </View>
 
-            <View style={styles.actionArea}>
-              {selected?.hasPin ? (
-                <TextInput
+                {initialized ? (
+                  <Segmented<LoginMode>
+                    options={[
+                      { label: '账号登录', value: 'login' },
+                      { label: '邀请码', value: 'join' },
+                    ]}
+                    value={mode}
+                    onChange={(nextMode) => {
+                      setMode(nextMode);
+                      setMessage(null);
+                    }}
+                  />
+                ) : null}
+
+                <View
                   style={[
-                    styles.pinInput,
-                    { backgroundColor: c.card, borderColor: c.separator, color: c.label },
+                    styles.form,
+                    { backgroundColor: c.card, borderColor: c.separator },
                   ]}
-                  value={pin}
-                  onChangeText={setPin}
-                  placeholder="输入家庭 PIN"
-                  placeholderTextColor={c.tertiaryLabel}
-                  keyboardType="number-pad"
-                  secureTextEntry
-                  maxLength={6}
-                  onSubmitEditing={() => void submit()}
+                >
+                  {!initialized ? (
+                    <>
+                      <FormField
+                        label="家庭名称"
+                        value={householdName}
+                        onChangeText={setHouseholdName}
+                        placeholder="我的家"
+                      />
+                      <FormField
+                        label="你的成员名称"
+                        value={ownerName}
+                        onChangeText={setOwnerName}
+                        placeholder="家庭管理员"
+                      />
+                    </>
+                  ) : null}
+
+                  {initialized && mode === 'join' ? (
+                    <>
+                      <FormField
+                        label="邀请码"
+                        value={invitationToken}
+                        onChangeText={(value) => {
+                          setInvitationToken(value.trim());
+                          setInvitePreview(null);
+                        }}
+                        placeholder="输入收到的邀请码"
+                        autoCapitalize="none"
+                      />
+                      <PressableScale
+                        disabled={invitationToken.length < 32 || previewBusy}
+                        onPress={() => void previewInvitation()}
+                        style={styles.previewButton}
+                      >
+                        {previewBusy ? (
+                          <ActivityIndicator color={c.tint} size="small" />
+                        ) : (
+                          <Text style={[t.subhead, { color: c.tint, fontWeight: '600' }]}>验证邀请码</Text>
+                        )}
+                      </PressableScale>
+                      {invitePreview ? (
+                        <View style={[styles.previewBox, { backgroundColor: c.tintSoft }]}>
+                          <Text style={[t.body, { color: c.label }]}>
+                            {invitePreview.avatarEmoji} {invitePreview.householdName}
+                          </Text>
+                          <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>成员档案：{invitePreview.memberName}</Text>
+                        </View>
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  <FormField
+                    label="登录账号"
+                    value={loginName}
+                    onChangeText={setLoginName}
+                    placeholder="输入账号"
+                    autoCapitalize="none"
+                  />
+                  <FormField
+                    label="密码"
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder={
+                      initialized
+                        ? '输入密码'
+                        : '至少 8 位'
+                    }
+                    secureTextEntry
+                    autoCapitalize="none"
+                  />
+
+                  {initialized && mode === 'login' ? (
+                    <FormField
+                      label="家庭标识（可选）"
+                      value={householdSlug}
+                      onChangeText={setHouseholdSlug}
+                      placeholder="多家庭账号可指定"
+                      autoCapitalize="none"
+                    />
+                  ) : null}
+
+                  {!initialized ? (
+                    <FormField
+                      label="初始化密钥"
+                      value={bootstrapKey}
+                      onChangeText={setBootstrapKey}
+                      placeholder="输入部署时生成的密钥"
+                      secureTextEntry
+                      autoCapitalize="none"
+                    />
+                  ) : null}
+                </View>
+
+                {message ? (
+                  <View style={[styles.messageBox, { backgroundColor: c.redSoft }]}>
+                    <Text style={[t.subhead, { color: c.red, textAlign: 'center' }]}>{message}</Text>
+                  </View>
+                ) : null}
+
+                <PrimaryButton
+                  title={
+                    !initialized
+                      ? '创建并进入'
+                      : mode === 'join'
+                        ? '领取邀请并进入'
+                        : '登录'
+                  }
+                  onPress={() => void submit()}
+                  disabled={!canSubmit}
+                  loading={busy}
+                  icon={
+                    !busy ? (
+                      initialized ? (
+                        mode === 'join' ? (
+                          <UserPlus color="#FFFFFF" size={18} />
+                        ) : (
+                          <LogIn color="#FFFFFF" size={18} />
+                        )
+                      ) : (
+                        <KeyRound color="#FFFFFF" size={18} />
+                      )
+                    ) : undefined
+                  }
                 />
-              ) : null}
 
-              {message ? (
-                <Text style={[t.subhead, { color: c.red, textAlign: 'center' }]}>{message}</Text>
-              ) : null}
-
-              <PrimaryButton
-                title={selected ? `以${selected.name}身份进入` : '选择一个成员'}
-                onPress={() => void submit()}
-                disabled={!selected}
-                loading={busy}
-                icon={!busy && selected ? <ArrowRight color="#FFFFFF" size={18} /> : undefined}
-              />
-            </View>
-          </View>
+              </>
+            ) : null}
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function FormField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  secureTextEntry,
+  autoCapitalize = 'sentences',
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  secureTextEntry?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+}) {
+  const c = useTheme();
+  return (
+    <View style={styles.field}>
+      <Text style={[t.footnote, { color: c.secondaryLabel }]}>{label}</Text>
+      <TextInput
+        autoCapitalize={autoCapitalize}
+        autoCorrect={false}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={c.tertiaryLabel}
+        secureTextEntry={secureTextEntry}
+        style={[
+          styles.input,
+          { backgroundColor: c.bg, borderColor: c.separator, color: c.label },
+        ]}
+        value={value}
+      />
+    </View>
   );
 }
 
@@ -184,7 +394,7 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
   },
   frame: { width: '100%', maxWidth: 536 },
-  frameDesktop: { maxWidth: 536 },
+  frameDesktop: { maxWidth: 520 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   brandMark: {
     width: 42,
@@ -193,50 +403,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heading: { marginTop: 38, marginBottom: 24 },
-  memberGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  memberGridDesktop: { gap: 16 },
-  memberCell: { width: '100%', minWidth: 0 },
-  memberCellDesktop: { width: 260 },
-  memberCard: {
-    minHeight: 112,
+  loader: { marginVertical: 64 },
+  statusState: { alignItems: 'center', gap: 14, paddingVertical: 64 },
+  retryButton: { paddingHorizontal: 18, paddingVertical: 10 },
+  heading: { marginTop: 34, marginBottom: 22 },
+  form: {
+    borderWidth: 1,
     borderRadius: radius.md,
-    borderWidth: 1,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    padding: 16,
+    gap: 14,
+    marginTop: 16,
+    marginBottom: 16,
   },
-  memberAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roleRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5 },
-  selection: {
-    width: 23,
-    height: 23,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionArea: {
+  field: { gap: 6 },
+  input: {
     width: '100%',
-    maxWidth: 360,
-    alignSelf: 'center',
-    gap: 12,
-    marginTop: 28,
-  },
-  pinInput: {
-    height: 46,
+    minHeight: 46,
     borderRadius: radius.sm,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
     fontSize: 16,
-    textAlign: 'center',
   },
-  errorBox: { padding: 12, borderRadius: radius.sm, marginBottom: 18 },
+  previewButton: {
+    minHeight: 34,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  previewBox: { borderRadius: radius.sm, padding: 12 },
+  messageBox: { padding: 11, borderRadius: radius.sm, marginBottom: 12 },
 });
