@@ -75,6 +75,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   let refreshRequests = 0;
   const presentedRefreshTokens: string[] = [];
   let rejectedAuthorization: string | undefined;
+  const staleAccessRoute = /\/(dishes|menus|shopping-list)(\?|$)/;
   simulatingUnauthorized = true;
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/auth/refresh') {
@@ -83,7 +84,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       if (body?.refreshToken) presentedRefreshTokens.push(body.refreshToken);
     }
   });
-  await page.route(/\/(dishes|menus|shopping-list)(\?|$)/, async (route) => {
+  await page.route(staleAccessRoute, async (route) => {
     const request = route.request();
     const authorization = request.headers().authorization;
     if (!rejectedAuthorization) rejectedAuthorization = authorization;
@@ -116,6 +117,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     presentedRefreshTokens.length,
   );
   await page.waitForLoadState('networkidle');
+  await page.unroute(staleAccessRoute);
   simulatingUnauthorized = false;
   expect(runtimeErrors).toEqual([]);
 
@@ -399,8 +401,14 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     window.localStorage.getItem('family-app-token'),
   );
   expect(accessToken).toBeTruthy();
-  const logout = await request.post(`${API_URL}/auth/logout`, {
+  await openSection(page, testInfo.project.name, 'profile');
+  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await expect(page.getByText(/退出账号「爸爸」/)).toBeVisible();
+  await page.getByRole('button', { name: '退出', exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
+  const revoked = await request.get(`${API_URL}/members`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  expect(logout.ok()).toBeTruthy();
+  expect(revoked.status()).toBe(401);
 });

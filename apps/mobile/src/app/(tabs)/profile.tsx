@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import {
   Card,
+  ConfirmDialog,
   PressableScale,
   PrimaryButton,
   SectionHeader,
@@ -63,6 +64,8 @@ export default function ProfileScreen() {
   const [inviteRole, setInviteRole] = useState<InviteRole>('member');
   const [createdInvitation, setCreatedInvitation] =
     useState<CreatedHouseholdInvitation | null>(null);
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const savePassword = () => {
     if (newPassword !== confirmPassword) {
@@ -382,12 +385,8 @@ export default function ProfileScreen() {
           <SectionHeader title="账号" />
           <Card>
             <PressableScale
-              onPress={() =>
-                Alert.alert('退出登录', `退出账号「${account?.loginName ?? ''}」？`, [
-                  { text: '取消', style: 'cancel' },
-                  { text: '退出', style: 'destructive', onPress: () => void logout() },
-                ])
-              }
+              accessibilityLabel="退出登录"
+              onPress={() => setLogoutConfirmVisible(true)}
               style={{ padding: 14 }}
             >
               <Text style={[t.body, { color: c.red, textAlign: 'center' }]}>退出登录</Text>
@@ -399,6 +398,19 @@ export default function ProfileScreen() {
           </Text>
         </ScrollView>
       </PageContainer>
+
+      <ConfirmDialog
+        confirmLabel="退出"
+        loading={loggingOut}
+        message={`退出账号「${account?.loginName ?? ''}」？`}
+        onCancel={() => setLogoutConfirmVisible(false)}
+        onConfirm={() => {
+          setLoggingOut(true);
+          void logout();
+        }}
+        title="退出登录"
+        visible={logoutConfirmVisible}
+      />
     </SafeAreaView>
   );
 }
