@@ -5,10 +5,12 @@ import {
   BookOpenText,
   CookingPot,
   House,
+  History,
   LayoutDashboard,
   ListTodo,
   ShoppingCart,
   UserRound,
+  UsersRound,
   UtensilsCrossed,
   Vote,
   type LucideIcon,
@@ -71,10 +73,13 @@ interface NavItem {
     | '/tasks'
     | '/notifications'
     | '/reminders'
+    | '/activity'
+    | '/members'
     | '/polls'
     | '/shopping'
     | '/profile';
   icon: LucideIcon;
+  requiresMemberManagement?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -85,6 +90,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: '家庭任务', href: '/tasks', icon: ListTodo },
   { label: '家庭投票', href: '/polls', icon: Vote },
   { label: '提醒中心', href: '/reminders', icon: BellRing },
+  { label: '家庭活动', href: '/activity', icon: History },
+  {
+    label: '成员管理',
+    href: '/members',
+    icon: UsersRound,
+    requiresMemberManagement: true,
+  },
   { label: '家庭日历', href: '/calendar', icon: CalendarDays },
   { label: '采购与库存', href: '/shopping', icon: ShoppingCart },
   { label: '我的', href: '/profile', icon: UserRound },
@@ -139,7 +151,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </View>
 
         <View style={styles.nav}>
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter(
+            (item) =>
+              !item.requiresMemberManagement ||
+              member?.role === 'owner' ||
+              member?.role === 'admin',
+          ).map((item) => {
             const active = item.href === activeRoute;
             const Icon = item.icon;
             return (

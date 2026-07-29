@@ -209,6 +209,7 @@ try {
   await runScript('scripts/tasks.mjs');
   await runScript('scripts/polls.mjs');
   await runScript('scripts/reminders.mjs');
+  await runScript('scripts/members-activities.mjs');
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');
   await wait(50);

@@ -348,6 +348,38 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
+  await page.getByRole('button', { name: '打开家庭成员', exact: true }).click();
+  await expect(page).toHaveURL(/\/members$/);
+  await expect(page.getByText('家庭成员', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '在家成员', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '全部成员', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '编辑爸爸', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '编辑爸爸', exact: true }).click();
+  await expect(page.getByText('编辑成员', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('成员名称', { exact: true })).toHaveValue('爸爸');
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.getByText('编辑成员', { exact: true })).not.toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  if (testInfo.project.name === 'mobile-chrome') {
+    await page.getByRole('button', { name: '返回', exact: true }).click();
+    await expect(page).toHaveURL(/\/profile$/);
+  } else {
+    await openSection(page, testInfo.project.name, 'profile');
+  }
+
+  await page.getByRole('button', { name: '打开家庭活动', exact: true }).click();
+  await expect(page).toHaveURL(/\/activity$/);
+  await expect(page.getByText('家庭活动', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '全部', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '成员', exact: true }).click();
+  await page.getByRole('button', { name: '菜单', exact: true }).click();
+  await page.getByRole('button', { name: '全部', exact: true }).click();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect(page.getByRole('tab')).toHaveCount(6);
+  }
+  await expectNoHorizontalOverflow(page);
+
   await openSection(page, testInfo.project.name, 'home');
   await expect(
     page.getByText('家庭今日概览', { exact: true }),

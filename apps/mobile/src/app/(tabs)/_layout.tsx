@@ -122,6 +122,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="activity"
+        options={{
+          title: '活动',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="members"
+        options={{
+          title: '成员',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="shopping"
         options={{
           title: '采购',

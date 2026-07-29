@@ -33,6 +33,18 @@ export type PollVoteMode = 'single' | 'multiple';
 export type PollStatus = 'open' | 'closed';
 export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
+export type ActivityModule =
+  | 'member'
+  | 'invitation'
+  | 'menu'
+  | 'calendar'
+  | 'task'
+  | 'poll'
+  | 'reminder'
+  | 'shopping'
+  | 'inventory'
+  | 'recipe'
+  | 'system';
 export type NotificationModule =
   | 'menu'
   | 'task'
@@ -122,6 +134,7 @@ export class Household {
 @Check('CHK_members_role', `"role" IN ('owner', 'admin', 'member')`)
 @Index('IDX_members_household', ['householdId'])
 @Index('IDX_members_account', ['accountId'])
+@Index('IDX_members_household_status', ['householdId', 'disabledAt'])
 @Unique('UQ_members_household_account', ['householdId', 'accountId'])
 export class Member {
   @PrimaryGeneratedColumn('uuid')
@@ -159,7 +172,79 @@ export class Member {
   @Column({ default: false })
   prefersCooking: boolean;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  disabledAt: Date | null;
+
   @CreateDateColumn()
+  createdAt: Date;
+}
+
+@Entity('household_activity_logs')
+@Check(
+  'CHK_household_activity_logs_module',
+  `"module" IN ('member', 'invitation', 'menu', 'calendar', 'task', 'poll', 'reminder', 'shopping', 'inventory', 'recipe', 'system')`,
+)
+@Index('IDX_household_activity_logs_household_created', [
+  'householdId',
+  'createdAt',
+])
+@Index('IDX_household_activity_logs_subject', ['subjectMemberId', 'createdAt'])
+export class HouseholdActivityLog {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_household_activity_logs_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_household_activity_logs_actor',
+  })
+  actor: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  actorId: string | null;
+
+  @Column({ type: 'varchar', length: 64 })
+  actorName: string;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'subjectMemberId',
+    foreignKeyConstraintName: 'FK_household_activity_logs_subject',
+  })
+  subjectMember: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  subjectMemberId: string | null;
+
+  @Column({ type: 'varchar', length: 32 })
+  module: ActivityModule;
+
+  @Column({ type: 'varchar', length: 64 })
+  action: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  summary: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  detail: string | null;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  targetPath: string | null;
+
+  @Column({ type: 'jsonb', default: {} })
+  metadata: Record<string, unknown>;
+
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }
 
@@ -1553,6 +1638,7 @@ export const ALL_ENTITIES = [
   Account,
   Household,
   Member,
+  HouseholdActivityLog,
   AuthSession,
   HouseholdInvitation,
   Ingredient,

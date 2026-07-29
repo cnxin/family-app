@@ -91,6 +91,7 @@ export class JwtAuthGuard implements CanActivate {
           householdId: true,
           name: true,
           role: true,
+          disabledAt: true,
         },
       }),
       this.sessions.findOneBy({
@@ -104,6 +105,7 @@ export class JwtAuthGuard implements CanActivate {
       !account ||
       account.disabledAt ||
       !member ||
+      member.disabledAt ||
       !session ||
       session.revokedAt ||
       session.expiresAt.getTime() <= Date.now()

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ActivitiesModule } from './activities/activities.module';
 import { AuthModule } from './auth/auth.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { databaseOptions } from './database/database.options';
@@ -18,6 +19,7 @@ import { UploadModule } from './upload/upload.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot(databaseOptions()),
+    ActivitiesModule,
     AuthModule,
     CalendarModule,
     DishesModule,

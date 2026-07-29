@@ -9,6 +9,7 @@ import { AddRecipeVariants1785227100000 } from './1785227100000-add-recipe-varia
 import { AddHouseholdTasks1785227200000 } from './1785227200000-add-household-tasks';
 import { AddHouseholdPolls1785227300000 } from './1785227300000-add-household-polls';
 import { AddConfigurableReminders1785227400000 } from './1785227400000-add-configurable-reminders';
+import { AddMembersAndActivity1785227500000 } from './1785227500000-add-members-and-activity';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -22,4 +23,5 @@ export const ALL_MIGRATIONS = [
   AddHouseholdTasks1785227200000,
   AddHouseholdPolls1785227300000,
   AddConfigurableReminders1785227400000,
+  AddMembersAndActivity1785227500000,
 ];

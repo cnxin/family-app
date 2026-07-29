@@ -50,6 +50,7 @@ const ids = {
   account: randomUUID(),
   member: randomUUID(),
   session: randomUUID(),
+  activity: randomUUID(),
   ingredient: randomUUID(),
   dish: randomUUID(),
   menu: randomUUID(),
@@ -93,6 +94,18 @@ try {
   await db.query(
     'INSERT INTO members (id, "householdId", "accountId", name, "avatarEmoji", role) VALUES ($1, $2, $3, $4, $5, $6)',
     [ids.member, ids.household, ids.account, '隔离测试成员', 'T', 'member'],
+  );
+  await db.query(
+    `INSERT INTO household_activity_logs
+       (id, "householdId", "actorId", "actorName", "subjectMemberId", module, action, summary)
+     VALUES ($1, $2, $3, $4, $3, 'member', 'isolation_test', $5)`,
+    [
+      ids.activity,
+      ids.household,
+      ids.member,
+      '隔离测试成员',
+      '隔离测试活动',
+    ],
   );
   await db.query(
     `INSERT INTO auth_sessions
@@ -230,10 +243,15 @@ try {
   const defaultToken = login.body.data.token;
   const defaultHouseholdId = login.body.data.member.householdId;
   const members = await request('/members', defaultToken);
+  const managedMembers = await request('/household/members', defaultToken);
   assert(members.status === 200 && members.body.data.length > 0, '登录后可读取本家庭成员');
   assert(
-    members.body.data.every((member) => member.householdId !== ids.household),
-    '成员列表不泄露其他家庭成员',
+    members.body.data.every((member) => member.householdId !== ids.household) &&
+      managedMembers.status === 200 &&
+      managedMembers.body.data.every(
+        (member) => member.householdId !== ids.household,
+      ),
+    '成员列表和管理目录不泄露其他家庭成员',
   );
 
   const foreignToken = signToken({
@@ -337,6 +355,7 @@ try {
   const defaultPolls = await request('/polls?status=all', defaultToken);
   const defaultNotifications = await request('/notifications', defaultToken);
   const defaultReminders = await request('/reminders?status=all', defaultToken);
+  const defaultActivities = await request('/activities?limit=100', defaultToken);
   const defaultReminderSources = await request(
     `/reminder-sources?start=${TEST_DATE}&end=${TEST_DATE}`,
     defaultToken,
@@ -353,6 +372,10 @@ try {
       ) &&
       defaultReminders.status === 200 &&
       defaultReminders.body.data.every((item) => item.id !== ids.reminder) &&
+      defaultActivities.status === 200 &&
+      defaultActivities.body.data.every(
+        (item) => item.id !== `activity:${ids.activity}`,
+      ) &&
       defaultReminderSources.status === 200 &&
       defaultReminderSources.body.data.every(
         (item) =>
@@ -360,7 +383,7 @@ try {
           item.sourceId !== ids.task &&
           item.sourceId !== ids.poll,
       ),
-    '任务、投票、提醒和通用通知只返回当前家庭数据',
+    '任务、投票、提醒、活动和通用通知只返回当前家庭数据',
   );
 
   const foreignMenu = await request(

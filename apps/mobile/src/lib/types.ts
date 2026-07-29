@@ -28,6 +28,46 @@ export interface Member {
   avatarEmoji: string;
   role: MemberRole;
   prefersCooking: boolean;
+  disabledAt?: string | null;
+  createdAt?: string;
+}
+
+export interface ManagedMember extends Member {
+  disabledAt: string | null;
+  account: {
+    loginName: string;
+    disabledAt: string | null;
+  } | null;
+}
+
+export type ActivityModule =
+  | 'member'
+  | 'invitation'
+  | 'menu'
+  | 'calendar'
+  | 'task'
+  | 'poll'
+  | 'reminder'
+  | 'shopping'
+  | 'inventory'
+  | 'recipe'
+  | 'system';
+
+export interface HouseholdActivity {
+  id: string;
+  module: ActivityModule;
+  action: string;
+  summary: string;
+  detail: string | null;
+  actor: {
+    id: string | null;
+    name: string;
+    avatarEmoji: string;
+  };
+  subjectMemberId: string | null;
+  targetPath: string | null;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
 }
 
 export interface AccountProfile {

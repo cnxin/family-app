@@ -19,9 +19,11 @@ import type {
   DishSkillLevel,
   Ingredient,
   HouseholdInvitation,
+  HouseholdActivity,
   InventoryCategory,
   InventoryItem,
   Member,
+  ManagedMember,
   MealType,
   Menu,
   MenuDateCount,
@@ -45,6 +47,67 @@ export function useMembers(enabled = true) {
   return useQuery({
     queryKey: ['members'],
     queryFn: () => api<Member[]>('/members'),
+    enabled,
+  });
+}
+
+export function useManagedMembers(enabled = true) {
+  return useQuery({
+    queryKey: ['household-members'],
+    queryFn: () => api<ManagedMember[]>('/household/members'),
+    enabled,
+  });
+}
+
+export function useUpdateManagedMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      name?: string;
+      avatarEmoji?: string;
+      role?: 'owner' | 'admin' | 'member';
+      prefersCooking?: boolean;
+    }) =>
+      api<ManagedMember>(`/household/members/${id}`, {
+        method: 'PATCH',
+        body,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['household-members'] });
+      void qc.invalidateQueries({ queryKey: ['members'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useUpdateManagedMemberStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api<ManagedMember>(`/household/members/${id}/status`, {
+        method: 'PATCH',
+        body: { enabled },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['household-members'] });
+      void qc.invalidateQueries({ queryKey: ['members'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useActivities(
+  scope: 'all' | 'members' | 'menus' = 'all',
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['activities', scope],
+    queryFn: () =>
+      api<HouseholdActivity[]>(`/activities?scope=${scope}&limit=100`),
     enabled,
   });
 }

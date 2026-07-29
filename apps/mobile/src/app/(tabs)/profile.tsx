@@ -2,10 +2,12 @@ import { useRouter } from 'expo-router';
 import {
   BookOpenText,
   ChevronRight,
+  History,
   KeyRound,
   Share2,
   Trash2,
   UserPlus,
+  UsersRound,
 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
@@ -339,6 +341,42 @@ export default function ProfileScreen() {
               </View>
               <ChevronRight color={c.tertiaryLabel} size={19} />
             </PressableScale>
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+            <PressableScale
+              accessibilityLabel="打开家庭活动"
+              haptic={false}
+              onPress={() => router.push('/activity')}
+              style={styles.recipeRow}
+            >
+              <View style={[styles.recipeIcon, { backgroundColor: c.blueSoft }]}>
+                <History color={c.blue} size={20} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>家庭活动</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>成员管理与菜单动态</Text>
+              </View>
+              <ChevronRight color={c.tertiaryLabel} size={19} />
+            </PressableScale>
+            {canManageMembers ? (
+              <>
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+                <PressableScale
+                  accessibilityLabel="打开家庭成员"
+                  haptic={false}
+                  onPress={() => router.push('/members')}
+                  style={styles.recipeRow}
+                >
+                  <View style={[styles.recipeIcon, { backgroundColor: c.greenSoft }]}>
+                    <UsersRound color={c.green} size={20} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>家庭成员</Text>
+                    <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>档案、角色与登录状态</Text>
+                  </View>
+                  <ChevronRight color={c.tertiaryLabel} size={19} />
+                </PressableScale>
+              </>
+            ) : null}
           </Card>
 
           <SectionHeader title="账号" />
