@@ -1,9 +1,11 @@
 import {
+  Bell,
   CalendarDays,
   BookOpenText,
   CookingPot,
   House,
   LayoutDashboard,
+  ListTodo,
   ShoppingCart,
   UserRound,
   UtensilsCrossed,
@@ -23,6 +25,7 @@ import {
 } from 'react-native';
 import { useSession } from '../lib/session';
 import { memberSubtitle } from '../lib/member';
+import { useNotifications } from '../lib/queries';
 import { radius, type as t, useTheme } from '../lib/theme';
 
 export const DESKTOP_BREAKPOINT = 1024;
@@ -63,6 +66,8 @@ interface NavItem {
     | '/recipes'
     | '/kitchen'
     | '/calendar'
+    | '/tasks'
+    | '/notifications'
     | '/shopping'
     | '/profile';
   icon: LucideIcon;
@@ -73,6 +78,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '点菜', href: '/order', icon: UtensilsCrossed },
   { label: '家庭菜谱', href: '/recipes', icon: BookOpenText },
   { label: '菜单安排', href: '/kitchen', icon: CookingPot },
+  { label: '家庭任务', href: '/tasks', icon: ListTodo },
   { label: '家庭日历', href: '/calendar', icon: CalendarDays },
   { label: '采购与库存', href: '/shopping', icon: ShoppingCart },
   { label: '我的', href: '/profile', icon: UserRound },
@@ -97,9 +103,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { member } = useSession();
+  const { data: notifications } = useNotifications(false, desktop);
   const activeRoute = currentRoute(pathname);
-  const activeItem = NAV_ITEMS.find((item) => item.href === activeRoute) ?? NAV_ITEMS[0];
+  const activeItem =
+    activeRoute === '/notifications'
+      ? { label: '通知中心', href: '/notifications' as const, icon: Bell }
+      : NAV_ITEMS.find((item) => item.href === activeRoute) ?? NAV_ITEMS[0];
   const ActiveIcon = activeItem.icon;
+  const unreadCount = notifications?.length ?? 0;
 
   if (!desktop) return <>{children}</>;
 
@@ -194,7 +205,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {activeItem.label}
             </Text>
           </View>
-          <Text style={[t.footnote, { color: c.secondaryLabel }]}>{formatToday()}</Text>
+          <View style={styles.topbarActions}>
+            <Text style={[t.footnote, { color: c.secondaryLabel }]}>{formatToday()}</Text>
+            <Pressable
+              accessibilityLabel={`打开通知中心${unreadCount ? `，${unreadCount}条未读` : ''}`}
+              accessibilityRole="button"
+              onPress={() => router.push('/notifications')}
+              style={({ pressed }) => [
+                styles.notificationButton,
+                { backgroundColor: pressed ? c.fill : 'transparent' },
+              ]}
+            >
+              <Bell color={unreadCount ? c.tint : c.secondaryLabel} size={19} />
+              {unreadCount ? (
+                <View style={[styles.notificationBadge, { backgroundColor: c.red }]}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
         </View>
         <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
       </View>
@@ -259,5 +290,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   topbarTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topbarActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  notificationButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 3,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
   pageContainer: { width: '100%', alignSelf: 'center' },
 });

@@ -118,6 +118,50 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   simulatingUnauthorized = false;
   expect(runtimeErrors).toEqual([]);
 
+  const tasksLink =
+    testInfo.project.name === 'mobile-chrome'
+      ? page.getByRole('link', { name: '查看任务', exact: true })
+      : page.getByRole('link', { name: '家庭任务', exact: true });
+  await expect(tasksLink).toBeVisible();
+  await tasksLink.click();
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByText('家庭任务', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '添加任务', exact: true }).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  const taskTitle = `任务回归-${testInfo.project.name}`;
+  await page.getByRole('button', { name: '添加任务', exact: true }).first().click();
+  await expect(page.getByText('新建家庭任务', { exact: true })).toBeVisible();
+  await page.getByLabel('任务名称').fill(taskTitle);
+  await page.getByLabel('任务备注').fill('浏览器端新增任务');
+  await page.getByRole('button', { name: '添加任务', exact: true }).last().click();
+  await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toBeVisible();
+
+  await openSection(page, testInfo.project.name, 'calendar');
+  const calendarTask = page.getByRole('button').filter({ hasText: taskTitle });
+  await expect(calendarTask).toBeVisible();
+  await calendarTask.click();
+  await expect(page).toHaveURL(/\/tasks\?date=.*taskId=/);
+  await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toBeVisible();
+
+  await page.getByRole('button', { name: `编辑${taskTitle}` }).click();
+  await page.getByLabel('任务备注').fill('浏览器端已编辑任务');
+  await page.getByRole('button', { name: '保存修改', exact: true }).click();
+  await expect(page.getByText('浏览器端已编辑任务', { exact: true })).toBeVisible();
+
+  await page.getByRole('checkbox', { name: `完成${taskTitle}` }).click();
+  await page.getByRole('button', { name: '已处理', exact: true }).click();
+  await expect(page.getByRole('button', { name: `恢复${taskTitle}` }).first()).toBeVisible();
+  await page.getByRole('button', { name: `恢复${taskTitle}` }).first().click();
+  await page.getByRole('button', { name: '待办', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toBeVisible();
+
+  await page.getByRole('button', { name: `停用${taskTitle}` }).click();
+  await expect(page.getByText('停用这个任务？', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '停用任务', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
   await openSection(page, testInfo.project.name, 'kitchen');
   await expect(page.getByText('菜单安排', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('本餐主厨', { exact: true })).toHaveCount(3);
@@ -220,6 +264,15 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(
     page.getByText('家庭今日概览', { exact: true }),
   ).toBeVisible();
+  await page.getByRole('button', { name: /打开通知中心/ }).first().click();
+  await expect(page).toHaveURL(/\/notifications$/);
+  await expect(page.getByText('通知中心', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '未读', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '全部', exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await openSection(page, testInfo.project.name, 'home');
+  await expect(page.getByText('家庭今日概览', { exact: true })).toBeVisible();
   expect(runtimeErrors).toEqual([]);
 
   const accessToken = await page.evaluate(() =>

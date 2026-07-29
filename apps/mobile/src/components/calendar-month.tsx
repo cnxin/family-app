@@ -67,12 +67,18 @@ export function CalendarMonth({
   const markers = useMemo(() => {
     const result = new Map<
       string,
-      { eventCount: number; menuCount: number }
+      { eventCount: number; menuCount: number; taskCount: number }
     >();
     for (const entry of entries) {
-      const current = result.get(entry.date) ?? { eventCount: 0, menuCount: 0 };
+      const current = result.get(entry.date) ?? {
+        eventCount: 0,
+        menuCount: 0,
+        taskCount: 0,
+      };
       if (entry.module === 'menu') {
         current.menuCount += entry.metadata.itemCount ?? 0;
+      } else if (entry.module === 'task') {
+        current.taskCount += 1;
       } else {
         current.eventCount += 1;
       }
@@ -160,6 +166,7 @@ export function CalendarMonth({
           const markerLabel = [
             marker?.menuCount ? `已有${marker.menuCount}道菜` : '',
             marker?.eventCount ? `有${marker.eventCount}个家庭事件` : '',
+            marker?.taskCount ? `有${marker.taskCount}个家庭任务` : '',
           ]
             .filter(Boolean)
             .join('，');
@@ -227,6 +234,14 @@ export function CalendarMonth({
                     </Text>
                   </View>
                 ) : null}
+                {marker?.taskCount ? (
+                  <View
+                    style={[
+                      styles.taskDot,
+                      { backgroundColor: selected ? '#FFFFFF' : c.blue },
+                    ]}
+                  />
+                ) : null}
               </Pressable>
             </View>
           );
@@ -289,4 +304,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   menuBadgeText: { fontSize: 8, lineHeight: 10, fontWeight: '800' },
+  taskDot: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 2,
+  },
 });

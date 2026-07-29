@@ -1,9 +1,11 @@
 import {
   ArrowRight,
+  Bell,
   BookOpenText,
   CheckCircle2,
   Clock3,
   CookingPot,
+  ListTodo,
   ShoppingCart,
   UtensilsCrossed,
   type LucideIcon,
@@ -22,7 +24,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import { Card } from '../../components/ui';
 import { mealLabel, todayStr } from '../../lib/date';
-import { useDishes, useMenusOfDate, useShoppingList } from '../../lib/queries';
+import {
+  useDishes,
+  useMenusOfDate,
+  useNotifications,
+  useShoppingList,
+  useTasks,
+} from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { CATEGORY_EMOJI, Palette, radius, type as t, useTheme } from '../../lib/theme';
 import type { MealType, Menu } from '../../lib/types';
@@ -123,6 +131,8 @@ export default function HomeScreen() {
   const { data: menus, isLoading: menusLoading } = useMenusOfDate(date);
   const { data: shopping, isLoading: shoppingLoading } = useShoppingList(date);
   const { data: dishes } = useDishes();
+  const { data: tasks, isLoading: tasksLoading } = useTasks(date, date);
+  const { data: notifications } = useNotifications();
 
   const menuItems =
     menus?.reduce(
@@ -136,6 +146,8 @@ export default function HomeScreen() {
   const breakfast = menus?.find((menu) => menu.mealType === 'breakfast');
   const lunch = menus?.find((menu) => menu.mealType === 'lunch');
   const dinner = menus?.find((menu) => menu.mealType === 'dinner');
+  const pendingTasks = tasks?.filter((entry) => entry.status === 'pending') ?? [];
+  const unreadCount = notifications?.length ?? 0;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -149,47 +161,154 @@ export default function HomeScreen() {
               </Text>
               <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 6 }]}>{fullDate()}</Text>
             </View>
-            <Pressable
-              onPress={() => router.push('/order')}
-              style={({ pressed }) => [
-                styles.orderButton,
-                { backgroundColor: pressed ? c.cardPressed : c.tint },
-              ]}
-            >
-              <UtensilsCrossed color="#FFFFFF" size={18} />
-              <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>开始点菜</Text>
-              <ArrowRight color="#FFFFFF" size={17} />
-            </Pressable>
+            <View style={styles.heroActions}>
+              <Pressable
+                accessibilityLabel={`打开通知中心${unreadCount ? `，${unreadCount}条未读` : ''}`}
+                accessibilityRole="button"
+                onPress={() => router.push('/notifications')}
+                style={({ pressed }) => [
+                  styles.bellButton,
+                  {
+                    backgroundColor: pressed ? c.fillStrong : c.card,
+                    borderColor: c.separator,
+                  },
+                ]}
+              >
+                <Bell color={unreadCount ? c.tint : c.secondaryLabel} size={19} />
+                {unreadCount ? (
+                  <View style={[styles.bellBadge, { backgroundColor: c.red }]}>
+                    <Text style={styles.bellBadgeText}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/order')}
+                style={({ pressed }) => [
+                  styles.orderButton,
+                  { backgroundColor: pressed ? c.cardPressed : c.tint },
+                ]}
+              >
+                <UtensilsCrossed color="#FFFFFF" size={18} />
+                <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>开始点菜</Text>
+                <ArrowRight color="#FFFFFF" size={17} />
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.metrics}>
-            <MetricCard
-              icon={CookingPot}
-              iconColor={c.tint}
-              iconBackground={c.tintSoft}
-              value={menuItems}
-              label="今日菜品"
-            />
-            <MetricCard
-              icon={ShoppingCart}
-              iconColor={c.orange}
-              iconBackground={c.orangeSoft}
-              value={shoppingPending}
-              label="待购物"
-            />
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/kitchen')}
+              style={[styles.metricLink, desktop && styles.metricLinkDesktop]}
+            >
+              <MetricCard
+                icon={CookingPot}
+                iconColor={c.tint}
+                iconBackground={c.tintSoft}
+                value={menuItems}
+                label="今日菜品"
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/tasks')}
+              style={[styles.metricLink, desktop && styles.metricLinkDesktop]}
+            >
+              <MetricCard
+                icon={ListTodo}
+                iconColor={c.blue}
+                iconBackground={c.blueSoft}
+                value={pendingTasks.length}
+                label="今日待办"
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/shopping')}
+              style={[styles.metricLink, desktop && styles.metricLinkDesktop]}
+            >
+              <MetricCard
+                icon={ShoppingCart}
+                iconColor={c.orange}
+                iconBackground={c.orangeSoft}
+                value={shoppingPending}
+                label="待购物"
+              />
+            </Pressable>
             <Pressable
               accessibilityRole="link"
               onPress={() => router.push('/recipes')}
-              style={styles.metricLink}
+              style={[styles.metricLink, desktop && styles.metricLinkDesktop]}
             >
               <MetricCard
                 icon={BookOpenText}
-                iconColor={c.blue}
-                iconBackground={c.blueSoft}
+                iconColor={c.accent}
+                iconBackground={c.accentSoft}
                 value={dishes?.length ?? 0}
                 label="家庭菜谱"
               />
             </Pressable>
+          </View>
+
+          <View style={styles.tasksSection}>
+            <View style={styles.sectionTitleRow}>
+              <View>
+                <Text style={[t.title2, { color: c.label }]}>今天的任务</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>家务、维护和家庭准备</Text>
+              </View>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => router.push('/tasks')}
+                style={styles.textLink}
+              >
+                <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>查看任务</Text>
+                <ArrowRight color={c.tint} size={16} />
+              </Pressable>
+            </View>
+            <Card style={styles.tasksCard}>
+              {tasksLoading ? (
+                <ActivityIndicator color={c.tint} style={styles.taskLoader} />
+              ) : pendingTasks.length ? (
+                pendingTasks.slice(0, 4).map((entry) => (
+                  <Pressable
+                    accessibilityRole="link"
+                    key={entry.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/tasks',
+                        params: { date: entry.dueDate, taskId: entry.taskId },
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.taskSummaryRow,
+                      { borderBottomColor: c.separator },
+                      pressed && { backgroundColor: c.fill },
+                    ]}
+                  >
+                    <CheckCircle2 color={c.tint} size={19} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={[t.subhead, { color: c.label, fontWeight: '600' }]}
+                      >
+                        {entry.task.title}
+                      </Text>
+                      <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                        {entry.assignee?.name ?? '全家可做'}
+                      </Text>
+                    </View>
+                    <ArrowRight color={c.tertiaryLabel} size={16} />
+                  </Pressable>
+                ))
+              ) : (
+                <View style={styles.emptyTasks}>
+                  <CheckCircle2 color={c.tint} size={24} />
+                  <Text style={[t.subhead, { color: c.secondaryLabel }]}>今天没有待办任务</Text>
+                </View>
+              )}
+            </Card>
           </View>
 
           <View style={[styles.mainGrid, desktop && styles.mainGridDesktop]}>
@@ -288,6 +407,27 @@ const styles = StyleSheet.create({
   contentDesktop: { paddingTop: 32 },
   hero: { gap: 18 },
   heroDesktop: { flexDirection: 'row', alignItems: 'center' },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  bellButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
   orderButton: {
     height: 44,
     borderRadius: radius.md,
@@ -298,9 +438,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  metrics: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  metricCard: { flex: 1, minWidth: 0, minHeight: 116, padding: 14 },
-  metricLink: { flex: 1, minWidth: 0 },
+  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 24 },
+  metricCard: { flex: 1, minWidth: 0, minHeight: 110, padding: 14 },
+  metricLink: { flexGrow: 1, flexBasis: '46%', minWidth: 0 },
+  metricLinkDesktop: { flexBasis: '22%' },
   metricIcon: {
     width: 34,
     height: 34,
@@ -318,6 +459,25 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  tasksSection: { marginTop: 30 },
+  tasksCard: { overflow: 'hidden', minHeight: 76 },
+  taskLoader: { marginVertical: 24 },
+  taskSummaryRow: {
+    minHeight: 64,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  emptyTasks: {
+    minHeight: 78,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
   },
   textLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
   menuCard: { minHeight: 230, padding: 18 },

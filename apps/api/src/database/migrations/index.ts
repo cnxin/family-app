@@ -6,6 +6,7 @@ import { AddRevocableAuthSessions1785226800000 } from './1785226800000-add-revoc
 import { SeparateAccountsAndInvitations1785226900000 } from './1785226900000-separate-accounts-and-invitations';
 import { AddUnifiedCalendar1785227000000 } from './1785227000000-add-unified-calendar';
 import { AddRecipeVariants1785227100000 } from './1785227100000-add-recipe-variants';
+import { AddHouseholdTasks1785227200000 } from './1785227200000-add-household-tasks';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -16,4 +17,5 @@ export const ALL_MIGRATIONS = [
   SeparateAccountsAndInvitations1785226900000,
   AddUnifiedCalendar1785227000000,
   AddRecipeVariants1785227100000,
+  AddHouseholdTasks1785227200000,
 ];

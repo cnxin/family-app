@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Clock3,
   CookingPot,
+  ListTodo,
   Pencil,
   Plus,
   Trash2,
@@ -328,34 +329,47 @@ function ScheduleRow({
   onDelete,
   onEdit,
   onOpenMenu,
+  onOpenTask,
 }: {
   entry: CalendarEntry;
   onDelete: () => void;
   onEdit: () => void;
   onOpenMenu: () => void;
+  onOpenTask: () => void;
 }) {
   const c = useTheme();
   const isMenu = entry.module === 'menu';
-  const canManage = !isMenu && Boolean(entry.metadata.canManage);
+  const isTask = entry.module === 'task';
+  const isCalendar = entry.module === 'calendar';
+  const canManage = isCalendar && Boolean(entry.metadata.canManage);
+  const interactive = isMenu || isTask;
 
   return (
     <Pressable
-      accessibilityRole={isMenu ? 'button' : undefined}
-      onPress={isMenu ? onOpenMenu : undefined}
+      accessibilityRole={interactive ? 'button' : undefined}
+      onPress={isMenu ? onOpenMenu : isTask ? onOpenTask : undefined}
       style={({ pressed }) => [
         styles.scheduleRow,
         { borderBottomColor: c.separator },
-        pressed && isMenu && { backgroundColor: c.fill },
+        pressed && interactive && { backgroundColor: c.fill },
       ]}
     >
       <View
         style={[
           styles.scheduleIcon,
-          { backgroundColor: isMenu ? c.orangeSoft : c.tintSoft },
+          {
+            backgroundColor: isMenu
+              ? c.orangeSoft
+              : isTask
+                ? c.blueSoft
+                : c.tintSoft,
+          },
         ]}
       >
         {isMenu ? (
           <CookingPot color={c.orange} size={19} />
+        ) : isTask ? (
+          <ListTodo color={c.blue} size={19} />
         ) : (
           <CalendarDays color={c.tint} size={19} />
         )}
@@ -369,7 +383,15 @@ function ScheduleRow({
             {entry.title}
           </Text>
           <Text style={[t.caption, { color: c.secondaryLabel }]}>
-            {isMenu ? entry.summary : eventTime(entry)}
+            {isMenu
+              ? entry.summary
+              : isTask
+                ? entry.status === 'done'
+                  ? '已完成'
+                  : entry.status === 'skipped'
+                    ? '已跳过'
+                    : entry.metadata.assigneeName ?? '待认领'
+                : eventTime(entry)}
           </Text>
         </View>
         {!isMenu && entry.summary ? (
@@ -380,7 +402,7 @@ function ScheduleRow({
             {entry.summary}
           </Text>
         ) : null}
-        {!isMenu ? (
+        {isCalendar ? (
           <View style={styles.creatorRow}>
             <UserRound color={c.tertiaryLabel} size={12} />
             <Text style={[t.caption, { color: c.tertiaryLabel }]}>
@@ -389,7 +411,7 @@ function ScheduleRow({
           </View>
         ) : null}
       </View>
-      {isMenu ? <ChevronRight color={c.tertiaryLabel} size={18} /> : null}
+      {interactive ? <ChevronRight color={c.tertiaryLabel} size={18} /> : null}
       {canManage ? (
         <View style={styles.rowActions}>
           <Pressable
@@ -473,6 +495,13 @@ export default function CalendarScreen() {
     });
   };
 
+  const openTask = (entry: CalendarEntry) => {
+    router.push({
+      pathname: '/tasks',
+      params: { date: entry.date, taskId: entry.sourceId },
+    });
+  };
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -543,6 +572,7 @@ export default function CalendarScreen() {
                         setFormOpen(true);
                       }}
                       onOpenMenu={() => openMenu(entry)}
+                      onOpenTask={() => openTask(entry)}
                     />
                   ))
                 ) : (

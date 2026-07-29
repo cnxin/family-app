@@ -6,6 +6,7 @@ import {
 import { api } from './api';
 import type {
   AccountProfile,
+  AppNotification,
   CalendarEntry,
   CalendarEvent,
   CreatedHouseholdInvitation,
@@ -28,6 +29,9 @@ import type {
   MemberDishSkill,
   RecipeDish,
   ShoppingItem,
+  TaskInstanceStatus,
+  TaskOccurrence,
+  TaskRecurrence,
 } from './types';
 
 export function useMembers(enabled = true) {
@@ -132,6 +136,110 @@ export function useDeleteCalendarEvent() {
         method: 'DELETE',
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar'] }),
+  });
+}
+
+export function useTasks(start: string, end: string, enabled = true) {
+  return useQuery({
+    queryKey: ['tasks', start, end],
+    queryFn: () => api<TaskOccurrence[]>(`/tasks?start=${start}&end=${end}`),
+    enabled,
+  });
+}
+
+export interface TaskInput {
+  id?: string;
+  title: string;
+  note?: string | null;
+  startsOn: string;
+  recurrence: TaskRecurrence;
+  repeatInterval: number;
+  endsOn?: string | null;
+  defaultAssigneeId?: string | null;
+}
+
+export function useUpsertTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: TaskInput) =>
+      id
+        ? api(`/tasks/${id}`, { method: 'PATCH', body })
+        : api('/tasks', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useArchiveTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; archived: true }>(`/tasks/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+    },
+  });
+}
+
+export function useUpdateTaskOccurrence() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      taskId: string;
+      dueDate: string;
+      status?: TaskInstanceStatus;
+      assigneeId?: string | null;
+    }) =>
+      api<TaskOccurrence>(
+        `/tasks/${input.taskId}/instances/${input.dueDate}`,
+        {
+          method: 'PATCH',
+          body: { status: input.status, assigneeId: input.assigneeId },
+        },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useNotifications(includeRead = false, enabled = true) {
+  return useQuery({
+    queryKey: ['notifications', includeRead],
+    queryFn: () =>
+      api<AppNotification[]>(
+        `/notifications${includeRead ? '?includeRead=true' : ''}`,
+      ),
+    enabled,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<AppNotification>(`/notifications/${id}/read`, { method: 'PATCH' }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api<{ updated: number }>('/notifications/read-all', { method: 'PATCH' }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 }
 

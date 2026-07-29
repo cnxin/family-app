@@ -56,6 +56,9 @@ const ids = {
   menuItem: randomUUID(),
   menuEvent: randomUUID(),
   calendarEvent: randomUUID(),
+  task: randomUUID(),
+  taskInstance: randomUUID(),
+  notification: randomUUID(),
   shoppingItem: randomUUID(),
   inventoryItem: randomUUID(),
 };
@@ -132,6 +135,31 @@ try {
       '隔离测试日历事件',
       '只能由所属家庭读取',
       ids.member,
+    ],
+  );
+  await db.query(
+    `INSERT INTO household_tasks
+       (id, "householdId", title, "startsOn", recurrence, "createdById", "defaultAssigneeId")
+     VALUES ($1, $2, $3, $4, 'once', $5, $5)`,
+    [ids.task, ids.household, '隔离测试任务', TEST_DATE, ids.member],
+  );
+  await db.query(
+    `INSERT INTO household_task_instances
+       (id, "householdId", "taskId", "dueDate", "assigneeId", status)
+     VALUES ($1, $2, $3, $4, $5, 'pending')`,
+    [ids.taskInstance, ids.household, ids.task, TEST_DATE, ids.member],
+  );
+  await db.query(
+    `INSERT INTO notifications
+       (id, "householdId", "recipientId", module, type, "sourceId", title, "targetPath")
+     VALUES ($1, $2, $3, 'task', 'task_assigned', $4, $5, $6)`,
+    [
+      ids.notification,
+      ids.household,
+      ids.member,
+      ids.task,
+      '隔离测试通知',
+      `/tasks?date=${TEST_DATE}&taskId=${ids.task}`,
     ],
   );
   await db.query(
@@ -248,9 +276,25 @@ try {
   assert(
     defaultCalendar.status === 200 &&
       defaultCalendar.body.data.every(
-        (entry) => entry.sourceId !== ids.calendarEvent,
+        (entry) =>
+          entry.sourceId !== ids.calendarEvent && entry.sourceId !== ids.task,
       ),
-    '统一日历不读取其他家庭事件',
+    '统一日历不读取其他家庭事件或任务',
+  );
+
+  const defaultTasks = await request(
+    `/tasks?start=${TEST_DATE}&end=${TEST_DATE}`,
+    defaultToken,
+  );
+  const defaultNotifications = await request('/notifications', defaultToken);
+  assert(
+    defaultTasks.status === 200 &&
+      defaultTasks.body.data.every((item) => item.taskId !== ids.task) &&
+      defaultNotifications.status === 200 &&
+      defaultNotifications.body.data.every(
+        (item) => item.id !== ids.notification,
+      ),
+    '任务和通用通知只返回当前家庭数据',
   );
 
   const foreignMenu = await request(
@@ -329,8 +373,39 @@ try {
       foreignCalendar.body.data.some(
         (entry) => entry.sourceId === ids.calendarEvent,
       ) &&
+      foreignCalendar.body.data.some((entry) => entry.sourceId === ids.task) &&
       crossCalendar.status === 404,
-    '家庭事件只对所属家庭可见且不能被跨家庭修改',
+    '家庭事件与任务只对所属家庭可见且不能被跨家庭修改',
+  );
+
+  const foreignTasks = await request(
+    `/tasks?start=${TEST_DATE}&end=${TEST_DATE}`,
+    foreignToken,
+  );
+  const crossTask = await request(
+    `/tasks/${ids.task}`,
+    defaultToken,
+    'PATCH',
+    { title: '不应写入' },
+  );
+  const crossTaskInstance = await request(
+    `/tasks/${ids.task}/instances/${TEST_DATE}`,
+    defaultToken,
+    'PATCH',
+    { status: 'done' },
+  );
+  const crossGenericNotification = await request(
+    `/notifications/${ids.notification}/read`,
+    defaultToken,
+    'PATCH',
+  );
+  assert(
+    foreignTasks.status === 200 &&
+      foreignTasks.body.data.some((item) => item.taskId === ids.task) &&
+      crossTask.status === 404 &&
+      crossTaskInstance.status === 404 &&
+      crossGenericNotification.status === 404,
+    '不能跨家庭读取、修改任务实例或处理通知',
   );
 
   const crossShopping = await request(
@@ -354,6 +429,11 @@ try {
 
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
+  await db.query('DELETE FROM notifications WHERE id = $1', [ids.notification]);
+  await db.query('DELETE FROM household_task_instances WHERE id = $1', [
+    ids.taskInstance,
+  ]);
+  await db.query('DELETE FROM household_tasks WHERE id = $1', [ids.task]);
   await db.query('DELETE FROM calendar_events WHERE id = $1', [ids.calendarEvent]);
   await db.query('DELETE FROM menu_events WHERE id = $1', [ids.menuEvent]);
   await db.query('DELETE FROM menu_items WHERE id = $1', [ids.menuItem]);

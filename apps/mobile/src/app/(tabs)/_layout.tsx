@@ -94,6 +94,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="tasks"
+        options={{
+          title: '任务',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: '通知',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="shopping"
         options={{
           title: '采购',

@@ -39,17 +39,18 @@ import {
   useAssignMenuChef,
   useCompleteMenu,
   useGenerateShoppingList,
-  useMarkMenuNotificationRead,
+  useMarkNotificationRead,
   useMembers,
+  useNotifications,
   useRecipe,
   useMenuEvents,
-  useMenuNotifications,
   useMenusOfDate,
   useUpdateMenuItem,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../lib/theme';
 import type {
+  AppNotification,
   Member,
   Menu,
   MenuEvent,
@@ -723,18 +724,18 @@ function MealMenuSection({
   );
 }
 
-function NotificationPanel({ notifications }: { notifications: MenuEvent[] }) {
+function NotificationPanel({ notifications }: { notifications: AppNotification[] }) {
   const c = useTheme();
-  const markRead = useMarkMenuNotificationRead();
+  const markRead = useMarkNotificationRead();
   if (!notifications.length) return null;
 
   return (
     <View>
       <SectionHeader title={`菜单提醒（${notifications.length}）`} />
       <Card style={{ overflow: 'hidden' }}>
-        {notifications.map((event) => (
+        {notifications.map((notification) => (
           <View
-            key={event.id}
+            key={notification.id}
             style={[styles.notificationRow, { borderBottomColor: c.separator }]}
           >
             <View style={[styles.notificationIcon, { backgroundColor: c.orangeSoft }]}>
@@ -742,18 +743,17 @@ function NotificationPanel({ notifications }: { notifications: MenuEvent[] }) {
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
-                {event.actor.name} 划掉了你点的「{event.menuItem?.dish.name ?? '一道菜'}」
+                {notification.title}
               </Text>
               <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>
-                {event.menu.date} {mealLabel(event.menu.mealType)}
-                {event.reason ? ` · ${event.reason}` : ''}
+                {notification.body ?? '打开菜单查看详情'}
               </Text>
             </View>
             <PressableScale
               accessibilityLabel="标记提醒为已读"
               disabled={markRead.isPending}
               haptic={false}
-              onPress={() => markRead.mutate(event.id)}
+              onPress={() => markRead.mutate(notification.id)}
               style={[styles.readButton, { backgroundColor: c.fill }]}
             >
               <Check color={c.tint} size={15} />
@@ -779,7 +779,10 @@ export default function KitchenScreen() {
   const [date, setDate] = useState(initialDate);
   const { data: members } = useMembers();
   const { data: menus, isLoading } = useMenusOfDate(date);
-  const { data: notifications } = useMenuNotifications();
+  const { data: allNotifications } = useNotifications();
+  const notifications = allNotifications?.filter(
+    (notification) => notification.module === 'menu',
+  );
   const generate = useGenerateShoppingList();
 
   useEffect(() => {

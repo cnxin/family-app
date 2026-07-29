@@ -459,7 +459,17 @@ try {
   const notification = notifications.body.data.find(
     (event) => event.menuItemId === secondItem.id,
   );
-  assert(notification, '点菜人收到划掉提醒');
+  const genericNotifications = await request('/notifications', memberToken);
+  const genericNotification = genericNotifications.body.data.find(
+    (item) =>
+      item.module === 'menu' &&
+      item.type === 'menu_item_rejected' &&
+      item.sourceId === notification?.id,
+  );
+  assert(
+    notification && genericNotification,
+    '点菜人同时通过兼容接口和通用通知收到划掉提醒',
+  );
   const crossRead = await request(
     `/menu-notifications/${notification.id}/read`,
     chefToken,
@@ -474,6 +484,7 @@ try {
     '/menu-notifications',
     memberToken,
   );
+  const genericAfterRead = await request('/notifications', memberToken);
   assert(
     notifications.status === 200 &&
       notification.reason === '临时调整菜单' &&
@@ -481,8 +492,62 @@ try {
       markedRead.status === 200 &&
       !notificationsAfterRead.body.data.some(
         (event) => event.id === notification.id,
+      ) &&
+      !genericAfterRead.body.data.some(
+        (item) => item.id === genericNotification.id,
       ),
-    '划掉提醒只对点菜人可见并可标记已读',
+    '划掉提醒只对点菜人可见且兼容与通用已读状态同步',
+  );
+
+  const restoredForGenericRead = await request(
+    `/menu-items/${secondItem.id}`,
+    memberToken,
+    'PATCH',
+    { status: 'pending' },
+  );
+  const claimedForGenericRead = await request(
+    `/menu-items/${secondItem.id}`,
+    chefToken,
+    'PATCH',
+    { status: 'accepted' },
+  );
+  const secondRejectedItem = await request(
+    `/menu-items/${secondItem.id}`,
+    chefToken,
+    'PATCH',
+    { status: 'rejected', reason: '验证通用通知已读同步' },
+  );
+  const unreadGenericAfterSecondRejection = await request(
+    '/notifications',
+    memberToken,
+  );
+  const secondGenericNotification = unreadGenericAfterSecondRejection.body.data.find(
+    (item) =>
+      item.module === 'menu' &&
+      item.type === 'menu_item_rejected' &&
+      item.sourceId !== genericNotification.sourceId,
+  );
+  const genericMarkedRead = secondGenericNotification
+    ? await request(
+        `/notifications/${secondGenericNotification.id}/read`,
+        memberToken,
+        'PATCH',
+      )
+    : { status: 0 };
+  const legacyAfterGenericRead = await request(
+    '/menu-notifications',
+    memberToken,
+  );
+  assert(
+    restoredForGenericRead.status === 200 &&
+      claimedForGenericRead.status === 200 &&
+      secondRejectedItem.status === 200 &&
+      secondGenericNotification &&
+      genericMarkedRead.status === 200 &&
+      !legacyAfterGenericRead.body.data.some(
+        (event) => event.id === secondGenericNotification.sourceId,
+      ),
+    '通用通知标记已读后兼容提醒同步为已读',
   );
 
   const restored = await request(

@@ -254,13 +254,13 @@ export interface CalendarEvent {
 export interface CalendarEntry {
   id: string;
   sourceId: string;
-  module: 'menu' | 'calendar';
+  module: 'menu' | 'calendar' | 'task';
   date: string;
   startsAt: string | null;
   endsAt: string | null;
   title: string;
   summary: string | null;
-  status: 'open' | 'done' | 'scheduled';
+  status: 'open' | 'done' | 'scheduled' | 'pending' | 'skipped';
   targetPath: string;
   metadata: {
     mealType?: MealType;
@@ -268,5 +268,61 @@ export interface CalendarEntry {
     createdById?: string;
     createdByName?: string;
     canManage?: boolean;
+    canUpdate?: boolean;
+    assigneeId?: string | null;
+    assigneeName?: string | null;
+    recurrence?: TaskRecurrence;
   };
+}
+
+export type TaskRecurrence = 'once' | 'daily' | 'weekly' | 'monthly';
+export type TaskInstanceStatus = 'pending' | 'done' | 'skipped';
+
+export interface HouseholdTask {
+  id: string;
+  title: string;
+  note: string | null;
+  startsOn: string;
+  recurrence: TaskRecurrence;
+  repeatInterval: number;
+  endsOn: string | null;
+  createdById: string;
+  createdBy: Member;
+  defaultAssigneeId: string | null;
+  defaultAssignee: Member | null;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskOccurrence {
+  id: string;
+  taskId: string;
+  dueDate: string;
+  status: TaskInstanceStatus;
+  assigneeId: string | null;
+  assignee: Member | null;
+  resolvedById: string | null;
+  resolvedBy: Member | null;
+  resolvedAt: string | null;
+  canManageTask: boolean;
+  canUpdate: boolean;
+  task: HouseholdTask;
+}
+
+export type NotificationModule = 'menu' | 'task' | 'calendar' | 'system';
+
+export interface AppNotification {
+  id: string;
+  householdId: string;
+  recipientId: string;
+  recipient: Member;
+  module: NotificationModule;
+  type: string;
+  sourceId: string | null;
+  title: string;
+  body: string | null;
+  targetPath: string;
+  readAt: string | null;
+  createdAt: string;
 }

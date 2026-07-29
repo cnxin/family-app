@@ -39,6 +39,7 @@ import {
   MenuEvent,
   MenuItem,
   MenuItemStatus,
+  Notification,
 } from '../entities';
 import { buildRecipeSnapshot } from '../recipes/recipe.snapshot';
 
@@ -144,6 +145,8 @@ export class MenusService {
     @InjectRepository(MenuItem) private readonly items: Repository<MenuItem>,
     @InjectRepository(MenuEvent)
     private readonly events: Repository<MenuEvent>,
+    @InjectRepository(Notification)
+    private readonly notifications: Repository<Notification>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -320,9 +323,11 @@ export class MenusService {
         const variants = manager.getRepository(DishRecipeVariant);
         const skills = manager.getRepository(MemberDishSkill);
         const events = manager.getRepository(MenuEvent);
+        const notifications = manager.getRepository(Notification);
         const item = await items
           .createQueryBuilder('item')
           .innerJoinAndSelect('item.menu', 'menu')
+          .innerJoinAndSelect('item.dish', 'dish')
           .where('item.id = :id', { id })
           .andWhere('menu.householdId = :householdId', {
             householdId: user.householdId,
@@ -426,6 +431,7 @@ export class MenusService {
         }
 
         const pendingEvents: MenuEvent[] = [];
+        let rejectionEvent: MenuEvent | null = null;
         if (nextAssigneeId !== previousAssigneeId) {
           const previousAssignee = previousAssigneeId
             ? await members.findOneBy({
@@ -450,8 +456,7 @@ export class MenusService {
         if (nextStatus !== previousStatus) {
           item.status = nextStatus;
           item.statusReason = nextStatus === 'rejected' ? reason : null;
-          pendingEvents.push(
-            events.create({
+          const statusEvent = events.create({
               householdId: user.householdId,
               menuId: item.menuId,
               menuItemId: item.id,
@@ -465,8 +470,9 @@ export class MenusService {
               fromValue: previousStatus,
               toValue: nextStatus,
               reason: nextStatus === 'rejected' ? reason : null,
-            }),
-          );
+            });
+          pendingEvents.push(statusEvent);
+          if (statusEvent.recipientId) rejectionEvent = statusEvent;
         }
         if (dto.note != null) {
           if (item.requestedById !== user.memberId) {
@@ -489,6 +495,23 @@ export class MenusService {
 
         await items.save(item);
         if (pendingEvents.length) await events.save(pendingEvents);
+        if (rejectionEvent?.recipientId) {
+          await notifications.save(
+            notifications.create({
+              householdId: user.householdId,
+              recipientId: rejectionEvent.recipientId,
+              module: 'menu',
+              type: 'menu_item_rejected',
+              sourceId: rejectionEvent.id,
+              title: `${user.name} 划掉了你点的「${item.dish.name}」`.slice(
+                0,
+                160,
+              ),
+              body: reason,
+              targetPath: `/kitchen?date=${item.menu.date}&mealType=${item.menu.mealType}`,
+            }),
+          );
+        }
         const saved = await items.findOne({ where: { id } });
         if (!saved) throw new NotFoundException('这道菜不在菜单里');
         return saved;
@@ -631,6 +654,16 @@ export class MenusService {
     if (!event.readAt) {
       event.readAt = new Date();
       await this.events.save(event);
+      await this.notifications.update(
+        {
+          householdId: user.householdId,
+          recipientId: user.memberId,
+          module: 'menu',
+          sourceId: event.id,
+          readAt: IsNull(),
+        },
+        { readAt: event.readAt },
+      );
     }
     return event;
   }
@@ -715,7 +748,15 @@ export class MenusController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Menu, MenuItem, MenuEvent, Member])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Menu,
+      MenuItem,
+      MenuEvent,
+      Member,
+      Notification,
+    ]),
+  ],
   controllers: [MenusController],
   providers: [MenusService],
   exports: [MenusService],

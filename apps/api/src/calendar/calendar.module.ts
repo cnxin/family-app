@@ -23,6 +23,7 @@ import {
 import { Between, Repository } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { CalendarEvent, MealType, Menu } from '../entities';
+import { TasksModule, TasksService } from '../tasks/tasks.module';
 
 class CalendarRangeDto {
   @IsISO8601({ strict: true })
@@ -153,6 +154,7 @@ export class CalendarService {
     @InjectRepository(CalendarEvent)
     private readonly events: Repository<CalendarEvent>,
     @InjectRepository(Menu) private readonly menus: Repository<Menu>,
+    private readonly tasks: TasksService,
   ) {}
 
   async list(start: string, end: string, user: JwtUser) {
@@ -165,7 +167,7 @@ export class CalendarService {
       throw new BadRequestException('单次最多查询 371 天');
     }
 
-    const [events, menuRows] = await Promise.all([
+    const [events, menuRows, taskRows] = await Promise.all([
       this.events.find({
         where: { householdId: user.householdId, date: Between(start, end) },
         order: { date: 'ASC', startsAt: 'ASC', createdAt: 'ASC' },
@@ -196,6 +198,7 @@ export class CalendarService {
           status: 'open' | 'done';
           itemCount: string;
         }>(),
+      this.tasks.list(start, end, user),
     ]);
 
     const rows = [
@@ -239,12 +242,34 @@ export class CalendarService {
             user.role === 'admin',
         },
       })),
+      ...taskRows.map((occurrence) => ({
+        id: `task:${occurrence.taskId}:${occurrence.dueDate}`,
+        sourceId: occurrence.taskId,
+        module: 'task' as const,
+        date: occurrence.dueDate,
+        startsAt: null,
+        endsAt: null,
+        title: occurrence.task.title,
+        summary: occurrence.task.note,
+        status: occurrence.status,
+        targetPath: `/tasks?date=${occurrence.dueDate}&taskId=${occurrence.taskId}`,
+        metadata: {
+          assigneeId: occurrence.assigneeId,
+          assigneeName: occurrence.assignee?.name ?? null,
+          recurrence: occurrence.task.recurrence,
+          canManage: occurrence.canManageTask,
+          canUpdate: occurrence.canUpdate,
+        },
+      })),
     ];
 
     return rows.sort((left, right) => {
       const dateOrder = left.date.localeCompare(right.date);
       if (dateOrder) return dateOrder;
-      if (left.module !== right.module) return left.module === 'calendar' ? -1 : 1;
+      if (left.module !== right.module) {
+        const moduleOrder = { calendar: 0, task: 1, menu: 2 };
+        return moduleOrder[left.module] - moduleOrder[right.module];
+      }
       if (left.module === 'menu' && right.module === 'menu') {
         return MEAL_ORDER[left.metadata.mealType] - MEAL_ORDER[right.metadata.mealType];
       }
@@ -324,7 +349,7 @@ export class CalendarController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CalendarEvent, Menu])],
+  imports: [TypeOrmModule.forFeature([CalendarEvent, Menu]), TasksModule],
   controllers: [CalendarController],
   providers: [CalendarService],
 })
