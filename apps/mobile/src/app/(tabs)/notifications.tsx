@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CookingPot,
   ListTodo,
+  Vote,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
@@ -34,6 +35,7 @@ type NotificationFilter = 'unread' | 'all';
 const MODULE_LABELS: Record<NotificationModule, string> = {
   menu: '菜单',
   task: '任务',
+  poll: '投票',
   calendar: '日历',
   system: '系统',
 };
@@ -52,6 +54,7 @@ function NotificationIcon({ module }: { module: NotificationModule }) {
   const props = { size: 18, color: c.tint };
   if (module === 'menu') return <CookingPot {...props} color={c.orange} />;
   if (module === 'task') return <ListTodo {...props} color={c.blue} />;
+  if (module === 'poll') return <Vote {...props} color={c.accent} />;
   if (module === 'calendar') return <CalendarDays {...props} />;
   return <Bell {...props} />;
 }
@@ -72,6 +75,8 @@ function NotificationRow({
       ? c.orangeSoft
       : notification.module === 'task'
         ? c.blueSoft
+        : notification.module === 'poll'
+          ? c.accentSoft
         : c.tintSoft;
   return (
     <Pressable
@@ -214,7 +219,7 @@ export default function NotificationsScreen() {
               <EmptyState
                 emoji="🔕"
                 title={filter === 'unread' ? '通知都处理完了' : '还没有通知'}
-                hint="任务指派、完成和菜单变化会显示在这里"
+                hint="任务、投票和菜单变化会显示在这里"
               />
             ) : null}
           </Card>

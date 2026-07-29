@@ -310,7 +310,7 @@ export interface TaskOccurrence {
   task: HouseholdTask;
 }
 
-export type NotificationModule = 'menu' | 'task' | 'calendar' | 'system';
+export type NotificationModule = 'menu' | 'task' | 'poll' | 'calendar' | 'system';
 
 export interface AppNotification {
   id: string;
@@ -325,4 +325,44 @@ export interface AppNotification {
   targetPath: string;
   readAt: string | null;
   createdAt: string;
+}
+
+export type PollCategory = 'general' | 'meal' | 'activity' | 'movie' | 'shopping';
+export type PollVoteMode = 'single' | 'multiple';
+export type PollStatus = 'open' | 'closed';
+
+export interface PollOptionResult {
+  id: string;
+  label: string;
+  description: string | null;
+  sortOrder: number;
+  voteCount: number;
+  percentage: number;
+  voters: Member[];
+}
+
+export interface HouseholdPoll {
+  id: string;
+  title: string;
+  description: string | null;
+  category: PollCategory;
+  voteMode: PollVoteMode;
+  maxChoices: number;
+  closesAt: string | null;
+  status: PollStatus;
+  sourceModule: string | null;
+  sourceId: string | null;
+  createdById: string;
+  createdBy: Member;
+  closedById: string | null;
+  closedBy: Member | null;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canManage: boolean;
+  canVote: boolean;
+  totalVoters: number;
+  totalVotes: number;
+  selectedOptionIds: string[];
+  options: PollOptionResult[];
 }

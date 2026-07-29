@@ -162,6 +162,53 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
+  await openSection(page, testInfo.project.name, 'home');
+  const pollsLink =
+    testInfo.project.name === 'mobile-chrome'
+      ? page.getByRole('link', { name: '查看投票', exact: true })
+      : page.getByRole('link', { name: '家庭投票', exact: true });
+  await expect(pollsLink).toBeVisible();
+  await pollsLink.click();
+  await expect(page).toHaveURL(/\/polls$/);
+  await expect(page.getByText('家庭投票', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '发起投票', exact: true }).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  const pollTitle = `投票回归-${testInfo.project.name}`;
+  await page.getByRole('button', { name: '发起投票', exact: true }).first().click();
+  await expect(page.getByText('发起家庭投票', { exact: true })).toBeVisible();
+  await page.getByLabel('投票标题').fill(pollTitle);
+  await page.getByLabel('投票说明').fill('浏览器端新增投票');
+  await page.getByRole('textbox', { name: '候选项1', exact: true }).fill('周六上午');
+  await page.getByRole('textbox', { name: '候选项2', exact: true }).fill('周日下午');
+  await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
+  await expect(page.getByRole('checkbox', { name: '选择周六上午' })).toBeVisible();
+
+  await page.getByRole('checkbox', { name: '选择周六上午' }).click();
+  await page.getByRole('button', { name: `提交${pollTitle}的投票` }).click();
+  await expect(page.getByText(/1 票 · 100%/).first()).toBeVisible();
+
+  await page.getByRole('button', { name: `编辑投票${pollTitle}` }).click();
+  await expect(page.getByText('编辑家庭投票', { exact: true })).toBeVisible();
+  await page.getByLabel('投票说明').fill('浏览器端已编辑投票');
+  await page.getByRole('button', { name: '保存修改', exact: true }).click();
+  await expect(page.getByText('浏览器端已编辑投票', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: `结束投票${pollTitle}` }).click();
+  await expect(page.getByText('结束这个投票？', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '结束投票', exact: true }).click();
+  await page.getByRole('button', { name: '已结束', exact: true }).click();
+  await expect(page.getByRole('button', { name: `重新开启投票${pollTitle}` })).toBeVisible();
+  await page.getByRole('button', { name: `重新开启投票${pollTitle}` }).click();
+  await page.getByRole('button', { name: '进行中', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: '取消选择周六上午' })).toBeVisible();
+
+  await page.getByRole('button', { name: `删除投票${pollTitle}` }).click();
+  await expect(page.getByText('删除这个投票？', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '删除投票', exact: true }).click();
+  await expect(page.getByText(pollTitle, { exact: true })).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+
   await openSection(page, testInfo.project.name, 'kitchen');
   await expect(page.getByText('菜单安排', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('本餐主厨', { exact: true })).toHaveCount(3);

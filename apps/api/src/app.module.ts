@@ -7,6 +7,7 @@ import { DishesModule } from './dishes/dishes.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { MenusModule } from './menus/menus.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PollsModule } from './polls/polls.module';
 import { RecipesModule } from './recipes/recipes.module';
 import { ShoppingModule } from './shopping/shopping.module';
 import { SystemModule } from './system/system.module';
@@ -22,6 +23,7 @@ import { UploadModule } from './upload/upload.module';
     InventoryModule,
     MenusModule,
     NotificationsModule,
+    PollsModule,
     RecipesModule,
     ShoppingModule,
     SystemModule,

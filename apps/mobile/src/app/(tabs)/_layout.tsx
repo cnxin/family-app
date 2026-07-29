@@ -108,6 +108,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="polls"
+        options={{
+          title: '投票',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="shopping"
         options={{
           title: '采购',

@@ -59,6 +59,10 @@ const ids = {
   task: randomUUID(),
   taskInstance: randomUUID(),
   notification: randomUUID(),
+  poll: randomUUID(),
+  pollOption: randomUUID(),
+  pollVote: randomUUID(),
+  pollNotification: randomUUID(),
   shoppingItem: randomUUID(),
   inventoryItem: randomUUID(),
 };
@@ -160,6 +164,36 @@ try {
       ids.task,
       '隔离测试通知',
       `/tasks?date=${TEST_DATE}&taskId=${ids.task}`,
+    ],
+  );
+  await db.query(
+    `INSERT INTO polls
+       (id, "householdId", title, category, "voteMode", "maxChoices", "createdById")
+     VALUES ($1, $2, $3, 'general', 'single', 1, $4)`,
+    [ids.poll, ids.household, '隔离测试投票', ids.member],
+  );
+  await db.query(
+    `INSERT INTO poll_options (id, "pollId", label, "sortOrder")
+     VALUES ($1, $2, $3, 0)`,
+    [ids.pollOption, ids.poll, '隔离测试候选项'],
+  );
+  await db.query(
+    `INSERT INTO poll_votes
+       (id, "householdId", "pollId", "optionId", "memberId")
+     VALUES ($1, $2, $3, $4, $5)`,
+    [ids.pollVote, ids.household, ids.poll, ids.pollOption, ids.member],
+  );
+  await db.query(
+    `INSERT INTO notifications
+       (id, "householdId", "recipientId", module, type, "sourceId", title, "targetPath")
+     VALUES ($1, $2, $3, 'poll', 'poll_created', $4, $5, $6)`,
+    [
+      ids.pollNotification,
+      ids.household,
+      ids.member,
+      ids.poll,
+      '隔离测试投票通知',
+      `/polls?pollId=${ids.poll}`,
     ],
   );
   await db.query(
@@ -286,15 +320,19 @@ try {
     `/tasks?start=${TEST_DATE}&end=${TEST_DATE}`,
     defaultToken,
   );
+  const defaultPolls = await request('/polls?status=all', defaultToken);
   const defaultNotifications = await request('/notifications', defaultToken);
   assert(
     defaultTasks.status === 200 &&
       defaultTasks.body.data.every((item) => item.taskId !== ids.task) &&
+      defaultPolls.status === 200 &&
+      defaultPolls.body.data.every((poll) => poll.id !== ids.poll) &&
       defaultNotifications.status === 200 &&
       defaultNotifications.body.data.every(
-        (item) => item.id !== ids.notification,
+        (item) =>
+          item.id !== ids.notification && item.id !== ids.pollNotification,
       ),
-    '任务和通用通知只返回当前家庭数据',
+    '任务、投票和通用通知只返回当前家庭数据',
   );
 
   const foreignMenu = await request(
@@ -408,6 +446,39 @@ try {
     '不能跨家庭读取、修改任务实例或处理通知',
   );
 
+  const foreignPolls = await request('/polls?status=all', foreignToken);
+  const crossPoll = await request(
+    `/polls/${ids.poll}`,
+    defaultToken,
+    'PATCH',
+    { title: '不应写入' },
+  );
+  const crossPollVote = await request(
+    `/polls/${ids.poll}/votes`,
+    defaultToken,
+    'POST',
+    { optionIds: [ids.pollOption] },
+  );
+  const crossPollClose = await request(
+    `/polls/${ids.poll}/close`,
+    defaultToken,
+    'POST',
+  );
+  const crossPollNotification = await request(
+    `/notifications/${ids.pollNotification}/read`,
+    defaultToken,
+    'PATCH',
+  );
+  assert(
+    foreignPolls.status === 200 &&
+      foreignPolls.body.data.some((poll) => poll.id === ids.poll) &&
+      crossPoll.status === 404 &&
+      crossPollVote.status === 404 &&
+      crossPollClose.status === 404 &&
+      crossPollNotification.status === 404,
+    '不能跨家庭读取、修改、参与或结束投票及处理投票通知',
+  );
+
   const crossShopping = await request(
     `/shopping-items/${ids.shoppingItem}`,
     defaultToken,
@@ -429,7 +500,11 @@ try {
 
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
+  await db.query('DELETE FROM notifications WHERE id = $1', [ids.pollNotification]);
   await db.query('DELETE FROM notifications WHERE id = $1', [ids.notification]);
+  await db.query('DELETE FROM poll_votes WHERE id = $1', [ids.pollVote]);
+  await db.query('DELETE FROM poll_options WHERE id = $1', [ids.pollOption]);
+  await db.query('DELETE FROM polls WHERE id = $1', [ids.poll]);
   await db.query('DELETE FROM household_task_instances WHERE id = $1', [
     ids.taskInstance,
   ]);

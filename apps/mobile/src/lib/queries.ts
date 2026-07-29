@@ -11,6 +11,7 @@ import type {
   CalendarEvent,
   CreatedHouseholdInvitation,
   Dish,
+  HouseholdPoll,
   DishRecipeVariant,
   DishRecipeStep,
   DishReferenceLink,
@@ -27,6 +28,8 @@ import type {
   MenuItem,
   MenuItemStatus,
   MemberDishSkill,
+  PollCategory,
+  PollVoteMode,
   RecipeDish,
   ShoppingItem,
   TaskInstanceStatus,
@@ -240,6 +243,72 @@ export function useMarkAllNotificationsRead() {
       api<{ updated: number }>('/notifications/read-all', { method: 'PATCH' }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}
+
+export function usePolls(enabled = true) {
+  return useQuery({
+    queryKey: ['polls'],
+    queryFn: () => api<HouseholdPoll[]>('/polls?status=all'),
+    enabled,
+  });
+}
+
+export interface PollInput {
+  id?: string;
+  title: string;
+  description?: string | null;
+  category: PollCategory;
+  voteMode?: PollVoteMode;
+  maxChoices?: number;
+  closesAt?: string | null;
+  options?: { label: string; description?: string | null }[];
+}
+
+export function useUpsertPoll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: PollInput) =>
+      id
+        ? api<HouseholdPoll>(`/polls/${id}`, { method: 'PATCH', body })
+        : api<HouseholdPoll>('/polls', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['polls'] });
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useVotePoll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, optionIds }: { id: string; optionIds: string[] }) =>
+      api<HouseholdPoll>(`/polls/${id}/votes`, {
+        method: 'POST',
+        body: { optionIds },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['polls'] }),
+  });
+}
+
+export function useSetPollStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'close' | 'reopen' }) =>
+      api<HouseholdPoll>(`/polls/${id}/${action}`, { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['polls'] });
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useArchivePoll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; archived: true }>(`/polls/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['polls'] }),
   });
 }
 

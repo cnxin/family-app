@@ -8,6 +8,7 @@ import {
   ListTodo,
   ShoppingCart,
   UtensilsCrossed,
+  Vote,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -28,6 +29,7 @@ import {
   useDishes,
   useMenusOfDate,
   useNotifications,
+  usePolls,
   useShoppingList,
   useTasks,
 } from '../../lib/queries';
@@ -133,6 +135,7 @@ export default function HomeScreen() {
   const { data: dishes } = useDishes();
   const { data: tasks, isLoading: tasksLoading } = useTasks(date, date);
   const { data: notifications } = useNotifications();
+  const { data: polls, isLoading: pollsLoading } = usePolls();
 
   const menuItems =
     menus?.reduce(
@@ -148,6 +151,7 @@ export default function HomeScreen() {
   const dinner = menus?.find((menu) => menu.mealType === 'dinner');
   const pendingTasks = tasks?.filter((entry) => entry.status === 'pending') ?? [];
   const unreadCount = notifications?.length ?? 0;
+  const openPolls = polls?.filter((poll) => poll.status === 'open') ?? [];
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -311,6 +315,64 @@ export default function HomeScreen() {
             </Card>
           </View>
 
+          <View style={styles.pollsSection}>
+            <View style={styles.sectionTitleRow}>
+              <View>
+                <Text style={[t.title2, { color: c.label }]}>家庭投票</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>一起决定家庭安排</Text>
+              </View>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => router.push('/polls')}
+                style={styles.textLink}
+              >
+                <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>查看投票</Text>
+                <ArrowRight color={c.tint} size={16} />
+              </Pressable>
+            </View>
+            <Card style={styles.pollsCard}>
+              {pollsLoading ? (
+                <ActivityIndicator color={c.tint} style={styles.taskLoader} />
+              ) : openPolls.length ? (
+                openPolls.slice(0, 3).map((poll) => (
+                  <Pressable
+                    accessibilityRole="link"
+                    key={poll.id}
+                    onPress={() =>
+                      router.push({ pathname: '/polls', params: { pollId: poll.id } })
+                    }
+                    style={({ pressed }) => [
+                      styles.pollSummaryRow,
+                      { borderBottomColor: c.separator },
+                      pressed && { backgroundColor: c.fill },
+                    ]}
+                  >
+                    <View style={[styles.pollSummaryIcon, { backgroundColor: c.accentSoft }]}>
+                      <Vote color={c.accent} size={18} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={[t.subhead, { color: c.label, fontWeight: '600' }]}
+                      >
+                        {poll.title}
+                      </Text>
+                      <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                        {poll.totalVoters} 人参与 · {poll.voteMode === 'single' ? '单选' : '多选'}
+                      </Text>
+                    </View>
+                    <ArrowRight color={c.tertiaryLabel} size={16} />
+                  </Pressable>
+                ))
+              ) : (
+                <View style={styles.emptyTasks}>
+                  <Vote color={c.accent} size={24} />
+                  <Text style={[t.subhead, { color: c.secondaryLabel }]}>暂无进行中的投票</Text>
+                </View>
+              )}
+            </Card>
+          </View>
+
           <View style={[styles.mainGrid, desktop && styles.mainGridDesktop]}>
             <View style={styles.menuColumn}>
               <View style={styles.sectionTitleRow}>
@@ -461,7 +523,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   tasksSection: { marginTop: 30 },
+  pollsSection: { marginTop: 30 },
   tasksCard: { overflow: 'hidden', minHeight: 76 },
+  pollsCard: { overflow: 'hidden', minHeight: 76 },
   taskLoader: { marginVertical: 24 },
   taskSummaryRow: {
     minHeight: 64,
@@ -478,6 +542,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 9,
+  },
+  pollSummaryRow: {
+    minHeight: 64,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pollSummaryIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
   menuCard: { minHeight: 230, padding: 18 },
