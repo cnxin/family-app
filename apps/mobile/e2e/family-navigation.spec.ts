@@ -6,6 +6,7 @@ const NAVIGATION = {
   home: { mobile: '首页', desktop: '家庭首页', path: '/' },
   order: { mobile: '点菜', desktop: '点菜', path: '/order' },
   kitchen: { mobile: '菜单', desktop: '菜单安排', path: '/kitchen' },
+  calendar: { mobile: '日历', desktop: '家庭日历', path: '/calendar' },
   shopping: { mobile: '采购', desktop: '采购与库存', path: '/shopping' },
   profile: { mobile: '我的', desktop: '我的', path: '/profile' },
 } as const;
@@ -146,6 +147,33 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   ).toBeVisible();
   await page.getByRole('button', { name: '家庭库存', exact: true }).click();
   await expect(page.getByRole('button', { name: '新增库存' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await openSection(page, testInfo.project.name, 'calendar');
+  await expect(page.getByText('家庭日历', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '添加事件', exact: true }).first()).toBeVisible();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect(page.getByRole('tab')).toHaveCount(6);
+  }
+  await expectNoHorizontalOverflow(page);
+
+  const eventTitle = `日历回归-${testInfo.project.name}`;
+  await page.getByRole('button', { name: '添加事件', exact: true }).first().click();
+  await expect(page.getByText('新建家庭事件', { exact: true })).toBeVisible();
+  await page.getByLabel('事件名称').fill(eventTitle);
+  await page.getByLabel('事件备注').fill('浏览器端新增事件');
+  await page.getByRole('button', { name: '添加事件', exact: true }).last().click();
+  await expect(page.getByRole('button', { name: `编辑${eventTitle}` })).toBeVisible();
+
+  await page.getByRole('button', { name: `编辑${eventTitle}` }).click();
+  await page.getByLabel('事件备注').fill('浏览器端已编辑');
+  await page.getByRole('button', { name: '保存修改', exact: true }).click();
+  await expect(page.getByText('浏览器端已编辑', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: `删除${eventTitle}` }).click();
+  await expect(page.getByText('删除这个事件？', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '删除事件', exact: true }).click();
+  await expect(page.getByRole('button', { name: `编辑${eventTitle}` })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
   await openSection(page, testInfo.project.name, 'profile');

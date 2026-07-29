@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import {
+  CalendarDays,
   CookingPot,
   LayoutDashboard,
   ShoppingCart,
@@ -73,6 +74,15 @@ export default function TabLayout() {
           title: '菜单',
           tabBarIcon: ({ color }) => (
             <TabIcon icon={CookingPot} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: '日历',
+          tabBarIcon: ({ color }) => (
+            <TabIcon icon={CalendarDays} color={color} />
           ),
         }}
       />

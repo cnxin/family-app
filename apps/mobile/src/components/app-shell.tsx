@@ -1,5 +1,5 @@
 import {
-  ChefHat,
+  CalendarDays,
   CookingPot,
   House,
   LayoutDashboard,
@@ -56,7 +56,7 @@ export function PageContainer({
 
 interface NavItem {
   label: string;
-  href: '/' | '/order' | '/kitchen' | '/shopping' | '/profile';
+  href: '/' | '/order' | '/kitchen' | '/calendar' | '/shopping' | '/profile';
   icon: LucideIcon;
 }
 
@@ -64,6 +64,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '家庭首页', href: '/', icon: LayoutDashboard },
   { label: '点菜', href: '/order', icon: UtensilsCrossed },
   { label: '菜单安排', href: '/kitchen', icon: CookingPot },
+  { label: '家庭日历', href: '/calendar', icon: CalendarDays },
   { label: '采购与库存', href: '/shopping', icon: ShoppingCart },
   { label: '我的', href: '/profile', icon: UserRound },
 ];
@@ -89,6 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { member } = useSession();
   const activeRoute = currentRoute(pathname);
   const activeItem = NAV_ITEMS.find((item) => item.href === activeRoute) ?? NAV_ITEMS[0];
+  const ActiveIcon = activeItem.icon;
 
   if (!desktop) return <>{children}</>;
 
@@ -178,7 +180,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ]}
         >
           <View style={styles.topbarTitle}>
-            <ChefHat color={c.tint} size={18} />
+            <ActiveIcon color={c.tint} size={18} />
             <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
               {activeItem.label}
             </Text>

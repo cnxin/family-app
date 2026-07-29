@@ -6,6 +6,8 @@ import {
 import { api } from './api';
 import type {
   AccountProfile,
+  CalendarEntry,
+  CalendarEvent,
   CreatedHouseholdInvitation,
   Dish,
   DishRecipeStep,
@@ -70,6 +72,49 @@ export function useMenuDateCounts(start: string, end: string, enabled = true) {
   });
 }
 
+export function useCalendarEntries(start: string, end: string, enabled = true) {
+  return useQuery({
+    queryKey: ['calendar', start, end],
+    queryFn: () =>
+      api<CalendarEntry[]>(`/calendar?start=${start}&end=${end}`),
+    enabled,
+  });
+}
+
+export interface CalendarEventInput {
+  id?: string;
+  date: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  title: string;
+  note?: string | null;
+}
+
+export function useUpsertCalendarEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: CalendarEventInput) =>
+      id
+        ? api<CalendarEvent>(`/calendar-events/${id}`, {
+            method: 'PATCH',
+            body,
+          })
+        : api<CalendarEvent>('/calendar-events', { method: 'POST', body }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar'] }),
+  });
+}
+
+export function useDeleteCalendarEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; removed: true }>(`/calendar-events/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['calendar'] }),
+  });
+}
+
 export function useAddMenuItems() {
   const qc = useQueryClient();
   return useMutation({
@@ -86,6 +131,7 @@ export function useAddMenuItems() {
       void qc.invalidateQueries({ queryKey: ['menus'] });
       void qc.invalidateQueries({ queryKey: ['menu-dates'] });
       void qc.invalidateQueries({ queryKey: ['menu-events'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
     },
   });
 }
@@ -114,6 +160,7 @@ export function useUpdateMenuItem() {
       void qc.invalidateQueries({ queryKey: ['menus'] });
       void qc.invalidateQueries({ queryKey: ['menu-dates'] });
       void qc.invalidateQueries({ queryKey: ['menu-events'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
     },
   });
 }
@@ -130,6 +177,7 @@ export function useAssignMenuChef() {
       void qc.invalidateQueries({ queryKey: ['menu'] });
       void qc.invalidateQueries({ queryKey: ['menus'] });
       void qc.invalidateQueries({ queryKey: ['menu-events'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
     },
   });
 }
@@ -143,6 +191,7 @@ export function useCompleteMenu() {
       void qc.invalidateQueries({ queryKey: ['menu'] });
       void qc.invalidateQueries({ queryKey: ['menus'] });
       void qc.invalidateQueries({ queryKey: ['menu-events'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
     },
   });
 }

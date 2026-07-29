@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { useLocalSearchParams } from 'expo-router';
 import {
   Bell,
   Check,
@@ -674,11 +675,23 @@ export default function KitchenScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const { member } = useSession();
-  const [date, setDate] = useState(todayStr());
+  const params = useLocalSearchParams<{ date?: string | string[] }>();
+  const parameterDate = Array.isArray(params.date) ? params.date[0] : params.date;
+  const initialDate =
+    parameterDate && /^\d{4}-\d{2}-\d{2}$/.test(parameterDate)
+      ? parameterDate
+      : todayStr();
+  const [date, setDate] = useState(initialDate);
   const { data: members } = useMembers();
   const { data: menus, isLoading } = useMenusOfDate(date);
   const { data: notifications } = useMenuNotifications();
   const generate = useGenerateShoppingList();
+
+  useEffect(() => {
+    if (parameterDate && /^\d{4}-\d{2}-\d{2}$/.test(parameterDate)) {
+      setDate(parameterDate);
+    }
+  }, [parameterDate]);
 
   const totalItems =
     menus?.reduce(

@@ -159,3 +159,37 @@ export interface MenuDateCount {
   date: string;
   count: number;
 }
+
+export interface CalendarEvent {
+  id: string;
+  householdId: string;
+  date: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  title: string;
+  note: string | null;
+  createdById: string;
+  createdBy?: Member;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarEntry {
+  id: string;
+  sourceId: string;
+  module: 'menu' | 'calendar';
+  date: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  title: string;
+  summary: string | null;
+  status: 'open' | 'done' | 'scheduled';
+  targetPath: string;
+  metadata: {
+    mealType?: MealType;
+    itemCount?: number;
+    createdById?: string;
+    createdByName?: string;
+    canManage?: boolean;
+  };
+}

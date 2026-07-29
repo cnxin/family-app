@@ -55,6 +55,7 @@ const ids = {
   menu: randomUUID(),
   menuItem: randomUUID(),
   menuEvent: randomUUID(),
+  calendarEvent: randomUUID(),
   shoppingItem: randomUUID(),
   inventoryItem: randomUUID(),
 };
@@ -119,6 +120,19 @@ try {
        (id, "householdId", "menuId", "menuItemId", "actorId", "recipientId", type, "toValue")
      VALUES ($1, $2, $3, $4, $5, $5, 'item_status_changed', 'rejected')`,
     [ids.menuEvent, ids.household, ids.menu, ids.menuItem, ids.member],
+  );
+  await db.query(
+    `INSERT INTO calendar_events
+       (id, "householdId", date, title, note, "createdById")
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      ids.calendarEvent,
+      ids.household,
+      TEST_DATE,
+      '隔离测试日历事件',
+      '只能由所属家庭读取',
+      ids.member,
+    ],
   );
   await db.query(
     'INSERT INTO shopping_items (id, "householdId", date, "customName", source) VALUES ($1, $2, $3, $4, $5)',
@@ -207,6 +221,18 @@ try {
     '日历标记不统计其他家庭菜单',
   );
 
+  const defaultCalendar = await request(
+    `/calendar?start=${TEST_DATE}&end=${TEST_DATE}`,
+    defaultToken,
+  );
+  assert(
+    defaultCalendar.status === 200 &&
+      defaultCalendar.body.data.every(
+        (entry) => entry.sourceId !== ids.calendarEvent,
+      ),
+    '统一日历不读取其他家庭事件',
+  );
+
   const foreignMenu = await request(
     `/menus?date=${TEST_DATE}&mealType=dinner`,
     foreignToken,
@@ -268,6 +294,25 @@ try {
     '不能读取或操作其他家庭的主厨、历史、提醒和菜单锁定',
   );
 
+  const foreignCalendar = await request(
+    `/calendar?start=${TEST_DATE}&end=${TEST_DATE}`,
+    foreignToken,
+  );
+  const crossCalendar = await request(
+    `/calendar-events/${ids.calendarEvent}`,
+    defaultToken,
+    'PATCH',
+    { title: '不应写入' },
+  );
+  assert(
+    foreignCalendar.status === 200 &&
+      foreignCalendar.body.data.some(
+        (entry) => entry.sourceId === ids.calendarEvent,
+      ) &&
+      crossCalendar.status === 404,
+    '家庭事件只对所属家庭可见且不能被跨家庭修改',
+  );
+
   const crossShopping = await request(
     `/shopping-items/${ids.shoppingItem}`,
     defaultToken,
@@ -289,6 +334,7 @@ try {
 
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
+  await db.query('DELETE FROM calendar_events WHERE id = $1', [ids.calendarEvent]);
   await db.query('DELETE FROM menu_events WHERE id = $1', [ids.menuEvent]);
   await db.query('DELETE FROM menu_items WHERE id = $1', [ids.menuItem]);
   await db.query('DELETE FROM shopping_items WHERE "householdId" = $1', [ids.household]);
