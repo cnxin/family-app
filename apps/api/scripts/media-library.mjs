@@ -3,6 +3,8 @@ import { createServer } from 'node:http';
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
 const PASSWORD = process.env.SEED_ACCOUNT_PASSWORD || 'family1234';
 const CREDENTIAL = 'media-library-contract-secret';
+let plexOffline = false;
+let plexServerId = 'library-contract-server';
 
 function assert(condition, message) {
   if (!condition) throw new Error(`断言失败: ${message}`);
@@ -38,6 +40,11 @@ const plex = createServer((req, res) => {
     res.end('{}');
     return;
   }
+  if (plexOffline) {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end('{}');
+    return;
+  }
   if (url.pathname === '/library/metadata/library-contract-242/thumb/poster-tag') {
     res.writeHead(200, { 'Content-Type': 'image/jpeg' });
     res.end('media-library-poster');
@@ -47,7 +54,7 @@ const plex = createServer((req, res) => {
   if (url.pathname === '/identity') {
     body = {
       MediaContainer: {
-        machineIdentifier: 'library-contract-server',
+        machineIdentifier: plexServerId,
         version: '1.43.0',
       },
     };
@@ -55,6 +62,15 @@ const plex = createServer((req, res) => {
     body = {
       MediaContainer: {
         Directory: [{ key: '1', type: 'movie', title: '测试电影' }],
+      },
+    };
+  } else if (url.pathname === '/accounts') {
+    body = {
+      MediaContainer: {
+        Account: [
+          { id: 'plex-user-dad', name: '爸爸 Plex' },
+          { id: 'plex-user-mom', name: '妈妈 Plex' },
+        ],
       },
     };
   } else if (url.pathname === '/library/sections/1/all') {
@@ -111,6 +127,132 @@ try {
     },
   );
   assert(configured.status === 200, '管理员可以配置媒体库测试连接');
+
+  const forbiddenUsers = await request(
+    '/media/playback-users',
+    member.accessToken,
+  );
+  assert(forbiddenUsers.status === 403, '普通成员不能读取媒体用户映射');
+
+  const playbackUsers = await request(
+    '/media/playback-users',
+    owner.accessToken,
+  );
+  const plexDirectory = playbackUsers.body.data.find(
+    (directory) => directory.provider === 'plex',
+  );
+  assert(
+    playbackUsers.status === 200 &&
+      plexDirectory.state === 'online' &&
+      plexDirectory.serverId === 'library-contract-server' &&
+      plexDirectory.users.length === 2 &&
+      !JSON.stringify(playbackUsers.body).includes(CREDENTIAL),
+    '管理员可以读取不含凭据的 Plex 用户目录',
+  );
+
+  const mapped = await request(
+    '/media/playback-users/plex/plex-user-mom/mapping',
+    owner.accessToken,
+    'PUT',
+    { memberId: member.member.id },
+  );
+  const mappingId = mapped.body?.data?.id;
+  assert(
+    mapped.status === 200 &&
+      mappingId &&
+      mapped.body.data.member.id === member.member.id,
+    '管理员可以把 Plex 用户显式关联到家庭成员',
+  );
+
+  const duplicateMember = await request(
+    '/media/playback-users/plex/plex-user-dad/mapping',
+    owner.accessToken,
+    'PUT',
+    { memberId: member.member.id },
+  );
+  assert(
+    duplicateMember.status === 409,
+    '同一服务器上的家庭成员不能关联多个外部用户',
+  );
+
+  const refreshedUsers = await request(
+    '/media/playback-users',
+    owner.accessToken,
+  );
+  const mappedUser = refreshedUsers.body.data
+    .find((directory) => directory.provider === 'plex')
+    .users.find((user) => user.externalUserId === 'plex-user-mom');
+  assert(
+    mappedUser.mapping?.id === mappingId &&
+      mappedUser.mapping.member.name === member.member.name,
+    '用户目录返回当前家庭成员映射',
+  );
+
+  plexOffline = true;
+  const offlineUsers = await request(
+    '/media/playback-users',
+    owner.accessToken,
+  );
+  const unavailableMapping = offlineUsers.body.data
+    .find((directory) => directory.provider === 'plex')
+    .users.find((user) => user.mapping?.id === mappingId);
+  assert(
+    offlineUsers.body.data.find((directory) => directory.provider === 'plex').state ===
+      'offline' &&
+      unavailableMapping?.isStale === false,
+    '服务离线时保留映射且不误报为失效',
+  );
+  plexOffline = false;
+
+  plexServerId = 'library-contract-server-2';
+  const changedServer = await request(
+    '/media/connector-settings/plex',
+    owner.accessToken,
+    'PUT',
+    {
+      name: '媒体库测试 Plex',
+      isEnabled: true,
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      credential: CREDENTIAL,
+      isPrimary: true,
+    },
+  );
+  assert(changedServer.status === 200, '测试连接可以切换到新的 Plex 服务器身份');
+  const changedServerUsers = await request(
+    '/media/playback-users',
+    owner.accessToken,
+  );
+  const changedPlexDirectory = changedServerUsers.body.data.find(
+    (directory) => directory.provider === 'plex',
+  );
+  const staleMapping = changedPlexDirectory.users.find(
+    (user) => user.mapping?.id === mappingId,
+  );
+  const currentServerUser = changedPlexDirectory.users.find(
+    (user) =>
+      user.serverId === 'library-contract-server-2' &&
+      user.externalUserId === 'plex-user-mom',
+  );
+  assert(
+    changedPlexDirectory.serverId === 'library-contract-server-2' &&
+      staleMapping?.isStale === true &&
+      currentServerUser?.mapping === null,
+    '服务器身份变化后旧映射失效且不会应用到同名新账号',
+  );
+
+  const forbiddenUnmap = await request(
+    `/media/playback-user-mappings/${mappingId}`,
+    member.accessToken,
+    'DELETE',
+  );
+  assert(forbiddenUnmap.status === 403, '普通成员不能取消媒体用户映射');
+
+  const unmapped = await request(
+    `/media/playback-user-mappings/${mappingId}`,
+    owner.accessToken,
+    'DELETE',
+  );
+  assert(unmapped.status === 200 && unmapped.body.data.deleted, '管理员可以取消媒体用户映射');
 
   const forbidden = await request(
     '/media/library/sync',

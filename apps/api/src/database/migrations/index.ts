@@ -19,6 +19,7 @@ import { AddHouseholdIntegrations1785228100000 } from './1785228100000-add-house
 import { AddMediaPollCandidates1785228200000 } from './1785228200000-add-media-poll-candidates';
 import { AddMediaLibraryItems1785228300000 } from './1785228300000-add-media-library-items';
 import { AddIntegrationEvents1785228400000 } from './1785228400000-add-integration-events';
+import { AddMediaUserMappings1785228500000 } from './1785228500000-add-media-user-mappings';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -42,4 +43,5 @@ export const ALL_MIGRATIONS = [
   AddMediaPollCandidates1785228200000,
   AddMediaLibraryItems1785228300000,
   AddIntegrationEvents1785228400000,
+  AddMediaUserMappings1785228500000,
 ];

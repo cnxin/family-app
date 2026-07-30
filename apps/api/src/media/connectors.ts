@@ -12,6 +12,7 @@ import {
   MediaLibraryProvider,
   MediaMetadataSnapshot,
   MediaProviderHealth,
+  MediaServerUser,
 } from './providers';
 import {
   MediaConnectorConfig,
@@ -184,6 +185,14 @@ function integerOrNull(value: unknown) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+function sortedUniqueUsers(users: MediaServerUser[]) {
+  const byId = new Map<string, MediaServerUser>();
+  for (const user of users) byId.set(user.externalUserId, user);
+  return [...byId.values()].sort((left, right) =>
+    left.name.localeCompare(right.name, 'zh-CN'),
+  );
+}
+
 export interface ConfiguredLibraryProvider {
   config: MediaConnectorConfig;
   provider: MediaLibraryProvider;
@@ -308,6 +317,26 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
       }
     }
     return result;
+  }
+
+  async listUsers() {
+    const [identity, body] = await Promise.all([
+      this.getIdentity(),
+      this.request('/accounts'),
+    ]);
+    const container = asRecord(asRecord(body).MediaContainer);
+    const users = asArray(container.Account)
+      .map(asRecord)
+      .flatMap<MediaServerUser>((account) => {
+        const externalUserId = asString(account.id) ?? asString(account.key);
+        const name = asString(account.name) ?? asString(account.title);
+        if (!externalUserId || !name) return [];
+        return [{ externalUserId, name, isDisabled: false }];
+      });
+    return {
+      serverId: identity.machineIdentifier,
+      users: sortedUniqueUsers(users),
+    };
   }
 
   async findByExternalRefs(
@@ -492,6 +521,29 @@ export class EmbyLibraryProvider implements MediaLibraryProvider {
       if (!items.length || items.length < pageSize || (total != null && start >= total)) break;
     }
     return result;
+  }
+
+  async listUsers() {
+    const [info, body] = await Promise.all([
+      this.getServerInfo(),
+      this.request('/Users'),
+    ]);
+    const values = Array.isArray(body)
+      ? body
+      : asArray(asRecord(body).Items);
+    const users = values.map(asRecord).flatMap<MediaServerUser>((account) => {
+      const externalUserId = asString(account.Id);
+      const name = asString(account.Name);
+      if (!externalUserId || !name) return [];
+      return [
+        {
+          externalUserId,
+          name,
+          isDisabled: asRecord(account.Policy).IsDisabled === true,
+        },
+      ];
+    });
+    return { serverId: info.id, users: sortedUniqueUsers(users) };
   }
 
   async findByExternalRefs(

@@ -411,6 +411,26 @@ export interface MediaConnectorSettings {
   updatedAt: string | null;
 }
 
+export interface MediaPlaybackUserDirectory {
+  connectorKey: string;
+  provider: 'plex' | 'emby';
+  name: string;
+  state: MediaConnectorState;
+  message: string;
+  serverId: string | null;
+  users: {
+    serverId: string | null;
+    externalUserId: string;
+    name: string;
+    isDisabled: boolean;
+    isStale: boolean;
+    mapping: {
+      id: string;
+      member: Pick<Member, 'id' | 'name' | 'avatarEmoji' | 'disabledAt'>;
+    } | null;
+  }[];
+}
+
 export interface MoviePilotWebhookResult {
   callbackPath: string;
   sourceIp: string;

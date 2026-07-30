@@ -19,6 +19,7 @@ import {
   MediaLibraryProvider,
   MediaMetadataSnapshot,
   MediaProviderHealth,
+  MediaServerUser,
 } from './providers';
 
 export interface PublicMediaConnector {
@@ -58,6 +59,16 @@ export interface MediaLibraryScan {
   name: string;
   primary: boolean;
   items: MediaLibraryCatalogItem[];
+}
+
+export interface PublicMediaPlaybackUserDirectory {
+  connectorKey: string;
+  provider: 'plex' | 'emby';
+  name: string;
+  state: PublicMediaConnector['state'];
+  message: string;
+  serverId: string | null;
+  users: MediaServerUser[];
 }
 
 interface ConnectorContext {
@@ -225,6 +236,67 @@ export class MediaConnectorsService {
         primary: config.primary,
         items: await provider.listItems(),
       })),
+    );
+  }
+
+  async playbackUsers(
+    householdId: string,
+    connectorKey?: string,
+  ): Promise<PublicMediaPlaybackUserDirectory[]> {
+    const context = await this.context(householdId);
+    const configs = context.configs.filter(
+      (config) =>
+        (config.kind === 'plex' || config.kind === 'emby') &&
+        (!connectorKey || config.key === connectorKey),
+    );
+    if (connectorKey && !configs.length) {
+      throw new MediaConnectorError('指定的媒体库不存在');
+    }
+    return Promise.all(
+      configs.map(async (config): Promise<PublicMediaPlaybackUserDirectory> => {
+        const base = {
+          connectorKey: config.key,
+          provider: config.kind as 'plex' | 'emby',
+          name: config.name,
+          serverId: null,
+          users: [],
+        };
+        if (config.enabled === false) {
+          return { ...base, state: 'disabled', message: '此家庭已停用' };
+        }
+        if (!config.baseUrl) {
+          return { ...base, state: 'not_configured', message: '未配置服务地址' };
+        }
+        if (!config.credential) {
+          return {
+            ...base,
+            state: 'needs_credential',
+            message: config.kind === 'plex' ? '等待配置 Token' : '等待配置 API Key',
+          };
+        }
+        const library = context.libraries.find(
+          (entry) => entry.config.key === config.key,
+        );
+        if (!library) {
+          return { ...base, state: 'offline', message: '连接器不可用' };
+        }
+        try {
+          const directory = await library.provider.listUsers();
+          return {
+            ...base,
+            state: 'online',
+            message: `已读取 ${directory.users.length} 个用户`,
+            serverId: directory.serverId,
+            users: directory.users,
+          };
+        } catch (error) {
+          return {
+            ...base,
+            state: 'offline',
+            message: error instanceof Error ? error.message : '读取用户失败',
+          };
+        }
+      }),
     );
   }
 

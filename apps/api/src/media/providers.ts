@@ -86,9 +86,21 @@ export interface MediaLibraryPoster {
   contentType: string;
 }
 
+export interface MediaServerUser {
+  externalUserId: string;
+  name: string;
+  isDisabled: boolean;
+}
+
+export interface MediaServerUserDirectory {
+  serverId: string;
+  users: MediaServerUser[];
+}
+
 export interface MediaLibraryProvider {
   readonly provider: MediaExternalProvider;
   listItems(): Promise<MediaLibraryCatalogItem[]>;
+  listUsers(): Promise<MediaServerUserDirectory>;
   findByExternalRefs(
     externalRefs: MediaExternalReference[],
   ): Promise<MediaLibraryMatch[]>;

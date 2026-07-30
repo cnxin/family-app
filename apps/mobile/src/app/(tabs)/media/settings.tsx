@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Save,
   ServerCog,
+  Unlink,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
@@ -34,11 +35,15 @@ import { Card, EmptyState, PrimaryButton, Segmented } from '../../../components/
 import {
   useMediaSourceConfigs,
   useMediaConnectorSettings,
+  useMediaPlaybackUsers,
+  useMembers,
+  useDeleteMediaPlaybackUserMapping,
   useResetMediaConnectorSettings,
   useResetMediaSourceConfig,
   useRotateMoviePilotWebhook,
   useTestMediaConnectorSettings,
   useUpdateMediaConnectorSettings,
+  useUpdateMediaPlaybackUserMapping,
   useUpdateMediaSourceConfig,
 } from '../../../lib/queries';
 import { BASE_URL } from '../../../lib/api';
@@ -46,10 +51,12 @@ import { useSession } from '../../../lib/session';
 import { radius, type as t, useTheme } from '../../../lib/theme';
 import type {
   MediaConnectorSettings,
+  MediaPlaybackUserDirectory,
   MediaSourceConfig,
+  Member,
 } from '../../../lib/types';
 
-type SettingsSection = 'services' | 'sources';
+type SettingsSection = 'services' | 'sources' | 'users';
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -718,6 +725,258 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
   );
 }
 
+function PlaybackUserDirectories({
+  directories,
+  members,
+  refreshing,
+  onRefresh,
+}: {
+  directories: MediaPlaybackUserDirectory[];
+  members: Member[];
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const c = useTheme();
+  const update = useUpdateMediaPlaybackUserMapping();
+  const remove = useDeleteMediaPlaybackUserMapping();
+  const [message, setMessage] = useState<string | null>(null);
+
+  const mapUser = async (
+    directory: MediaPlaybackUserDirectory,
+    externalUser: MediaPlaybackUserDirectory['users'][number],
+    member: Member,
+  ) => {
+    if (externalUser.mapping?.member.id === member.id) return;
+    setMessage(null);
+    try {
+      await update.mutateAsync({
+        provider: directory.provider,
+        externalUserId: externalUser.externalUserId,
+        memberId: member.id,
+      });
+      setMessage(`已将 ${externalUser.name} 关联到 ${member.name}`);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '关联失败');
+    }
+  };
+
+  const unmapUser = async (
+    externalUser: MediaPlaybackUserDirectory['users'][number],
+  ) => {
+    if (!externalUser.mapping) return;
+    setMessage(null);
+    try {
+      await remove.mutateAsync(externalUser.mapping.id);
+      setMessage(`已取消 ${externalUser.name} 的成员关联`);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '取消关联失败');
+    }
+  };
+
+  return (
+    <View style={styles.userDirectorySection}>
+      <View style={styles.userDirectoryToolbar}>
+        <Text style={[t.headline, { color: c.label }]}>媒体用户</Text>
+        <Pressable
+          accessibilityLabel="刷新媒体用户"
+          accessibilityRole="button"
+          disabled={refreshing}
+          onPress={onRefresh}
+          style={({ pressed }) => [
+            styles.refreshButton,
+            { backgroundColor: pressed ? c.fill : c.card, borderColor: c.separator },
+            refreshing && { opacity: 0.45 },
+          ]}
+        >
+          {refreshing ? (
+            <ActivityIndicator color={c.tint} size="small" />
+          ) : (
+            <RefreshCw color={c.tint} size={16} />
+          )}
+          <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>刷新</Text>
+        </Pressable>
+      </View>
+
+      {message ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[t.footnote, styles.message, { color: message.startsWith('已') ? c.green : c.red }]}
+        >
+          {message}
+        </Text>
+      ) : null}
+
+      <View style={styles.grid}>
+        {directories.map((directory) => {
+          const online = directory.state === 'online';
+          const status = online
+            ? { label: '已连接', color: c.green, background: c.greenSoft }
+            : directory.state === 'offline'
+              ? { label: '离线', color: c.red, background: c.redSoft }
+              : directory.state === 'disabled'
+                ? { label: '已停用', color: c.secondaryLabel, background: c.fill }
+                : { label: '待配置', color: c.orange, background: c.orangeSoft };
+          return (
+            <Card key={directory.connectorKey} style={styles.sourceCard}>
+              <View style={styles.sourceHeader}>
+                <View style={[styles.sourceIcon, { backgroundColor: c.fill }]}>
+                  <Cable color={c.tint} size={20} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[t.headline, { color: c.label }]}>{directory.name}</Text>
+                  <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                    {directory.message}
+                  </Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: status.background }]}>
+                  <Text style={[t.caption, { color: status.color, fontWeight: '700' }]}>
+                    {status.label}
+                  </Text>
+                </View>
+              </View>
+
+              {directory.users.length ? (
+                <View style={styles.externalUserList}>
+                  {directory.users.map((externalUser) => {
+                    const unavailable = directory.state !== 'online';
+                    const mappingLocked =
+                      unavailable || externalUser.isStale || externalUser.isDisabled;
+                    const updateBusy =
+                      update.isPending &&
+                      update.variables?.provider === directory.provider &&
+                      update.variables.externalUserId === externalUser.externalUserId;
+                    const removeBusy =
+                      remove.isPending &&
+                      remove.variables === externalUser.mapping?.id;
+                    const busy = updateBusy || removeBusy;
+                    return (
+                      <View
+                        key={`${externalUser.serverId ?? 'unknown'}:${externalUser.externalUserId}`}
+                        style={[styles.externalUserRow, { borderColor: c.separator }]}
+                      >
+                        <View style={styles.externalUserHeader}>
+                          <View style={[styles.externalAvatar, { backgroundColor: c.tintSoft }]}>
+                            <Text style={[t.subhead, { color: c.tint, fontWeight: '800' }]}>
+                              {externalUser.name.slice(0, 1).toLocaleUpperCase('zh-CN')}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                              {externalUser.name}
+                            </Text>
+                            <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                              {externalUser.mapping
+                                ? `${externalUser.mapping.member.avatarEmoji} ${externalUser.mapping.member.name}`
+                                : '未关联'}
+                            </Text>
+                          </View>
+                          {mappingLocked ? (
+                            <View style={[styles.statusBadge, { backgroundColor: c.orangeSoft }]}>
+                              <Text style={[t.caption, { color: c.orange, fontWeight: '700' }]}>
+                                {unavailable
+                                  ? '暂不可验证'
+                                  : externalUser.isStale
+                                    ? '已失效'
+                                    : '已停用'}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {mappingLocked ? (
+                          externalUser.mapping ? (
+                            <Pressable
+                              accessibilityLabel={`取消 ${externalUser.name} 的成员关联`}
+                              accessibilityRole="button"
+                              disabled={busy}
+                              onPress={() => void unmapUser(externalUser)}
+                              style={({ pressed }) => [
+                                styles.unmapButton,
+                                { backgroundColor: pressed ? c.redSoft : c.card, borderColor: c.separator },
+                                busy && { opacity: 0.45 },
+                              ]}
+                            >
+                              <Unlink color={c.red} size={15} />
+                              <Text style={[t.footnote, { color: c.red, fontWeight: '700' }]}>取消关联</Text>
+                            </Pressable>
+                          ) : null
+                        ) : (
+                          <View style={styles.memberMappingField}>
+                            <Text style={[t.caption, { color: c.secondaryLabel, fontWeight: '700' }]}>家庭成员</Text>
+                            <View accessibilityRole="radiogroup" style={styles.memberOptions}>
+                              <Pressable
+                                accessibilityLabel={`取消 ${externalUser.name} 的成员关联`}
+                                accessibilityRole="radio"
+                                accessibilityState={{ checked: !externalUser.mapping }}
+                                aria-checked={!externalUser.mapping}
+                                disabled={busy || !externalUser.mapping}
+                                onPress={() => void unmapUser(externalUser)}
+                                style={({ pressed }) => [
+                                  styles.memberOption,
+                                  {
+                                    backgroundColor: !externalUser.mapping
+                                      ? c.fillStrong
+                                      : pressed
+                                        ? c.fill
+                                        : c.card,
+                                    borderColor: !externalUser.mapping ? c.secondaryLabel : c.separator,
+                                  },
+                                  (busy || !externalUser.mapping) && { opacity: !externalUser.mapping ? 1 : 0.45 },
+                                ]}
+                              >
+                                <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>未关联</Text>
+                              </Pressable>
+                              {members.map((member) => {
+                                const selected = externalUser.mapping?.member.id === member.id;
+                                return (
+                                  <Pressable
+                                    key={member.id}
+                                    accessibilityLabel={`将 ${externalUser.name} 关联到 ${member.name}`}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ checked: selected }}
+                                    aria-checked={selected}
+                                    disabled={busy || selected}
+                                    onPress={() => void mapUser(directory, externalUser, member)}
+                                    style={({ pressed }) => [
+                                      styles.memberOption,
+                                      {
+                                        backgroundColor: selected
+                                          ? c.tintSoft
+                                          : pressed
+                                            ? c.fill
+                                            : c.card,
+                                        borderColor: selected ? c.tint : c.separator,
+                                      },
+                                      busy && { opacity: 0.45 },
+                                    ]}
+                                  >
+                                    <Text style={t.subhead}>{member.avatarEmoji}</Text>
+                                    <Text style={[t.footnote, { color: selected ? c.tint : c.label, fontWeight: '700' }]}>
+                                      {member.name}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={[t.footnote, { color: c.secondaryLabel }]}>{directory.message}</Text>
+              )}
+            </Card>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function MediaSettingsScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
@@ -725,7 +984,9 @@ export default function MediaSettingsScreen() {
   const params = useLocalSearchParams<{ section?: string }>();
   const parameterSection = firstParam(params.section);
   const [section, setSection] = useState<SettingsSection>(
-    parameterSection === 'sources' ? 'sources' : 'services',
+    parameterSection === 'sources' || parameterSection === 'users'
+      ? parameterSection
+      : 'services',
   );
   const { member } = useSession();
   const canManage = member?.role === 'owner' || member?.role === 'admin';
@@ -733,9 +994,17 @@ export default function MediaSettingsScreen() {
   const connectorQuery = useMediaConnectorSettings(
     canManage && section === 'services',
   );
+  const playbackUsersQuery = useMediaPlaybackUsers(
+    canManage && section === 'users',
+  );
+  const membersQuery = useMembers(canManage && section === 'users');
 
   useEffect(() => {
-    if (parameterSection === 'sources' || parameterSection === 'services') {
+    if (
+      parameterSection === 'sources' ||
+      parameterSection === 'services' ||
+      parameterSection === 'users'
+    ) {
       setSection(parameterSection);
     }
   }, [parameterSection]);
@@ -762,7 +1031,7 @@ export default function MediaSettingsScreen() {
               >
                 观影设置
               </Text>
-              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>媒体服务 · 搜索数据源</Text>
+              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>媒体服务 · 搜索数据源 · 用户映射</Text>
             </View>
           </View>
 
@@ -775,19 +1044,32 @@ export default function MediaSettingsScreen() {
               options={[
                 { label: '媒体服务', value: 'services' },
                 { label: '搜索数据源', value: 'sources' },
+                { label: '用户映射', value: 'users' },
               ]}
               value={section}
             />
           </View>
 
-          {(section === 'services' ? connectorQuery.isLoading : sourceQuery.isLoading) ? (
+          {(section === 'services'
+            ? connectorQuery.isLoading
+            : section === 'sources'
+              ? sourceQuery.isLoading
+              : playbackUsersQuery.isLoading || membersQuery.isLoading) ? (
             <ActivityIndicator color={c.tint} style={styles.loader} />
           ) : null}
-          {(section === 'services' ? connectorQuery.error : sourceQuery.error) ? (
+          {(section === 'services'
+            ? connectorQuery.error
+            : section === 'sources'
+              ? sourceQuery.error
+              : playbackUsersQuery.error ?? membersQuery.error) ? (
             <Card>
               <EmptyState
                 emoji="!"
-                hint={(section === 'services' ? connectorQuery.error : sourceQuery.error)?.message}
+                hint={(section === 'services'
+                  ? connectorQuery.error
+                  : section === 'sources'
+                    ? sourceQuery.error
+                    : playbackUsersQuery.error ?? membersQuery.error)?.message}
                 title="设置加载失败"
               />
             </Card>
@@ -809,6 +1091,16 @@ export default function MediaSettingsScreen() {
                 </View>
               ))}
             </View>
+          ) : null}
+          {section === 'users' && playbackUsersQuery.data && membersQuery.data ? (
+            <PlaybackUserDirectories
+              directories={playbackUsersQuery.data}
+              members={membersQuery.data}
+              onRefresh={() => {
+                void playbackUsersQuery.refetch();
+              }}
+              refreshing={playbackUsersQuery.isRefetching}
+            />
           ) : null}
         </PageContainer>
       </ScrollView>
@@ -835,7 +1127,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loader: { marginTop: 48 },
-  sectionSwitcher: { marginTop: 22, maxWidth: 480 },
+  sectionSwitcher: { marginTop: 22, maxWidth: 620 },
   grid: { gap: 14, marginTop: 24 },
   gridDesktop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
   gridCellDesktop: { width: '48%', flexGrow: 1, minWidth: 360 },
@@ -919,5 +1211,64 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     textAlignVertical: 'top',
+  },
+  userDirectorySection: { marginTop: 24 },
+  userDirectoryToolbar: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  refreshButton: {
+    minHeight: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  externalUserList: { gap: 0 },
+  externalUserRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  externalUserHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  externalAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberMappingField: { gap: 8 },
+  memberOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  memberOption: {
+    minHeight: 38,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  unmapButton: {
+    minHeight: 40,
+    alignSelf: 'flex-start',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
   },
 });

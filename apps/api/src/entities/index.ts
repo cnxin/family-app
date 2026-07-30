@@ -1813,6 +1813,76 @@ export class IntegrationEvent {
   processedAt: Date | null;
 }
 
+@Entity('media_user_mappings')
+@Check(
+  'CHK_media_user_mappings_provider',
+  `"provider" IN ('plex', 'emby')`,
+)
+@Unique('UQ_media_user_mappings_external', [
+  'householdId',
+  'connectorKey',
+  'serverId',
+  'externalUserId',
+])
+@Unique('UQ_media_user_mappings_member', [
+  'householdId',
+  'connectorKey',
+  'serverId',
+  'memberId',
+])
+@Index('IDX_media_user_mappings_household_provider', [
+  'householdId',
+  'provider',
+])
+export class MediaUserMapping {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_media_user_mappings_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  provider: MediaLibraryProviderKind;
+
+  @Column({ type: 'varchar', length: 128 })
+  connectorKey: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  serverId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  externalUserId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  externalUserName: string;
+
+  @ManyToOne(() => Member, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_media_user_mappings_member',
+  })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @Column({ type: 'timestamptz' })
+  lastSeenAt: Date;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('media_library_items')
 @Check(
   'CHK_media_library_items_provider',
@@ -2330,6 +2400,7 @@ export const ALL_ENTITIES = [
   Integration,
   IntegrationSecret,
   IntegrationEvent,
+  MediaUserMapping,
   MediaLibraryItem,
   HouseholdMedia,
   MediaRequest,

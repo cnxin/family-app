@@ -62,6 +62,16 @@ async function testPlex() {
           },
         });
       }
+      if (url.pathname === '/accounts') {
+        return json({
+          MediaContainer: {
+            Account: [
+              { id: 1, name: '爸爸 Plex' },
+              { id: 2, name: '妈妈 Plex' },
+            ],
+          },
+        });
+      }
       if (url.pathname === '/library/sections/1/all') {
         return json({
           MediaContainer: {
@@ -110,6 +120,7 @@ async function testPlex() {
     }) as typeof fetch,
   );
   const health = await provider.health();
+  const users = await provider.listUsers();
   const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
   const poster = await provider.getPoster('242', library[0].metadata);
@@ -118,6 +129,11 @@ async function testPlex() {
     thumb: '//untrusted.test/poster.jpg',
   });
   assert(health.available && health.message === 'Plex 1.43.0', '读取 Plex 版本');
+  assert(
+    users.serverId === 'plex-server-id' &&
+      users.users.map((user) => user.externalUserId).join(',') === '1,2',
+    '读取 Plex 稳定服务器标识和用户目录',
+  );
   assert(matches.length === 1 && matches[0].libraryItemId === '242', '按外部 ID 匹配 Plex 条目');
   assert(
     library.length === 1 &&
@@ -178,6 +194,12 @@ async function testEmby() {
           ],
         });
       }
+      if (url.pathname === '/Users') {
+        return json([
+          { Id: 'emby-user-1', Name: '爸爸 Emby', Policy: { IsDisabled: false } },
+          { Id: 'emby-user-2', Name: '妈妈 Emby', Policy: { IsDisabled: true } },
+        ]);
+      }
       if (url.pathname === '/Items/emby-item-7/Images/Primary') {
         return new Response('emby-poster', {
           headers: { 'Content-Type': 'image/png' },
@@ -187,10 +209,17 @@ async function testEmby() {
     }) as typeof fetch,
   );
   const health = await provider.health();
+  const users = await provider.listUsers();
   const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
   const poster = await provider.getPoster('emby-item-7', library[0].metadata);
   assert(health.available && health.message === 'Emby 4.9.1', '读取 Emby 版本');
+  assert(
+    users.serverId === 'emby-server-id' &&
+      users.users.length === 2 &&
+      users.users[1].isDisabled,
+    '读取 Emby 稳定服务器标识和用户状态',
+  );
   assert(
     matches.length === 1 &&
       matches[0].playbackUrl ===

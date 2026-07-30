@@ -27,6 +27,7 @@ import type {
   MediaLibraryAvailability,
   MediaLibraryResponse,
   MediaLibrarySyncResponse,
+  MediaPlaybackUserDirectory,
   MoviePilotWebhookResult,
   MediaRequest,
   MediaSearchResponse,
@@ -283,6 +284,56 @@ export function useMediaConnectorSettings(enabled = true) {
     queryFn: () =>
       api<MediaConnectorSettings[]>('/media/connector-settings'),
     enabled,
+  });
+}
+
+export function useMediaPlaybackUsers(enabled = true) {
+  return useQuery({
+    queryKey: ['media-playback-users'],
+    queryFn: () =>
+      api<MediaPlaybackUserDirectory[]>('/media/playback-users'),
+    enabled,
+  });
+}
+
+export function useUpdateMediaPlaybackUserMapping() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      provider,
+      externalUserId,
+      memberId,
+    }: {
+      provider: MediaPlaybackUserDirectory['provider'];
+      externalUserId: string;
+      memberId: string;
+    }) =>
+      api(`/media/playback-users/${provider}/${encodeURIComponent(externalUserId)}/mapping`, {
+        method: 'PUT',
+        body: { memberId },
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['media-playback-users'] }),
+        qc.invalidateQueries({ queryKey: ['activities'] }),
+      ]);
+    },
+  });
+}
+
+export function useDeleteMediaPlaybackUserMapping() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mappingId: string) =>
+      api(`/media/playback-user-mappings/${mappingId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['media-playback-users'] }),
+        qc.invalidateQueries({ queryKey: ['activities'] }),
+      ]);
+    },
   });
 }
 

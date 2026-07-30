@@ -58,6 +58,8 @@ import {
   MediaRequestStatus,
   MediaTitle,
   MediaType,
+  MediaUserMapping,
+  Member,
   Notification,
   Poll,
   PollOption,
@@ -69,6 +71,7 @@ import {
 } from './integration-settings.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { MoviePilotWebhookService } from './moviepilot-webhook.service';
+import { MediaUserMappingsService } from './media-user-mappings.service';
 import {
   MediaLibraryQuery,
   MediaLibraryService,
@@ -209,6 +212,11 @@ class RotateMoviePilotWebhookDto {
   @IsString()
   @MaxLength(64)
   sourceIp?: string;
+}
+
+class MapPlaybackUserDto {
+  @IsUUID('4')
+  memberId: string;
 }
 
 class MediaExternalRefDto {
@@ -1280,6 +1288,7 @@ class MediaController {
     private readonly sourceSettings: MediaSourceSettingsService,
     private readonly integrationSettings: IntegrationSettingsService,
     private readonly moviePilotWebhook: MoviePilotWebhookService,
+    private readonly userMappings: MediaUserMappingsService,
     private readonly connectorsService: MediaConnectorsService,
     private readonly library: MediaLibraryService,
   ) {}
@@ -1402,6 +1411,40 @@ class MediaController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.moviePilotWebhook.rotate(dto.sourceIp, user);
+  }
+
+  @Get('playback-users')
+  @RequireCapabilities('manage_integrations')
+  playbackUsers(@CurrentUser() user: JwtUser) {
+    return this.userMappings.list(user);
+  }
+
+  @Put('playback-users/:provider/:externalUserId/mapping')
+  @RequireCapabilities('manage_integrations')
+  mapPlaybackUser(
+    @Param('provider') providerValue: string,
+    @Param('externalUserId') externalUserId: string,
+    @Body() dto: MapPlaybackUserDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (providerValue !== 'plex' && providerValue !== 'emby') {
+      throw new NotFoundException('媒体服务不存在');
+    }
+    return this.userMappings.map(
+      providerValue,
+      externalUserId,
+      dto.memberId,
+      user,
+    );
+  }
+
+  @Delete('playback-user-mappings/:mappingId')
+  @RequireCapabilities('manage_integrations')
+  unmapPlaybackUser(
+    @Param('mappingId', ParseUUIDPipe) mappingId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.userMappings.unmap(mappingId, user);
   }
 
   @Public()
@@ -1532,7 +1575,9 @@ class MediaController {
       MediaTitle,
       MediaExternalRef,
       MediaLibraryItem,
+      MediaUserMapping,
       MediaRequest,
+      Member,
       Notification,
       Poll,
     ]),
@@ -1545,6 +1590,7 @@ class MediaController {
     MediaLibraryService,
     IntegrationSettingsService,
     MoviePilotWebhookService,
+    MediaUserMappingsService,
     MediaSourceSettingsService,
     MediaMetadataService,
   ],
