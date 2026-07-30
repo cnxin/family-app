@@ -247,8 +247,8 @@ flowchart TB
   -> 家人投票
   -> 安排观影日期
   -> 提交 MoviePilot 订阅
-  -> Plex/Emby 检测已入库
-  -> 通知家人
+  -> MoviePilot 整理完成并通知请求人
+  -> Plex/Emby 确认已入库
   -> 播放并同步观看记录
 ```
 
@@ -269,6 +269,7 @@ flowchart TB
 - `media_votes`：成员意愿。
 - `media_requests`：MoviePilot 请求与订阅状态。
 - `media_library_items`：某连接器中的入库和版本状态。
+- `integration_events`：外部回调的幂等审计，只保存业务匹配所需的脱敏字段。
 - `viewing_sessions`：一次实际观影。
 - `viewing_participants`：参与成员、进度、评分和评论。
 - `viewing_progress`：剧集或长内容的成员进度。
@@ -297,7 +298,9 @@ M4-E 已实现豆瓣兼容桥接、TMDB 与 Bangumi 三源并行搜索。来源�
 
 M4-F 已为 `poll_options` 增加可选的真实片单引用。家庭成员可从片单选择 2 至 12 部影视发起结构化投票，候选卡展示本地海报、类型和年份并可分别回到片单。单片与多片投票共享家庭隔离、状态保护和有序事务锁；关闭、重开或归档会批量同步候选状态。普通文字投票保持不变。详细边界见 [M4-F 多片候选投票验收](m4-media-candidate-polls-acceptance.md)。
 
-MoviePilot 插件市场的现有实现确认了两条可复用的事件路径：整理完成由 `TransferComplete` 事件触发，Plex/Emby/Jellyfin 的入库、播放开始和播放停止统一进入 `WebhookMessage`。后续同步采用“MoviePilot 负责自动化与整理完成、Plex/Emby 负责实际播放状态”的边界，不要求家庭成员安装或操作 MoviePilot 插件。通用 Webhook 插件会转发全部事件且不提供签名或自定义认证头，因此不能直接作为可信入口；接收端必须增加事件白名单、独立随机密钥、来源限制、幂等键和脱敏日志。
+M4-G 已接入 MoviePilot `TransferComplete` 整理完成回调。家庭管理员为已有 MoviePilot 家庭连接生成或轮换一次性展示的随机回调地址，可限制精确来源 IP；服务端只保存密钥摘要，只接受白名单事件和 64 KiB 以内请求，并以规范化载荷哈希去重。回调按家庭、提供方、有效请求、TMDB 编号和剧集季严格匹配，匹配后将请求标记完成，仅通知原请求人并直达片单详情；未匹配事件只保留脱敏审计，不修改片单。详细边界见 [M4-G MoviePilot 整理完成回调验收](m4-moviepilot-webhook-acceptance.md)。
+
+MoviePilot 插件市场的现有实现确认了两条可复用的事件路径：整理完成由 `TransferComplete` 事件触发，Plex/Emby/Jellyfin 的入库、播放开始和播放停止统一进入 `WebhookMessage`。同步采用“MoviePilot 负责自动化与整理完成、Plex/Emby 负责实际入库和播放状态”的边界，不要求家庭成员安装或操作 MoviePilot 插件。通用 Webhook 插件会转发全部事件且不提供签名或自定义认证头，因此不能直接作为可信入口；接收端继续使用事件白名单、独立随机密钥、来源限制、幂等键和脱敏日志。播放事件接入前必须先把外部媒体服务器用户显式映射到家庭成员，不能根据用户名猜测观看人。
 
 ## 11. 访客系统
 
@@ -557,7 +560,8 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 - [x] 家庭级 Plex/Emby/MoviePilot 设置、主媒体库与连接测试。
 - [x] 结构化多片候选投票。
 - [x] MoviePilot 请求状态持久化、家庭权限与订阅界面。
-- [ ] 播放进度、观看记录和媒体就绪通知。
+- [x] MoviePilot 整理完成回调、媒体就绪通知与脱敏事件审计。
+- [ ] Plex/Emby 用户映射、播放进度与观看记录。
 
 验收标准：家庭片单不依赖外部系统存在；同一影片在多个外部系统中可正确去重；连接器离线不影响家庭数据。
 
@@ -588,10 +592,11 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 
 ## 22. 下一次实施范围
 
-前端质量门禁可以通过 `corepack pnpm lint`、`corepack pnpm typecheck` 和 `corepack pnpm test:web` 重复执行。M2、M3 已冻结，M4 的片单、三源搜索、单片/多片投票、订阅请求和媒体连接设置已经完成。下一次实施范围：
+前端质量门禁可以通过 `corepack pnpm lint`、`corepack pnpm typecheck` 和 `corepack pnpm test:web` 重复执行。M2、M3 已冻结，M4 的片单、三源搜索、单片/多片投票、订阅请求、媒体连接设置和 MoviePilot 整理完成通知已经完成。下一次实施范围：
 
 1. 使用轮换后的 Plex Token 和 MoviePilot API Key 完成 NAS 真实数据只读验收；Emby 部署后复用同一契约验收。
-2. 以 MoviePilot `TransferComplete` 接入媒体就绪通知，以 Plex/Emby 播放 Webhook 接入观看记录；统一做事件白名单、认证、幂等和本地快照。
+2. 新增 Plex/Emby 外部用户目录与家庭成员显式映射；未映射用户的播放事件只审计，不归到任何成员。
+3. 在用户映射基础上接入 Plex/Emby 播放开始、停止和进度事件，生成可追溯的观看会话与成员进度；沿用事件白名单、独立密钥、来源限制、幂等和脱敏策略。
 
 访客系统继续使用独立临时权限模型，不与正式家庭成员或媒体连接器凭据混用。
 

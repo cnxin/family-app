@@ -25,6 +25,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  HttpCode,
   Injectable,
   Module,
   NotFoundException,
@@ -34,10 +35,11 @@ import {
   Post,
   Put,
   Query,
+  Req,
   Res,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { Response } from 'express';
+import { Request as ExpressRequest, Response } from 'express';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
@@ -47,6 +49,7 @@ import {
   HouseholdMediaSourceConfig,
   HouseholdMediaStatus,
   Integration,
+  IntegrationEvent,
   IntegrationSecret,
   MediaExternalProvider,
   MediaExternalRef,
@@ -55,6 +58,7 @@ import {
   MediaRequestStatus,
   MediaTitle,
   MediaType,
+  Notification,
   Poll,
   PollOption,
 } from '../entities';
@@ -64,6 +68,7 @@ import {
   UpdateIntegrationSettingsInput,
 } from './integration-settings.service';
 import { MediaMetadataService } from './media-metadata.service';
+import { MoviePilotWebhookService } from './moviepilot-webhook.service';
 import {
   MediaLibraryQuery,
   MediaLibraryService,
@@ -197,6 +202,13 @@ class UpdateIntegrationSettingsDto
   @IsOptional()
   @IsBoolean()
   isPrimary?: boolean;
+}
+
+class RotateMoviePilotWebhookDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sourceIp?: string;
 }
 
 class MediaExternalRefDto {
@@ -1267,6 +1279,7 @@ class MediaController {
     private readonly metadata: MediaMetadataService,
     private readonly sourceSettings: MediaSourceSettingsService,
     private readonly integrationSettings: IntegrationSettingsService,
+    private readonly moviePilotWebhook: MoviePilotWebhookService,
     private readonly connectorsService: MediaConnectorsService,
     private readonly library: MediaLibraryService,
   ) {}
@@ -1382,6 +1395,27 @@ class MediaController {
     return this.connectorsService.test(user.householdId, kindValue);
   }
 
+  @Post('connector-settings/moviepilot/webhook')
+  @RequireCapabilities('manage_integrations')
+  rotateMoviePilotWebhook(
+    @Body() dto: RotateMoviePilotWebhookDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.moviePilotWebhook.rotate(dto.sourceIp, user);
+  }
+
+  @Public()
+  @Post('webhooks/moviepilot/:integrationId/:secret')
+  @HttpCode(200)
+  receiveMoviePilotWebhook(
+    @Param('integrationId', ParseUUIDPipe) integrationId: string,
+    @Param('secret') secret: string,
+    @Req() request: ExpressRequest,
+    @Body() body: unknown,
+  ) {
+    return this.moviePilotWebhook.receive(integrationId, secret, request, body);
+  }
+
   @Post('library-availability')
   libraryAvailability(
     @Body() dto: MediaAvailabilityDto,
@@ -1493,11 +1527,13 @@ class MediaController {
       HouseholdMedia,
       HouseholdMediaSourceConfig,
       Integration,
+      IntegrationEvent,
       IntegrationSecret,
       MediaTitle,
       MediaExternalRef,
       MediaLibraryItem,
       MediaRequest,
+      Notification,
       Poll,
     ]),
   ],
@@ -1508,6 +1544,7 @@ class MediaController {
     MediaConnectorsService,
     MediaLibraryService,
     IntegrationSettingsService,
+    MoviePilotWebhookService,
     MediaSourceSettingsService,
     MediaMetadataService,
   ],

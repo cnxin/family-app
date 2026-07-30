@@ -36,6 +36,7 @@ export type MediaType = 'movie' | 'series';
 export type MediaMetadataSource = 'tmdb' | 'douban' | 'bangumi';
 export type MediaCredentialKind = 'token' | 'api_key';
 export type IntegrationKind = 'plex' | 'emby' | 'moviepilot';
+export type IntegrationEventStatus = 'processed' | 'ignored' | 'failed';
 export type MediaExternalProvider =
   | 'tmdb'
   | 'imdb'
@@ -79,6 +80,7 @@ export type NotificationModule =
   | 'poll'
   | 'calendar'
   | 'reminder'
+  | 'media'
   | 'system';
 
 export interface DishRecipeStep {
@@ -1210,7 +1212,7 @@ export class HouseholdTaskInstance {
 @Entity('notifications')
 @Check(
   'CHK_notifications_module',
-  `"module" IN ('menu', 'task', 'poll', 'calendar', 'system')`,
+  `"module" IN ('menu', 'task', 'poll', 'calendar', 'reminder', 'media', 'system')`,
 )
 @Index('IDX_notifications_recipient_read', ['recipientId', 'readAt', 'createdAt'])
 @Index('IDX_notifications_household_source', ['householdId', 'module', 'sourceId'])
@@ -1689,6 +1691,15 @@ export class Integration {
   @Column({ type: 'timestamptz', nullable: true })
   lastSyncedAt: Date | null;
 
+  @Column({ type: 'varchar', length: 64, nullable: true, select: false })
+  webhookSecretHash: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  webhookSourceIp: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  webhookUpdatedAt: Date | null;
+
   @OneToOne(() => IntegrationSecret, (secret) => secret.integration)
   secret: IntegrationSecret | null;
 
@@ -1728,6 +1739,78 @@ export class IntegrationSecret {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
+}
+
+@Entity('integration_events')
+@Check(
+  'CHK_integration_events_status',
+  `"status" IN ('processed', 'ignored', 'failed')`,
+)
+@Unique('UQ_integration_events_idempotency', [
+  'integrationId',
+  'idempotencyKey',
+])
+@Index('IDX_integration_events_household_received', [
+  'householdId',
+  'receivedAt',
+])
+export class IntegrationEvent {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_integration_events_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Integration, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'integrationId',
+    foreignKeyConstraintName: 'FK_integration_events_integration',
+  })
+  integration: Integration;
+
+  @Column('uuid')
+  integrationId: string;
+
+  @Column({ type: 'varchar', length: 48 })
+  provider: IntegrationKind;
+
+  @Column({ type: 'varchar', length: 80 })
+  eventType: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  idempotencyKey: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  status: IntegrationEventStatus;
+
+  @Column({ type: 'jsonb', default: {} })
+  payload: Record<string, unknown>;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  error: string | null;
+
+  @ManyToOne(() => MediaRequest, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'mediaRequestId',
+    foreignKeyConstraintName: 'FK_integration_events_media_request',
+  })
+  mediaRequest: MediaRequest | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  mediaRequestId: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  receivedAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  processedAt: Date | null;
 }
 
 @Entity('media_library_items')
@@ -2246,6 +2329,7 @@ export const ALL_ENTITIES = [
   HouseholdMediaSourceConfig,
   Integration,
   IntegrationSecret,
+  IntegrationEvent,
   MediaLibraryItem,
   HouseholdMedia,
   MediaRequest,

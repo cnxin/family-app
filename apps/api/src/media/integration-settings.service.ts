@@ -22,6 +22,7 @@ import {
   mediaConnectorConfigs,
 } from './connectors.config';
 import { connectorRole } from './connectors';
+import { literalIpFromBaseUrl } from './moviepilot-webhook.service';
 
 const KINDS: IntegrationKind[] = ['plex', 'emby', 'moviepilot'];
 const NAMES: Record<IntegrationKind, string> = {
@@ -112,6 +113,14 @@ export class IntegrationSettingsService {
           (row?.isEnabled ?? true) && config.baseUrl && credentialConfigured,
         ),
         capabilities: CAPABILITIES[config.kind],
+        webhookConfigured:
+          config.kind === 'moviepilot' && Boolean(row?.webhookSecretHash),
+        webhookSourceIp:
+          config.kind === 'moviepilot'
+            ? row?.webhookSourceIp ?? literalIpFromBaseUrl(config.baseUrl)
+            : null,
+        webhookUpdatedAt:
+          config.kind === 'moviepilot' ? row?.webhookUpdatedAt ?? null : null,
         updatedAt: row?.updatedAt ?? null,
       };
     });
@@ -259,6 +268,7 @@ export class IntegrationSettingsService {
     const query = this.integrations
       .createQueryBuilder('integration')
       .leftJoinAndSelect('integration.secret', 'secret')
+      .addSelect('integration.webhookSecretHash')
       .where('integration.householdId = :householdId', { householdId })
       .andWhere('integration.kind IN (:...kinds)', { kinds: KINDS });
     if (withCredentials) query.addSelect('secret.credentialEncrypted');

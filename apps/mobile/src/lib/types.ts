@@ -405,7 +405,16 @@ export interface MediaConnectorSettings {
   isPrimary: boolean;
   configured: boolean;
   capabilities: string[];
+  webhookConfigured: boolean;
+  webhookSourceIp: string | null;
+  webhookUpdatedAt: string | null;
   updatedAt: string | null;
+}
+
+export interface MoviePilotWebhookResult {
+  callbackPath: string;
+  sourceIp: string;
+  updatedAt: string;
 }
 
 export interface MediaLibraryMatch {
@@ -577,6 +586,7 @@ export type NotificationModule =
   | 'poll'
   | 'calendar'
   | 'reminder'
+  | 'media'
   | 'system';
 
 export interface AppNotification {

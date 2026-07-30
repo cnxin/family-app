@@ -1,9 +1,12 @@
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Cable,
   CheckCircle2,
+  Copy,
   KeyRound,
+  Link2,
   RefreshCw,
   RotateCcw,
   Save,
@@ -12,6 +15,7 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,10 +36,12 @@ import {
   useMediaConnectorSettings,
   useResetMediaConnectorSettings,
   useResetMediaSourceConfig,
+  useRotateMoviePilotWebhook,
   useTestMediaConnectorSettings,
   useUpdateMediaConnectorSettings,
   useUpdateMediaSourceConfig,
 } from '../../../lib/queries';
+import { BASE_URL } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import { radius, type as t, useTheme } from '../../../lib/theme';
 import type {
@@ -318,17 +324,23 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
   const update = useUpdateMediaConnectorSettings();
   const reset = useResetMediaConnectorSettings();
   const test = useTestMediaConnectorSettings();
+  const rotateWebhook = useRotateMoviePilotWebhook();
   const [name, setName] = useState(config.name);
   const [isEnabled, setIsEnabled] = useState(config.isEnabled);
   const [baseUrl, setBaseUrl] = useState(config.baseUrl ?? '');
   const [credential, setCredential] = useState('');
   const [clearCredential, setClearCredential] = useState(false);
   const [isPrimary, setIsPrimary] = useState(config.isPrimary);
+  const [webhookSourceIp, setWebhookSourceIp] = useState(
+    config.webhookSourceIp ?? '',
+  );
+  const [callbackUrl, setCallbackUrl] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const busy =
     (update.isPending && update.variables?.kind === config.kind) ||
     (reset.isPending && reset.variables === config.kind) ||
-    (test.isPending && test.variables === config.kind);
+    (test.isPending && test.variables === config.kind) ||
+    (config.kind === 'moviepilot' && rotateWebhook.isPending);
 
   useEffect(() => {
     setName(config.name);
@@ -337,7 +349,17 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
     setCredential('');
     setClearCredential(false);
     setIsPrimary(config.isPrimary);
-  }, [config]);
+    setWebhookSourceIp(config.webhookSourceIp ?? '');
+  }, [
+    config.baseUrl,
+    config.credentialConfigured,
+    config.isEnabled,
+    config.isPrimary,
+    config.kind,
+    config.mode,
+    config.name,
+    config.webhookSourceIp,
+  ]);
 
   const save = async (testAfterSave = false) => {
     setMessage(null);
@@ -373,12 +395,50 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
   const restore = async () => {
     setMessage(null);
     try {
-      await reset.mutateAsync(config.kind);
+      const settings = await reset.mutateAsync(config.kind);
+      const restored = settings.find((item) => item.kind === config.kind);
+      setCallbackUrl(null);
+      setWebhookSourceIp(restored?.webhookSourceIp ?? '');
       setMessage('已恢复服务器默认设置');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '恢复失败');
     }
+  };
+
+  const rotateMoviePilotWebhook = async () => {
+    setMessage(null);
+    try {
+      const result = await rotateWebhook.mutateAsync(webhookSourceIp);
+      setWebhookSourceIp(result.sourceIp);
+      setCallbackUrl(`${BASE_URL}${result.callbackPath}`);
+      setMessage(config.webhookConfigured ? '已重新生成回调地址' : '已生成回调地址');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '生成回调地址失败');
+    }
+  };
+
+  const confirmWebhookRotation = () => {
+    if (!config.webhookConfigured) {
+      void rotateMoviePilotWebhook();
+      return;
+    }
+    Alert.alert('重新生成回调地址', '现有回调地址将立即失效。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '重新生成',
+        style: 'destructive',
+        onPress: () => void rotateMoviePilotWebhook(),
+      },
+    ]);
+  };
+
+  const copyCallbackUrl = async () => {
+    if (!callbackUrl) return;
+    await Clipboard.setStringAsync(callbackUrl);
+    setMessage('已复制回调地址');
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const status = !isEnabled
@@ -571,6 +631,89 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
           </Pressable>
         ) : null}
       </View>
+
+      {config.kind === 'moviepilot' ? (
+        <View style={[styles.webhookSection, { borderColor: c.separator }]}>
+          <View style={styles.webhookHeader}>
+            <View style={[styles.webhookIcon, { backgroundColor: c.tintSoft }]}>
+              <Link2 color={c.tint} size={17} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>完成通知回调</Text>
+              <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                {config.webhookConfigured ? '已启用' : '未生成'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>允许来源 IP</Text>
+            <TextInput
+              accessibilityLabel="MoviePilot 回调允许来源 IP"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!busy}
+              onChangeText={setWebhookSourceIp}
+              placeholder="192.168.1.10"
+              placeholderTextColor={c.tertiaryLabel}
+              style={[t.subhead, styles.input, { backgroundColor: c.fill, color: c.label }]}
+              value={webhookSourceIp}
+            />
+          </View>
+
+          {callbackUrl ? (
+            <View style={styles.field}>
+              <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>MoviePilot 回调地址</Text>
+              <TextInput
+                accessibilityLabel="MoviePilot 回调地址"
+                editable={false}
+                multiline
+                selectTextOnFocus
+                style={[
+                  t.caption,
+                  styles.callbackInput,
+                  { backgroundColor: c.fill, color: c.label },
+                ]}
+                value={callbackUrl}
+              />
+            </View>
+          ) : config.webhookConfigured ? (
+            <Text style={[t.caption, { color: c.secondaryLabel }]}>回调地址已隐藏，重新生成后显示一次</Text>
+          ) : null}
+
+          <View style={styles.actions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={confirmWebhookRotation}
+              style={({ pressed }) => [
+                styles.testButton,
+                { backgroundColor: pressed ? c.fill : c.card, borderColor: c.tint },
+                busy && { opacity: 0.45 },
+              ]}
+            >
+              <Link2 color={c.tint} size={16} />
+              <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>
+                {config.webhookConfigured ? '重新生成' : '生成回调地址'}
+              </Text>
+            </Pressable>
+            {callbackUrl ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => void copyCallbackUrl()}
+                style={({ pressed }) => [
+                  styles.resetButton,
+                  { backgroundColor: pressed ? c.fill : c.card, borderColor: c.separator },
+                ]}
+              >
+                <Copy color={c.secondaryLabel} size={16} />
+                <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>复制地址</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -755,5 +898,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
+  },
+  webhookSection: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 16,
+    gap: 14,
+  },
+  webhookHeader: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  webhookIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callbackInput: {
+    minHeight: 68,
+    maxHeight: 100,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    textAlignVertical: 'top',
   },
 });

@@ -6,6 +6,7 @@ import {
   Check,
   CheckCheck,
   ChevronRight,
+  Clapperboard,
   CookingPot,
   ListTodo,
   Vote,
@@ -39,6 +40,7 @@ const MODULE_LABELS: Record<NotificationModule, string> = {
   poll: '投票',
   calendar: '日历',
   reminder: '提醒',
+  media: '观影',
   system: '系统',
 };
 
@@ -59,6 +61,7 @@ function NotificationIcon({ module }: { module: NotificationModule }) {
   if (module === 'poll') return <Vote {...props} color={c.accent} />;
   if (module === 'calendar') return <CalendarDays {...props} />;
   if (module === 'reminder') return <BellRing {...props} />;
+  if (module === 'media') return <Clapperboard {...props} color={c.green} />;
   return <Bell {...props} />;
 }
 
@@ -80,40 +83,47 @@ function NotificationRow({
         ? c.blueSoft
         : notification.module === 'poll'
           ? c.accentSoft
+          : notification.module === 'media'
+            ? c.greenSoft
         : c.tintSoft;
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onOpen}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.notificationRow,
         { borderBottomColor: c.separator },
         unread && { backgroundColor: c.tintSoft },
-        pressed && { opacity: 0.72 },
       ]}
     >
-      <View style={[styles.notificationIcon, { backgroundColor: iconBackground }]}>
-        <NotificationIcon module={notification.module} />
-      </View>
-      <View style={styles.notificationBody}>
-        <View style={styles.notificationTitleRow}>
-          <Text
-            numberOfLines={2}
-            style={[t.subhead, { color: c.label, flex: 1, fontWeight: unread ? '700' : '600' }]}
-          >
-            {notification.title}
-          </Text>
-          {unread ? <View style={[styles.unreadDot, { backgroundColor: c.tint }]} /> : null}
+      <Pressable
+        accessibilityLabel={`打开${notification.title}`}
+        accessibilityRole="button"
+        onPress={onOpen}
+        style={({ pressed }) => [styles.notificationOpen, pressed && { opacity: 0.72 }]}
+      >
+        <View style={[styles.notificationIcon, { backgroundColor: iconBackground }]}>
+          <NotificationIcon module={notification.module} />
         </View>
-        {notification.body ? (
-          <Text numberOfLines={2} style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>
-            {notification.body}
+        <View style={styles.notificationBody}>
+          <View style={styles.notificationTitleRow}>
+            <Text
+              numberOfLines={2}
+              style={[t.subhead, { color: c.label, flex: 1, fontWeight: unread ? '700' : '600' }]}
+            >
+              {notification.title}
+            </Text>
+            {unread ? <View style={[styles.unreadDot, { backgroundColor: c.tint }]} /> : null}
+          </View>
+          {notification.body ? (
+            <Text numberOfLines={2} style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>
+              {notification.body}
+            </Text>
+          ) : null}
+          <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 6 }]}>
+            {MODULE_LABELS[notification.module]} · {notificationTime(notification.createdAt)}
           </Text>
-        ) : null}
-        <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 6 }]}>
-          {MODULE_LABELS[notification.module]} · {notificationTime(notification.createdAt)}
-        </Text>
-      </View>
+        </View>
+        {!unread ? <ChevronRight color={c.tertiaryLabel} size={18} /> : null}
+      </Pressable>
       {unread ? (
         <Pressable
           accessibilityLabel={`标记${notification.title}为已读`}
@@ -129,10 +139,8 @@ function NotificationRow({
         >
           <Check color={c.tint} size={16} />
         </Pressable>
-      ) : (
-        <ChevronRight color={c.tertiaryLabel} size={18} />
-      )}
-    </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -222,7 +230,7 @@ export default function NotificationsScreen() {
               <EmptyState
                 emoji="🔕"
                 title={filter === 'unread' ? '通知都处理完了' : '还没有通知'}
-                hint="任务、投票和菜单变化会显示在这里"
+                hint="任务、投票、菜单和影视变化会显示在这里"
               />
             ) : null}
           </Card>
@@ -258,7 +266,16 @@ const styles = StyleSheet.create({
   notificationRow: {
     minHeight: 88,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 14,
+    gap: 6,
+  },
+  notificationOpen: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 88,
+    paddingLeft: 14,
     paddingVertical: 13,
     flexDirection: 'row',
     alignItems: 'center',

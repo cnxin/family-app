@@ -27,6 +27,7 @@ import type {
   MediaLibraryAvailability,
   MediaLibraryResponse,
   MediaLibrarySyncResponse,
+  MoviePilotWebhookResult,
   MediaRequest,
   MediaSearchResponse,
   MediaSourceConfig,
@@ -337,6 +338,37 @@ export function useTestMediaConnectorSettings() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['media-connectors'] });
+    },
+  });
+}
+
+export function useRotateMoviePilotWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sourceIp: string) =>
+      api<MoviePilotWebhookResult>(
+        '/media/connector-settings/moviepilot/webhook',
+        {
+          method: 'POST',
+          body: { ...(sourceIp.trim() ? { sourceIp: sourceIp.trim() } : {}) },
+        },
+      ),
+    onSuccess: (result) => {
+      qc.setQueryData<MediaConnectorSettings[]>(
+        ['media-connector-settings'],
+        (settings) =>
+          settings?.map((setting) =>
+            setting.kind === 'moviepilot'
+              ? {
+                  ...setting,
+                  webhookConfigured: true,
+                  webhookSourceIp: result.sourceIp,
+                  webhookUpdatedAt: result.updatedAt,
+                }
+              : setting,
+          ),
+      );
+      void qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });
 }
