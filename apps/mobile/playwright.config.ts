@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.FAMILY_WEB_URL ?? 'http://localhost:8081';
+const webPort = new URL(baseURL).port || '8081';
 const authState = {
   mobile: 'e2e/.auth/mobile.json',
   desktop: 'e2e/.auth/desktop.json',
@@ -58,7 +59,7 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      'corepack pnpm exec expo start --web --host localhost --port 8081',
+      `corepack pnpm exec expo start --web --host localhost --port ${webPort}`,
     url: baseURL,
     reuseExistingServer: true,
     timeout: 180_000,

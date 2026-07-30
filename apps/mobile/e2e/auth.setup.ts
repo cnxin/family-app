@@ -63,7 +63,7 @@ async function loginWithMouse(
 
   await expect(page).not.toHaveURL(/\/login$/);
   await expect(
-    page.getByText('家庭今日概览', { exact: true }),
+    page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
 
   mkdirSync(dirname(authFile), { recursive: true });

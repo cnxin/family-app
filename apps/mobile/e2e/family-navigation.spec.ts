@@ -4,10 +4,10 @@ const API_URL = process.env.FAMILY_API_URL ?? 'http://127.0.0.1:3100';
 
 const NAVIGATION = {
   home: { mobile: '首页', desktop: '家庭首页', path: '/' },
-  order: { mobile: '点菜', desktop: '点菜', path: '/order' },
-  kitchen: { mobile: '菜单', desktop: '菜单安排', path: '/kitchen' },
+  order: { mobile: '点菜', desktop: '点菜', path: '/order', module: '家庭食堂' },
+  kitchen: { mobile: '菜单安排', desktop: '菜单安排', path: '/kitchen', module: '家庭食堂' },
   calendar: { mobile: '日历', desktop: '家庭日历', path: '/calendar' },
-  shopping: { mobile: '采购', desktop: '采购与库存', path: '/shopping' },
+  shopping: { mobile: '采购与库存', desktop: '采购与库存', path: '/shopping', module: '采购与库存' },
   profile: { mobile: '我的', desktop: '我的', path: '/profile' },
 } as const;
 
@@ -19,9 +19,29 @@ async function openSection(
   section: NavigationKey,
 ) {
   const target = NAVIGATION[section];
+  const module = 'module' in target ? target.module : null;
+  if (module) {
+    if (projectName === 'mobile-chrome') {
+      await page.getByRole('tab', { name: '首页', exact: true }).click();
+      const moduleLink = page.getByRole('link').filter({ hasText: module }).first();
+      await expect(moduleLink).toBeVisible();
+      await moduleLink.click();
+      if (module === target.desktop) {
+        await expect(page).toHaveURL(new RegExp(`${target.path}$`));
+        return;
+      }
+    } else if (module === '家庭食堂') {
+      const moduleLink = page.getByRole('link', { name: module, exact: true });
+      await expect(moduleLink).toBeVisible();
+      await moduleLink.click();
+    }
+  }
+
   const locator = projectName === 'mobile-chrome'
-    ? page.getByRole('tab', { name: target.mobile, exact: true })
-    : page.getByRole('link', { name: target.desktop, exact: true });
+    ? module
+      ? page.getByRole('link').filter({ hasText: target.mobile }).first()
+      : page.getByRole('tab', { name: target.mobile, exact: true })
+    : page.getByRole('link', { name: target.desktop, exact: true }).first();
 
   await expect(locator).toBeVisible();
   await locator.click();
@@ -67,7 +87,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
 
   await page.goto('/');
   await expect(
-    page.getByText('家庭今日概览', { exact: true }),
+    page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
@@ -108,7 +128,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   });
   await page.reload();
   await expect(
-    page.getByText('家庭今日概览', { exact: true }),
+    page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
   expect(forcedUnauthorized).toBeGreaterThanOrEqual(1);
   expect(forcedUnauthorized).toBeLessThanOrEqual(2);
@@ -121,6 +141,30 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.unroute(staleAccessRoute);
   simulatingUnauthorized = false;
   expect(runtimeErrors).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath('platform-home.png'),
+    fullPage: true,
+  });
+
+  const canteenLink =
+    testInfo.project.name === 'mobile-chrome'
+      ? page.getByRole('link').filter({ hasText: '家庭食堂' }).first()
+      : page.getByRole('link', { name: '家庭食堂', exact: true });
+  await canteenLink.click();
+  await expect(page).toHaveURL(/\/canteen$/);
+  await expect(page.getByRole('heading', { name: '家庭食堂', exact: true })).toBeVisible();
+  await expect(page.getByText('今日菜单', { exact: true }).last()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('canteen-home.png'),
+    fullPage: true,
+  });
+  if (testInfo.project.name === 'mobile-chrome') {
+    await page.getByRole('button', { name: '返回家庭首页', exact: true }).click();
+  } else {
+    await page.getByRole('link', { name: '家庭首页', exact: true }).click();
+  }
+  await expect(page).toHaveURL(/\/$/);
 
   const mediaRoute = /\/media(\?|$)/;
   const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;
@@ -317,6 +361,10 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     });
   });
 
+  // 首页会预取片单；重载后让新建的路由 mock 填充查询缓存。
+  await page.reload();
+  await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
+
   const mediaLink =
     testInfo.project.name === 'mobile-chrome'
       ? page.getByRole('link').filter({ hasText: '家庭观影' })
@@ -324,13 +372,19 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(mediaLink).toBeVisible();
   await mediaLink.click();
   await expect(page).toHaveURL(/\/media$/);
-  await expect(page.getByText('家庭观影', { exact: true }).first()).toBeVisible();
-  await expect(page.getByLabel('媒体连接状态')).toBeVisible();
-  await expect(page.getByText('Plex · Plex 1.43.0', { exact: true })).toBeVisible();
-  await expect(
-    page.getByText('MoviePilot · 等待配置 API Key', { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText('Emby · 未配置服务地址', { exact: true })).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: '家庭观影', exact: true })).toBeVisible();
+  await expect(page.getByText('媒体服务', { exact: true })).toBeVisible();
+  await expect(page.getByText('媒体库 · Plex 1.43.0', { exact: true })).toBeVisible();
+  await expect(page.getByText('自动化 · 等待配置 API Key', { exact: true })).toBeVisible();
+  await expect(page.getByText('媒体库 · 未配置服务地址', { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('media-home.png'),
+    fullPage: true,
+  });
+  await page.getByRole('link').filter({ hasText: '家庭片单' }).first().click();
+  await expect(page).toHaveURL(/\/media\/watchlist$/);
+  await expect(page.getByRole('heading', { name: '家庭片单', exact: true })).toBeVisible();
   await expect(
     page.getByRole('link', { name: '用Plex播放家庭电影回归样例' }),
   ).toBeVisible();
@@ -363,12 +417,12 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page).toHaveURL(/\/polls\?pollId=poll-browser-fixture-media-1/);
   await expect(page.getByRole('checkbox', { name: '选择想看' })).toBeVisible();
   await page.getByRole('button', { name: /关联的片单条目/ }).click();
-  await expect(page).toHaveURL(/\/media\?mediaId=media-browser-fixture-1/);
+  await expect(page).toHaveURL(/\/media\/watchlist\?mediaId=media-browser-fixture-1/);
   await expect(page.getByText('编辑观影安排', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '关闭', exact: true }).first().click();
   await expect(page.getByText('编辑观影安排', { exact: true })).not.toBeVisible();
   if (testInfo.project.name === 'mobile-chrome') {
-    await expect(page.getByRole('tab')).toHaveCount(6);
+    await expect(page.getByRole('tab')).toHaveCount(4);
   }
   await expectNoHorizontalOverflow(page);
   await page.screenshot({
@@ -376,6 +430,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     fullPage: true,
   });
   if (testInfo.project.name === 'mobile-chrome') {
+    await page.getByRole('button', { name: '返回家庭观影', exact: true }).click();
+    await expect(page).toHaveURL(/\/media$/);
     await page.getByRole('button', { name: '返回家庭首页', exact: true }).click();
     await expect(page).toHaveURL(/\/$/);
   } else {
@@ -388,7 +444,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
 
   const tasksLink =
     testInfo.project.name === 'mobile-chrome'
-      ? page.getByRole('link', { name: '查看任务', exact: true })
+      ? page.getByRole('link').filter({ hasText: '家庭任务' }).first()
       : page.getByRole('link', { name: '家庭任务', exact: true });
   await expect(tasksLink).toBeVisible();
   await tasksLink.click();
@@ -433,7 +489,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await openSection(page, testInfo.project.name, 'home');
   const pollsLink =
     testInfo.project.name === 'mobile-chrome'
-      ? page.getByRole('link', { name: '查看投票', exact: true })
+      ? page.getByRole('link').filter({ hasText: '家庭投票' }).first()
       : page.getByRole('link', { name: '家庭投票', exact: true });
   await expect(pollsLink).toBeVisible();
   await pollsLink.click();
@@ -539,7 +595,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByText('家庭日历', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '添加事件', exact: true }).first()).toBeVisible();
   if (testInfo.project.name === 'mobile-chrome') {
-    await expect(page.getByRole('tab')).toHaveCount(6);
+    await expect(page.getByRole('tab')).toHaveCount(4);
   }
   await expectNoHorizontalOverflow(page);
 
@@ -643,13 +699,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.getByRole('button', { name: '菜单', exact: true }).click();
   await page.getByRole('button', { name: '全部', exact: true }).click();
   if (testInfo.project.name === 'mobile-chrome') {
-    await expect(page.getByRole('tab')).toHaveCount(6);
+    await expect(page.getByRole('tab')).toHaveCount(4);
   }
   await expectNoHorizontalOverflow(page);
 
   await openSection(page, testInfo.project.name, 'home');
   await expect(
-    page.getByText('家庭今日概览', { exact: true }),
+    page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: /打开通知中心/ }).first().click();
   await expect(page).toHaveURL(/\/notifications$/);
@@ -659,7 +715,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expectNoHorizontalOverflow(page);
 
   await openSection(page, testInfo.project.name, 'home');
-  await expect(page.getByText('家庭今日概览', { exact: true })).toBeVisible();
+  await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
   expect(runtimeErrors).toEqual([]);
 
   const accessToken = await page.evaluate(() =>

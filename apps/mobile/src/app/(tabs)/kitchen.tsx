@@ -26,7 +26,11 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import {
+  ModuleBackButton,
+  PageContainer,
+  useDesktopLayout,
+} from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import {
   Card,
@@ -848,7 +852,8 @@ export default function KitchenScreen() {
         maxWidth={900}
         style={[styles.page, desktop && styles.pageDesktop]}
       >
-        <View style={styles.header}>
+        <ModuleBackButton href="/canteen" label="家庭食堂" />
+        <View style={[styles.header, !desktop && styles.headerMobile]}>
           <Text style={[t.largeTitle, { color: c.label }]}>菜单安排</Text>
           <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
             分配主厨、认领菜品并查看进度
@@ -921,6 +926,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, paddingTop: 8 },
   pageDesktop: { paddingTop: 22 },
   header: { paddingTop: 0 },
+  headerMobile: { marginTop: 12 },
   dateControl: { marginTop: 14 },
   scrollContent: { paddingBottom: 32 },
   itemRow: {

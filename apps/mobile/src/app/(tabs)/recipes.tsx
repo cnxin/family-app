@@ -18,7 +18,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import {
+  ModuleBackButton,
+  PageContainer,
+  useDesktopLayout,
+} from '../../components/app-shell';
 import { Card, EmptyState, Segmented } from '../../components/ui';
 import { photoUri } from '../../lib/api';
 import { useMembers, useRecipes } from '../../lib/queries';
@@ -169,7 +173,8 @@ export default function RecipesScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer style={[styles.page, desktop && styles.pageDesktop]}>
-        <View style={[styles.header, desktop && styles.headerDesktop]}>
+        <ModuleBackButton href="/canteen" label="家庭食堂" />
+        <View style={[styles.header, !desktop && styles.headerMobile, desktop && styles.headerDesktop]}>
           <View style={{ flex: 1 }}>
             <Text style={[t.largeTitle, { color: c.label }]}>家庭菜谱</Text>
             <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
@@ -268,6 +273,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, paddingTop: 8 },
   pageDesktop: { paddingTop: 22 },
   header: { gap: 14 },
+  headerMobile: { marginTop: 12 },
   headerDesktop: { flexDirection: 'row', alignItems: 'center' },
   addButton: {
     minHeight: 42,

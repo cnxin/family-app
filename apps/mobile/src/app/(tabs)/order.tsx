@@ -27,7 +27,11 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import {
+  ModuleBackButton,
+  PageContainer,
+  useDesktopLayout,
+} from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import { Card, PrimaryButton, Segmented } from '../../components/ui';
 import { api, photoUri } from '../../lib/api';
@@ -269,7 +273,8 @@ export default function OrderScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer style={[styles.content, desktop && styles.contentDesktop]}>
-        <View style={[styles.header, desktop && styles.headerDesktop]}>
+        <ModuleBackButton href="/canteen" label="家庭食堂" />
+        <View style={[styles.header, !desktop && styles.headerMobile, desktop && styles.headerDesktop]}>
           <View style={{ flex: 1 }}>
             <Text style={[t.largeTitle, { color: c.label }]}>点菜</Text>
             <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
@@ -476,6 +481,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingTop: 8 },
   contentDesktop: { paddingTop: 22, paddingBottom: 20 },
   header: { gap: 12 },
+  headerMobile: { marginTop: 12 },
   headerDesktop: { flexDirection: 'row', alignItems: 'center' },
   recipeLink: {
     height: 36,

@@ -1,16 +1,15 @@
 import { Redirect, Tabs } from 'expo-router';
 import {
+  Bell,
   CalendarDays,
-  CookingPot,
   LayoutDashboard,
-  ShoppingCart,
   UserRound,
-  UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react-native';
 import React from 'react';
 import { ColorValue } from 'react-native';
 import { AppShell, useDesktopLayout } from '../../components/app-shell';
+import { useNotifications } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { useTheme } from '../../lib/theme';
 
@@ -28,6 +27,7 @@ export default function TabLayout() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const { member, ready } = useSession();
+  const { data: notifications } = useNotifications(false, ready && Boolean(member) && !desktop);
 
   if (!ready) return null;
   if (!member) return <Redirect href="/login" />;
@@ -63,18 +63,14 @@ export default function TabLayout() {
         name="order"
         options={{
           title: '点菜',
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={UtensilsCrossed} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
         name="kitchen"
         options={{
           title: '菜单',
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={CookingPot} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -104,7 +100,13 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: '通知',
-          href: null,
+          tabBarBadge: notifications?.length
+            ? notifications.length > 99
+              ? '99+'
+              : notifications.length
+            : undefined,
+          tabBarBadgeStyle: { backgroundColor: c.red, color: '#FFFFFF', fontSize: 10 },
+          tabBarIcon: ({ color }) => <TabIcon icon={Bell} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -146,9 +148,14 @@ export default function TabLayout() {
         name="shopping"
         options={{
           title: '采购',
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={ShoppingCart} color={color} />
-          ),
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="canteen"
+        options={{
+          title: '食堂',
+          href: null,
         }}
       />
       <Tabs.Screen

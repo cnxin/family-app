@@ -1,8 +1,8 @@
 import {
+  ArrowLeft,
   Bell,
   BellRing,
   CalendarDays,
-  BookOpenText,
   CookingPot,
   Film,
   House,
@@ -12,15 +12,15 @@ import {
   ShoppingCart,
   UserRound,
   UsersRound,
-  UtensilsCrossed,
   Vote,
   type LucideIcon,
 } from 'lucide-react-native';
-import { usePathname, useRouter } from 'expo-router';
+import { usePathname, useRouter, type Href } from 'expo-router';
 import React from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleProp,
   StyleSheet,
   Text,
@@ -65,50 +65,65 @@ export function PageContainer({
 
 interface NavItem {
   label: string;
-  href:
-    | '/'
-    | '/order'
-    | '/recipes'
-    | '/kitchen'
-    | '/calendar'
-    | '/tasks'
-    | '/notifications'
-    | '/reminders'
-    | '/activity'
-    | '/members'
-    | '/media'
-    | '/polls'
-    | '/shopping'
-    | '/profile';
+  href: Href;
   icon: LucideIcon;
+  matches: (pathname: string) => boolean;
+  children?: { label: string; href: Href; matches: (pathname: string) => boolean }[];
   requiresMemberManagement?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: '家庭首页', href: '/', icon: LayoutDashboard },
-  { label: '点菜', href: '/order', icon: UtensilsCrossed },
-  { label: '家庭菜谱', href: '/recipes', icon: BookOpenText },
-  { label: '菜单安排', href: '/kitchen', icon: CookingPot },
-  { label: '家庭任务', href: '/tasks', icon: ListTodo },
-  { label: '家庭投票', href: '/polls', icon: Vote },
-  { label: '家庭观影', href: '/media', icon: Film },
-  { label: '提醒中心', href: '/reminders', icon: BellRing },
-  { label: '家庭活动', href: '/activity', icon: History },
+  {
+    label: '家庭首页',
+    href: '/',
+    icon: LayoutDashboard,
+    matches: (pathname) => pathname === '/',
+  },
+  {
+    label: '家庭食堂',
+    href: '/canteen',
+    icon: CookingPot,
+    matches: (pathname) =>
+      pathname === '/canteen' ||
+      pathname === '/order' ||
+      pathname === '/recipes' ||
+      pathname === '/kitchen',
+    children: [
+      { label: '食堂首页', href: '/canteen', matches: (pathname) => pathname === '/canteen' },
+      { label: '点菜', href: '/order', matches: (pathname) => pathname === '/order' },
+      { label: '家庭菜谱', href: '/recipes', matches: (pathname) => pathname === '/recipes' },
+      { label: '菜单安排', href: '/kitchen', matches: (pathname) => pathname === '/kitchen' },
+    ],
+  },
+  {
+    label: '家庭观影',
+    href: '/media',
+    icon: Film,
+    matches: (pathname) => pathname === '/media' || pathname.startsWith('/media/'),
+    children: [
+      { label: '观影首页', href: '/media', matches: (pathname) => pathname === '/media' },
+      {
+        label: '家庭片单',
+        href: '/media/watchlist',
+        matches: (pathname) => pathname === '/media/watchlist',
+      },
+    ],
+  },
+  { label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },
+  { label: '采购与库存', href: '/shopping', icon: ShoppingCart, matches: (pathname) => pathname === '/shopping' },
+  { label: '家庭任务', href: '/tasks', icon: ListTodo, matches: (pathname) => pathname === '/tasks' },
+  { label: '家庭日历', href: '/calendar', icon: CalendarDays, matches: (pathname) => pathname === '/calendar' },
+  { label: '提醒中心', href: '/reminders', icon: BellRing, matches: (pathname) => pathname === '/reminders' },
+  { label: '家庭活动', href: '/activity', icon: History, matches: (pathname) => pathname === '/activity' },
   {
     label: '成员管理',
     href: '/members',
     icon: UsersRound,
+    matches: (pathname) => pathname === '/members',
     requiresMemberManagement: true,
   },
-  { label: '家庭日历', href: '/calendar', icon: CalendarDays },
-  { label: '采购与库存', href: '/shopping', icon: ShoppingCart },
-  { label: '我的', href: '/profile', icon: UserRound },
+  { label: '我的', href: '/profile', icon: UserRound, matches: (pathname) => pathname === '/profile' },
 ];
-
-function currentRoute(pathname: string) {
-  if (pathname === '/') return '/';
-  return `/${pathname.split('/').filter(Boolean)[0] ?? ''}`;
-}
 
 function formatToday() {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -125,11 +140,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { member } = useSession();
   const { data: notifications } = useNotifications(false, desktop);
-  const activeRoute = currentRoute(pathname);
-  const activeItem =
-    activeRoute === '/notifications'
-      ? { label: '通知中心', href: '/notifications' as const, icon: Bell }
-      : NAV_ITEMS.find((item) => item.href === activeRoute) ?? NAV_ITEMS[0];
+  const activeModule = NAV_ITEMS.find((item) => item.matches(pathname));
+  const activeChild = activeModule?.children?.find((item) => item.matches(pathname));
+  const activeItem = pathname === '/notifications'
+    ? { label: '通知中心', icon: Bell }
+    : activeChild
+      ? { label: activeChild.label, icon: activeModule?.icon ?? House }
+      : { label: activeModule?.label ?? '小管家', icon: activeModule?.icon ?? House };
   const ActiveIcon = activeItem.icon;
   const unreadCount = notifications?.length ?? 0;
 
@@ -153,44 +170,85 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </View>
         </View>
 
-        <View style={styles.nav}>
+        <ScrollView
+          contentContainerStyle={styles.navContent}
+          showsVerticalScrollIndicator={false}
+          style={styles.nav}
+        >
           {NAV_ITEMS.filter(
             (item) =>
               !item.requiresMemberManagement ||
               member?.role === 'owner' ||
               member?.role === 'admin',
           ).map((item) => {
-            const active = item.href === activeRoute;
+            const active = activeModule === item;
             const Icon = item.icon;
             return (
-              <Pressable
-                key={item.href}
-                accessibilityRole="link"
-                onPress={() => router.replace(item.href)}
-                style={({ pressed }) => [
-                  styles.navItem,
-                  {
-                    backgroundColor: active
-                      ? c.tintSoft
-                      : pressed
-                        ? c.fill
-                        : 'transparent',
-                  },
-                ]}
-              >
-                <Icon color={active ? c.tint : c.secondaryLabel} size={20} />
-                <Text
-                  style={[
-                    t.subhead,
-                    { color: active ? c.tint : c.label, fontWeight: active ? '700' : '500' },
+              <View key={item.label}>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => router.replace(item.href)}
+                  style={({ pressed }) => [
+                    styles.navItem,
+                    {
+                      backgroundColor: active
+                        ? c.tintSoft
+                        : pressed
+                          ? c.fill
+                          : 'transparent',
+                    },
                   ]}
                 >
-                  {item.label}
-                </Text>
-              </Pressable>
+                  <Icon color={active ? c.tint : c.secondaryLabel} size={20} />
+                  <Text
+                    style={[
+                      t.subhead,
+                      { color: active ? c.tint : c.label, fontWeight: active ? '700' : '500' },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+                {active && item.children ? (
+                  <View style={styles.subnav}>
+                    {item.children.map((child) => {
+                      const childActive = child.matches(pathname);
+                      return (
+                        <Pressable
+                          accessibilityRole="link"
+                          key={child.label}
+                          onPress={() => router.replace(child.href)}
+                          style={({ pressed }) => [
+                            styles.subnavItem,
+                            { backgroundColor: pressed ? c.fill : 'transparent' },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.subnavMarker,
+                              { backgroundColor: childActive ? c.tint : c.separator },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              t.footnote,
+                              {
+                                color: childActive ? c.tint : c.secondaryLabel,
+                                fontWeight: childActive ? '700' : '500',
+                              },
+                            ]}
+                          >
+                            {child.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
             );
           })}
-        </View>
+        </ScrollView>
 
         <Pressable
           accessibilityRole="button"
@@ -259,6 +317,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+export function ModuleBackButton({ href, label }: { href: Href; label: string }) {
+  const c = useTheme();
+  const desktop = useDesktopLayout();
+  const router = useRouter();
+
+  if (desktop) return null;
+
+  return (
+    <Pressable
+      accessibilityLabel={`返回${label}`}
+      accessibilityRole="button"
+      onPress={() => router.replace(href)}
+      style={({ pressed }) => [
+        styles.moduleBackButton,
+        { backgroundColor: pressed ? c.fillStrong : c.card, borderColor: c.separator },
+      ]}
+    >
+      <ArrowLeft color={c.label} size={18} />
+      <Text style={[t.footnote, { color: c.label, fontWeight: '700' }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row' },
   sidebar: {
@@ -281,7 +362,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nav: { flex: 1, paddingTop: 28, gap: 6 },
+  nav: { flex: 1, marginTop: 22 },
+  navContent: { gap: 6, paddingBottom: 18 },
   navItem: {
     height: 44,
     borderRadius: radius.md,
@@ -290,6 +372,16 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
   },
+  subnav: { paddingLeft: 21, paddingTop: 4, paddingBottom: 3, gap: 1 },
+  subnavItem: {
+    height: 34,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  subnavMarker: { width: 5, height: 5, borderRadius: 3 },
   member: {
     minHeight: 76,
     borderTopWidth: 1,
@@ -337,4 +429,14 @@ const styles = StyleSheet.create({
   },
   notificationBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
   pageContainer: { width: '100%', alignSelf: 'center' },
+  moduleBackButton: {
+    minHeight: 36,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
 });

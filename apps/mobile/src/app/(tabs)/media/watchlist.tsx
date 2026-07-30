@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  ArrowLeft,
   CalendarDays,
   Film,
   Pencil,
@@ -28,18 +27,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import { ModuleBackButton, PageContainer, useDesktopLayout } from '../../../components/app-shell';
 import {
   CalendarMonth,
   startOfMonth,
-} from '../../components/calendar-month';
+} from '../../../components/calendar-month';
 import {
   ConfirmDialog,
   EmptyState,
   PrimaryButton,
   Segmented,
-} from '../../components/ui';
-import { parseDate, todayStr } from '../../lib/date';
+} from '../../../components/ui';
+import { parseDate, todayStr } from '../../../lib/date';
 import {
   useCreateMedia,
   useDeleteMedia,
@@ -48,8 +47,8 @@ import {
   useMediaLibraryAvailability,
   usePolls,
   useUpdateMedia,
-} from '../../lib/queries';
-import { radius, type as t, useTheme } from '../../lib/theme';
+} from '../../../lib/queries';
+import { radius, type as t, useTheme } from '../../../lib/theme';
 import type {
   HouseholdMedia,
   HouseholdMediaStatus,
@@ -57,7 +56,7 @@ import type {
   MediaConnectorSummary,
   MediaLibraryMatch,
   MediaType,
-} from '../../lib/types';
+} from '../../../lib/types';
 
 type MediaFilter = HouseholdMediaStatus | 'all';
 
@@ -796,22 +795,13 @@ export default function MediaScreen() {
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer maxWidth={1180} style={[styles.page, desktop && styles.pageDesktop]}>
         <View style={styles.pageHeader}>
-          {!desktop ? (
-            <Pressable
-              accessibilityLabel="返回家庭首页"
-              accessibilityRole="button"
-              onPress={() => router.replace('/')}
-              style={({ pressed }) => [
-                styles.backButton,
-                { backgroundColor: pressed ? c.fill : 'transparent' },
-              ]}
-            >
-              <ArrowLeft color={c.label} size={21} />
-            </Pressable>
-          ) : null}
+          <ModuleBackButton href="/media" label="家庭观影" />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[desktop ? t.largeTitle : t.title1, { color: c.label }]}> 
-              家庭观影
+            <Text
+              accessibilityRole="header"
+              style={[desktop ? t.largeTitle : t.title1, { color: c.label }]}
+            >
+              家庭片单
             </Text>
             <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}> 
               {entries?.length ?? 0} 部影视
