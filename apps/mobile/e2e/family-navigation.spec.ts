@@ -915,6 +915,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     path: testInfo.outputPath('media-home.png'),
     fullPage: true,
   });
+  await page.getByRole('link').filter({ hasText: '观影投票' }).first().click();
+  await expect(page).toHaveURL(/\/media\/polls(?:\?returnTo=media)?$/);
+  await expect(page.getByRole('heading', { name: '观影投票', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '返回家庭观影', exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('button', { name: '返回家庭观影', exact: true }).click();
+  await expect(page).toHaveURL(/\/media$/);
   await page.getByRole('link').filter({ hasText: '我的媒体库' }).first().click();
   await expect(page).toHaveURL(/\/media\/library$/);
   await expect(page.getByRole('heading', { name: '我的媒体库', exact: true })).toBeVisible();
@@ -1005,7 +1012,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     .click();
   await expect(page.getByText('已选 2 部', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '发起投票', exact: true }).click();
-  await expect(page).toHaveURL(/\/polls\?.*candidateIds=/);
+  await expect(page).toHaveURL(/\/media\/polls\?.*candidateIds=/);
   await expect(page.getByText('发起选片投票', { exact: true })).toBeVisible();
   await expect(page.getByText('家庭片单候选 · 已选 2 部')).toBeVisible();
   await expect(
@@ -1071,7 +1078,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       exact: true,
     })
     .click();
-  await expect(page).toHaveURL(/\/polls\?.*sourceModule=media/);
+  await expect(page).toHaveURL(/\/media\/polls\?.*sourceModule=media/);
   await expect(page.getByText('来自家庭片单 · 家庭电影回归样例')).toBeVisible();
   await expect(page.getByLabel('投票标题')).toHaveValue(
     '要一起看《家庭电影回归样例》吗？',
@@ -1087,9 +1094,11 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     /\/media\/watchlist\?(?=[^#]*mediaId=media-browser-fixture-1)(?=[^#]*filter=voting)/,
   );
   await expect(page.getByText('编辑观影安排', { exact: true })).toBeVisible();
-  await expect(page.getByText('投票中', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '关闭', exact: true }).first().click();
   await expect(page.getByText('编辑观影安排', { exact: true })).not.toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '投票中 1', exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole('button', {
       name: '查看家庭电影回归样例的家庭投票',

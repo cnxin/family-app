@@ -241,7 +241,7 @@ export default function MediaHomeScreen() {
             <ActionCard
               background={c.blueSoft}
               color={c.blue}
-              href="/polls"
+              href={{ pathname: '/media/polls', params: { returnTo: 'media' } }}
               icon={Vote}
               label="观影投票"
               status={`${mediaPolls.length} 个进行中`}

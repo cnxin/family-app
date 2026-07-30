@@ -112,6 +112,16 @@ const NAV_ITEMS: NavItem[] = [
         href: '/media/library',
         matches: (pathname) => pathname === '/media/library',
       },
+      {
+        label: '观影投票',
+        href: '/media/polls',
+        matches: (pathname) => pathname === '/media/polls',
+      },
+      {
+        label: '观看记录',
+        href: '/media/history',
+        matches: (pathname) => pathname === '/media/history',
+      },
     ],
   },
   { label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },
@@ -322,12 +332,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ModuleBackButton({ href, label }: { href: Href; label: string }) {
+export function ModuleBackButton({
+  href,
+  label,
+  showOnDesktop = false,
+}: {
+  href: Href;
+  label: string;
+  showOnDesktop?: boolean;
+}) {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
 
-  if (desktop) return null;
+  if (desktop && !showOnDesktop) return null;
 
   return (
     <Pressable

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import {
   BellPlus,
   Check,
@@ -29,7 +29,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import {
+  ModuleBackButton,
+  PageContainer,
+  useDesktopLayout,
+} from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import {
   Card,
@@ -124,6 +128,7 @@ function PollForm({
   source,
   mediaCandidates,
   initialMediaIds,
+  mediaScope,
 }: {
   poll: HouseholdPoll | null;
   visible: boolean;
@@ -132,6 +137,7 @@ function PollForm({
   source: PollSource | null;
   mediaCandidates: HouseholdMedia[];
   initialMediaIds: string[];
+  mediaScope: boolean;
 }) {
   const c = useTheme();
   const save = useUpsertPoll();
@@ -162,7 +168,9 @@ function PollForm({
             : ''),
     );
     setDescription(poll?.description ?? '');
-    setCategory(poll?.category ?? (source || candidateMode ? 'movie' : 'general'));
+    setCategory(
+      poll?.category ?? (source || candidateMode || mediaScope ? 'movie' : 'general'),
+    );
     setVoteMode(poll?.voteMode ?? 'single');
     setMaxChoices(String(poll?.maxChoices ?? 2));
     setHasDeadline(Boolean(poll?.closesAt));
@@ -174,7 +182,7 @@ function PollForm({
     );
     setSelectedMediaIds(initialMediaIds);
     setMessage(null);
-  }, [candidateMode, initialMediaIds, poll, source, visible]);
+  }, [candidateMode, initialMediaIds, mediaScope, poll, source, visible]);
 
   const updateOption = (index: number, value: string) => {
     setOptions((current) =>
@@ -229,7 +237,7 @@ function PollForm({
         id: poll?.id,
         title: normalizedTitle,
         description: description.trim() || null,
-        category,
+        category: mediaScope && !poll ? 'movie' : category,
         closesAt: deadline?.toISOString() ?? null,
         ...(!rulesLocked
           ? {
@@ -264,7 +272,13 @@ function PollForm({
           <View style={styles.formHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.title2, { color: c.label }]}>
-                {poll ? '编辑家庭投票' : candidateMode ? '发起选片投票' : '发起家庭投票'}
+                {poll
+                  ? '编辑家庭投票'
+                  : candidateMode
+                    ? '发起选片投票'
+                    : mediaScope
+                      ? '发起观影投票'
+                      : '发起家庭投票'}
               </Text>
               <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
                 {poll ? `${poll.totalVoters} 人已经参与` : '家庭成员都可以参与选择'}
@@ -303,13 +317,15 @@ function PollForm({
 
             <View style={styles.field}>
               <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>分类</Text>
-              {source || candidateMode ? (
+              {source || candidateMode || mediaScope ? (
                 <View style={[styles.sourceNotice, { backgroundColor: c.accentSoft }]}>
                   <Film color={c.accent} size={17} />
                   <Text numberOfLines={2} style={[t.subhead, { color: c.accent, flex: 1, fontWeight: '600' }]}>
                     {source
                       ? `来自家庭片单 · ${source.title}`
-                      : `家庭片单候选 · 已选 ${selectedMediaIds.length} 部`}
+                      : candidateMode
+                        ? `家庭片单候选 · 已选 ${selectedMediaIds.length} 部`
+                        : '家庭观影'}
                   </Text>
                 </View>
               ) : (
@@ -899,6 +915,8 @@ export default function PollsScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
+  const pathname = usePathname();
+  const mediaScope = pathname === '/media/polls';
   const params = useLocalSearchParams<{
     pollId?: string;
     sourceModule?: string;
@@ -974,13 +992,27 @@ export default function PollsScreen() {
     setFormOpen(true);
   }, [initialMediaIds, source]);
 
+  const scopedPolls = useMemo(
+    () =>
+      mediaScope
+        ? (polls ?? []).filter(
+            (poll) =>
+              poll.category === 'movie' ||
+              poll.sourceModule === 'media' ||
+              poll.options.some((option) => Boolean(option.mediaId)),
+          )
+        : polls ?? [],
+    [mediaScope, polls],
+  );
   const visiblePolls = useMemo(
     () =>
-      filter === 'all' ? polls ?? [] : (polls ?? []).filter((poll) => poll.status === filter),
-    [filter, polls],
+      filter === 'all'
+        ? scopedPolls
+        : scopedPolls.filter((poll) => poll.status === filter),
+    [filter, scopedPolls],
   );
-  const openCount = polls?.filter((poll) => poll.status === 'open').length ?? 0;
-  const closedCount = polls?.filter((poll) => poll.status === 'closed').length ?? 0;
+  const openCount = scopedPolls.filter((poll) => poll.status === 'open').length;
+  const closedCount = scopedPolls.filter((poll) => poll.status === 'closed').length;
 
   const reopen = (poll: HouseholdPoll) => {
     setStatus.mutate(
@@ -1000,9 +1032,18 @@ export default function PollsScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer maxWidth={940} style={[styles.page, desktop && styles.pageDesktop]}>
+        {mediaScope ? (
+          <ModuleBackButton
+            href={returnTo === 'watchlist' ? '/media/watchlist' : '/media'}
+            label={returnTo === 'watchlist' ? '家庭片单' : '家庭观影'}
+            showOnDesktop
+          />
+        ) : null}
         <View style={styles.pageHeader}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[t.largeTitle, { color: c.label }]}>家庭投票</Text>
+            <Text accessibilityRole="header" style={[t.largeTitle, { color: c.label }]}>
+              {mediaScope ? '观影投票' : '家庭投票'}
+            </Text>
             <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
               {openCount} 项进行中 · {closedCount} 项已结束
             </Text>
@@ -1106,6 +1147,7 @@ export default function PollsScreen() {
         source={!editingPoll ? source : null}
         mediaCandidates={mediaCandidates}
         initialMediaIds={!editingPoll ? initialMediaIds : []}
+        mediaScope={mediaScope}
         visible={formOpen}
       />
 

@@ -1630,9 +1630,12 @@ export default function MediaScreen() {
                     setDetailEntry(null);
                     router.push(
                       detailPoll
-                        ? { pathname: '/polls', params: { pollId: detailPoll.id } }
+                        ? {
+                            pathname: '/media/polls',
+                            params: { pollId: detailPoll.id, returnTo: 'watchlist' },
+                          }
                         : {
-                            pathname: '/polls',
+                            pathname: '/media/polls',
                             params: {
                               sourceModule: 'media',
                               sourceId: detailEntry.id,
@@ -1787,7 +1790,7 @@ export default function MediaScreen() {
                     setPollSelectionActive(false);
                     setSelectedPollCandidates([]);
                     router.push({
-                      pathname: '/polls',
+                      pathname: '/media/polls',
                       params: {
                         candidateIds,
                         returnTo: 'watchlist',
@@ -1882,9 +1885,12 @@ export default function MediaScreen() {
                       const poll = pollByMediaId.get(entry.id);
                       router.push(
                         poll
-                          ? { pathname: '/polls', params: { pollId: poll.id } }
+                          ? {
+                              pathname: '/media/polls',
+                              params: { pollId: poll.id, returnTo: 'watchlist' },
+                            }
                           : {
-                              pathname: '/polls',
+                              pathname: '/media/polls',
                               params: {
                                 sourceModule: 'media',
                                 sourceId: entry.id,
