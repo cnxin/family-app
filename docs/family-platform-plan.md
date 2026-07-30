@@ -289,7 +289,9 @@ M4-A 已落地连接器无关的 `media_titles`、`media_external_refs` 与 `hou
 
 M4-B 已复用通用投票的 `sourceModule/sourceId` 建立片单来源关联。一部片单条目只能有一个进行中的家庭投票；发起、结束、重开和删除会同步 `watchlist/voting` 状态，活动、通知、权限与透明结果继续使用通用能力。跨家庭来源、并发重复和投票期间绕过状态修改均由服务端约束。详细边界见 [M4-B 观影片单关联投票验收](m4-media-polls-acceptance.md)。
 
-M4-C 已实现可并存的 Plex/Emby `MediaLibraryProvider`、使用官方 `X-API-KEY` 的 MoviePilot `MediaAutomationProvider`、连接器健康状态、外部 ID 媒体库匹配和无凭据播放入口。连接器凭据仅从环境变量或密钥文件注入，错误与超时不会阻断家庭片单。MoviePilot 请求状态持久化、权限和界面操作仍留在后续批次。详细边界见 [M4-C 媒体连接器验收](m4-media-connectors-acceptance.md)。
+M4-C 已实现可并存的 Plex/Emby `MediaLibraryProvider`、使用官方 `X-API-KEY` 的 MoviePilot `MediaAutomationProvider`、连接器健康状态、外部 ID 媒体库匹配和无凭据播放入口。连接器凭据仅从环境变量或密钥文件注入，错误与超时不会阻断家庭片单；请求状态持久化、权限和界面操作由 M4-D 在此基础上完成。详细边界见 [M4-C 媒体连接器验收](m4-media-connectors-acceptance.md)。
+
+M4-D 已新增独立的 `media_requests`，保存 MoviePilot 请求人、影片/季、外部请求编号、同步时间、状态与失败原因。同一影片/季只允许一条进行中订阅；正式成员可提交和刷新，请求人或家庭管理员可取消，进行中订阅会阻止影片直接移出片单。外部调用不持有数据库事务，MoviePilot 失败不修改家庭片单。移动与桌面片单已提供订阅、刷新、取消和重试操作。详细边界见 [M4-D MoviePilot 订阅请求验收](m4-media-requests-acceptance.md)。
 
 MoviePilot 插件市场的现有实现确认了两条可复用的事件路径：整理完成由 `TransferComplete` 事件触发，Plex/Emby/Jellyfin 的入库、播放开始和播放停止统一进入 `WebhookMessage`。后续同步采用“MoviePilot 负责自动化与整理完成、Plex/Emby 负责实际播放状态”的边界，不要求家庭成员安装或操作 MoviePilot 插件。通用 Webhook 插件会转发全部事件且不提供签名或自定义认证头，因此不能直接作为可信入口；接收端必须增加事件白名单、独立随机密钥、来源限制、幂等键和脱敏日志。
 
@@ -547,7 +549,7 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 - [x] Plex 与 Emby 可并存的健康检查、媒体匹配和播放入口。
 - [x] MoviePilot 官方 API Key 认证、订阅与取消适配器契约。
 - [ ] 在线元数据搜索与多片候选投票。
-- [ ] MoviePilot 请求状态持久化、家庭权限与订阅界面。
+- [x] MoviePilot 请求状态持久化、家庭权限与订阅界面。
 - [ ] 播放进度、观看记录和媒体就绪通知。
 
 验收标准：家庭片单不依赖外部系统存在；同一影片在多个外部系统中可正确去重；连接器离线不影响家庭数据。
@@ -582,10 +584,9 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 前端质量门禁可以通过 `corepack pnpm lint`、`corepack pnpm typecheck` 和 `corepack pnpm test:web` 重复执行。M2、M3 已冻结，M4-A/B/C 的家庭片单、排期、来源投票和媒体连接器基础已经完成。下一次实施范围：
 
 1. 使用轮换后的 Plex Token 和 MoviePilot API Key 完成 NAS 真实数据只读验收；Emby 部署后复用同一契约验收。
-2. 为 MoviePilot 请求增加家庭权限、状态持久化和界面操作，并记录订阅审计活动。
-3. 选定影视元数据来源并接入搜索；手动录入继续作为离线回退。
-4. 在线搜索确定结构化候选影片后，再扩展多片候选投票，不以纯文字保存媒体关联。
-5. 以 MoviePilot `TransferComplete` 接入媒体就绪通知，以 Plex/Emby 播放 Webhook 接入观看记录；统一做事件白名单、认证、幂等和本地快照。
+2. 选定影视元数据来源并接入搜索；手动录入继续作为离线回退。
+3. 在线搜索确定结构化候选影片后，再扩展多片候选投票，不以纯文字保存媒体关联。
+4. 以 MoviePilot `TransferComplete` 接入媒体就绪通知，以 Plex/Emby 播放 Webhook 接入观看记录；统一做事件白名单、认证、幂等和本地快照。
 
 访客系统继续使用独立临时权限模型，不与正式家庭成员或媒体连接器凭据混用。
 

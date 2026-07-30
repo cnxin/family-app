@@ -3,10 +3,12 @@ import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   CalendarDays,
+  Download,
   Film,
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   Search,
   Server,
   Trash2,
@@ -41,11 +43,15 @@ import {
 import { parseDate, todayStr } from '../../../lib/date';
 import {
   useCreateMedia,
+  useCreateMediaRequest,
+  useCancelMediaRequest,
   useDeleteMedia,
   useMedia,
   useMediaConnectors,
   useMediaLibraryAvailability,
+  useMediaRequests,
   usePolls,
+  useRefreshMediaRequest,
   useUpdateMedia,
 } from '../../../lib/queries';
 import { radius, type as t, useTheme } from '../../../lib/theme';
@@ -55,6 +61,8 @@ import type {
   HouseholdPoll,
   MediaConnectorSummary,
   MediaLibraryMatch,
+  MediaRequest,
+  MediaRequestStatus,
   MediaType,
 } from '../../../lib/types';
 
@@ -112,6 +120,27 @@ function statusColors(
   if (status === 'dropped') return { color: c.secondaryLabel, background: c.fill };
   if (status === 'voting') return { color: c.accent, background: c.accentSoft };
   return { color: c.tint, background: c.tintSoft };
+}
+
+const REQUEST_STATUS_LABELS: Record<MediaRequestStatus, string> = {
+  pending: '等待处理',
+  processing: '订阅处理中',
+  completed: '订阅完成',
+  failed: '订阅失败',
+  cancelled: '已取消',
+};
+
+function requestStatusColors(
+  status: MediaRequestStatus,
+  c: ReturnType<typeof useTheme>,
+) {
+  if (status === 'completed') return { color: c.green, background: c.greenSoft };
+  if (status === 'failed') return { color: c.red, background: c.redSoft };
+  if (status === 'cancelled') {
+    return { color: c.secondaryLabel, background: c.fill };
+  }
+  if (status === 'processing') return { color: c.blue, background: c.blueSoft };
+  return { color: c.orange, background: c.orangeSoft };
 }
 
 function Poster({ entry }: { entry: HouseholdMedia }) {
@@ -189,26 +218,46 @@ function ConnectorStrip({ connectors }: { connectors: MediaConnectorSummary[] })
 
 function MediaCard({
   entry,
+  moviePilot,
+  request,
+  requestBusy,
+  onCancelRequest,
   onDelete,
   onEdit,
   onPlay,
   onPoll,
+  onRefreshRequest,
+  onSubscribe,
   libraries,
   poll,
 }: {
   entry: HouseholdMedia;
+  moviePilot: MediaConnectorSummary | null;
+  request: MediaRequest | null;
+  requestBusy: boolean;
+  onCancelRequest: () => void;
   onDelete: () => void;
   onEdit: () => void;
   onPlay: (match: MediaLibraryMatch) => void;
   onPoll: () => void;
+  onRefreshRequest: () => void;
+  onSubscribe: () => void;
   libraries: MediaLibraryMatch[];
   poll: HouseholdPoll | null;
 }) {
   const c = useTheme();
   const colors = statusColors(entry.status, c);
+  const requestColors = request ? requestStatusColors(request.status, c) : null;
   const refs = entry.mediaTitle.externalRefs.filter(
     (ref) => ref.provider === 'tmdb' || ref.provider === 'imdb',
   );
+  const hasTmdb = refs.some(
+    (ref) => ref.provider === 'tmdb' && /^\d+$/.test(ref.externalId),
+  );
+  const canStartRequest =
+    moviePilot?.available === true &&
+    hasTmdb &&
+    (!request || request.status === 'failed' || request.status === 'cancelled');
 
   return (
     <View style={[styles.mediaCard, { backgroundColor: c.card, borderColor: c.separator }]}> 
@@ -283,6 +332,160 @@ function MediaCard({
             ))}
           </View>
         ) : null}
+
+        {request ? (
+          <View
+            style={[
+              styles.requestPanel,
+              { backgroundColor: c.fill, borderColor: c.separator },
+            ]}
+          >
+            <View style={styles.requestHeader}>
+              <Download color={requestColors?.color ?? c.secondaryLabel} size={16} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={[t.footnote, { color: c.label, fontWeight: '700' }]}
+                >
+                  MoviePilot{request.season ? ` · 第 ${request.season} 季` : ''}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}
+                >
+                  {request.requestedBy.avatarEmoji} {request.requestedBy.name}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.requestStatusBadge,
+                  { backgroundColor: requestColors?.background ?? c.fillStrong },
+                ]}
+              >
+                <Text
+                  style={[
+                    t.caption,
+                    { color: requestColors?.color ?? c.label, fontWeight: '700' },
+                  ]}
+                >
+                  {REQUEST_STATUS_LABELS[request.status]}
+                </Text>
+              </View>
+            </View>
+            {request.message ? (
+              <Text
+                numberOfLines={2}
+                style={[
+                  t.caption,
+                  styles.requestMessage,
+                  { color: request.status === 'failed' ? c.red : c.secondaryLabel },
+                ]}
+              >
+                {request.message}
+              </Text>
+            ) : null}
+            <View style={styles.requestActions}>
+              {request.status !== 'completed' && request.status !== 'cancelled' ? (
+                <Pressable
+                  accessibilityLabel={`刷新${entry.mediaTitle.title}的MoviePilot订阅状态`}
+                  accessibilityRole="button"
+                  disabled={requestBusy || !request.externalRequestId}
+                  onPress={onRefreshRequest}
+                  style={({ pressed }) => [
+                    styles.requestActionButton,
+                    {
+                      backgroundColor: pressed ? c.tintSoft : c.card,
+                      opacity: requestBusy || !request.externalRequestId ? 0.45 : 1,
+                    },
+                  ]}
+                >
+                  <RefreshCw color={c.tint} size={15} />
+                  <Text style={[t.caption, { color: c.tint, fontWeight: '700' }]}>
+                    刷新
+                  </Text>
+                </Pressable>
+              ) : null}
+              {request.canCancel ? (
+                <Pressable
+                  accessibilityLabel={`取消${entry.mediaTitle.title}的MoviePilot订阅`}
+                  accessibilityRole="button"
+                  disabled={requestBusy}
+                  onPress={onCancelRequest}
+                  style={({ pressed }) => [
+                    styles.requestActionButton,
+                    {
+                      backgroundColor: pressed ? c.redSoft : c.card,
+                      opacity: requestBusy ? 0.45 : 1,
+                    },
+                  ]}
+                >
+                  <X color={c.red} size={15} />
+                  <Text style={[t.caption, { color: c.red, fontWeight: '700' }]}>
+                    取消
+                  </Text>
+                </Pressable>
+              ) : null}
+              {canStartRequest ? (
+                <Pressable
+                  accessibilityLabel={`重新订阅${entry.mediaTitle.title}`}
+                  accessibilityRole="button"
+                  disabled={requestBusy}
+                  onPress={onSubscribe}
+                  style={({ pressed }) => [
+                    styles.requestActionButton,
+                    {
+                      backgroundColor: pressed ? c.greenSoft : c.card,
+                      opacity: requestBusy ? 0.45 : 1,
+                    },
+                  ]}
+                >
+                  <Download color={c.green} size={15} />
+                  <Text style={[t.caption, { color: c.green, fontWeight: '700' }]}>
+                    重新订阅
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <Pressable
+            accessibilityLabel={
+              !hasTmdb
+                ? `${entry.mediaTitle.title}缺少TMDB ID，不能订阅`
+                : !moviePilot?.available
+                  ? 'MoviePilot当前不可用'
+                  : `订阅${entry.mediaTitle.title}`
+            }
+            accessibilityRole="button"
+            disabled={!canStartRequest}
+            onPress={onSubscribe}
+            style={({ pressed }) => [
+              styles.subscribeButton,
+              {
+                backgroundColor: pressed ? c.greenSoft : c.fill,
+                opacity: canStartRequest ? 1 : 0.58,
+              },
+            ]}
+          >
+            <Download color={canStartRequest ? c.green : c.tertiaryLabel} size={16} />
+            <Text
+              numberOfLines={1}
+              style={[
+                t.caption,
+                {
+                  color: canStartRequest ? c.green : c.secondaryLabel,
+                  fontWeight: '700',
+                },
+              ]}
+            >
+              {!hasTmdb
+                ? '缺少 TMDB ID'
+                : !moviePilot?.available
+                  ? 'MoviePilot 不可用'
+                  : '提交订阅'}
+            </Text>
+          </Pressable>
+        )}
 
         <View style={styles.mediaFooter}>
           <View style={styles.externalRefs}>
@@ -682,7 +885,7 @@ function MediaForm({
             </Field>
 
             {message ? (
-              <Text style={[t.footnote, styles.formMessage, { color: c.red }]}> 
+              <Text style={[t.footnote, styles.formMessage, { color: c.red }]}>
                 {message}
               </Text>
             ) : null}
@@ -692,6 +895,122 @@ function MediaForm({
               title={entry ? '保存安排' : '加入片单'}
             />
           </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function SubscriptionDialog({
+  entry,
+  onClose,
+  onSubmitted,
+}: {
+  entry: HouseholdMedia | null;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const c = useTheme();
+  const create = useCreateMediaRequest();
+  const [season, setSeason] = useState('1');
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!entry) return;
+    setSeason('1');
+    setMessage(null);
+  }, [entry]);
+
+  const submit = async () => {
+    if (!entry) return;
+    const parsedSeason = Number(season);
+    if (
+      entry.mediaTitle.type === 'series' &&
+      (!Number.isInteger(parsedSeason) || parsedSeason < 1 || parsedSeason > 999)
+    ) {
+      setMessage('季数需要是 1 到 999 之间的整数');
+      return;
+    }
+    setMessage(null);
+    try {
+      await create.mutateAsync({
+        mediaId: entry.id,
+        ...(entry.mediaTitle.type === 'series' ? { season: parsedSeason } : {}),
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onSubmitted();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '订阅失败，请稍后再试');
+    }
+  };
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={Boolean(entry)}
+    >
+      <View style={styles.modalOverlay}>
+        <Pressable
+          accessibilityLabel="关闭订阅窗口"
+          accessibilityRole="button"
+          disabled={create.isPending}
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          style={[
+            styles.subscriptionSheet,
+            { backgroundColor: c.card, borderColor: c.separator },
+          ]}
+        >
+          <View style={styles.formHeader}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[t.title2, { color: c.label }]}>提交 MoviePilot 订阅</Text>
+              <Text
+                numberOfLines={1}
+                style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}
+              >
+                {entry?.mediaTitle.title}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭"
+              accessibilityRole="button"
+              disabled={create.isPending}
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.closeButton,
+                { backgroundColor: pressed ? c.fill : 'transparent' },
+              ]}
+            >
+              <X color={c.secondaryLabel} size={20} />
+            </Pressable>
+          </View>
+          <View style={styles.subscriptionContent}>
+            {entry?.mediaTitle.type === 'series' ? (
+              <Field label="季数">
+                <FormInput
+                  accessibilityLabel="订阅季数"
+                  inputMode="numeric"
+                  maxLength={3}
+                  onChangeText={setSeason}
+                  value={season}
+                />
+              </Field>
+            ) : null}
+            {message ? (
+              <Text style={[t.footnote, styles.formMessage, { color: c.red }]}>
+                {message}
+              </Text>
+            ) : null}
+            <PrimaryButton
+              loading={create.isPending}
+              onPress={() => void submit()}
+              title="提交订阅"
+            />
+          </View>
         </View>
       </View>
     </Modal>
@@ -745,15 +1064,38 @@ export default function MediaScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<HouseholdMedia | null>(null);
+  const [subscriptionEntry, setSubscriptionEntry] =
+    useState<HouseholdMedia | null>(null);
+  const [pendingCancel, setPendingCancel] = useState<{
+    entry: HouseholdMedia;
+    request: MediaRequest;
+  } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<HouseholdMedia | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const openedParameter = useRef<string | null>(null);
   const { data: entries, error, isLoading } = useMedia(filter, debouncedSearch);
   const { data: connectors } = useMediaConnectors();
+  const { data: mediaRequests } = useMediaRequests();
   const mediaIds = useMemo(() => (entries ?? []).map((entry) => entry.id), [entries]);
   const { data: availability } = useMediaLibraryAvailability(mediaIds);
   const { data: polls } = usePolls();
+  const refreshRequest = useRefreshMediaRequest();
+  const cancelRequest = useCancelMediaRequest();
   const remove = useDeleteMedia();
+
+  const moviePilot =
+    connectors?.find((connector) => connector.kind === 'moviepilot') ?? null;
+
+  const requestByMediaId = useMemo(() => {
+    const result = new Map<string, MediaRequest>();
+    for (const request of mediaRequests ?? []) {
+      if (!result.has(request.householdMediaId)) {
+        result.set(request.householdMediaId, request);
+      }
+    }
+    return result;
+  }, [mediaRequests]);
 
   const pollByMediaId = useMemo(() => {
     const result = new Map<string, HouseholdPoll>();
@@ -902,6 +1244,13 @@ export default function MediaScreen() {
                 <View key={entry.id} style={desktop ? styles.desktopCardCell : undefined}>
                   <MediaCard
                     entry={entry}
+                    moviePilot={moviePilot}
+                    onCancelRequest={() => {
+                      const request = requestByMediaId.get(entry.id);
+                      if (!request) return;
+                      setRequestError(null);
+                      setPendingCancel({ entry, request });
+                    }}
                     onDelete={() => {
                       setDeleteError(null);
                       setPendingDelete(entry);
@@ -930,8 +1279,40 @@ export default function MediaScreen() {
                             },
                       );
                     }}
+                    onRefreshRequest={() => {
+                      const request = requestByMediaId.get(entry.id);
+                      if (!request) return;
+                      setRequestError(null);
+                      refreshRequest.mutate(request.id, {
+                        onSuccess: () => {
+                          void Haptics.notificationAsync(
+                            Haptics.NotificationFeedbackType.Success,
+                          );
+                        },
+                        onError: (requestFailure) => {
+                          setRequestError(
+                            requestFailure instanceof Error
+                              ? requestFailure.message
+                              : '订阅状态刷新失败',
+                          );
+                        },
+                      });
+                    }}
+                    onSubscribe={() => {
+                      setRequestError(null);
+                      setSubscriptionEntry(entry);
+                    }}
                     libraries={availability?.[entry.id] ?? []}
                     poll={pollByMediaId.get(entry.id) ?? null}
+                    request={requestByMediaId.get(entry.id) ?? null}
+                    requestBusy={
+                      (refreshRequest.isPending &&
+                        refreshRequest.variables ===
+                          requestByMediaId.get(entry.id)?.id) ||
+                      (cancelRequest.isPending &&
+                        cancelRequest.variables ===
+                          requestByMediaId.get(entry.id)?.id)
+                    }
                   />
                 </View>
               ))}
@@ -944,8 +1325,13 @@ export default function MediaScreen() {
             />
           )}
           {deleteError ? (
-            <Text style={[t.footnote, styles.deleteError, { color: c.red }]}> 
+            <Text style={[t.footnote, styles.deleteError, { color: c.red }]}>
               {deleteError}
+            </Text>
+          ) : null}
+          {requestError ? (
+            <Text style={[t.footnote, styles.deleteError, { color: c.red }]}>
+              {requestError}
             </Text>
           ) : null}
         </ScrollView>
@@ -959,6 +1345,46 @@ export default function MediaScreen() {
         }}
         onSaved={() => setFormOpen(false)}
         visible={formOpen}
+      />
+
+      <SubscriptionDialog
+        entry={subscriptionEntry}
+        onClose={() => {
+          if (!subscriptionEntry) return;
+          setSubscriptionEntry(null);
+        }}
+        onSubmitted={() => setSubscriptionEntry(null)}
+      />
+
+      <ConfirmDialog
+        confirmLabel="取消订阅"
+        loading={cancelRequest.isPending}
+        message={`取消「${pendingCancel?.entry.mediaTitle.title ?? ''}」${pendingCancel?.request.season ? `第 ${pendingCancel.request.season} 季` : ''}的 MoviePilot 订阅。`}
+        onCancel={() => {
+          if (!cancelRequest.isPending) setPendingCancel(null);
+        }}
+        onConfirm={() => {
+          if (!pendingCancel) return;
+          setRequestError(null);
+          cancelRequest.mutate(pendingCancel.request.id, {
+            onSuccess: () => {
+              setPendingCancel(null);
+              void Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
+            },
+            onError: (requestFailure) => {
+              setPendingCancel(null);
+              setRequestError(
+                requestFailure instanceof Error
+                  ? requestFailure.message
+                  : '取消订阅失败',
+              );
+            },
+          });
+        }}
+        title="取消 MoviePilot 订阅？"
+        visible={Boolean(pendingCancel)}
       />
 
       <ConfirmDialog
@@ -1116,6 +1542,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
+  requestPanel: {
+    marginTop: 9,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: 9,
+    gap: 7,
+  },
+  requestHeader: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  requestStatusBadge: {
+    minHeight: 25,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestMessage: { lineHeight: 17 },
+  requestActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  requestActionButton: {
+    minHeight: 31,
+    borderRadius: radius.sm,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  subscribeButton: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    marginTop: 9,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
   mediaFooter: {
     flex: 1,
     minHeight: 38,
@@ -1151,6 +1619,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: 'hidden',
   },
+  subscriptionSheet: {
+    width: '100%',
+    maxWidth: 460,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  subscriptionContent: { padding: 18, paddingTop: 6, gap: 17 },
   formHeader: {
     minHeight: 68,
     paddingHorizontal: 18,

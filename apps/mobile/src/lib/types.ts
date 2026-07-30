@@ -347,6 +347,29 @@ export interface MediaLibraryMatch {
 
 export type MediaLibraryAvailability = Record<string, MediaLibraryMatch[]>;
 
+export type MediaRequestStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface MediaRequest {
+  id: string;
+  householdMediaId: string;
+  connectorKey: string;
+  season: number;
+  status: MediaRequestStatus;
+  externalRequestId: string | null;
+  message: string | null;
+  requestedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  cancelledBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
+  canCancel: boolean;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CalendarEvent {
   id: string;
   householdId: string;

@@ -45,6 +45,12 @@ export type HouseholdMediaStatus =
   | 'watching'
   | 'completed'
   | 'dropped';
+export type MediaRequestStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
 export type ActivityModule =
@@ -1618,6 +1624,111 @@ export class HouseholdMedia {
   @Column('uuid')
   createdById: string;
 
+  @OneToMany(() => MediaRequest, (request) => request.householdMedia)
+  requests: MediaRequest[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('media_requests')
+@Check(
+  'CHK_media_requests_status',
+  `"status" IN ('pending', 'processing', 'completed', 'failed', 'cancelled')`,
+)
+@Check(
+  'CHK_media_requests_season',
+  `"season" >= 0 AND "season" <= 999`,
+)
+@Index('IDX_media_requests_household_status', [
+  'householdId',
+  'status',
+  'updatedAt',
+])
+@Index(
+  'UQ_media_requests_active_scope',
+  ['householdId', 'householdMediaId', 'connectorKey', 'season'],
+  {
+    unique: true,
+    where: `"status" IN ('pending', 'processing')`,
+  },
+)
+@Index(
+  'UQ_media_requests_connector_external',
+  ['connectorKey', 'externalRequestId'],
+  { unique: true, where: `"externalRequestId" IS NOT NULL` },
+)
+export class MediaRequest {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_media_requests_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => HouseholdMedia, (entry) => entry.requests, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'householdMediaId',
+    foreignKeyConstraintName: 'FK_media_requests_household_media',
+  })
+  householdMedia: HouseholdMedia;
+
+  @Column('uuid')
+  householdMediaId: string;
+
+  @Column({ type: 'varchar', length: 128 })
+  connectorKey: string;
+
+  @Column({ type: 'int', default: 0 })
+  season: number;
+
+  @Column({ type: 'varchar', length: 24, default: 'pending' })
+  status: MediaRequestStatus;
+
+  @Column({ type: 'varchar', length: 180, nullable: true })
+  externalRequestId: string | null;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  message: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'requestedById',
+    foreignKeyConstraintName: 'FK_media_requests_requested_by',
+  })
+  requestedBy: Member;
+
+  @Column('uuid')
+  requestedById: string;
+
+  @ManyToOne(() => Member, {
+    eager: true,
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({
+    name: 'cancelledById',
+    foreignKeyConstraintName: 'FK_media_requests_cancelled_by',
+  })
+  cancelledBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  cancelledById: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastSyncedAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
@@ -1869,6 +1980,7 @@ export const ALL_ENTITIES = [
   MediaTitle,
   MediaExternalRef,
   HouseholdMedia,
+  MediaRequest,
   Reminder,
   ReminderRecipient,
   ShoppingItem,

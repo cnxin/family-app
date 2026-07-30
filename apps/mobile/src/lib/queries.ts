@@ -24,6 +24,7 @@ import type {
   HouseholdMediaStatus,
   MediaConnectorSummary,
   MediaLibraryAvailability,
+  MediaRequest,
   InventoryCategory,
   InventoryItem,
   Member,
@@ -215,6 +216,59 @@ export function useMediaLibraryAvailability(mediaIds: string[]) {
       }),
     enabled: normalizedIds.length > 0,
     staleTime: 60_000,
+  });
+}
+
+export function useMediaRequests(enabled = true) {
+  return useQuery({
+    queryKey: ['media-requests'],
+    queryFn: () => api<MediaRequest[]>('/media/requests'),
+    enabled,
+  });
+}
+
+export function useCreateMediaRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      mediaId,
+      season,
+    }: {
+      mediaId: string;
+      season?: number;
+    }) =>
+      api<MediaRequest>(`/media/${mediaId}/requests`, {
+        method: 'POST',
+        body: { connectorKey: 'moviepilot', ...(season ? { season } : {}) },
+      }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['media-requests'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useRefreshMediaRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<MediaRequest>(`/media/requests/${id}/refresh`, { method: 'POST' }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['media-requests'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useCancelMediaRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<MediaRequest>(`/media/requests/${id}`, { method: 'DELETE' }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['media-requests'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
   });
 }
 

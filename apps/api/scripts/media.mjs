@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+
+const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
 
 function assert(condition, message) {
@@ -36,6 +40,16 @@ const createdPollIds = [];
 const suffix = Date.now().toString(36);
 const tmdbId = `m4-tmdb-${suffix}`;
 const imdbId = `tt-m4-${suffix}`;
+const db = new Client({
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT || 5433),
+  user: process.env.DB_USER || 'family',
+  password: process.env.DB_PASSWORD || 'family123',
+  database: process.env.DB_NAME || 'family_app',
+});
+let activePermissionRequestId = null;
+
+await db.connect();
 
 try {
   const connectors = await request('/media/connectors', mom.token);
@@ -388,12 +402,101 @@ try {
     '观影投票操作写入家庭活动记录',
   );
 
+  console.log('5. MoviePilot 请求持久化与家庭权限');
+  const requestable = await request('/media', mom.token, 'POST', {
+    type: 'movie',
+    title: `订阅持久化测试 ${suffix}`,
+    year: 2097,
+    externalRefs: [
+      { provider: 'tmdb', externalId: String(Date.now()) },
+    ],
+  });
+  assert(requestable.status === 201, '可以建立带数字 TMDB ID 的待订阅影片');
+  createdIds.push(requestable.data.id);
+
+  const unavailableRequest = await request(
+    `/media/${requestable.data.id}/requests`,
+    mom.token,
+    'POST',
+    { connectorKey: 'moviepilot' },
+  );
+  const persistedRequests = await request('/media/requests', dad.token);
+  const failedRequest = persistedRequests.data.find(
+    (item) => item.householdMediaId === requestable.data.id,
+  );
+  assert(
+    unavailableRequest.status === 502 &&
+      failedRequest?.status === 'failed' &&
+      failedRequest.requestedBy.id === mom.member.id,
+    'MoviePilot 未配置时保留失败请求、请求人和错误状态',
+  );
+
+  const requestActivities = await request('/activities?limit=100', dad.token);
+  assert(
+    requestActivities.data.some(
+      (activity) =>
+        activity.action === 'media_request_submitted' &&
+        activity.metadata.mediaRequestId === failedRequest.id,
+    ) &&
+      requestActivities.data.some(
+        (activity) =>
+          activity.action === 'media_request_failed' &&
+          activity.metadata.mediaRequestId === failedRequest.id,
+      ),
+    '订阅提交和连接失败分别写入家庭活动',
+  );
+
+  activePermissionRequestId = randomUUID();
+  await db.query(
+    `INSERT INTO media_requests
+       (id, "householdId", "householdMediaId", "connectorKey", season, status,
+        "externalRequestId", "requestedById")
+     VALUES ($1, $2, $3, 'moviepilot', 0, 'pending', $4, $5)`,
+    [
+      activePermissionRequestId,
+      requestable.data.householdId,
+      requestable.data.id,
+      `permission-${suffix}`,
+      dad.member.id,
+    ],
+  );
+  const memberView = await request('/media/requests', mom.token);
+  const ownerRequest = memberView.data.find(
+    (item) => item.id === activePermissionRequestId,
+  );
+  const memberCancel = await request(
+    `/media/requests/${activePermissionRequestId}`,
+    mom.token,
+    'DELETE',
+  );
+  const removeWithActiveRequest = await request(
+    `/media/${requestable.data.id}`,
+    dad.token,
+    'DELETE',
+  );
+  assert(
+    ownerRequest?.canCancel === false &&
+      memberCancel.status === 403 &&
+      removeWithActiveRequest.status === 409,
+    '普通成员不能取消他人请求，进行中订阅会阻止影片移出片单',
+  );
+  await db.query('DELETE FROM media_requests WHERE id = $1', [
+    activePermissionRequestId,
+  ]);
+  activePermissionRequestId = null;
+
   console.log('\n家庭观影测试全部通过');
 } finally {
+  if (activePermissionRequestId) {
+    await db.query('DELETE FROM media_requests WHERE id = $1', [
+      activePermissionRequestId,
+    ]);
+  }
   for (const id of createdPollIds) {
     await request(`/polls/${id}`, dad.token, 'DELETE');
   }
   for (const id of createdIds) {
     await request(`/media/${id}`, dad.token, 'DELETE');
   }
+  await db.end();
 }

@@ -169,8 +169,15 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   const mediaRoute = /\/media(\?|$)/;
   const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;
   const mediaAvailabilityRoute = /\/media\/library-availability(\?|$)/;
+  const mediaRequestsRoute = /\/media\/requests(\?|$)/;
+  const mediaRequestActionRoute =
+    /\/media\/requests\/media-request-browser-fixture-\d+(\/refresh)?$/;
+  const mediaSubscribeRoute =
+    /\/media\/media-browser-fixture-1\/requests$/;
   const linkedPollRoute = /\/polls(\?|$)/;
   let linkedPollFixture: Record<string, unknown> | null = null;
+  let mediaRequestSequence = 0;
+  let mediaRequestFixtures: Record<string, unknown>[] = [];
   await page.route(mediaRoute, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
@@ -263,10 +270,10 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
             name: 'MoviePilot',
             role: 'automation',
             primary: false,
-            state: 'needs_credential',
-            available: false,
-            message: '等待配置 API Key',
-            checkedAt: null,
+            state: 'online',
+            available: true,
+            message: 'MoviePilot v2.9.0',
+            checkedAt: '2099-01-01T00:00:00.000Z',
           },
         ],
       }),
@@ -294,6 +301,69 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
           'media-browser-fixture-2': [],
         },
       }),
+    });
+  });
+  await page.route(mediaRequestsRoute, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: mediaRequestFixtures }),
+    });
+  });
+  await page.route(mediaSubscribeRoute, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postDataJSON()).toEqual({
+      connectorKey: 'moviepilot',
+    });
+    mediaRequestSequence += 1;
+    const request = {
+      id: `media-request-browser-fixture-${mediaRequestSequence}`,
+      householdMediaId: 'media-browser-fixture-1',
+      connectorKey: 'moviepilot',
+      season: 0,
+      status: 'processing',
+      externalRequestId: String(880 + mediaRequestSequence),
+      message: null,
+      requestedBy: {
+        id: 'member-browser-fixture',
+        name: '爸爸',
+        avatarEmoji: '👨',
+      },
+      cancelledBy: null,
+      canCancel: true,
+      lastSyncedAt: '2099-01-01T00:00:00.000Z',
+      createdAt: '2099-01-01T00:00:00.000Z',
+      updatedAt: '2099-01-01T00:00:00.000Z',
+    };
+    mediaRequestFixtures = [request, ...mediaRequestFixtures];
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: request }),
+    });
+  });
+  await page.route(mediaRequestActionRoute, async (route) => {
+    const requestId = new URL(route.request().url()).pathname.split('/')[3];
+    const current = mediaRequestFixtures.find((item) => item.id === requestId);
+    expect(current).toBeTruthy();
+    const status = route.request().method() === 'DELETE' ? 'cancelled' : 'completed';
+    const updated = {
+      ...current,
+      status,
+      canCancel: false,
+      cancelledBy:
+        status === 'cancelled'
+          ? { id: 'member-browser-fixture', name: '爸爸', avatarEmoji: '👨' }
+          : null,
+      updatedAt: '2099-01-01T00:05:00.000Z',
+    };
+    mediaRequestFixtures = mediaRequestFixtures.map((item) =>
+      item.id === requestId ? updated : item,
+    );
+    await route.fulfill({
+      status: route.request().method() === 'DELETE' ? 200 : 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: updated }),
     });
   });
   await page.route(linkedPollRoute, async (route) => {
@@ -375,7 +445,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('heading', { name: '家庭观影', exact: true })).toBeVisible();
   await expect(page.getByText('媒体服务', { exact: true })).toBeVisible();
   await expect(page.getByText('媒体库 · Plex 1.43.0', { exact: true })).toBeVisible();
-  await expect(page.getByText('自动化 · 等待配置 API Key', { exact: true })).toBeVisible();
+  await expect(page.getByText('自动化 · MoviePilot v2.9.0', { exact: true })).toBeVisible();
   await expect(page.getByText('媒体库 · 未配置服务地址', { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await page.screenshot({
@@ -396,6 +466,35 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByLabel('安排观影日期')).toBeVisible();
   await page.getByRole('button', { name: '关闭', exact: true }).last().click();
   await expect(page.getByText('加入家庭片单', { exact: true })).not.toBeVisible();
+  await page
+    .getByRole('button', { name: '订阅家庭电影回归样例', exact: true })
+    .click();
+  await expect(
+    page.getByText('提交 MoviePilot 订阅', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '提交订阅', exact: true }).click();
+  await expect(page.getByText('订阅处理中', { exact: true })).toBeVisible();
+  await page
+    .getByRole('button', {
+      name: '取消家庭电影回归样例的MoviePilot订阅',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByText('取消 MoviePilot 订阅？', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '取消订阅', exact: true }).click();
+  await expect(page.getByText('已取消', { exact: true }).first()).toBeVisible();
+  await page
+    .getByRole('button', { name: '重新订阅家庭电影回归样例', exact: true })
+    .click();
+  await page.getByRole('button', { name: '提交订阅', exact: true }).click();
+  await expect(page.getByText('订阅处理中', { exact: true })).toBeVisible();
+  await page
+    .getByRole('button', {
+      name: '刷新家庭电影回归样例的MoviePilot订阅状态',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByText('订阅完成', { exact: true })).toBeVisible();
   await page
     .getByRole('button', {
       name: '发起家庭电影回归样例的家庭投票',
@@ -439,6 +538,9 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   }
   await page.unroute(mediaAvailabilityRoute);
   await page.unroute(mediaConnectorsRoute);
+  await page.unroute(mediaRequestActionRoute);
+  await page.unroute(mediaSubscribeRoute);
+  await page.unroute(mediaRequestsRoute);
   await page.unroute(linkedPollRoute);
   await page.unroute(mediaRoute);
 

@@ -5,14 +5,17 @@ import {
 } from './connectors.config';
 import {
   EmbyLibraryProvider,
+  MediaConnectorError,
   MoviePilotAutomationProvider,
   PlexLibraryProvider,
   connectorRole,
 } from './connectors';
 import {
+  MediaAutomationRequest,
   MediaExternalReference,
   MediaLibraryMatch,
   MediaLibraryProvider,
+  MediaMetadataSnapshot,
   MediaProviderHealth,
 } from './providers';
 
@@ -159,6 +162,33 @@ export class MediaConnectorsService {
     return result;
   }
 
+  requestMedia(
+    connectorKey: string,
+    media: MediaMetadataSnapshot,
+    idempotencyKey: string,
+    options: { season?: number } = {},
+  ): Promise<MediaAutomationRequest> {
+    return this.automation(connectorKey).requestMedia(
+      media,
+      idempotencyKey,
+      options,
+    );
+  }
+
+  getRequest(
+    connectorKey: string,
+    requestId: string,
+  ): Promise<MediaAutomationRequest | null> {
+    return this.automation(connectorKey).getRequest(requestId);
+  }
+
+  cancelRequest(
+    connectorKey: string,
+    requestId: string,
+  ): Promise<MediaAutomationRequest> {
+    return this.automation(connectorKey).cancelRequest(requestId);
+  }
+
   private publicStatus(
     config: MediaConnectorConfig,
     state: PublicMediaConnector['state'],
@@ -175,6 +205,13 @@ export class MediaConnectorsService {
       message,
       checkedAt: null,
     };
+  }
+
+  private automation(connectorKey: string) {
+    if (!this.moviePilot || this.moviePilot.config.key !== connectorKey) {
+      throw new MediaConnectorError('MoviePilot 尚未配置或未启用');
+    }
+    return this.moviePilot;
   }
 
   private health(config: MediaConnectorConfig, refresh = false) {

@@ -71,6 +71,7 @@ const ids = {
   mediaTitle: randomUUID(),
   mediaExternalRef: randomUUID(),
   householdMedia: randomUUID(),
+  mediaRequest: randomUUID(),
 };
 
 const db = new Client({
@@ -252,6 +253,19 @@ try {
      VALUES ($1, $2, $3, 'scheduled', $4, $5)`,
     [ids.householdMedia, ids.household, ids.mediaTitle, TEST_DATE, ids.member],
   );
+  await db.query(
+    `INSERT INTO media_requests
+       (id, "householdId", "householdMediaId", "connectorKey", season, status,
+        "externalRequestId", "requestedById")
+     VALUES ($1, $2, $3, 'moviepilot', 0, 'processing', $4, $5)`,
+    [
+      ids.mediaRequest,
+      ids.household,
+      ids.householdMedia,
+      `isolation-${ids.mediaRequest}`,
+      ids.member,
+    ],
+  );
 
   const anonymousMembers = await request('/members');
   assert(anonymousMembers.status === 401, '匿名请求不能枚举家庭成员');
@@ -372,10 +386,15 @@ try {
   );
 
   const defaultMedia = await request('/media?status=all', defaultToken);
+  const defaultMediaRequests = await request('/media/requests', defaultToken);
   assert(
     defaultMedia.status === 200 &&
-      defaultMedia.body.data.every((entry) => entry.id !== ids.householdMedia),
-    '家庭片单不读取其他家庭的观影记录',
+      defaultMedia.body.data.every((entry) => entry.id !== ids.householdMedia) &&
+      defaultMediaRequests.status === 200 &&
+      defaultMediaRequests.body.data.every(
+        (entry) => entry.id !== ids.mediaRequest,
+      ),
+    '家庭片单和订阅请求不读取其他家庭的观影记录',
   );
 
   const defaultTasks = await request(
@@ -501,6 +520,7 @@ try {
   );
 
   const foreignMedia = await request('/media?status=all', foreignToken);
+  const foreignMediaRequests = await request('/media/requests', foreignToken);
   const crossMediaUpdate = await request(
     `/media/${ids.householdMedia}`,
     defaultToken,
@@ -509,6 +529,16 @@ try {
   );
   const crossMediaDelete = await request(
     `/media/${ids.householdMedia}`,
+    defaultToken,
+    'DELETE',
+  );
+  const crossMediaRequestRefresh = await request(
+    `/media/requests/${ids.mediaRequest}/refresh`,
+    defaultToken,
+    'POST',
+  );
+  const crossMediaRequestCancel = await request(
+    `/media/requests/${ids.mediaRequest}`,
     defaultToken,
     'DELETE',
   );
@@ -522,10 +552,16 @@ try {
   assert(
     foreignMedia.status === 200 &&
       foreignMedia.body.data.some((entry) => entry.id === ids.householdMedia) &&
+      foreignMediaRequests.status === 200 &&
+      foreignMediaRequests.body.data.some(
+        (entry) => entry.id === ids.mediaRequest,
+      ) &&
       crossMediaUpdate.status === 404 &&
       crossMediaDelete.status === 404 &&
+      crossMediaRequestRefresh.status === 404 &&
+      crossMediaRequestCancel.status === 404 &&
       crossMediaPoll.status === 404,
-    '不能跨家庭读取、修改、删除观影片单或建立来源投票',
+    '不能跨家庭读取、修改、删除观影片单、订阅请求或建立来源投票',
   );
 
   const foreignTasks = await request(
@@ -659,6 +695,7 @@ try {
   await db.query('DELETE FROM menu_items WHERE id = $1', [ids.menuItem]);
   await db.query('DELETE FROM shopping_items WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM inventory_items WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM media_requests WHERE id = $1', [ids.mediaRequest]);
   await db.query('DELETE FROM household_media WHERE id = $1', [ids.householdMedia]);
   await db.query('DELETE FROM media_external_refs WHERE id = $1', [ids.mediaExternalRef]);
   await db.query('DELETE FROM media_titles WHERE id = $1', [ids.mediaTitle]);
