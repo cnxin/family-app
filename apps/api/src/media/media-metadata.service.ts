@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { MediaExternalProvider, MediaType } from '../entities';
-import { mediaMetadataConfig } from './metadata.config';
 import {
   BangumiMetadataProvider,
   DoubanMetadataProvider,
@@ -12,6 +11,7 @@ import {
   MediaMetadataSnapshot,
   MediaSearchQuery,
 } from './providers';
+import { MediaSourceSettingsService } from './media-source-settings.service';
 
 type MetadataSource = Extract<
   MediaExternalProvider,
@@ -145,49 +145,57 @@ function mergeResults(results: MediaSearchResult[]) {
 
 @Injectable()
 export class MediaMetadataService {
-  private readonly sources: SourceEntry[];
   private readonly cache = new Map<string, CacheEntry>();
 
-  constructor() {
-    const config = mediaMetadataConfig();
-    this.sources = [
+  constructor(private readonly settings: MediaSourceSettingsService) {}
+
+  async search(
+    query: MediaSearchQuery,
+    householdId: string,
+  ): Promise<MediaSearchResponse> {
+    const resolved = await this.settings.resolve(householdId);
+    const sources: SourceEntry[] = [
       {
         provider: 'douban',
         name: '豆瓣',
-        instance: config.douban.baseUrl
+        instance: resolved.enabled.douban && resolved.config.douban.baseUrl
           ? new DoubanMetadataProvider({
-              ...config.douban,
-              baseUrl: config.douban.baseUrl,
+              ...resolved.config.douban,
+              baseUrl: resolved.config.douban.baseUrl,
             })
           : null,
-        missingMessage: '等待配置豆瓣兼容桥接服务',
+        missingMessage: resolved.enabled.douban
+          ? '等待配置豆瓣兼容桥接服务'
+          : '此家庭已停用',
       },
       {
         provider: 'tmdb',
         name: 'TMDB',
         instance:
-          config.tmdb.token || config.tmdb.apiKey
-            ? new TmdbMetadataProvider(config.tmdb)
+          resolved.enabled.tmdb &&
+          (resolved.config.tmdb.token || resolved.config.tmdb.apiKey)
+            ? new TmdbMetadataProvider(resolved.config.tmdb)
             : null,
-        missingMessage: '等待配置 API Token 或 API Key',
+        missingMessage: resolved.enabled.tmdb
+          ? '等待配置 API Token 或 API Key'
+          : '此家庭已停用',
       },
       {
         provider: 'bangumi',
         name: 'Bangumi',
-        instance: new BangumiMetadataProvider(config.bangumi),
-        missingMessage: '',
+        instance: resolved.enabled.bangumi
+          ? new BangumiMetadataProvider(resolved.config.bangumi)
+          : null,
+        missingMessage: '此家庭已停用',
       },
     ];
-  }
-
-  async search(query: MediaSearchQuery): Promise<MediaSearchResponse> {
     const normalizedQuery = normalize(query.query);
-    const cacheKey = `${normalizedQuery}:${query.type ?? 'all'}:${query.year ?? 'all'}`;
+    const cacheKey = `${householdId}:${resolved.version}:${normalizedQuery}:${query.type ?? 'all'}:${query.year ?? 'all'}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.response;
 
     const settled = await Promise.all(
-      this.sources.map(async (source) => {
+      sources.map(async (source) => {
         if (!source.instance) {
           return {
             results: [] as MediaSearchResult[],
@@ -249,5 +257,11 @@ export class MediaMetadataService {
       if (oldest) this.cache.delete(oldest);
     }
     this.cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, response });
+  }
+
+  clearHouseholdCache(householdId: string) {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(`${householdId}:`)) this.cache.delete(key);
+    }
   }
 }

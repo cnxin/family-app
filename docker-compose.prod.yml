@@ -58,6 +58,7 @@ services:
       LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-5}
       LOGIN_RATE_WINDOW_MS: ${LOGIN_RATE_WINDOW_MS:-60000}
       BOOTSTRAP_SECRET_FILE: /run/secrets/bootstrap_secret
+      INTEGRATION_SECRET_KEY_FILE: /run/secrets/integration_secret
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       TZ: ${TZ:-Asia/Shanghai}
@@ -91,6 +92,7 @@ services:
       - db_password
       - jwt_secret
       - bootstrap_secret
+      - integration_secret
     volumes:
       - family_app_uploads_prod:/app/apps/api/uploads
       - ./deploy/secrets:/run/integration-secrets:ro
@@ -168,6 +170,8 @@ secrets:
     file: ${JWT_SECRET_PATH:-./deploy/secrets/jwt_secret.txt}
   bootstrap_secret:
     file: ${BOOTSTRAP_SECRET_PATH:-./deploy/secrets/bootstrap_secret.txt}
+  integration_secret:
+    file: ${INTEGRATION_SECRET_PATH:-./deploy/secrets/integration_secret.txt}
 
 volumes:
   family_app_pgdata_prod:

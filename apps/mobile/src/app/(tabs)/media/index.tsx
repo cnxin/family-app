@@ -6,6 +6,7 @@ import {
   ListVideo,
   Play,
   Server,
+  Settings2,
   Vote,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -27,6 +28,7 @@ import {
 import { Card } from '../../../components/ui';
 import { parseDate } from '../../../lib/date';
 import { useMedia, useMediaConnectors, usePolls } from '../../../lib/queries';
+import { useSession } from '../../../lib/session';
 import { radius, type as t, useTheme } from '../../../lib/theme';
 import type { MediaConnectorSummary } from '../../../lib/types';
 
@@ -144,6 +146,7 @@ export default function MediaHomeScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
+  const { member } = useSession();
   const params = useLocalSearchParams<{ mediaId?: string }>();
   const mediaId = firstParam(params.mediaId);
   const { data: entries, isLoading } = useMedia('all', '', !mediaId);
@@ -275,6 +278,16 @@ export default function MediaHomeScreen() {
             <View style={styles.contentColumn}>
               <View style={styles.sectionHeader}>
                 <Text style={[t.title2, { color: c.label }]}>媒体服务</Text>
+                {member?.role === 'owner' || member?.role === 'admin' ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    onPress={() => router.push('/media/settings')}
+                    style={styles.textLink}
+                  >
+                    <Settings2 color={c.tint} size={15} />
+                    <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>数据源设置</Text>
+                  </Pressable>
+                ) : null}
               </View>
               <Card style={styles.listCard}>
                 {connectors?.length ? (

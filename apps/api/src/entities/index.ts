@@ -32,6 +32,8 @@ export type PollCategory = 'general' | 'meal' | 'activity' | 'movie' | 'shopping
 export type PollVoteMode = 'single' | 'multiple';
 export type PollStatus = 'open' | 'closed';
 export type MediaType = 'movie' | 'series';
+export type MediaMetadataSource = 'tmdb' | 'douban' | 'bangumi';
+export type MediaCredentialKind = 'token' | 'api_key';
 export type MediaExternalProvider =
   | 'tmdb'
   | 'imdb'
@@ -1571,6 +1573,62 @@ export class MediaExternalRef {
   createdAt: Date;
 }
 
+@Entity('household_media_source_configs')
+@Check(
+  'CHK_household_media_source_configs_provider',
+  `"provider" IN ('tmdb', 'douban', 'bangumi')`,
+)
+@Check(
+  'CHK_household_media_source_configs_credential_kind',
+  `"credentialKind" IS NULL OR "credentialKind" IN ('token', 'api_key')`,
+)
+@Unique('UQ_household_media_source_configs_scope', [
+  'householdId',
+  'provider',
+])
+@Index('IDX_household_media_source_configs_household', ['householdId'])
+export class HouseholdMediaSourceConfig {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_household_media_source_configs_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  provider: MediaMetadataSource;
+
+  @Column({ default: true })
+  isEnabled: boolean;
+
+  @Column({ type: 'varchar', length: 2000, nullable: true })
+  baseUrl: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  credentialKind: MediaCredentialKind | null;
+
+  @Column({ type: 'text', nullable: true, select: false })
+  credentialEncrypted: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  credentialHint: string | null;
+
+  @Column({ type: 'jsonb', default: {} })
+  settings: Record<string, unknown>;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('household_media')
 @Check(
   'CHK_household_media_status',
@@ -1991,6 +2049,7 @@ export const ALL_ENTITIES = [
   PollVote,
   MediaTitle,
   MediaExternalRef,
+  HouseholdMediaSourceConfig,
   HouseholdMedia,
   MediaRequest,
   Reminder,

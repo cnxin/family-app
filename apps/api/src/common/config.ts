@@ -1,7 +1,12 @@
 import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
 
 function readConfiguredSecret(
-  name: 'BOOTSTRAP_SECRET' | 'DB_PASSWORD' | 'JWT_SECRET',
+  name:
+    | 'BOOTSTRAP_SECRET'
+    | 'DB_PASSWORD'
+    | 'JWT_SECRET'
+    | 'INTEGRATION_SECRET_KEY',
   developmentFallback: string,
 ) {
   const fileVariable = `${name}_FILE`;
@@ -40,6 +45,25 @@ export function bootstrapSecret() {
   );
 }
 
+export function integrationSecretKey() {
+  const configured = readConfiguredSecret('INTEGRATION_SECRET_KEY', '');
+  if (!configured) {
+    return createHash('sha256')
+      .update('family-app-local-integration-secret', 'utf8')
+      .digest();
+  }
+
+  const key = /^[0-9a-f]{64}$/i.test(configured)
+    ? Buffer.from(configured, 'hex')
+    : Buffer.from(configured, 'base64');
+  if (key.length !== 32) {
+    throw new Error(
+      'INTEGRATION_SECRET_KEY 必须是 32 字节的 Base64 或 64 位十六进制密钥',
+    );
+  }
+  return key;
+}
+
 export function trustProxyHops() {
   const rawValue = process.env.TRUST_PROXY_HOPS?.trim();
   if (!rawValue) return 0;
@@ -54,6 +78,7 @@ export function validateRuntimeConfiguration() {
   databasePassword();
   jwtSecret();
   bootstrapSecret();
+  integrationSecretKey();
   trustProxyHops();
   if (
     process.env.NODE_ENV === 'production' &&

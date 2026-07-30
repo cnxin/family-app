@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { MediaMetadataService } from '../src/media/media-metadata.service';
+import { MediaSourceSettingsService } from '../src/media/media-source-settings.service';
+import { mediaMetadataConfig } from '../src/media/metadata.config';
 
 const environmentKeys = [
   'TMDB_API_BASE_URL',
@@ -128,8 +130,18 @@ async function main() {
     process.env.BANGUMI_USER_AGENT = 'family-app-contract/1.0';
     globalThis.fetch = fakeFetch;
 
-    const service = new MediaMetadataService();
-    const first = await service.search({ query: '流浪地球', type: 'movie' });
+    const settings = {
+      resolve: async () => ({
+        config: mediaMetadataConfig(),
+        enabled: { tmdb: true, douban: true, bangumi: true },
+        version: 'contract-config',
+      }),
+    } as unknown as MediaSourceSettingsService;
+    const service = new MediaMetadataService(settings);
+    const first = await service.search(
+      { query: '流浪地球', type: 'movie' },
+      'contract-household',
+    );
     assert.deepEqual(
       first.sources.map((source) => source.provider),
       ['douban', 'tmdb', 'bangumi'],
@@ -151,17 +163,23 @@ async function main() {
     );
     assert.equal(first.results[0].posterUrl, 'https://img.test/douban.jpg');
 
-    await service.search({ query: '流浪地球', type: 'movie' });
+    await service.search(
+      { query: '流浪地球', type: 'movie' },
+      'contract-household',
+    );
     assert.deepEqual(Object.fromEntries(requestCounts), {
       'douban.test': 1,
       'tmdb.test': 1,
       'bangumi.test': 1,
     });
 
-    const degraded = await service.search({
-      query: '降级测试',
-      type: 'movie',
-    });
+    const degraded = await service.search(
+      {
+        query: '降级测试',
+        type: 'movie',
+      },
+      'contract-household',
+    );
     assert.equal(
       degraded.sources.find((source) => source.provider === 'bangumi')?.state,
       'offline',
@@ -174,11 +192,14 @@ async function main() {
 
     process.env.TMDB_API_TOKEN = '';
     process.env.DOUBAN_API_BASE_URL = '';
-    const partiallyConfigured = new MediaMetadataService();
-    const fallback = await partiallyConfigured.search({
-      query: '流浪地球',
-      type: 'movie',
-    });
+    const partiallyConfigured = new MediaMetadataService(settings);
+    const fallback = await partiallyConfigured.search(
+      {
+        query: '流浪地球',
+        type: 'movie',
+      },
+      'contract-household',
+    );
     assert.equal(fallback.sources[0].state, 'not_configured');
     assert.equal(fallback.sources[1].state, 'not_configured');
     assert.equal(fallback.sources[2].state, 'online');

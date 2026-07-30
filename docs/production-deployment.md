@@ -19,6 +19,7 @@ mkdir -p deploy/secrets
 openssl rand -base64 48 > deploy/secrets/db_password.txt
 openssl rand -hex 64 > deploy/secrets/jwt_secret.txt
 openssl rand -hex 32 > deploy/secrets/bootstrap_secret.txt
+openssl rand -base64 32 > deploy/secrets/integration_secret.txt
 chmod 600 deploy/.env.production deploy/secrets/*.txt
 ```
 
@@ -28,6 +29,7 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - `CORS_ORIGINS` 填完整来源，例如 `https://family.example.com`。多个来源用逗号分隔。
 - `APP_VERSION` 建议使用发布版本或 Git 提交短哈希，不要长期依赖 `latest`。
 - 根据主机内存调整资源限制。默认值适合小型家庭实例的起点，不等于容量承诺。
+- `integration_secret.txt` 用于加密数据库中的家庭连接凭据，必须独立备份且在恢复数据库时一并恢复。丢失或错误轮换会使已有家庭凭据无法解密。
 
 可选媒体连接器：
 
@@ -43,8 +45,9 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 豆瓣没有稳定的官方公共影视搜索 API。`DOUBAN_API_BASE_URL` 只能指向自行审核、限权的兼容桥接服务，不应复用 MoviePilot 管理端账号或 API Key。
 - 三个来源会独立超时和降级，任何来源不可用都不会阻断家庭片单与手动录入。完整变量和豆瓣响应契约见 [M4-E 三源影视搜索验收](m4-media-search-acceptance.md)。
 - 元数据凭据同样优先使用 `/run/integration-secrets/` 下的 `*_FILE`，文件权限规则与媒体连接器一致。
+- 服务器变量是所有家庭的默认值。家庭管理员也可在“家庭观影 -> 数据源设置”建立家庭覆盖；其 Token 使用 `integration_secret.txt` 进行 AES-256-GCM 加密，界面和 API 均不回显明文。
 
-环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥以及未来的连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效。
+环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥、集成加密密钥以及连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效；集成加密密钥不能在未迁移现有密文时直接轮换。
 
 ## 3. 校验并启动
 

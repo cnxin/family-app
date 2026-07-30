@@ -26,6 +26,7 @@ import type {
   MediaLibraryAvailability,
   MediaRequest,
   MediaSearchResponse,
+  MediaSourceConfig,
   InventoryCategory,
   InventoryItem,
   Member,
@@ -211,6 +212,56 @@ export function useMediaSearch(
     },
     enabled: enabled && Boolean(query.trim()),
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useMediaSourceConfigs(enabled = true) {
+  return useQuery({
+    queryKey: ['media-source-configs'],
+    queryFn: () => api<MediaSourceConfig[]>('/media/metadata-sources'),
+    enabled,
+  });
+}
+
+export interface UpdateMediaSourceConfigInput {
+  provider: MediaSourceConfig['provider'];
+  isEnabled: boolean;
+  baseUrl: string | null;
+  credentialKind: 'token' | 'api_key';
+  credential?: string;
+  clearCredential?: boolean;
+  imageBaseUrl?: string | null;
+  userAgent?: string | null;
+}
+
+export function useUpdateMediaSourceConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ provider, ...body }: UpdateMediaSourceConfigInput) =>
+      api<MediaSourceConfig[]>(`/media/metadata-sources/${provider}`, {
+        method: 'PUT',
+        body,
+      }),
+    onSuccess: (configs) => {
+      qc.setQueryData(['media-source-configs'], configs);
+      void qc.invalidateQueries({ queryKey: ['media-search'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useResetMediaSourceConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: MediaSourceConfig['provider']) =>
+      api<MediaSourceConfig[]>(`/media/metadata-sources/${provider}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (configs) => {
+      qc.setQueryData(['media-source-configs'], configs);
+      void qc.invalidateQueries({ queryKey: ['media-search'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
   });
 }
 

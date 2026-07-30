@@ -333,6 +333,23 @@ export interface MediaSearchResponse {
   sources: MediaSourceSearchStatus[];
 }
 
+export interface MediaSourceConfig {
+  provider: MediaMetadataSource;
+  name: string;
+  mode: 'household' | 'server_default';
+  isEnabled: boolean;
+  baseUrl: string | null;
+  credentialKind: 'token' | 'api_key';
+  credentialConfigured: boolean;
+  credentialHint: string | null;
+  configured: boolean;
+  settings: {
+    imageBaseUrl?: string;
+    userAgent?: string;
+  };
+  updatedAt: string | null;
+}
+
 export interface MediaTitle {
   id: string;
   type: MediaType;

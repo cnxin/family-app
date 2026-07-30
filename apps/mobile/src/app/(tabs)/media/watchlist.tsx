@@ -1446,9 +1446,15 @@ export default function MediaScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
-  const params = useLocalSearchParams<{ mediaId?: string }>();
+  const params = useLocalSearchParams<{ mediaId?: string; filter?: string }>();
   const parameterMediaId = firstParam(params.mediaId);
-  const [filter, setFilter] = useState<MediaFilter>('all');
+  const parameterFilter = firstParam(params.filter);
+  const initialFilter = FILTER_OPTIONS.some(
+    (option) => option.value === parameterFilter,
+  )
+    ? (parameterFilter as MediaFilter)
+    : 'all';
+  const [filter, setFilter] = useState<MediaFilter>(initialFilter);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -1506,13 +1512,25 @@ export default function MediaScreen() {
   }, [search]);
 
   useEffect(() => {
+    if (
+      parameterFilter &&
+      FILTER_OPTIONS.some((option) => option.value === parameterFilter)
+    ) {
+      setFilter(parameterFilter as MediaFilter);
+    }
+  }, [parameterFilter]);
+
+  useEffect(() => {
     if (!parameterMediaId || openedParameter.current === parameterMediaId) return;
     const target = entries?.find((entry) => entry.id === parameterMediaId);
-    if (!target) return;
+    if (!target) {
+      if (!isLoading && filter !== 'all') setFilter('all');
+      return;
+    }
     openedParameter.current = parameterMediaId;
     setEditingEntry(target);
     setFormOpen(true);
-  }, [entries, parameterMediaId]);
+  }, [entries, filter, isLoading, parameterMediaId]);
 
   const counts = useMemo(() => {
     const result = new Map<HouseholdMediaStatus, number>();
@@ -1664,6 +1682,7 @@ export default function MediaScreen() {
                                 sourceModule: 'media',
                                 sourceId: entry.id,
                                 sourceTitle: entry.mediaTitle.title,
+                                returnTo: 'watchlist',
                               },
                             },
                       );

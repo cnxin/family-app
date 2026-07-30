@@ -168,6 +168,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
 
   const mediaRoute = /\/media(\?|$)/;
   const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;
+  const mediaSourcesRoute = /\/media\/metadata-sources(?:\/[^/?]+)?(?:\?|$)/;
   const mediaSearchRoute = /\/media\/search\?/;
   const mediaAvailabilityRoute = /\/media\/library-availability(\?|$)/;
   const mediaRequestsRoute = /\/media\/requests(\?|$)/;
@@ -177,8 +178,62 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     /\/media\/media-browser-fixture-1\/requests$/;
   const linkedPollRoute = /\/polls(\?|$)/;
   let linkedPollFixture: Record<string, unknown> | null = null;
+  let mediaFixtureStatus = 'watchlist';
   let mediaRequestSequence = 0;
   let mediaRequestFixtures: Record<string, unknown>[] = [];
+  let mediaSourceConfigs: {
+    provider: string;
+    name: string;
+    mode: string;
+    isEnabled: boolean;
+    baseUrl: string | null;
+    credentialKind: string;
+    credentialConfigured: boolean;
+    credentialHint: string | null;
+    configured: boolean;
+    settings: Record<string, string>;
+    updatedAt: string | null;
+  }[] = [
+    {
+      provider: 'tmdb',
+      name: 'TMDB',
+      mode: 'server_default',
+      isEnabled: true,
+      baseUrl: 'https://api.themoviedb.org/3',
+      credentialKind: 'token',
+      credentialConfigured: false,
+      credentialHint: null,
+      configured: false,
+      settings: { imageBaseUrl: 'https://image.tmdb.org/t/p/w500' },
+      updatedAt: null,
+    },
+    {
+      provider: 'douban',
+      name: '豆瓣',
+      mode: 'server_default',
+      isEnabled: true,
+      baseUrl: null,
+      credentialKind: 'token',
+      credentialConfigured: false,
+      credentialHint: null,
+      configured: false,
+      settings: {},
+      updatedAt: null,
+    },
+    {
+      provider: 'bangumi',
+      name: 'Bangumi',
+      mode: 'server_default',
+      isEnabled: true,
+      baseUrl: 'https://api.bgm.tv',
+      credentialKind: 'token',
+      credentialConfigured: false,
+      credentialHint: null,
+      configured: true,
+      settings: { userAgent: 'family-app-browser-test/1.0' },
+      updatedAt: null,
+    },
+  ];
   await page.route(mediaRoute, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
@@ -192,7 +247,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
           {
             id: 'media-browser-fixture-1',
             householdId: 'household-browser-fixture',
-            status: 'watchlist',
+            status: mediaFixtureStatus,
             scheduledFor: null,
             note: '周末家庭观影',
             mediaTitle: {
@@ -233,8 +288,58 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
             createdAt: '2099-01-01T00:00:00.000Z',
             updatedAt: '2099-01-01T00:00:00.000Z',
           },
-        ],
+        ].filter((entry) => {
+          const requestedStatus = new URL(route.request().url()).searchParams.get('status');
+          return !requestedStatus || requestedStatus === 'all' || entry.status === requestedStatus;
+        }),
       }),
+    });
+  });
+  await page.route(mediaSourcesRoute, async (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: mediaSourceConfigs }),
+      });
+      return;
+    }
+    const provider = new URL(route.request().url()).pathname.split('/').at(-1);
+    if (method === 'PUT') {
+      const body = route.request().postDataJSON() as {
+        isEnabled: boolean;
+        baseUrl: string | null;
+        credentialKind: 'token' | 'api_key';
+        credential?: string;
+        imageBaseUrl?: string | null;
+        userAgent?: string | null;
+      };
+      expect(body.credential).toBe('browser-source-secret-2468');
+      mediaSourceConfigs = mediaSourceConfigs.map((config) =>
+        config.provider === provider
+          ? {
+              ...config,
+              mode: 'household',
+              isEnabled: body.isEnabled,
+              baseUrl: body.baseUrl,
+              credentialKind: body.credentialKind,
+              credentialConfigured: true,
+              credentialHint: '****2468',
+              configured: true,
+              settings: {
+                ...(body.imageBaseUrl ? { imageBaseUrl: body.imageBaseUrl } : {}),
+                ...(body.userAgent ? { userAgent: body.userAgent } : {}),
+              },
+              updatedAt: '2099-01-01T00:00:00.000Z',
+            }
+          : config,
+      );
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: mediaSourceConfigs }),
     });
   });
   await page.route(mediaConnectorsRoute, async (route) => {
@@ -344,9 +449,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     });
   });
   await page.route(mediaAvailabilityRoute, async (route) => {
-    expect(route.request().postDataJSON()).toEqual({
-      mediaIds: ['media-browser-fixture-1', 'media-browser-fixture-2'],
-    });
+    const body = route.request().postDataJSON() as { mediaIds: string[] };
+    expect(body.mediaIds.length).toBeGreaterThan(0);
+    expect(
+      body.mediaIds.every((id) =>
+        ['media-browser-fixture-1', 'media-browser-fixture-2'].includes(id),
+      ),
+    ).toBe(true);
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
@@ -488,6 +597,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
         voters: [],
       })),
     };
+    mediaFixtureStatus = 'voting';
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
@@ -511,6 +621,26 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByText('媒体库 · Plex 1.43.0', { exact: true })).toBeVisible();
   await expect(page.getByText('自动化 · MoviePilot v2.9.0', { exact: true })).toBeVisible();
   await expect(page.getByText('媒体库 · 未配置服务地址', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: /数据源设置/ }).click();
+  await expect(page).toHaveURL(/\/media\/settings$/);
+  await expect(page.getByRole('heading', { name: '数据源设置', exact: true })).toBeVisible();
+  await expect(page.getByLabel('TMDB API Token')).toHaveValue('');
+  await page.getByLabel('TMDB API Token').fill('browser-source-secret-2468');
+  await page.getByRole('button', { name: '保存 TMDB', exact: true }).click();
+  await expect(page.getByText('****2468', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('TMDB API Token')).toHaveValue('');
+  await expect(page.getByText('browser-source-secret-2468')).not.toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('media-source-settings.png'),
+    fullPage: true,
+  });
+  if (testInfo.project.name === 'mobile-chrome') {
+    await page.getByRole('button', { name: '返回家庭观影', exact: true }).click();
+  } else {
+    await page.getByRole('link', { name: '家庭观影', exact: true }).first().click();
+  }
+  await expect(page).toHaveURL(/\/media$/);
   await expectNoHorizontalOverflow(page);
   await page.screenshot({
     path: testInfo.outputPath('media-home.png'),
@@ -577,6 +707,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     })
     .click();
   await expect(page.getByText('订阅完成', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^想看/ }).click();
   await page
     .getByRole('button', {
       name: '发起家庭电影回归样例的家庭投票',
@@ -595,13 +726,19 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     page.getByRole('textbox', { name: '候选项2', exact: true }),
   ).toHaveValue('这次先不看');
   await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
-  await expect(page).toHaveURL(/\/polls\?pollId=poll-browser-fixture-media-1/);
-  await expect(page.getByRole('checkbox', { name: '选择想看' })).toBeVisible();
-  await page.getByRole('button', { name: /关联的片单条目/ }).click();
-  await expect(page).toHaveURL(/\/media\/watchlist\?mediaId=media-browser-fixture-1/);
+  await expect(page).toHaveURL(
+    /\/media\/watchlist\?(?=[^#]*mediaId=media-browser-fixture-1)(?=[^#]*filter=voting)/,
+  );
   await expect(page.getByText('编辑观影安排', { exact: true })).toBeVisible();
+  await expect(page.getByText('投票中', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '关闭', exact: true }).first().click();
   await expect(page.getByText('编辑观影安排', { exact: true })).not.toBeVisible();
+  await expect(
+    page.getByRole('button', {
+      name: '查看家庭电影回归样例的家庭投票',
+      exact: true,
+    }),
+  ).toBeVisible();
   if (testInfo.project.name === 'mobile-chrome') {
     await expect(page.getByRole('tab')).toHaveCount(4);
   }
@@ -620,6 +757,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   }
   await page.unroute(mediaAvailabilityRoute);
   await page.unroute(mediaConnectorsRoute);
+  await page.unroute(mediaSourcesRoute);
   await page.unroute(mediaSearchRoute);
   await page.unroute(mediaRequestActionRoute);
   await page.unroute(mediaSubscribeRoute);

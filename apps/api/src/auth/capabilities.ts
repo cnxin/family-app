@@ -17,7 +17,8 @@ export type Capability =
   | 'manage_recipes'
   | 'manage_shopping'
   | 'manage_inventory'
-  | 'manage_members';
+  | 'manage_members'
+  | 'manage_integrations';
 
 const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
   owner: new Set([
@@ -27,6 +28,7 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_shopping',
     'manage_inventory',
     'manage_members',
+    'manage_integrations',
   ]),
   admin: new Set([
     'place_meal_order',
@@ -35,6 +37,7 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_shopping',
     'manage_inventory',
     'manage_members',
+    'manage_integrations',
   ]),
   member: new Set([
     'place_meal_order',

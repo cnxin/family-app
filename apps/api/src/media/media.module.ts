@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -30,14 +31,17 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
+import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   HouseholdMedia,
+  HouseholdMediaSourceConfig,
   HouseholdMediaStatus,
   MediaExternalProvider,
   MediaExternalRef,
@@ -49,6 +53,10 @@ import {
 } from '../entities';
 import { MediaConnectorsService } from './media-connectors.service';
 import { MediaMetadataService } from './media-metadata.service';
+import {
+  MediaSourceSettingsService,
+  UpdateMediaSourceSettingsInput,
+} from './media-source-settings.service';
 
 const MEDIA_STATUSES: HouseholdMediaStatus[] = [
   'watchlist',
@@ -107,6 +115,42 @@ class MediaSearchDto {
   @Min(1878)
   @Max(2199)
   year?: number;
+}
+
+class UpdateMediaSourceSettingsDto
+  implements UpdateMediaSourceSettingsInput
+{
+  @IsOptional()
+  @IsBoolean()
+  isEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  baseUrl?: string | null;
+
+  @IsOptional()
+  @IsIn(['token', 'api_key'])
+  credentialKind?: 'token' | 'api_key' | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  credential?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  clearCredential?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  imageBaseUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  userAgent?: string | null;
 }
 
 class MediaExternalRefDto {
@@ -1082,19 +1126,58 @@ class MediaController {
     private readonly service: MediaService,
     private readonly requests: MediaRequestsService,
     private readonly metadata: MediaMetadataService,
+    private readonly sourceSettings: MediaSourceSettingsService,
   ) {}
 
   @Get('search')
-  search(@Query() query: MediaSearchDto) {
+  search(@Query() query: MediaSearchDto, @CurrentUser() user: JwtUser) {
     const normalizedQuery = normalizeText(query.query);
     if (!normalizedQuery) {
       throw new BadRequestException('请输入影视名称');
     }
-    return this.metadata.search({
-      query: normalizedQuery,
-      type: query.type,
-      year: query.year,
-    });
+    return this.metadata.search(
+      {
+        query: normalizedQuery,
+        type: query.type,
+        year: query.year,
+      },
+      user.householdId,
+    );
+  }
+
+  @Get('metadata-sources')
+  @RequireCapabilities('manage_integrations')
+  metadataSources(@CurrentUser() user: JwtUser) {
+    return this.sourceSettings.list(user);
+  }
+
+  @Put('metadata-sources/:provider')
+  @RequireCapabilities('manage_integrations')
+  async updateMetadataSource(
+    @Param('provider') providerValue: string,
+    @Body() dto: UpdateMediaSourceSettingsDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!this.sourceSettings.isProvider(providerValue)) {
+      throw new NotFoundException('影视数据源不存在');
+    }
+    const result = await this.sourceSettings.update(providerValue, dto, user);
+    this.metadata.clearHouseholdCache(user.householdId);
+    return result;
+  }
+
+  @Delete('metadata-sources/:provider')
+  @RequireCapabilities('manage_integrations')
+  async resetMetadataSource(
+    @Param('provider') providerValue: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!this.sourceSettings.isProvider(providerValue)) {
+      throw new NotFoundException('影视数据源不存在');
+    }
+    const result = await this.sourceSettings.reset(providerValue, user);
+    this.metadata.clearHouseholdCache(user.householdId);
+    return result;
   }
 
   @Get()
@@ -1172,6 +1255,7 @@ class MediaController {
   imports: [
     TypeOrmModule.forFeature([
       HouseholdMedia,
+      HouseholdMediaSourceConfig,
       MediaTitle,
       MediaExternalRef,
       MediaRequest,
@@ -1183,6 +1267,7 @@ class MediaController {
     MediaService,
     MediaRequestsService,
     MediaConnectorsService,
+    MediaSourceSettingsService,
     MediaMetadataService,
   ],
   exports: [MediaService, MediaRequestsService, MediaConnectorsService],

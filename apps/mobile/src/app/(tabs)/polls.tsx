@@ -757,11 +757,13 @@ export default function PollsScreen() {
     sourceModule?: string;
     sourceId?: string;
     sourceTitle?: string;
+    returnTo?: string;
   }>();
   const focusedPollId = firstParam(params.pollId);
   const sourceModule = firstParam(params.sourceModule);
   const sourceId = firstParam(params.sourceId);
   const sourceTitle = firstParam(params.sourceTitle);
+  const returnTo = firstParam(params.returnTo);
   const source =
     sourceModule === 'media' && sourceId && sourceTitle
       ? { module: 'media' as const, id: sourceId, title: sourceTitle }
@@ -905,7 +907,14 @@ export default function PollsScreen() {
         onSaved={(saved) => {
           setFormOpen(false);
           if (source) {
-            router.replace({ pathname: '/polls', params: { pollId: saved.id } });
+            if (returnTo === 'watchlist') {
+              router.replace({
+                pathname: '/media/watchlist',
+                params: { mediaId: source.id, filter: 'voting' },
+              });
+            } else {
+              router.replace({ pathname: '/polls', params: { pollId: saved.id } });
+            }
           }
         }}
         poll={editingPoll}
