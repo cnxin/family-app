@@ -56,7 +56,31 @@ async function testPlex() {
         });
       }
       if (url.pathname === '/library/sections') {
-        return json({ MediaContainer: { Directory: [] } });
+        return json({
+          MediaContainer: {
+            Directory: [{ key: '1', type: 'movie', title: '电影' }],
+          },
+        });
+      }
+      if (url.pathname === '/library/sections/1/all') {
+        return json({
+          MediaContainer: {
+            totalSize: 1,
+            Metadata: [
+              {
+                ratingKey: '242',
+                type: 'movie',
+                title: 'Fight Club',
+                year: 1999,
+                summary: 'An insomniac meets a soap maker.',
+                Guid: [
+                  { id: 'tmdb://550' },
+                  { id: 'imdb://tt0137523' },
+                ],
+              },
+            ],
+          },
+        });
       }
       if (url.pathname === '/library/all') {
         return json({
@@ -80,9 +104,16 @@ async function testPlex() {
     }) as typeof fetch,
   );
   const health = await provider.health();
+  const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
   assert(health.available && health.message === 'Plex 1.43.0', '读取 Plex 版本');
   assert(matches.length === 1 && matches[0].libraryItemId === '242', '按外部 ID 匹配 Plex 条目');
+  assert(
+    library.length === 1 &&
+      library[0].title === 'Fight Club' &&
+      library[0].externalRefs.some((ref) => ref.provider === 'tmdb'),
+    '分页读取 Plex 媒体库及外部编号',
+  );
   assert(
     matches[0].playbackUrl?.includes('/server/plex-server-id/details?key=') &&
       !matches[0].playbackUrl.includes('contract-secret') &&
@@ -104,16 +135,20 @@ async function testEmby() {
         return json({ Id: 'emby-server-id', Version: '4.9.1' });
       }
       if (url.pathname === '/Items') {
-        assert(
-          url.searchParams.get('AnyProviderIdEquals')?.includes('Tmdb.550'),
-          '使用 TMDB ProviderId 查询 Emby',
-        );
+        if (url.searchParams.has('AnyProviderIdEquals')) {
+          assert(
+            url.searchParams.get('AnyProviderIdEquals')?.includes('Tmdb.550'),
+            '使用 TMDB ProviderId 查询 Emby',
+          );
+        }
         return json({
+          TotalRecordCount: 1,
           Items: [
             {
               Id: 'emby-item-7',
               Type: 'Movie',
               Name: 'Fight Club',
+              ProductionYear: 1999,
               ProviderIds: { Tmdb: '550', Imdb: 'tt0137523' },
             },
           ],
@@ -123,6 +158,7 @@ async function testEmby() {
     }) as typeof fetch,
   );
   const health = await provider.health();
+  const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
   assert(health.available && health.message === 'Emby 4.9.1', '读取 Emby 版本');
   assert(
@@ -130,6 +166,10 @@ async function testEmby() {
       matches[0].playbackUrl ===
         'http://emby.test/web/index.html#!/item?id=emby-item-7&serverId=emby-server-id',
     '匹配 Emby 条目并生成无密钥播放链接',
+  );
+  assert(
+    library.length === 1 && library[0].externalRefs.length === 2,
+    '分页读取 Emby 媒体库及外部编号',
   );
 }
 

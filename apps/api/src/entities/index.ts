@@ -57,6 +57,7 @@ export type MediaRequestStatus =
   | 'completed'
   | 'failed'
   | 'cancelled';
+export type MediaLibraryProviderKind = 'plex' | 'emby';
 export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
 export type ActivityModule =
@@ -1729,6 +1730,99 @@ export class IntegrationSecret {
   updatedAt: Date;
 }
 
+@Entity('media_library_items')
+@Check(
+  'CHK_media_library_items_provider',
+  `"provider" IN ('plex', 'emby')`,
+)
+@Check(
+  'CHK_media_library_items_type',
+  `"mediaType" IN ('movie', 'series')`,
+)
+@Unique('UQ_media_library_items_connector_item', [
+  'householdId',
+  'connectorKey',
+  'libraryItemId',
+])
+@Index('IDX_media_library_items_household_title', [
+  'householdId',
+  'title',
+])
+@Index('IDX_media_library_items_media_title', ['mediaTitleId'])
+export class MediaLibraryItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_media_library_items_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => MediaTitle, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'mediaTitleId',
+    foreignKeyConstraintName: 'FK_media_library_items_media_title',
+  })
+  mediaTitle: MediaTitle | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  mediaTitleId: string | null;
+
+  @Column({ type: 'varchar', length: 32 })
+  provider: MediaLibraryProviderKind;
+
+  @Column({ type: 'varchar', length: 128 })
+  connectorKey: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  libraryItemId: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  mediaType: MediaType;
+
+  @Column({ type: 'varchar', length: 180 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 180, nullable: true })
+  originalTitle: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  year: number | null;
+
+  @Column({ type: 'varchar', length: 5000, nullable: true })
+  overview: string | null;
+
+  @Column({ type: 'varchar', length: 2000, nullable: true })
+  posterUrl: string | null;
+
+  @Column({ type: 'jsonb', default: [] })
+  externalRefs: {
+    provider: 'tmdb' | 'imdb';
+    mediaType: MediaType;
+    externalId: string;
+  }[];
+
+  @Column({ type: 'varchar', length: 4000, nullable: true })
+  playbackUrl: string | null;
+
+  @Column({ type: 'jsonb', default: {} })
+  metadata: Record<string, unknown>;
+
+  @Column({ type: 'timestamptz' })
+  lastSeenAt: Date;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('household_media')
 @Check(
   'CHK_household_media_status',
@@ -2152,6 +2246,7 @@ export const ALL_ENTITIES = [
   HouseholdMediaSourceConfig,
   Integration,
   IntegrationSecret,
+  MediaLibraryItem,
   HouseholdMedia,
   MediaRequest,
   Reminder,

@@ -68,8 +68,22 @@ export interface MediaLibraryMatch {
   metadata: Record<string, unknown>;
 }
 
+export interface MediaLibraryCatalogItem {
+  libraryItemId: string;
+  type: MediaType;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  overview: string | null;
+  posterUrl: string | null;
+  externalRefs: MediaExternalReference[];
+  playbackUrl: string | null;
+  metadata: Record<string, unknown>;
+}
+
 export interface MediaLibraryProvider {
   readonly provider: MediaExternalProvider;
+  listItems(): Promise<MediaLibraryCatalogItem[]>;
   findByExternalRefs(
     externalRefs: MediaExternalReference[],
   ): Promise<MediaLibraryMatch[]>;

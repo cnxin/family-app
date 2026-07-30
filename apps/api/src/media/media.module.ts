@@ -29,6 +29,7 @@ import {
   Module,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Put,
@@ -47,6 +48,7 @@ import {
   IntegrationSecret,
   MediaExternalProvider,
   MediaExternalRef,
+  MediaLibraryItem,
   MediaRequest,
   MediaRequestStatus,
   MediaTitle,
@@ -60,6 +62,10 @@ import {
   UpdateIntegrationSettingsInput,
 } from './integration-settings.service';
 import { MediaMetadataService } from './media-metadata.service';
+import {
+  MediaLibraryQuery,
+  MediaLibraryService,
+} from './media-library.service';
 import {
   MediaSourceSettingsService,
   UpdateMediaSourceSettingsInput,
@@ -275,6 +281,41 @@ class MediaAvailabilityDto {
   mediaIds: string[];
 }
 
+class MediaLibraryQueryDto implements MediaLibraryQuery {
+  @IsOptional()
+  @IsIn(['plex', 'emby'])
+  connectorKey?: string;
+
+  @IsOptional()
+  @IsIn(['movie', 'series'])
+  type?: MediaType;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(12)
+  @Max(60)
+  pageSize?: number;
+}
+
+class SyncMediaLibraryDto {
+  @IsOptional()
+  @IsIn(['plex', 'emby'])
+  connectorKey?: string;
+}
+
 class MediaRequestQueryDto {
   @IsOptional()
   @IsUUID('4')
@@ -357,6 +398,7 @@ export class MediaService {
     private readonly householdMedia: Repository<HouseholdMedia>,
     private readonly dataSource: DataSource,
     private readonly connectors: MediaConnectorsService,
+    private readonly library: MediaLibraryService,
   ) {}
 
   async list(query: MediaQueryDto, user: JwtUser) {
@@ -407,18 +449,39 @@ export class MediaService {
       where: mediaIds.map((id) => ({ id, householdId: user.householdId })),
       relations: { mediaTitle: { externalRefs: true } },
     });
-    return this.connectors.availability(
-      user.householdId,
-      entries.map((entry) => ({
-        id: entry.id,
-        externalRefs: (entry.mediaTitle.externalRefs ?? []).map((ref) => ({
-          provider: ref.provider,
-          mediaType: ref.mediaType,
-          externalId: ref.externalId,
-          connectorKey: ref.connectorKey ?? undefined,
-        })),
+    const media = entries.map((entry) => ({
+      id: entry.id,
+      mediaTitleId: entry.mediaTitleId,
+      externalRefs: (entry.mediaTitle.externalRefs ?? []).map((ref) => ({
+        provider: ref.provider,
+        mediaType: ref.mediaType,
+        externalId: ref.externalId,
+        connectorKey: ref.connectorKey ?? undefined,
       })),
-    );
+    }));
+    const [live, snapshots] = await Promise.all([
+      this.connectors.availability(
+      user.householdId,
+      media.map((entry) => ({
+        id: entry.id,
+        externalRefs: entry.externalRefs,
+      })),
+      ),
+      this.library.availability(user.householdId, media),
+    ]);
+    for (const entry of media) {
+      const keys = new Set(
+        live[entry.id].map(
+          (match) => `${match.connectorKey}:${match.libraryItemId}`,
+        ),
+      );
+      live[entry.id].push(
+        ...snapshots[entry.id].filter(
+          (match) => !keys.has(`${match.connectorKey}:${match.libraryItemId}`),
+        ),
+      );
+    }
+    return live;
   }
 
   async create(dto: CreateMediaDto, user: JwtUser) {
@@ -1192,6 +1255,7 @@ class MediaController {
     private readonly sourceSettings: MediaSourceSettingsService,
     private readonly integrationSettings: IntegrationSettingsService,
     private readonly connectorsService: MediaConnectorsService,
+    private readonly library: MediaLibraryService,
   ) {}
 
   @Get('search')
@@ -1313,6 +1377,31 @@ class MediaController {
     return this.service.libraryAvailability(dto.mediaIds, user);
   }
 
+  @Get('library')
+  mediaLibrary(
+    @Query() query: MediaLibraryQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.library.list(query, user);
+  }
+
+  @Post('library/sync')
+  @RequireCapabilities('manage_integrations')
+  syncMediaLibrary(
+    @Body() dto: SyncMediaLibraryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.library.sync(dto.connectorKey, user);
+  }
+
+  @Post('library/:libraryItemId/add')
+  addLibraryItem(
+    @Param('libraryItemId', ParseUUIDPipe) libraryItemId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.library.addToWatchlist(libraryItemId, user);
+  }
+
   @Get('requests')
   mediaRequests(
     @Query() query: MediaRequestQueryDto,
@@ -1375,6 +1464,7 @@ class MediaController {
       IntegrationSecret,
       MediaTitle,
       MediaExternalRef,
+      MediaLibraryItem,
       MediaRequest,
       Poll,
     ]),
@@ -1384,6 +1474,7 @@ class MediaController {
     MediaService,
     MediaRequestsService,
     MediaConnectorsService,
+    MediaLibraryService,
     IntegrationSettingsService,
     MediaSourceSettingsService,
     MediaMetadataService,

@@ -419,6 +419,54 @@ export interface MediaLibraryMatch {
 
 export type MediaLibraryAvailability = Record<string, MediaLibraryMatch[]>;
 
+export interface MediaLibraryItem {
+  id: string;
+  connectorKey: string;
+  provider: 'plex' | 'emby';
+  connectorName: string;
+  libraryItemId: string;
+  type: MediaType;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  overview: string | null;
+  posterUrl: string | null;
+  externalRefs: {
+    provider: 'tmdb' | 'imdb';
+    mediaType: MediaType;
+    externalId: string;
+  }[];
+  playbackUrl: string | null;
+  householdMediaId: string | null;
+  lastSeenAt: string;
+}
+
+export interface MediaLibraryResponse {
+  items: MediaLibraryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pages: number;
+  lastSyncedAt: string | null;
+  connectors: {
+    connectorKey: 'plex' | 'emby';
+    name: string;
+    provider: 'plex' | 'emby';
+    lastSyncedAt: string | null;
+  }[];
+}
+
+export interface MediaLibrarySyncResponse {
+  results: {
+    connectorKey: string;
+    name: string;
+    provider: 'plex' | 'emby';
+    itemCount: number;
+    matchedCount: number;
+    syncedAt: string;
+  }[];
+}
+
 export type MediaRequestStatus =
   | 'pending'
   | 'processing'

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   CalendarDays,
   Film,
+  Library,
   ListVideo,
   Play,
   Server,
@@ -221,6 +222,14 @@ export default function MediaHomeScreen() {
               icon={ListVideo}
               label="家庭片单"
               status={`${entries?.length ?? 0} 部影视`}
+            />
+            <ActionCard
+              background={c.blueSoft}
+              color={c.blue}
+              href="/media/library"
+              icon={Library}
+              label="我的媒体库"
+              status="Plex 与 Emby"
             />
             <ActionCard
               background={c.blueSoft}

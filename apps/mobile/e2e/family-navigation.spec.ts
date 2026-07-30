@@ -175,6 +175,10 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   const mediaSourcesRoute = /\/media\/metadata-sources(?:\/[^/?]+)?(?:\?|$)/;
   const mediaSearchRoute = /\/media\/search\?/;
   const mediaAvailabilityRoute = /\/media\/library-availability(\?|$)/;
+  const mediaLibraryRoute = /\/media\/library(?:\?.*)?$/;
+  const mediaLibrarySyncRoute = /\/media\/library\/sync$/;
+  const mediaLibraryAddRoute =
+    /\/media\/library\/library-browser-fixture-1\/add$/;
   const mediaRequestsRoute = /\/media\/requests(\?|$)/;
   const mediaRequestActionRoute =
     /\/media\/requests\/media-request-browser-fixture-\d+(\/refresh)?$/;
@@ -186,6 +190,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   let mediaFixture2Status = 'watchlist';
   let mediaRequestSequence = 0;
   let mediaRequestFixtures: Record<string, unknown>[] = [];
+  let libraryHouseholdMediaId: string | null = null;
   let mediaSourceConfigs: {
     provider: string;
     name: string;
@@ -513,6 +518,83 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       }),
     });
   });
+  await page.route(mediaLibraryRoute, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          items: [
+            {
+              id: 'library-browser-fixture-1',
+              connectorKey: 'plex',
+              provider: 'plex',
+              connectorName: 'Plex',
+              libraryItemId: '242',
+              type: 'movie',
+              title: '媒体库回归样例',
+              originalTitle: 'Library Regression Fixture',
+              year: 2099,
+              overview: '验证媒体库同步、播放入口与家庭片单导入。',
+              posterUrl: null,
+              externalRefs: [
+                { provider: 'tmdb', mediaType: 'movie', externalId: '550' },
+                { provider: 'imdb', mediaType: 'movie', externalId: 'tt0137523' },
+              ],
+              playbackUrl: 'http://plex.test/web/index.html#!/details?key=242',
+              householdMediaId: libraryHouseholdMediaId,
+              lastSeenAt: '2099-01-01T08:30:00.000Z',
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 24,
+          pages: 1,
+          lastSyncedAt: '2099-01-01T08:30:00.000Z',
+          connectors: [
+            {
+              connectorKey: 'plex',
+              name: 'Plex',
+              provider: 'plex',
+              lastSyncedAt: '2099-01-01T08:30:00.000Z',
+            },
+          ],
+        },
+      }),
+    });
+  });
+  await page.route(mediaLibrarySyncRoute, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          results: [
+            {
+              connectorKey: 'plex',
+              name: 'Plex',
+              provider: 'plex',
+              itemCount: 1,
+              matchedCount: 0,
+              syncedAt: '2099-01-01T08:30:00.000Z',
+            },
+          ],
+        },
+      }),
+    });
+  });
+  await page.route(mediaLibraryAddRoute, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    libraryHouseholdMediaId = 'media-browser-fixture-library';
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { householdMediaId: libraryHouseholdMediaId, added: true },
+      }),
+    });
+  });
   await page.route(mediaSearchRoute, async (route) => {
     expect(route.request().method()).toBe('GET');
     const url = new URL(route.request().url());
@@ -833,6 +915,26 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     path: testInfo.outputPath('media-home.png'),
     fullPage: true,
   });
+  await page.getByRole('link').filter({ hasText: '我的媒体库' }).first().click();
+  await expect(page).toHaveURL(/\/media\/library$/);
+  await expect(page.getByRole('heading', { name: '我的媒体库', exact: true })).toBeVisible();
+  await expect(page.getByText('媒体库回归样例', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: '用Plex播放媒体库回归样例' })).toBeVisible();
+  await page.getByRole('button', { name: '同步媒体库', exact: true }).click();
+  await expect(page.getByText('已同步 1 部，关联家庭片单 0 部', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '将媒体库回归样例加入家庭片单' }).click();
+  await expect(page.getByText('已在片单', { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('media-library.png'),
+    fullPage: true,
+  });
+  if (testInfo.project.name === 'mobile-chrome') {
+    await page.getByRole('button', { name: '返回观影首页', exact: true }).click();
+  } else {
+    await page.getByRole('link', { name: '观影首页', exact: true }).first().click();
+  }
+  await expect(page).toHaveURL(/\/media$/);
   await page.getByRole('link').filter({ hasText: '家庭片单' }).first().click();
   await expect(page).toHaveURL(/\/media\/watchlist$/);
   await expect(page.getByRole('heading', { name: '家庭片单', exact: true })).toBeVisible();
@@ -983,6 +1085,9 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     await openSection(page, testInfo.project.name, 'home');
   }
   await page.unroute(mediaAvailabilityRoute);
+  await page.unroute(mediaLibraryAddRoute);
+  await page.unroute(mediaLibrarySyncRoute);
+  await page.unroute(mediaLibraryRoute);
   await page.unroute(mediaConnectorsRoute);
   await page.unroute(mediaConnectorSettingsRoute);
   await page.unroute(mediaSourcesRoute);

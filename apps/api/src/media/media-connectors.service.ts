@@ -13,6 +13,7 @@ import {
   MediaAutomationRequest,
   MediaAutomationProvider,
   MediaExternalReference,
+  MediaLibraryCatalogItem,
   MediaLibraryMatch,
   MediaLibraryProvider,
   MediaMetadataSnapshot,
@@ -48,6 +49,14 @@ export interface PublicLibraryMatch {
 interface LibraryConnector {
   config: MediaConnectorConfig;
   provider: MediaLibraryProvider;
+}
+
+export interface MediaLibraryScan {
+  connectorKey: string;
+  provider: 'plex' | 'emby';
+  name: string;
+  primary: boolean;
+  items: MediaLibraryCatalogItem[];
 }
 
 interface ConnectorContext {
@@ -192,6 +201,30 @@ export class MediaConnectorsService {
     return (
       await this.automation(householdId, connectorKey)
     ).requestMedia(media, idempotencyKey, options);
+  }
+
+  async scanLibraries(
+    householdId: string,
+    connectorKey?: string,
+  ): Promise<MediaLibraryScan[]> {
+    const context = await this.context(householdId);
+    const targets = connectorKey
+      ? context.libraries.filter((library) => library.config.key === connectorKey)
+      : context.libraries;
+    if (!targets.length) {
+      throw new MediaConnectorError(
+        connectorKey ? '指定的媒体库尚未配置或未启用' : '尚未配置可用的媒体库',
+      );
+    }
+    return Promise.all(
+      targets.map(async ({ config, provider }) => ({
+        connectorKey: config.key,
+        provider: config.kind as 'plex' | 'emby',
+        name: config.name,
+        primary: config.primary,
+        items: await provider.listItems(),
+      })),
+    );
   }
 
   async getRequest(

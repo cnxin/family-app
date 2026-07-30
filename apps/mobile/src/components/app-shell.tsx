@@ -107,6 +107,11 @@ const NAV_ITEMS: NavItem[] = [
         href: '/media/watchlist',
         matches: (pathname) => pathname === '/media/watchlist',
       },
+      {
+        label: '我的媒体库',
+        href: '/media/library',
+        matches: (pathname) => pathname === '/media/library',
+      },
     ],
   },
   { label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },

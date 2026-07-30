@@ -25,6 +25,8 @@ import type {
   MediaConnectorSummary,
   MediaConnectorSettings,
   MediaLibraryAvailability,
+  MediaLibraryResponse,
+  MediaLibrarySyncResponse,
   MediaRequest,
   MediaSearchResponse,
   MediaSourceConfig,
@@ -350,6 +352,56 @@ export function useMediaLibraryAvailability(mediaIds: string[]) {
       }),
     enabled: normalizedIds.length > 0,
     staleTime: 60_000,
+  });
+}
+
+export function useMediaLibrary(
+  type: MediaType | 'all' = 'all',
+  search = '',
+  page = 1,
+) {
+  return useQuery({
+    queryKey: ['media-library', type, search, page],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), pageSize: '24' });
+      if (type !== 'all') params.set('type', type);
+      if (search.trim()) params.set('search', search.trim());
+      return api<MediaLibraryResponse>(`/media/library?${params.toString()}`);
+    },
+  });
+}
+
+export function useSyncMediaLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api<MediaLibrarySyncResponse>('/media/library/sync', {
+        method: 'POST',
+        body: {},
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['media-library'] });
+      void qc.invalidateQueries({ queryKey: ['media'] });
+      void qc.invalidateQueries({ queryKey: ['media-connectors'] });
+      void qc.invalidateQueries({ queryKey: ['media-library-availability'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useAddLibraryItemToWatchlist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (libraryItemId: string) =>
+      api<{ householdMediaId: string; added: boolean }>(
+        `/media/library/${libraryItemId}/add`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['media-library'] });
+      void qc.invalidateQueries({ queryKey: ['media'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
   });
 }
 

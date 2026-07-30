@@ -6,6 +6,7 @@ import {
   MediaAutomationProvider,
   MediaAutomationRequest,
   MediaExternalReference,
+  MediaLibraryCatalogItem,
   MediaLibraryMatch,
   MediaLibraryProvider,
   MediaMetadataSnapshot,
@@ -104,6 +105,31 @@ function relevantExternalRefs(references: MediaExternalReference[]) {
   );
 }
 
+function plexExternalRefs(item: JsonRecord, mediaType: MediaType) {
+  return asArray(item.Guid)
+    .map((value) => asString(asRecord(value).id))
+    .filter((value): value is string => Boolean(value))
+    .flatMap<MediaExternalReference>((value) => {
+      const match = /^(tmdb|imdb):\/\/(.+)$/i.exec(value);
+      if (!match) return [];
+      return [
+        {
+          provider: match[1].toLowerCase() as Extract<
+            MediaExternalProvider,
+            'tmdb' | 'imdb'
+          >,
+          mediaType,
+          externalId: match[2],
+        },
+      ];
+    });
+}
+
+function integerOrNull(value: unknown) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 export interface ConfiguredLibraryProvider {
   config: MediaConnectorConfig;
   provider: MediaLibraryProvider;
@@ -168,6 +194,68 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
     }
   }
 
+  async listItems(): Promise<MediaLibraryCatalogItem[]> {
+    const sectionsBody = asRecord(await this.request('/library/sections'));
+    const sections = asArray(asRecord(sectionsBody.MediaContainer).Directory)
+      .map(asRecord)
+      .filter((section) => section.type === 'movie' || section.type === 'show');
+    const result: MediaLibraryCatalogItem[] = [];
+    const pageSize = 200;
+    for (const section of sections) {
+      const sectionKey = asString(section.key);
+      if (!sectionKey) continue;
+      let start = 0;
+      while (start < 20_000) {
+        const params = new URLSearchParams({
+          includeGuids: '1',
+          'X-Plex-Container-Start': String(start),
+          'X-Plex-Container-Size': String(pageSize),
+        });
+        const pageBody = asRecord(
+          await this.request(`/library/sections/${encodeURIComponent(sectionKey)}/all`, params),
+        );
+        const container = asRecord(pageBody.MediaContainer);
+        const items = [
+          ...asArray(container.Metadata),
+          ...asArray(container.Video),
+          ...asArray(container.Directory),
+        ].map(asRecord);
+        for (const item of items) {
+          const libraryItemId = asString(item.ratingKey) ?? asString(item.key);
+          const title = asString(item.title);
+          if (!libraryItemId || !title) continue;
+          const type: MediaType = item.type === 'show' ? 'series' : 'movie';
+          result.push({
+            libraryItemId: libraryItemId.replace(/^\/library\/metadata\//, ''),
+            type,
+            title,
+            originalTitle: asString(item.originalTitle),
+            year: integerOrNull(item.year),
+            overview: asString(item.summary),
+            posterUrl: null,
+            externalRefs: plexExternalRefs(item, type),
+            playbackUrl: await this.getPlaybackTarget(
+              libraryItemId.replace(/^\/library\/metadata\//, ''),
+            ),
+            metadata: {
+              sectionKey,
+              sectionTitle: asString(section.title),
+              thumb: asString(item.thumb),
+              addedAt: integerOrNull(item.addedAt),
+              updatedAt: integerOrNull(item.updatedAt),
+            },
+          });
+        }
+        const total = integerOrNull(container.totalSize) ?? integerOrNull(container.total);
+        start += items.length;
+        if (!items.length || items.length < pageSize || (total != null && start >= total)) {
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
   async findByExternalRefs(
     externalRefs: MediaExternalReference[],
   ): Promise<MediaLibraryMatch[]> {
@@ -195,23 +283,10 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
     const requestedKeys = new Set(references.map(externalRefKey));
     const matches: MediaLibraryMatch[] = [];
     for (const [libraryItemId, item] of items) {
-      const itemRefs = asArray(item.Guid)
-        .map((value) => asString(asRecord(value).id))
-        .filter((value): value is string => Boolean(value))
-        .flatMap<MediaExternalReference>((value) => {
-          const match = /^(tmdb|imdb):\/\/(.+)$/i.exec(value);
-          if (!match) return [];
-          return [
-            {
-              provider: match[1].toLowerCase() as Extract<
-                MediaExternalProvider,
-                'tmdb' | 'imdb'
-              >,
-              mediaType: item.type === 'show' ? 'series' : 'movie',
-              externalId: match[2],
-            },
-          ];
-        });
+      const itemRefs = plexExternalRefs(
+        item,
+        item.type === 'show' ? 'series' : 'movie',
+      );
       if (
         itemRefs.length &&
         !itemRefs.some((reference) =>
@@ -297,6 +372,54 @@ export class EmbyLibraryProvider implements MediaLibraryProvider {
     } catch (error) {
       return healthFailure(error);
     }
+  }
+
+  async listItems(): Promise<MediaLibraryCatalogItem[]> {
+    const result: MediaLibraryCatalogItem[] = [];
+    const pageSize = 200;
+    let start = 0;
+    while (start < 20_000) {
+      const params = new URLSearchParams({
+        Recursive: 'true',
+        IncludeItemTypes: 'Movie,Series',
+        Fields: 'ProviderIds,Overview,OriginalTitle,DateCreated,ImageTags',
+        StartIndex: String(start),
+        Limit: String(pageSize),
+      });
+      const body = asRecord(await this.request('/Items', params));
+      const items = asArray(body.Items).map(asRecord);
+      for (const item of items) {
+        const libraryItemId = asString(item.Id);
+        const title = asString(item.Name);
+        if (!libraryItemId || !title) continue;
+        const type: MediaType = item.Type === 'Series' ? 'series' : 'movie';
+        const providerIds = asRecord(item.ProviderIds);
+        const externalRefs: MediaExternalReference[] = [];
+        const tmdbId = asString(providerIds.Tmdb);
+        const imdbId = asString(providerIds.Imdb);
+        if (tmdbId) externalRefs.push({ provider: 'tmdb', mediaType: type, externalId: tmdbId });
+        if (imdbId) externalRefs.push({ provider: 'imdb', mediaType: type, externalId: imdbId });
+        result.push({
+          libraryItemId,
+          type,
+          title,
+          originalTitle: asString(item.OriginalTitle),
+          year: integerOrNull(item.ProductionYear),
+          overview: asString(item.Overview),
+          posterUrl: null,
+          externalRefs,
+          playbackUrl: await this.getPlaybackTarget(libraryItemId),
+          metadata: {
+            dateCreated: asString(item.DateCreated),
+            imageTags: asRecord(item.ImageTags),
+          },
+        });
+      }
+      const total = integerOrNull(body.TotalRecordCount);
+      start += items.length;
+      if (!items.length || items.length < pageSize || (total != null && start >= total)) break;
+    }
+    return result;
   }
 
   async findByExternalRefs(
