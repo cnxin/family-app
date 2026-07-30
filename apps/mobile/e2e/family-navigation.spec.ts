@@ -941,6 +941,34 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(
     page.getByRole('link', { name: '用Plex播放家庭电影回归样例' }),
   ).toBeVisible();
+  await page
+    .getByRole('button', { name: '查看家庭电影回归样例详情', exact: true })
+    .click();
+  const mediaDetailDialog = page.getByTestId('media-detail-dialog');
+  await expect(
+    mediaDetailDialog.getByRole('heading', { name: '片单详情', exact: true }),
+  ).toBeVisible();
+  await expect(
+    mediaDetailDialog.getByText('Family Movie Fixture', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    mediaDetailDialog.getByText(
+      '用于验证移动端和桌面端片单卡片、状态与排期的稳定布局。',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    mediaDetailDialog.getByText('周末家庭观影', { exact: true }),
+  ).toBeVisible();
+  await expect(mediaDetailDialog.getByText('Plex', { exact: true })).toBeVisible();
+  await expect(
+    mediaDetailDialog.getByRole('link', {
+      name: '在详情中用Plex播放家庭电影回归样例',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(page.getByRole('button', { name: '加入片单', exact: true }).first()).toBeVisible();
   await expect(page.getByLabel('搜索家庭片单')).toBeVisible();
   await page.getByRole('button', { name: '加入片单', exact: true }).first().click();

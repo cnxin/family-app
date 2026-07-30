@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Check,
   Download,
+  Eye,
   Film,
   Pencil,
   Play,
@@ -36,6 +37,10 @@ import {
   CalendarMonth,
   startOfMonth,
 } from '../../../components/calendar-month';
+import {
+  MediaDetailDialog,
+  type MediaDetailAction,
+} from '../../../components/media-detail-dialog';
 import {
   ConfirmDialog,
   EmptyState,
@@ -114,6 +119,16 @@ function formatSchedule(value: string) {
     day: 'numeric',
     weekday: 'short',
   }).format(parseDate(value));
+}
+
+function formatMediaDateTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
 function statusColors(
@@ -229,6 +244,7 @@ function MediaCard({
   requestBusy,
   onCancelRequest,
   onDelete,
+  onDetails,
   onEdit,
   onPlay,
   onPoll,
@@ -247,6 +263,7 @@ function MediaCard({
   requestBusy: boolean;
   onCancelRequest: () => void;
   onDelete: () => void;
+  onDetails: () => void;
   onEdit: () => void;
   onPlay: (match: MediaLibraryMatch) => void;
   onPoll: () => void;
@@ -275,24 +292,38 @@ function MediaCard({
 
   return (
     <View style={[styles.mediaCard, { backgroundColor: c.card, borderColor: c.separator }]}> 
-      <Poster entry={entry} />
+      <Pressable
+        accessibilityLabel={`通过海报查看${entry.mediaTitle.title}详情`}
+        accessibilityRole="button"
+        onPress={onDetails}
+        style={({ pressed }) => [styles.posterTrigger, pressed && styles.detailPressed]}
+      >
+        <Poster entry={entry} />
+      </Pressable>
       <View style={styles.mediaBody}>
-        <View style={styles.mediaTitleRow}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={2} style={[t.headline, { color: c.label }]}> 
-              {entry.mediaTitle.title}
-            </Text>
-            <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}> 
-              {entry.mediaTitle.type === 'movie' ? '电影' : '剧集'}
-              {entry.mediaTitle.year ? ` · ${entry.mediaTitle.year}` : ''}
-            </Text>
+        <Pressable
+          accessibilityLabel={`通过片名查看${entry.mediaTitle.title}详情`}
+          accessibilityRole="button"
+          onPress={onDetails}
+          style={({ pressed }) => pressed && styles.detailPressed}
+        >
+          <View style={styles.mediaTitleRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={2} style={[t.headline, { color: c.label }]}>
+                {entry.mediaTitle.title}
+              </Text>
+              <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}>
+                {entry.mediaTitle.type === 'movie' ? '电影' : '剧集'}
+                {entry.mediaTitle.year ? ` · ${entry.mediaTitle.year}` : ''}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: colors.background }]}>
+              <Text style={[t.caption, { color: colors.color, fontWeight: '700' }]}>
+                {statusLabel(entry.status)}
+              </Text>
+            </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: colors.background }]}> 
-            <Text style={[t.caption, { color: colors.color, fontWeight: '700' }]}> 
-              {statusLabel(entry.status)}
-            </Text>
-          </View>
-        </View>
+        </Pressable>
 
         {entry.mediaTitle.overview ? (
           <Text
@@ -510,6 +541,19 @@ function MediaCard({
             ))}
           </View>
           <View style={styles.cardActions}>
+            {!pollSelectionActive ? (
+              <Pressable
+                accessibilityLabel={`查看${entry.mediaTitle.title}详情`}
+                accessibilityRole="button"
+                onPress={onDetails}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  { backgroundColor: pressed ? c.blueSoft : c.fill },
+                ]}
+              >
+                <Eye color={c.blue} size={17} />
+              </Pressable>
+            ) : null}
             {pollSelectionActive ? (
               <Pressable
                 accessibilityLabel={`${pollSelected ? '移除' : '选择'}候选影视${entry.mediaTitle.title}`}
@@ -1481,9 +1525,14 @@ export default function MediaScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
-  const params = useLocalSearchParams<{ mediaId?: string; filter?: string }>();
+  const params = useLocalSearchParams<{
+    mediaId?: string;
+    filter?: string;
+    view?: string;
+  }>();
   const parameterMediaId = firstParam(params.mediaId);
   const parameterFilter = firstParam(params.filter);
+  const parameterView = firstParam(params.view);
   const initialFilter = FILTER_OPTIONS.some(
     (option) => option.value === parameterFilter,
   )
@@ -1494,6 +1543,7 @@ export default function MediaScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<HouseholdMedia | null>(null);
+  const [detailEntry, setDetailEntry] = useState<HouseholdMedia | null>(null);
   const [subscriptionEntry, setSubscriptionEntry] =
     useState<HouseholdMedia | null>(null);
   const [pendingCancel, setPendingCancel] = useState<{
@@ -1558,16 +1608,22 @@ export default function MediaScreen() {
   }, [parameterFilter]);
 
   useEffect(() => {
-    if (!parameterMediaId || openedParameter.current === parameterMediaId) return;
+    if (!parameterMediaId) return;
+    const parameterKey = `${parameterMediaId}:${parameterView ?? 'edit'}`;
+    if (openedParameter.current === parameterKey) return;
     const target = entries?.find((entry) => entry.id === parameterMediaId);
     if (!target) {
       if (!isLoading && filter !== 'all') setFilter('all');
       return;
     }
-    openedParameter.current = parameterMediaId;
+    openedParameter.current = parameterKey;
+    if (parameterView === 'detail') {
+      setDetailEntry(target);
+      return;
+    }
     setEditingEntry(target);
     setFormOpen(true);
-  }, [entries, filter, isLoading, parameterMediaId]);
+  }, [entries, filter, isLoading, parameterMediaId, parameterView]);
 
   const counts = useMemo(() => {
     const result = new Map<HouseholdMediaStatus, number>();
@@ -1576,6 +1632,69 @@ export default function MediaScreen() {
     }
     return result;
   }, [entries]);
+
+  const detailLibraries = detailEntry ? availability?.[detailEntry.id] ?? [] : [];
+  const detailRequest = detailEntry ? requestByMediaId.get(detailEntry.id) ?? null : null;
+  const detailPoll = detailEntry ? pollByMediaId.get(detailEntry.id) ?? null : null;
+  const detailActions: MediaDetailAction[] = detailEntry
+    ? [
+        ...detailLibraries
+          .filter((match) => Boolean(match.playbackUrl))
+          .map((match) => ({
+            label: `${match.name} 播放`,
+            accessibilityLabel: `在详情中用${match.name}播放${detailEntry.mediaTitle.title}`,
+            icon: Play,
+            onPress: () => {
+              if (!match.playbackUrl) return;
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              void Linking.openURL(match.playbackUrl);
+            },
+            role: 'link' as const,
+            tone: 'primary' as const,
+          })),
+        {
+          label: '编辑片单',
+          accessibilityLabel: `从详情编辑${detailEntry.mediaTitle.title}`,
+          icon: Pencil,
+          onPress: () => {
+            setDetailEntry(null);
+            setEditingEntry(detailEntry);
+            setFormOpen(true);
+          },
+          tone: 'neutral',
+        },
+        ...(
+          detailPoll ||
+          detailEntry.status === 'watchlist' ||
+          detailEntry.status === 'voting'
+            ? [
+                {
+                  label: detailPoll ? '查看投票' : '发起投票',
+                  accessibilityLabel: `从详情${detailPoll ? '查看' : '发起'}${detailEntry.mediaTitle.title}的家庭投票`,
+                  icon: Vote,
+                  onPress: () => {
+                    setDetailEntry(null);
+                    router.push(
+                      detailPoll
+                        ? { pathname: '/polls', params: { pollId: detailPoll.id } }
+                        : {
+                            pathname: '/polls',
+                            params: {
+                              sourceModule: 'media',
+                              sourceId: detailEntry.id,
+                              sourceTitle: detailEntry.mediaTitle.title,
+                              returnTo: 'watchlist',
+                            },
+                          },
+                    );
+                  },
+                  tone: 'accent' as const,
+                },
+              ]
+            : []
+        ),
+      ]
+    : [];
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -1795,6 +1914,7 @@ export default function MediaScreen() {
                       setDeleteError(null);
                       setPendingDelete(entry);
                     }}
+                    onDetails={() => setDetailEntry(entry)}
                     onEdit={() => {
                       setEditingEntry(entry);
                       setFormOpen(true);
@@ -1894,6 +2014,63 @@ export default function MediaScreen() {
           ) : null}
         </ScrollView>
       </PageContainer>
+
+      <MediaDetailDialog
+        actions={detailActions}
+        badge={
+          detailEntry
+            ? {
+                label: statusLabel(detailEntry.status),
+                color: statusColors(detailEntry.status, c).color,
+                backgroundColor: statusColors(detailEntry.status, c).background,
+              }
+            : undefined
+        }
+        dialogTitle="片单详情"
+        facts={
+          detailEntry
+            ? [
+                {
+                  label: '加入片单',
+                  value: `${detailEntry.createdBy.avatarEmoji} ${detailEntry.createdBy.name}`,
+                },
+                { label: '加入时间', value: formatMediaDateTime(detailEntry.createdAt) },
+                ...(detailEntry.scheduledFor
+                  ? [{ label: '观影安排', value: formatSchedule(detailEntry.scheduledFor) }]
+                  : []),
+                ...(detailLibraries.length
+                  ? [
+                      {
+                        label: '可播放位置',
+                        value: detailLibraries.map((library) => library.name).join('、'),
+                      },
+                    ]
+                  : []),
+                ...(detailRequest
+                  ? [
+                      {
+                        label: 'MoviePilot',
+                        value: `${REQUEST_STATUS_LABELS[detailRequest.status]}${detailRequest.season ? ` · 第 ${detailRequest.season} 季` : ''}`,
+                      },
+                    ]
+                  : []),
+              ]
+            : []
+        }
+        mediaType={detailEntry?.mediaTitle.type ?? 'movie'}
+        note={detailEntry?.note}
+        onClose={() => setDetailEntry(null)}
+        originalTitle={detailEntry?.mediaTitle.originalTitle}
+        overview={detailEntry?.mediaTitle.overview}
+        posterUrl={detailEntry?.mediaTitle.posterUrl}
+        references={(detailEntry?.mediaTitle.externalRefs ?? []).map((reference) => ({
+          label: reference.provider.toUpperCase(),
+          value: reference.externalId,
+        }))}
+        title={detailEntry?.mediaTitle.title ?? ''}
+        visible={Boolean(detailEntry)}
+        year={detailEntry?.mediaTitle.year}
+      />
 
       <MediaForm
         entry={editingEntry}
@@ -2106,7 +2283,9 @@ const styles = StyleSheet.create({
     gap: 13,
   },
   poster: { width: 100, height: 150, borderRadius: radius.sm },
+  posterTrigger: { width: 100, height: 150, borderRadius: radius.sm },
   posterFallback: { alignItems: 'center', justifyContent: 'center' },
+  detailPressed: { opacity: 0.72 },
   mediaBody: { flex: 1, minWidth: 0 },
   mediaTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   statusBadge: {

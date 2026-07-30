@@ -5,6 +5,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Film,
   ListPlus,
   Play,
@@ -29,6 +30,10 @@ import {
   PageContainer,
   useDesktopLayout,
 } from '../../../components/app-shell';
+import {
+  MediaDetailDialog,
+  type MediaDetailAction,
+} from '../../../components/media-detail-dialog';
 import { Card, EmptyState, Segmented } from '../../../components/ui';
 import {
   useAddLibraryItemToWatchlist,
@@ -77,19 +82,29 @@ function LibraryCard({
   item,
   busy,
   onAdd,
+  onDetails,
   onOpenWatchlist,
   onPlay,
 }: {
   item: MediaLibraryItem;
   busy: boolean;
   onAdd: () => void;
+  onDetails: () => void;
   onOpenWatchlist: () => void;
   onPlay: () => void;
 }) {
   const c = useTheme();
   return (
     <Card style={styles.itemCard}>
-      <View style={styles.itemTop}>
+      <Pressable
+        accessibilityLabel={`打开${item.title}详情`}
+        accessibilityRole="button"
+        onPress={onDetails}
+        style={({ pressed }) => [
+          styles.itemTop,
+          pressed && { backgroundColor: c.fill },
+        ]}
+      >
         <Poster item={item} />
         <View style={styles.itemContent}>
           <View style={styles.titleRow}>
@@ -125,8 +140,20 @@ function LibraryCard({
             ))}
           </View>
         </View>
-      </View>
+      </Pressable>
       <View style={[styles.actions, { borderTopColor: c.separator }]}>
+        <Pressable
+          accessibilityLabel={`查看${item.title}详情`}
+          accessibilityRole="button"
+          onPress={onDetails}
+          style={({ pressed }) => [
+            styles.actionButton,
+            { backgroundColor: pressed ? c.blueSoft : c.fill },
+          ]}
+        >
+          <Eye color={c.blue} size={16} />
+          <Text style={[t.footnote, { color: c.blue, fontWeight: '700' }]}>详情</Text>
+        </Pressable>
         <Pressable
           accessibilityLabel={`用${item.connectorName}播放${item.title}`}
           accessibilityRole="link"
@@ -195,6 +222,7 @@ export default function MediaLibraryScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<MediaLibraryItem | null>(null);
   const library = useMediaLibrary(filter, debouncedSearch, page);
   const sync = useSyncMediaLibrary();
   const add = useAddLibraryItemToWatchlist();
@@ -225,7 +253,12 @@ export default function MediaLibraryScreen() {
   const addToWatchlist = async (item: MediaLibraryItem) => {
     setMessage(null);
     try {
-      await add.mutateAsync(item.id);
+      const response = await add.mutateAsync(item.id);
+      setDetailItem((current) =>
+        current?.id === item.id
+          ? { ...current, householdMediaId: response.householdMediaId }
+          : current,
+      );
       setMessage(`「${item.title}」已加入家庭片单`);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
@@ -243,6 +276,43 @@ export default function MediaLibraryScreen() {
   };
 
   const data = library.data;
+  const detailActions: MediaDetailAction[] = detailItem
+    ? [
+        ...(detailItem.playbackUrl
+          ? [
+              {
+                label: `${detailItem.connectorName} 播放`,
+                accessibilityLabel: `在详情中用${detailItem.connectorName}播放${detailItem.title}`,
+                icon: Play,
+                onPress: () => void play(detailItem),
+                role: 'link' as const,
+                tone: 'primary' as const,
+              },
+            ]
+          : []),
+        {
+          label: detailItem.householdMediaId ? '查看家庭片单' : '加入家庭片单',
+          accessibilityLabel: detailItem.householdMediaId
+            ? `从详情打开${detailItem.title}的家庭片单条目`
+            : `从详情将${detailItem.title}加入家庭片单`,
+          icon: detailItem.householdMediaId ? Check : ListPlus,
+          disabled: add.isPending,
+          onPress: () => {
+            if (detailItem.householdMediaId) {
+              setDetailItem(null);
+              router.push({
+                pathname: '/media/watchlist',
+                params: { mediaId: detailItem.householdMediaId, view: 'detail' },
+              });
+              return;
+            }
+            void addToWatchlist(detailItem);
+          },
+          tone: 'success',
+        },
+      ]
+    : [];
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -344,10 +414,11 @@ export default function MediaLibraryScreen() {
                       busy={add.isPending && add.variables === item.id}
                       item={item}
                       onAdd={() => void addToWatchlist(item)}
+                      onDetails={() => setDetailItem(item)}
                       onOpenWatchlist={() =>
                         router.push({
                           pathname: '/media/watchlist',
-                          params: { mediaId: item.householdMediaId! },
+                          params: { mediaId: item.householdMediaId!, view: 'detail' },
                         })
                       }
                       onPlay={() => void play(item)}
@@ -402,6 +473,43 @@ export default function MediaLibraryScreen() {
           )}
         </PageContainer>
       </ScrollView>
+      <MediaDetailDialog
+        actions={detailActions}
+        badge={
+          detailItem
+            ? {
+                label: detailItem.connectorName,
+                color: c.blue,
+                backgroundColor: c.blueSoft,
+              }
+            : undefined
+        }
+        dialogTitle="媒体库详情"
+        facts={
+          detailItem
+            ? [
+                { label: '媒体来源', value: detailItem.connectorName },
+                { label: '最近同步', value: formatSyncedAt(detailItem.lastSeenAt) },
+                {
+                  label: '家庭片单',
+                  value: detailItem.householdMediaId ? '已加入' : '尚未加入',
+                },
+              ]
+            : []
+        }
+        mediaType={detailItem?.type ?? 'movie'}
+        onClose={() => setDetailItem(null)}
+        originalTitle={detailItem?.originalTitle}
+        overview={detailItem?.overview}
+        posterUrl={detailItem?.posterUrl}
+        references={(detailItem?.externalRefs ?? []).map((reference) => ({
+          label: reference.provider.toUpperCase(),
+          value: reference.externalId,
+        }))}
+        title={detailItem?.title ?? ''}
+        visible={Boolean(detailItem)}
+        year={detailItem?.year}
+      />
     </SafeAreaView>
   );
 }
