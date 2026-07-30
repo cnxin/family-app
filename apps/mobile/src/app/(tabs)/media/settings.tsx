@@ -1,8 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { Redirect } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  Cable,
   CheckCircle2,
   KeyRound,
+  RefreshCw,
   RotateCcw,
   Save,
   ServerCog,
@@ -27,12 +29,25 @@ import {
 import { Card, EmptyState, PrimaryButton, Segmented } from '../../../components/ui';
 import {
   useMediaSourceConfigs,
+  useMediaConnectorSettings,
+  useResetMediaConnectorSettings,
   useResetMediaSourceConfig,
+  useTestMediaConnectorSettings,
+  useUpdateMediaConnectorSettings,
   useUpdateMediaSourceConfig,
 } from '../../../lib/queries';
 import { useSession } from '../../../lib/session';
 import { radius, type as t, useTheme } from '../../../lib/theme';
-import type { MediaSourceConfig } from '../../../lib/types';
+import type {
+  MediaConnectorSettings,
+  MediaSourceConfig,
+} from '../../../lib/types';
+
+type SettingsSection = 'services' | 'sources';
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function SourceEditor({ config }: { config: MediaSourceConfig }) {
   const c = useTheme();
@@ -298,12 +313,289 @@ function SourceEditor({ config }: { config: MediaSourceConfig }) {
   );
 }
 
+function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
+  const c = useTheme();
+  const update = useUpdateMediaConnectorSettings();
+  const reset = useResetMediaConnectorSettings();
+  const test = useTestMediaConnectorSettings();
+  const [name, setName] = useState(config.name);
+  const [isEnabled, setIsEnabled] = useState(config.isEnabled);
+  const [baseUrl, setBaseUrl] = useState(config.baseUrl ?? '');
+  const [credential, setCredential] = useState('');
+  const [clearCredential, setClearCredential] = useState(false);
+  const [isPrimary, setIsPrimary] = useState(config.isPrimary);
+  const [message, setMessage] = useState<string | null>(null);
+  const busy =
+    (update.isPending && update.variables?.kind === config.kind) ||
+    (reset.isPending && reset.variables === config.kind) ||
+    (test.isPending && test.variables === config.kind);
+
+  useEffect(() => {
+    setName(config.name);
+    setIsEnabled(config.isEnabled);
+    setBaseUrl(config.baseUrl ?? '');
+    setCredential('');
+    setClearCredential(false);
+    setIsPrimary(config.isPrimary);
+  }, [config]);
+
+  const save = async (testAfterSave = false) => {
+    setMessage(null);
+    try {
+      await update.mutateAsync({
+        kind: config.kind,
+        name: name.trim(),
+        isEnabled,
+        baseUrl: baseUrl.trim() || null,
+        ...(credential.trim() ? { credential: credential.trim() } : {}),
+        ...(clearCredential ? { clearCredential: true } : {}),
+        ...(config.role === 'library' ? { isPrimary } : {}),
+      });
+      setCredential('');
+      setClearCredential(false);
+      if (testAfterSave) {
+        const status = await test.mutateAsync(config.kind);
+        setMessage(
+          status.available
+            ? `连接成功 · ${status.message}`
+            : `连接失败 · ${status.message}`,
+        );
+        if (!status.available) return;
+      } else {
+        setMessage('已保存');
+      }
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '保存失败');
+    }
+  };
+
+  const restore = async () => {
+    setMessage(null);
+    try {
+      await reset.mutateAsync(config.kind);
+      setMessage('已恢复服务器默认设置');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '恢复失败');
+    }
+  };
+
+  const status = !isEnabled
+    ? { label: '已停用', color: c.secondaryLabel, background: c.fill }
+    : config.configured
+      ? { label: '已配置', color: c.green, background: c.greenSoft }
+      : { label: '待配置', color: c.orange, background: c.orangeSoft };
+  const credentialLabel = config.kind === 'plex' ? 'Token' : 'API Key';
+  const messageSucceeded =
+    message?.startsWith('已') || message?.startsWith('连接成功');
+
+  return (
+    <Card style={styles.sourceCard}>
+      <View style={styles.sourceHeader}>
+        <View style={[styles.sourceIcon, { backgroundColor: c.fill }]}>
+          <Cable color={c.tint} size={20} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[t.headline, { color: c.label }]}>{config.name}</Text>
+          <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+            {config.mode === 'household' ? '家庭设置' : '服务器默认'}
+          </Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: status.background }]}>
+          <Text style={[t.caption, { color: status.color, fontWeight: '700' }]}>
+            {status.label}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.toggleRow, { borderColor: c.separator }]}>
+        <Text style={[t.subhead, { color: c.label, fontWeight: '600' }]}>启用服务</Text>
+        <Switch
+          accessibilityLabel={`启用${config.name}`}
+          disabled={busy}
+          onValueChange={setIsEnabled}
+          trackColor={{ false: c.fillStrong, true: c.tintSoft }}
+          thumbColor={isEnabled ? c.tint : c.tertiaryLabel}
+          value={isEnabled}
+        />
+      </View>
+
+      <View style={styles.field}>
+        <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>服务名称</Text>
+        <TextInput
+          accessibilityLabel={`${config.name} 服务名称`}
+          editable={!busy}
+          onChangeText={setName}
+          placeholder={config.name}
+          placeholderTextColor={c.tertiaryLabel}
+          style={[t.subhead, styles.input, { backgroundColor: c.fill, color: c.label }]}
+          value={name}
+        />
+      </View>
+
+      <View style={styles.field}>
+        <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>服务地址</Text>
+        <TextInput
+          accessibilityLabel={`${config.name} 服务地址`}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!busy}
+          onChangeText={setBaseUrl}
+          placeholder="http://192.168.1.10:端口"
+          placeholderTextColor={c.tertiaryLabel}
+          style={[t.subhead, styles.input, { backgroundColor: c.fill, color: c.label }]}
+          value={baseUrl}
+        />
+      </View>
+
+      <View style={styles.field}>
+        <View style={styles.credentialLabelRow}>
+          <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>{credentialLabel}</Text>
+          {config.credentialConfigured ? (
+            <View style={styles.credentialState}>
+              <KeyRound color={c.green} size={13} />
+              <Text style={[t.caption, { color: c.green, fontWeight: '700' }]}>
+                {config.credentialHint ?? '已配置'}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <TextInput
+          accessibilityLabel={`${config.name} ${credentialLabel}`}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!busy && !clearCredential}
+          onChangeText={setCredential}
+          placeholder={config.credentialConfigured ? '已配置' : credentialLabel}
+          placeholderTextColor={c.tertiaryLabel}
+          secureTextEntry
+          style={[
+            t.subhead,
+            styles.input,
+            { backgroundColor: c.fill, color: c.label },
+            clearCredential && { opacity: 0.45 },
+          ]}
+          value={credential}
+        />
+      </View>
+
+      {config.credentialConfigured ? (
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: clearCredential }}
+          disabled={busy}
+          onPress={() => {
+            setClearCredential((value) => !value);
+            setCredential('');
+          }}
+          style={styles.clearRow}
+        >
+          <View
+            style={[
+              styles.checkbox,
+              {
+                backgroundColor: clearCredential ? c.red : c.card,
+                borderColor: clearCredential ? c.red : c.fillStrong,
+              },
+            ]}
+          >
+            {clearCredential ? <CheckCircle2 color="#FFFFFF" size={14} /> : null}
+          </View>
+          <Text style={[t.footnote, { color: clearCredential ? c.red : c.secondaryLabel }]}>清除现有凭据</Text>
+        </Pressable>
+      ) : null}
+
+      {config.role === 'library' ? (
+        <View style={[styles.toggleRow, { borderColor: c.separator }]}>
+          <Text style={[t.subhead, { color: c.label, fontWeight: '600' }]}>主媒体库</Text>
+          <Switch
+            accessibilityLabel={`将${config.name}设为主媒体库`}
+            disabled={busy || !isEnabled}
+            onValueChange={setIsPrimary}
+            trackColor={{ false: c.fillStrong, true: c.greenSoft }}
+            thumbColor={isPrimary ? c.green : c.tertiaryLabel}
+            value={isPrimary}
+          />
+        </View>
+      ) : null}
+
+      {message ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[
+            t.footnote,
+            styles.message,
+            { color: messageSucceeded ? c.green : c.red },
+          ]}
+        >
+          {message}
+        </Text>
+      ) : null}
+
+      <View style={styles.actions}>
+        <PrimaryButton
+          disabled={busy}
+          icon={<Save color="#FFFFFF" size={17} />}
+          loading={update.isPending && update.variables?.kind === config.kind}
+          onPress={() => save(false)}
+          style={styles.saveButton}
+          title={`保存 ${config.name}`}
+        />
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => save(true)}
+          style={({ pressed }) => [
+            styles.testButton,
+            { backgroundColor: pressed ? c.fill : c.card, borderColor: c.tint },
+            busy && { opacity: 0.45 },
+          ]}
+        >
+          <RefreshCw color={c.tint} size={16} />
+          <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>保存并测试</Text>
+        </Pressable>
+        {config.mode === 'household' ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={restore}
+            style={({ pressed }) => [
+              styles.resetButton,
+              { backgroundColor: pressed ? c.fill : c.card, borderColor: c.separator },
+              busy && { opacity: 0.45 },
+            ]}
+          >
+            <RotateCcw color={c.secondaryLabel} size={16} />
+            <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>恢复默认</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
 export default function MediaSettingsScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ section?: string }>();
+  const parameterSection = firstParam(params.section);
+  const [section, setSection] = useState<SettingsSection>(
+    parameterSection === 'sources' ? 'sources' : 'services',
+  );
   const { member } = useSession();
   const canManage = member?.role === 'owner' || member?.role === 'admin';
-  const { data: configs, error, isLoading } = useMediaSourceConfigs(canManage);
+  const sourceQuery = useMediaSourceConfigs(canManage && section === 'sources');
+  const connectorQuery = useMediaConnectorSettings(
+    canManage && section === 'services',
+  );
+
+  useEffect(() => {
+    if (parameterSection === 'sources' || parameterSection === 'services') {
+      setSection(parameterSection);
+    }
+  }, [parameterSection]);
 
   if (member && !canManage) return <Redirect href="/media" />;
 
@@ -325,21 +617,50 @@ export default function MediaSettingsScreen() {
                 accessibilityRole="header"
                 style={[desktop ? t.largeTitle : t.title1, { color: c.label }]}
               >
-                数据源设置
+                观影设置
               </Text>
-              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>豆瓣 · TMDB · Bangumi</Text>
+              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>媒体服务 · 搜索数据源</Text>
             </View>
           </View>
 
-          {isLoading ? <ActivityIndicator color={c.tint} style={styles.loader} /> : null}
-          {error ? (
+          <View style={styles.sectionSwitcher}>
+            <Segmented<SettingsSection>
+              onChange={(value) => {
+                setSection(value);
+                router.setParams({ section: value });
+              }}
+              options={[
+                { label: '媒体服务', value: 'services' },
+                { label: '搜索数据源', value: 'sources' },
+              ]}
+              value={section}
+            />
+          </View>
+
+          {(section === 'services' ? connectorQuery.isLoading : sourceQuery.isLoading) ? (
+            <ActivityIndicator color={c.tint} style={styles.loader} />
+          ) : null}
+          {(section === 'services' ? connectorQuery.error : sourceQuery.error) ? (
             <Card>
-              <EmptyState emoji="!" hint={error.message} title="数据源加载失败" />
+              <EmptyState
+                emoji="!"
+                hint={(section === 'services' ? connectorQuery.error : sourceQuery.error)?.message}
+                title="设置加载失败"
+              />
             </Card>
           ) : null}
-          {configs?.length ? (
+          {section === 'services' && connectorQuery.data?.length ? (
             <View style={[styles.grid, desktop && styles.gridDesktop]}>
-              {configs.map((config) => (
+              {connectorQuery.data.map((config) => (
+                <View key={config.kind} style={desktop ? styles.gridCellDesktop : undefined}>
+                  <ConnectorEditor config={config} />
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {section === 'sources' && sourceQuery.data?.length ? (
+            <View style={[styles.grid, desktop && styles.gridDesktop]}>
+              {sourceQuery.data.map((config) => (
                 <View key={config.provider} style={desktop ? styles.gridCellDesktop : undefined}>
                   <SourceEditor config={config} />
                 </View>
@@ -371,6 +692,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loader: { marginTop: 48 },
+  sectionSwitcher: { marginTop: 22, maxWidth: 480 },
   grid: { gap: 14, marginTop: 24 },
   gridDesktop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' },
   gridCellDesktop: { width: '48%', flexGrow: 1, minWidth: 360 },
@@ -415,6 +737,16 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
   saveButton: { minWidth: 126, flexGrow: 1 },
   resetButton: {
+    minHeight: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  testButton: {
     minHeight: 44,
     borderRadius: radius.md,
     borderWidth: 1,

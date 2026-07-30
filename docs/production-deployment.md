@@ -36,6 +36,7 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - `PLEX_BASE_URL`、`EMBY_BASE_URL`、`MOVIEPILOT_BASE_URL` 填 API 容器可访问的 NAS 地址，不要填写带 `/web/index.html` 或 Token 的浏览器详情页链接。
 - Plex 使用 `PLEX_TOKEN_FILE`，Emby 使用 `EMBY_API_KEY_FILE`，MoviePilot v2 使用 `MOVIEPILOT_API_KEY_FILE`。建议统一放在 `/run/integration-secrets/`，该目录由编排只读挂载。
 - `MEDIA_PRIMARY_LIBRARY=plex` 或 `emby` 只设置默认播放入口；Plex 与 Emby 可以同时启用。
+- 上述变量是所有家庭的服务器默认值。家庭管理员可在“家庭观影 -> 观影设置 -> 媒体服务”建立家庭覆盖、切换主媒体库并测试连接；家庭凭据使用 `integration_secret.txt` 加密，界面与 API 不回显明文。
 - 例如先创建 `deploy/secrets/plex_token.txt`，再设置 `PLEX_TOKEN_FILE=/run/integration-secrets/plex_token.txt`。密钥文件权限保持 `600`。
 - API 镜像以内置 `node` 用户（UID 1000）运行。在 Linux/NAS 上应将连接器密钥文件属主设为 UID 1000，或使用只授予该 UID 读取权限的 ACL；不要通过放宽为全员可读来绕过权限问题。启动后用连接器状态接口确认文件可读。
 
@@ -45,7 +46,7 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 豆瓣没有稳定的官方公共影视搜索 API。`DOUBAN_API_BASE_URL` 只能指向自行审核、限权的兼容桥接服务，不应复用 MoviePilot 管理端账号或 API Key。
 - 三个来源会独立超时和降级，任何来源不可用都不会阻断家庭片单与手动录入。完整变量和豆瓣响应契约见 [M4-E 三源影视搜索验收](m4-media-search-acceptance.md)。
 - 元数据凭据同样优先使用 `/run/integration-secrets/` 下的 `*_FILE`，文件权限规则与媒体连接器一致。
-- 服务器变量是所有家庭的默认值。家庭管理员也可在“家庭观影 -> 数据源设置”建立家庭覆盖；其 Token 使用 `integration_secret.txt` 进行 AES-256-GCM 加密，界面和 API 均不回显明文。
+- 服务器变量是所有家庭的默认值。家庭管理员也可在“家庭观影 -> 观影设置 -> 搜索数据源”建立家庭覆盖；其 Token 使用 `integration_secret.txt` 进行 AES-256-GCM 加密，界面和 API 均不回显明文。
 
 环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥、集成加密密钥以及连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效；集成加密密钥不能在未迁移现有密文时直接轮换。
 

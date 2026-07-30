@@ -107,12 +107,16 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   });
   await page.route(staleAccessRoute, async (route) => {
     const request = route.request();
+    if (request.resourceType() === 'document') {
+      await route.continue();
+      return;
+    }
     const authorization = request.headers().authorization;
     if (!rejectedAuthorization) rejectedAuthorization = authorization;
     if (
       request.method() === 'GET' &&
       authorization === rejectedAuthorization &&
-      forcedUnauthorized < 2
+      forcedUnauthorized < 1
     ) {
       forcedUnauthorized += 1;
       await route.fulfill({
@@ -126,14 +130,12 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     }
     await route.continue();
   });
-  await page.reload();
+  await page.goto(`/?authRecovery=${Date.now()}`);
   await expect(
     page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
-  expect(forcedUnauthorized).toBeGreaterThanOrEqual(1);
-  expect(forcedUnauthorized).toBeLessThanOrEqual(2);
-  expect(refreshRequests).toBeGreaterThanOrEqual(1);
-  expect(refreshRequests).toBeLessThanOrEqual(2);
+  expect(forcedUnauthorized).toBe(1);
+  expect(refreshRequests).toBe(1);
   expect(new Set(presentedRefreshTokens).size).toBe(
     presentedRefreshTokens.length,
   );
@@ -168,6 +170,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
 
   const mediaRoute = /\/media(\?|$)/;
   const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;
+  const mediaConnectorSettingsRoute =
+    /\/media\/connector-settings(?:\/[^/?]+)?(?:\/test)?(?:\?|$)/;
   const mediaSourcesRoute = /\/media\/metadata-sources(?:\/[^/?]+)?(?:\?|$)/;
   const mediaSearchRoute = /\/media\/search\?/;
   const mediaAvailabilityRoute = /\/media\/library-availability(\?|$)/;
@@ -231,6 +235,63 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       credentialHint: null,
       configured: true,
       settings: { userAgent: 'family-app-browser-test/1.0' },
+      updatedAt: null,
+    },
+  ];
+  let mediaConnectorSettings: {
+    kind: string;
+    name: string;
+    role: string;
+    mode: string;
+    isEnabled: boolean;
+    baseUrl: string | null;
+    credentialConfigured: boolean;
+    credentialHint: string | null;
+    isPrimary: boolean;
+    configured: boolean;
+    capabilities: string[];
+    updatedAt: string | null;
+  }[] = [
+    {
+      kind: 'plex',
+      name: 'Plex',
+      role: 'library',
+      mode: 'server_default',
+      isEnabled: true,
+      baseUrl: 'http://plex.test',
+      credentialConfigured: false,
+      credentialHint: null,
+      isPrimary: true,
+      configured: false,
+      capabilities: ['library', 'playback'],
+      updatedAt: null,
+    },
+    {
+      kind: 'emby',
+      name: 'Emby',
+      role: 'library',
+      mode: 'server_default',
+      isEnabled: true,
+      baseUrl: null,
+      credentialConfigured: false,
+      credentialHint: null,
+      isPrimary: false,
+      configured: false,
+      capabilities: ['library', 'playback'],
+      updatedAt: null,
+    },
+    {
+      kind: 'moviepilot',
+      name: 'MoviePilot',
+      role: 'automation',
+      mode: 'server_default',
+      isEnabled: true,
+      baseUrl: 'http://moviepilot.test',
+      credentialConfigured: true,
+      credentialHint: '服务器默认',
+      isPrimary: false,
+      configured: true,
+      capabilities: ['automation', 'subscription'],
       updatedAt: null,
     },
   ];
@@ -341,6 +402,72 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       contentType: 'application/json',
       body: JSON.stringify({ data: mediaSourceConfigs }),
     });
+  });
+  await page.route(mediaConnectorSettingsRoute, async (route) => {
+    const method = route.request().method();
+    const parts = new URL(route.request().url()).pathname.split('/');
+    const kind = parts.at(-1) === 'test' ? parts.at(-2) : parts.at(-1);
+    if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: mediaConnectorSettings }),
+      });
+      return;
+    }
+    if (method === 'PUT') {
+      const body = route.request().postDataJSON() as {
+        name: string;
+        isEnabled: boolean;
+        baseUrl: string | null;
+        credential?: string;
+        isPrimary?: boolean;
+      };
+      expect(body.credential).toBe('browser-connector-secret-8642');
+      mediaConnectorSettings = mediaConnectorSettings.map((config) =>
+        config.kind === kind
+          ? {
+              ...config,
+              name: body.name,
+              mode: 'household',
+              isEnabled: body.isEnabled,
+              baseUrl: body.baseUrl,
+              credentialConfigured: true,
+              credentialHint: '****8642',
+              isPrimary: body.isPrimary ?? false,
+              configured: true,
+              updatedAt: '2099-01-01T00:00:00.000Z',
+            }
+          : config,
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: mediaConnectorSettings }),
+      });
+      return;
+    }
+    if (method === 'POST' && parts.at(-1) === 'test') {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            key: kind,
+            kind,
+            name: kind === 'plex' ? 'Plex' : kind,
+            role: kind === 'moviepilot' ? 'automation' : 'library',
+            primary: kind === 'plex',
+            state: 'online',
+            available: true,
+            message: kind === 'plex' ? 'Plex 1.43.0' : '已连接',
+            checkedAt: '2099-01-01T00:00:00.000Z',
+          },
+        }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 405 });
   });
   await page.route(mediaConnectorsRoute, async (route) => {
     await route.fulfill({
@@ -621,9 +748,23 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByText('媒体库 · Plex 1.43.0', { exact: true })).toBeVisible();
   await expect(page.getByText('自动化 · MoviePilot v2.9.0', { exact: true })).toBeVisible();
   await expect(page.getByText('媒体库 · 未配置服务地址', { exact: true })).toBeVisible();
-  await page.getByRole('link', { name: /数据源设置/ }).click();
+  await page.getByRole('link', { name: /观影设置/ }).click();
   await expect(page).toHaveURL(/\/media\/settings$/);
-  await expect(page.getByRole('heading', { name: '数据源设置', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '观影设置', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Plex Token')).toHaveValue('');
+  await page.getByLabel('Plex Token').fill('browser-connector-secret-8642');
+  await page.getByRole('button', { name: '保存并测试', exact: true }).first().click();
+  await expect(page.getByText('连接成功 · Plex 1.43.0', { exact: true })).toBeVisible();
+  await expect(page.getByText('****8642', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Plex Token')).toHaveValue('');
+  await expect(page.getByText('browser-connector-secret-8642')).not.toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('media-connector-settings.png'),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: '搜索数据源', exact: true }).click();
+  await expect(page).toHaveURL(/\/media\/settings\?section=sources$/);
   await expect(page.getByLabel('TMDB API Token')).toHaveValue('');
   await page.getByLabel('TMDB API Token').fill('browser-source-secret-2468');
   await page.getByRole('button', { name: '保存 TMDB', exact: true }).click();
@@ -757,6 +898,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   }
   await page.unroute(mediaAvailabilityRoute);
   await page.unroute(mediaConnectorsRoute);
+  await page.unroute(mediaConnectorSettingsRoute);
   await page.unroute(mediaSourcesRoute);
   await page.unroute(mediaSearchRoute);
   await page.unroute(mediaRequestActionRoute);
@@ -821,7 +963,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('button', { name: '发起投票', exact: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  const pollTitle = `投票回归-${testInfo.project.name}`;
+  const pollTitle = `投票回归-${testInfo.project.name}-${Date.now()}`;
   await page.getByRole('button', { name: '发起投票', exact: true }).first().click();
   await expect(page.getByText('发起家庭投票', { exact: true })).toBeVisible();
   await page.getByLabel('投票标题').fill(pollTitle);
@@ -829,16 +971,24 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.getByRole('textbox', { name: '候选项1', exact: true }).fill('周六上午');
   await page.getByRole('textbox', { name: '候选项2', exact: true }).fill('周日下午');
   await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
-  await expect(page.getByRole('checkbox', { name: '选择周六上午' })).toBeVisible();
+  const pollCard = page
+    .getByRole('button', { name: `编辑投票${pollTitle}`, exact: true })
+    .locator('xpath=ancestor::div[.//*[@role="checkbox"]][1]');
+  await expect(
+    pollCard.getByRole('checkbox', { name: '选择周六上午', exact: true }),
+  ).toBeVisible();
 
-  await page.getByRole('checkbox', { name: '选择周六上午' }).click();
-  await page.getByRole('button', { name: `提交${pollTitle}的投票` }).click();
+  await pollCard
+    .getByRole('checkbox', { name: '选择周六上午', exact: true })
+    .click();
+  await pollCard.getByRole('button', { name: `提交${pollTitle}的投票` }).click();
   await expect(page.getByText(/1 票 · 100%/).first()).toBeVisible();
 
   await page.getByRole('button', { name: `编辑投票${pollTitle}` }).click();
   await expect(page.getByText('编辑家庭投票', { exact: true })).toBeVisible();
   await page.getByLabel('投票说明').fill('浏览器端已编辑投票');
   await page.getByRole('button', { name: '保存修改', exact: true }).click();
+  await expect(page.getByText('编辑家庭投票', { exact: true })).not.toBeVisible();
   await expect(page.getByText('浏览器端已编辑投票', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: `结束投票${pollTitle}` }).click();
@@ -848,7 +998,9 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('button', { name: `重新开启投票${pollTitle}` })).toBeVisible();
   await page.getByRole('button', { name: `重新开启投票${pollTitle}` }).click();
   await page.getByRole('button', { name: '进行中', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: '取消选择周六上午' })).toBeVisible();
+  await expect(
+    pollCard.getByRole('checkbox', { name: '取消选择周六上午', exact: true }),
+  ).toBeVisible();
 
   await page.getByRole('button', { name: `删除投票${pollTitle}` }).click();
   await expect(page.getByText('删除这个投票？', { exact: true })).toBeVisible();

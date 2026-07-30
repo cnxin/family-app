@@ -43,6 +43,8 @@ import {
   HouseholdMedia,
   HouseholdMediaSourceConfig,
   HouseholdMediaStatus,
+  Integration,
+  IntegrationSecret,
   MediaExternalProvider,
   MediaExternalRef,
   MediaRequest,
@@ -52,6 +54,10 @@ import {
   Poll,
 } from '../entities';
 import { MediaConnectorsService } from './media-connectors.service';
+import {
+  IntegrationSettingsService,
+  UpdateIntegrationSettingsInput,
+} from './integration-settings.service';
 import { MediaMetadataService } from './media-metadata.service';
 import {
   MediaSourceSettingsService,
@@ -151,6 +157,37 @@ class UpdateMediaSourceSettingsDto
   @IsString()
   @MaxLength(300)
   userAgent?: string | null;
+}
+
+class UpdateIntegrationSettingsDto
+  implements UpdateIntegrationSettingsInput
+{
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  baseUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  credential?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  clearCredential?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
 }
 
 class MediaExternalRefDto {
@@ -359,8 +396,8 @@ export class MediaService {
     return this.present(entry);
   }
 
-  connectorStatus(refresh = false) {
-    return this.connectors.status(refresh);
+  connectorStatus(user: JwtUser, refresh = false) {
+    return this.connectors.status(user.householdId, refresh);
   }
 
   async libraryAvailability(mediaIds: string[], user: JwtUser) {
@@ -370,6 +407,7 @@ export class MediaService {
       relations: { mediaTitle: { externalRefs: true } },
     });
     return this.connectors.availability(
+      user.householdId,
       entries.map((entry) => ({
         id: entry.id,
         externalRefs: (entry.mediaTitle.externalRefs ?? []).map((ref) => ({
@@ -815,6 +853,7 @@ export class MediaRequestsService {
     >;
     try {
       externalRequest = await this.connectors.requestMedia(
+        user.householdId,
         connectorKey,
         this.metadataSnapshot(reserved.mediaTitle),
         reserved.id,
@@ -881,6 +920,7 @@ export class MediaRequestsService {
     >;
     try {
       externalRequest = await this.connectors.getRequest(
+        user.householdId,
         current.connectorKey,
         current.externalRequestId,
       );
@@ -953,6 +993,7 @@ export class MediaRequestsService {
 
     try {
       await this.connectors.cancelRequest(
+        user.householdId,
         current.connectorKey,
         current.externalRequestId,
       );
@@ -1127,6 +1168,8 @@ class MediaController {
     private readonly requests: MediaRequestsService,
     private readonly metadata: MediaMetadataService,
     private readonly sourceSettings: MediaSourceSettingsService,
+    private readonly integrationSettings: IntegrationSettingsService,
+    private readonly connectorsService: MediaConnectorsService,
   ) {}
 
   @Get('search')
@@ -1186,8 +1229,58 @@ class MediaController {
   }
 
   @Get('connectors')
-  connectors(@Query('refresh') refresh?: string) {
-    return this.service.connectorStatus(refresh === 'true');
+  connectors(
+    @CurrentUser() user: JwtUser,
+    @Query('refresh') refresh?: string,
+  ) {
+    return this.service.connectorStatus(user, refresh === 'true');
+  }
+
+  @Get('connector-settings')
+  @RequireCapabilities('manage_integrations')
+  connectorSettings(@CurrentUser() user: JwtUser) {
+    return this.integrationSettings.list(user);
+  }
+
+  @Put('connector-settings/:kind')
+  @RequireCapabilities('manage_integrations')
+  async updateConnectorSettings(
+    @Param('kind') kindValue: string,
+    @Body() dto: UpdateIntegrationSettingsDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!this.integrationSettings.isKind(kindValue)) {
+      throw new NotFoundException('媒体服务不存在');
+    }
+    const result = await this.integrationSettings.update(kindValue, dto, user);
+    this.connectorsService.clearHouseholdCache(user.householdId);
+    return result;
+  }
+
+  @Delete('connector-settings/:kind')
+  @RequireCapabilities('manage_integrations')
+  async resetConnectorSettings(
+    @Param('kind') kindValue: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!this.integrationSettings.isKind(kindValue)) {
+      throw new NotFoundException('媒体服务不存在');
+    }
+    const result = await this.integrationSettings.reset(kindValue, user);
+    this.connectorsService.clearHouseholdCache(user.householdId);
+    return result;
+  }
+
+  @Post('connector-settings/:kind/test')
+  @RequireCapabilities('manage_integrations')
+  testConnectorSettings(
+    @Param('kind') kindValue: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!this.integrationSettings.isKind(kindValue)) {
+      throw new NotFoundException('媒体服务不存在');
+    }
+    return this.connectorsService.test(user.householdId, kindValue);
   }
 
   @Post('library-availability')
@@ -1256,6 +1349,8 @@ class MediaController {
     TypeOrmModule.forFeature([
       HouseholdMedia,
       HouseholdMediaSourceConfig,
+      Integration,
+      IntegrationSecret,
       MediaTitle,
       MediaExternalRef,
       MediaRequest,
@@ -1267,6 +1362,7 @@ class MediaController {
     MediaService,
     MediaRequestsService,
     MediaConnectorsService,
+    IntegrationSettingsService,
     MediaSourceSettingsService,
     MediaMetadataService,
   ],

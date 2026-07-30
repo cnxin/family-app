@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import {
-  MediaConnectorConfig,
-  mediaConnectorConfigs,
-} from './connectors.config';
+import { IntegrationKind } from '../entities';
+import { MediaConnectorConfig } from './connectors.config';
 import {
   EmbyLibraryProvider,
   MediaConnectorError,
@@ -10,8 +8,10 @@ import {
   PlexLibraryProvider,
   connectorRole,
 } from './connectors';
+import { IntegrationSettingsService } from './integration-settings.service';
 import {
   MediaAutomationRequest,
+  MediaAutomationProvider,
   MediaExternalReference,
   MediaLibraryMatch,
   MediaLibraryProvider,
@@ -25,7 +25,12 @@ export interface PublicMediaConnector {
   name: string;
   role: 'library' | 'automation';
   primary: boolean;
-  state: 'not_configured' | 'needs_credential' | 'online' | 'offline';
+  state:
+    | 'disabled'
+    | 'not_configured'
+    | 'needs_credential'
+    | 'online'
+    | 'offline';
   available: boolean;
   message: string;
   checkedAt: Date | null;
@@ -45,6 +50,13 @@ interface LibraryConnector {
   provider: MediaLibraryProvider;
 }
 
+interface ConnectorContext {
+  configs: MediaConnectorConfig[];
+  libraries: LibraryConnector[];
+  moviePilot: MoviePilotAutomationProvider | null;
+  version: string;
+}
+
 interface TimedValue<T> {
   expiresAt: number;
   value: Promise<T>;
@@ -52,42 +64,27 @@ interface TimedValue<T> {
 
 @Injectable()
 export class MediaConnectorsService {
-  private readonly configs = mediaConnectorConfigs();
-  private readonly libraries: LibraryConnector[];
-  readonly moviePilot: MoviePilotAutomationProvider | null;
-  private readonly healthCache = new Map<string, TimedValue<MediaProviderHealth>>();
+  private readonly healthCache = new Map<
+    string,
+    TimedValue<MediaProviderHealth>
+  >();
   private readonly availabilityCache = new Map<
     string,
     TimedValue<MediaLibraryMatch[]>
   >();
 
-  constructor() {
-    this.libraries = this.configs
-      .filter(
-        (config) =>
-          (config.kind === 'plex' || config.kind === 'emby') &&
-          config.baseUrl &&
-          config.credential,
-      )
-      .map((config) => ({
-        config,
-        provider:
-          config.kind === 'plex'
-            ? new PlexLibraryProvider(config)
-            : new EmbyLibraryProvider(config),
-      }));
-    const moviePilotConfig = this.configs.find(
-      (config) =>
-        config.kind === 'moviepilot' && config.baseUrl && config.credential,
-    );
-    this.moviePilot = moviePilotConfig
-      ? new MoviePilotAutomationProvider(moviePilotConfig)
-      : null;
-  }
+  constructor(private readonly settings: IntegrationSettingsService) {}
 
-  async status(refresh = false): Promise<PublicMediaConnector[]> {
+  async status(
+    householdId: string,
+    refresh = false,
+  ): Promise<PublicMediaConnector[]> {
+    const context = await this.context(householdId);
     return Promise.all(
-      this.configs.map(async (config) => {
+      context.configs.map(async (config) => {
+        if (config.enabled === false) {
+          return this.publicStatus(config, 'disabled', '此家庭已停用');
+        }
         if (!config.baseUrl) {
           return this.publicStatus(config, 'not_configured', '未配置服务地址');
         }
@@ -98,14 +95,21 @@ export class MediaConnectorsService {
             config.kind === 'plex' ? '等待配置 Token' : '等待配置 API Key',
           );
         }
-        const health = await this.health(config, refresh);
+        const provider = this.provider(context, config.kind);
+        const health = await this.health(
+          householdId,
+          context.version,
+          config,
+          provider,
+          refresh,
+        );
         return {
           key: config.key,
           kind: config.kind,
           name: config.name,
           role: connectorRole(config.kind),
           primary: config.primary,
-          state: health.available ? 'online' as const : 'offline' as const,
+          state: health.available ? ('online' as const) : ('offline' as const),
           available: health.available,
           message: health.message ?? (health.available ? '已连接' : '连接失败'),
           checkedAt: health.checkedAt,
@@ -114,18 +118,32 @@ export class MediaConnectorsService {
     );
   }
 
+  async test(householdId: string, kind: IntegrationKind) {
+    const statuses = await this.status(householdId, true);
+    const status = statuses.find((item) => item.kind === kind);
+    if (!status) throw new MediaConnectorError('媒体服务不存在');
+    return status;
+  }
+
   async availability(
+    householdId: string,
     media: { id: string; externalRefs: MediaExternalReference[] }[],
   ): Promise<Record<string, PublicLibraryMatch[]>> {
+    const context = await this.context(householdId);
     const result = Object.fromEntries(media.map((entry) => [entry.id, []])) as Record<
       string,
       PublicLibraryMatch[]
     >;
     const healthyLibraries = (
       await Promise.all(
-        this.libraries.map(async (library) => ({
+        context.libraries.map(async (library) => ({
           library,
-          health: await this.health(library.config),
+          health: await this.health(
+            householdId,
+            context.version,
+            library.config,
+            library.provider,
+          ),
         })),
       )
     ).filter((entry) => entry.health.available);
@@ -134,6 +152,8 @@ export class MediaConnectorsService {
       media.flatMap((entry) =>
         healthyLibraries.map(async ({ library }) => {
           const matches: MediaLibraryMatch[] = await this.matches(
+            householdId,
+            context.version,
             library,
             entry.externalRefs,
           ).catch((): MediaLibraryMatch[] => []);
@@ -162,31 +182,76 @@ export class MediaConnectorsService {
     return result;
   }
 
-  requestMedia(
+  async requestMedia(
+    householdId: string,
     connectorKey: string,
     media: MediaMetadataSnapshot,
     idempotencyKey: string,
     options: { season?: number } = {},
   ): Promise<MediaAutomationRequest> {
-    return this.automation(connectorKey).requestMedia(
-      media,
-      idempotencyKey,
-      options,
-    );
+    return (
+      await this.automation(householdId, connectorKey)
+    ).requestMedia(media, idempotencyKey, options);
   }
 
-  getRequest(
+  async getRequest(
+    householdId: string,
     connectorKey: string,
     requestId: string,
   ): Promise<MediaAutomationRequest | null> {
-    return this.automation(connectorKey).getRequest(requestId);
+    return (await this.automation(householdId, connectorKey)).getRequest(
+      requestId,
+    );
   }
 
-  cancelRequest(
+  async cancelRequest(
+    householdId: string,
     connectorKey: string,
     requestId: string,
   ): Promise<MediaAutomationRequest> {
-    return this.automation(connectorKey).cancelRequest(requestId);
+    return (await this.automation(householdId, connectorKey)).cancelRequest(
+      requestId,
+    );
+  }
+
+  clearHouseholdCache(householdId: string) {
+    for (const key of this.healthCache.keys()) {
+      if (key.startsWith(`${householdId}:`)) this.healthCache.delete(key);
+    }
+    for (const key of this.availabilityCache.keys()) {
+      if (key.startsWith(`${householdId}:`)) this.availabilityCache.delete(key);
+    }
+  }
+
+  private async context(householdId: string): Promise<ConnectorContext> {
+    const resolved = await this.settings.resolve(householdId);
+    const active = resolved.configs.filter((config) => config.enabled !== false);
+    const libraries = active
+      .filter(
+        (config) =>
+          (config.kind === 'plex' || config.kind === 'emby') &&
+          config.baseUrl &&
+          config.credential,
+      )
+      .map((config) => ({
+        config,
+        provider:
+          config.kind === 'plex'
+            ? new PlexLibraryProvider(config)
+            : new EmbyLibraryProvider(config),
+      }));
+    const moviePilotConfig = active.find(
+      (config) =>
+        config.kind === 'moviepilot' && config.baseUrl && config.credential,
+    );
+    return {
+      configs: resolved.configs,
+      libraries,
+      moviePilot: moviePilotConfig
+        ? new MoviePilotAutomationProvider(moviePilotConfig)
+        : null,
+      version: resolved.version,
+    };
   }
 
   private publicStatus(
@@ -207,24 +272,39 @@ export class MediaConnectorsService {
     };
   }
 
-  private automation(connectorKey: string) {
-    if (!this.moviePilot || this.moviePilot.config.key !== connectorKey) {
+  private async automation(householdId: string, connectorKey: string) {
+    const context = await this.context(householdId);
+    if (
+      !context.moviePilot ||
+      context.moviePilot.config.key !== connectorKey
+    ) {
       throw new MediaConnectorError('MoviePilot 尚未配置或未启用');
     }
-    return this.moviePilot;
+    return context.moviePilot;
   }
 
-  private health(config: MediaConnectorConfig, refresh = false) {
-    const current = this.healthCache.get(config.key);
+  private provider(
+    context: ConnectorContext,
+    kind: IntegrationKind,
+  ): MediaLibraryProvider | MediaAutomationProvider | null {
+    return (
+      context.libraries.find((item) => item.config.kind === kind)?.provider ??
+      (kind === 'moviepilot' ? context.moviePilot : null)
+    );
+  }
+
+  private health(
+    householdId: string,
+    version: string,
+    config: MediaConnectorConfig,
+    provider: MediaLibraryProvider | MediaAutomationProvider | null,
+    refresh = false,
+  ) {
+    const key = `${householdId}:${version}:${config.key}`;
+    const current = this.healthCache.get(key);
     if (!refresh && current && current.expiresAt > Date.now()) {
       return current.value;
     }
-    const library = this.libraries.find(
-      (candidate) => candidate.config.key === config.key,
-    );
-    const provider =
-      library?.provider ??
-      (config.kind === 'moviepilot' ? this.moviePilot : null);
     const value = provider
       ? provider.health()
       : Promise.resolve({
@@ -232,7 +312,7 @@ export class MediaConnectorsService {
           checkedAt: new Date(),
           message: '连接器未启用',
         });
-    this.healthCache.set(config.key, {
+    this.healthCache.set(key, {
       expiresAt: Date.now() + 30_000,
       value,
     });
@@ -240,6 +320,8 @@ export class MediaConnectorsService {
   }
 
   private matches(
+    householdId: string,
+    version: string,
     library: LibraryConnector,
     refs: MediaExternalReference[],
   ): Promise<MediaLibraryMatch[]> {
@@ -249,7 +331,7 @@ export class MediaConnectorsService {
       .sort()
       .join('|');
     if (!refKey) return Promise.resolve([] as MediaLibraryMatch[]);
-    const key = `${library.config.key}:${refKey}`;
+    const key = `${householdId}:${version}:${library.config.key}:${refKey}`;
     const current = this.availabilityCache.get(key);
     if (current && current.expiresAt > Date.now()) return current.value;
     const value = library.provider.findByExternalRefs(refs);

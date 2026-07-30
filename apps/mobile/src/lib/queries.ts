@@ -23,6 +23,7 @@ import type {
   HouseholdMedia,
   HouseholdMediaStatus,
   MediaConnectorSummary,
+  MediaConnectorSettings,
   MediaLibraryAvailability,
   MediaRequest,
   MediaSearchResponse,
@@ -270,6 +271,71 @@ export function useMediaConnectors() {
     queryKey: ['media-connectors'],
     queryFn: () => api<MediaConnectorSummary[]>('/media/connectors'),
     staleTime: 30_000,
+  });
+}
+
+export function useMediaConnectorSettings(enabled = true) {
+  return useQuery({
+    queryKey: ['media-connector-settings'],
+    queryFn: () =>
+      api<MediaConnectorSettings[]>('/media/connector-settings'),
+    enabled,
+  });
+}
+
+export interface UpdateMediaConnectorSettingsInput {
+  kind: MediaConnectorSettings['kind'];
+  name: string;
+  isEnabled: boolean;
+  baseUrl: string | null;
+  credential?: string;
+  clearCredential?: boolean;
+  isPrimary?: boolean;
+}
+
+export function useUpdateMediaConnectorSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, ...body }: UpdateMediaConnectorSettingsInput) =>
+      api<MediaConnectorSettings[]>(`/media/connector-settings/${kind}`, {
+        method: 'PUT',
+        body,
+      }),
+    onSuccess: (settings) => {
+      qc.setQueryData(['media-connector-settings'], settings);
+      void qc.invalidateQueries({ queryKey: ['media-connectors'] });
+      void qc.invalidateQueries({ queryKey: ['media-library-availability'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useResetMediaConnectorSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: MediaConnectorSettings['kind']) =>
+      api<MediaConnectorSettings[]>(`/media/connector-settings/${kind}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (settings) => {
+      qc.setQueryData(['media-connector-settings'], settings);
+      void qc.invalidateQueries({ queryKey: ['media-connectors'] });
+      void qc.invalidateQueries({ queryKey: ['media-library-availability'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useTestMediaConnectorSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: MediaConnectorSettings['kind']) =>
+      api<MediaConnectorSummary>(`/media/connector-settings/${kind}/test`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['media-connectors'] });
+    },
   });
 }
 

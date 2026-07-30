@@ -375,6 +375,7 @@ export interface HouseholdMedia {
 
 export type MediaConnectorKind = 'plex' | 'emby' | 'moviepilot';
 export type MediaConnectorState =
+  | 'disabled'
   | 'not_configured'
   | 'needs_credential'
   | 'online'
@@ -390,6 +391,21 @@ export interface MediaConnectorSummary {
   available: boolean;
   message: string;
   checkedAt: string | null;
+}
+
+export interface MediaConnectorSettings {
+  kind: MediaConnectorKind;
+  name: string;
+  role: 'library' | 'automation';
+  mode: 'server_default' | 'household';
+  isEnabled: boolean;
+  baseUrl: string | null;
+  credentialConfigured: boolean;
+  credentialHint: string | null;
+  isPrimary: boolean;
+  configured: boolean;
+  capabilities: string[];
+  updatedAt: string | null;
 }
 
 export interface MediaLibraryMatch {

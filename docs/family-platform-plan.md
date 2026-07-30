@@ -289,7 +289,7 @@ M4-A 已落地连接器无关的 `media_titles`、`media_external_refs` 与 `hou
 
 M4-B 已复用通用投票的 `sourceModule/sourceId` 建立片单来源关联。一部片单条目只能有一个进行中的家庭投票；发起、结束、重开和删除会同步 `watchlist/voting` 状态，活动、通知、权限与透明结果继续使用通用能力。跨家庭来源、并发重复和投票期间绕过状态修改均由服务端约束。详细边界见 [M4-B 观影片单关联投票验收](m4-media-polls-acceptance.md)。
 
-M4-C 已实现可并存的 Plex/Emby `MediaLibraryProvider`、使用官方 `X-API-KEY` 的 MoviePilot `MediaAutomationProvider`、连接器健康状态、外部 ID 媒体库匹配和无凭据播放入口。连接器凭据仅从环境变量或密钥文件注入，错误与超时不会阻断家庭片单；请求状态持久化、权限和界面操作由 M4-D 在此基础上完成。详细边界见 [M4-C 媒体连接器验收](m4-media-connectors-acceptance.md)。
+M4-C 已实现可并存的 Plex/Emby `MediaLibraryProvider`、使用官方 `X-API-KEY` 的 MoviePilot `MediaAutomationProvider`、连接器健康状态、外部 ID 媒体库匹配和无凭据播放入口。服务器环境变量或密钥文件作为默认配置，家庭管理员可以建立加密的家庭覆盖、启停服务、选择主媒体库和测试连接；错误与超时不会阻断家庭片单。请求状态持久化、权限和界面操作由 M4-D 在此基础上完成。详细边界见 [M4-C 媒体连接器验收](m4-media-connectors-acceptance.md)。
 
 M4-D 已新增独立的 `media_requests`，保存 MoviePilot 请求人、影片/季、外部请求编号、同步时间、状态与失败原因。同一影片/季只允许一条进行中订阅；正式成员可提交和刷新，请求人或家庭管理员可取消，进行中订阅会阻止影片直接移出片单。外部调用不持有数据库事务，MoviePilot 失败不修改家庭片单。移动与桌面片单已提供订阅、刷新、取消和重试操作。详细边界见 [M4-D MoviePilot 订阅请求验收](m4-media-requests-acceptance.md)。
 
@@ -552,6 +552,7 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 - [x] MoviePilot 官方 API Key 认证、订阅与取消适配器契约。
 - [x] 豆瓣兼容桥接、TMDB 与 Bangumi 三源在线元数据搜索。
 - [x] 家庭级三源设置、加密凭据与服务器默认配置回退。
+- [x] 家庭级 Plex/Emby/MoviePilot 设置、主媒体库与连接测试。
 - [ ] 结构化多片候选投票。
 - [x] MoviePilot 请求状态持久化、家庭权限与订阅界面。
 - [ ] 播放进度、观看记录和媒体就绪通知。

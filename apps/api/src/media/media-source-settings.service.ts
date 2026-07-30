@@ -4,15 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-} from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
-import { integrationSecretKey } from '../common/config';
+import {
+  decryptIntegrationCredential,
+  encryptIntegrationCredential,
+  integrationCredentialHint,
+} from '../common/integration-credentials';
 import {
   HouseholdMediaSourceConfig,
   MediaCredentialKind,
@@ -66,14 +65,8 @@ function normalizeUrl(value: string | null | undefined, label: string) {
   return url.toString().replace(/\/$/, '');
 }
 
-function credentialHint(value: string) {
-  return `****${value.slice(-4)}`;
-}
-
 @Injectable()
 export class MediaSourceSettingsService {
-  private readonly encryptionKey = integrationSecretKey();
-
   constructor(
     @InjectRepository(HouseholdMediaSourceConfig)
     private readonly configs: Repository<HouseholdMediaSourceConfig>,
@@ -231,12 +224,12 @@ export class MediaSourceSettingsService {
         if (credential.length < 4) {
           throw new BadRequestException('凭据至少需要 4 个字符');
         }
-        row.credentialEncrypted = this.encryptCredential(
+        row.credentialEncrypted = encryptIntegrationCredential(
           credential,
           user.householdId,
           provider,
         );
-        row.credentialHint = credentialHint(credential);
+        row.credentialHint = integrationCredentialHint(credential);
       }
 
       row.settings = this.normalizeSettings(
@@ -377,43 +370,12 @@ export class MediaSourceSettingsService {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
   }
 
-  private encryptCredential(
-    value: string,
-    householdId: string,
-    provider: MediaMetadataSource,
-  ) {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', this.encryptionKey, iv);
-    cipher.setAAD(Buffer.from(`${householdId}:${provider}`, 'utf8'));
-    const encrypted = Buffer.concat([
-      cipher.update(value, 'utf8'),
-      cipher.final(),
-    ]);
-    return [
-      'v1',
-      iv.toString('base64'),
-      cipher.getAuthTag().toString('base64'),
-      encrypted.toString('base64'),
-    ].join(':');
-  }
-
   private decryptCredential(row: HouseholdMediaSourceConfig) {
-    if (!row.credentialEncrypted) return null;
-    const [version, ivValue, tagValue, encryptedValue] =
-      row.credentialEncrypted.split(':');
-    if (version !== 'v1' || !ivValue || !tagValue || !encryptedValue) {
-      throw new Error(`${PROVIDER_NAMES[row.provider]} 凭据密文格式无效`);
-    }
-    const decipher = createDecipheriv(
-      'aes-256-gcm',
-      this.encryptionKey,
-      Buffer.from(ivValue, 'base64'),
+    return decryptIntegrationCredential(
+      row.credentialEncrypted,
+      row.householdId,
+      row.provider,
+      PROVIDER_NAMES[row.provider],
     );
-    decipher.setAAD(Buffer.from(`${row.householdId}:${row.provider}`, 'utf8'));
-    decipher.setAuthTag(Buffer.from(tagValue, 'base64'));
-    return Buffer.concat([
-      decipher.update(Buffer.from(encryptedValue, 'base64')),
-      decipher.final(),
-    ]).toString('utf8');
   }
 }

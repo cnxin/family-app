@@ -9,6 +9,7 @@ export interface MediaConnectorConfig {
   baseUrl: string | null;
   credential: string | null;
   primary: boolean;
+  enabled?: boolean;
 }
 
 function optionalSecret(name: string) {

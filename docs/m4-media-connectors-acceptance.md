@@ -1,7 +1,7 @@
 # M4-C 媒体连接器验收
 
 > 完成日期：2026-07-30
-> 实施范围：Plex、Emby、MoviePilot 提供方适配器，连接状态、媒体匹配和播放入口
+> 实施范围：Plex、Emby、MoviePilot 提供方适配器、家庭级连接设置、连接状态、媒体匹配和播放入口
 
 ## 1. 连接器模型
 
@@ -15,13 +15,18 @@
 ```text
 GET  /media/connectors
 POST /media/library-availability
+GET  /media/connector-settings
+PUT  /media/connector-settings/:kind
+POST /media/connector-settings/:kind/test
+DELETE /media/connector-settings/:kind
 ```
 
 - 连接器状态区分未配置、缺少凭据、在线和离线。
 - 媒体库匹配批量接收当前家庭片单 ID；服务端重新校验 `householdId`，不会读取其他家庭条目。
 - Plex 使用 `tmdb://` / `imdb://` GUID 查询；Emby 使用 `ProviderIds` 查询。
 - 匹配结果可以同时返回 Plex 和 Emby。播放 URL 不包含 Token 或 API Key。
-- 健康结果缓存 30 秒、匹配结果缓存 60 秒；单个连接器失败返回空匹配，不阻断家庭片单。
+- 健康结果缓存 30 秒、匹配结果缓存 60 秒；缓存键包含家庭与配置版本，单个连接器失败返回空匹配，不阻断家庭片单。
+- 设置读取、修改、连接测试和恢复默认仅允许 `owner/admin`，连接状态和媒体播放入口对家庭成员开放。
 
 ## 3. MoviePilot 边界
 
@@ -31,14 +36,15 @@ POST /media/library-availability
 
 ## 4. 凭据与网络
 
-- 开发环境使用被 Git 忽略的 `.env`；生产环境优先使用 `*_FILE` 和只读密钥目录。
+- 开发环境使用被 Git 忽略的 `.env`；生产环境优先使用 `*_FILE` 和只读密钥目录。这些值作为所有家庭的服务器默认配置。
+- 家庭管理员可建立家庭覆盖。连接记录保存在 `integrations`，凭据单独使用 `integration_secrets` 和 AES-256-GCM 密文保存；认证上下文绑定家庭与连接器类型。
 - API 日志、公共响应、播放链接和测试输出均不包含连接器凭据。
 - 生产 API 增加仅用于主动访问 NAS 的 `integrations` 网络；数据库仍只在 `internal` 后端网络中。
 - 外部服务超时为 5 秒，认证失败只返回经过归一化的错误信息。
 
 ## 5. 客户端
 
-- 家庭观影页顶部只显示已经填写地址的连接器状态。
+- 家庭观影页显示三套连接器状态；管理员可从“观影设置 -> 媒体服务”分别启停、填写地址和凭据、选择 Plex/Emby 主媒体库并保存后测试。
 - 匹配到媒体库后，影片卡显示带来源名称的播放按钮。
 - 同一影片同时存在于 Plex 和 Emby 时保留两个入口，默认来源排在前面。
 - 连接器未配置或离线时，片单搜索、编辑、投票和排期保持可用。
@@ -49,6 +55,7 @@ POST /media/library-availability
 - Emby 契约测试覆盖版本、ProviderIds 匹配和无密钥深链。
 - MoviePilot 契约测试覆盖 `X-API-KEY`、幂等检查、官方媒体类型、创建、查询和取消。
 - API 集成测试覆盖未配置状态、响应脱敏和离线空匹配。
+- 家庭设置回归覆盖管理员权限、家庭隔离、独立密钥表、主媒体库唯一、运行时解密、活动日志脱敏和级联恢复默认。
 - API 构建、前后端 TypeScript、Expo Lint 和 `git diff --check` 通过。
 
 ## 7. 真实 NAS 验收条件

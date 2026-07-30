@@ -284,16 +284,29 @@ export class PollsService {
       const votes = manager.getRepository(PollVote);
       const pollOptions = manager.getRepository(PollOption);
       const voteCount = await votes.countBy({ pollId: poll.id });
-      const currentOptionCount = await pollOptions.countBy({ pollId: poll.id });
+      const currentOptions = await pollOptions.find({
+        where: { pollId: poll.id },
+        order: { sortOrder: 'ASC' },
+      });
       const options = dto.options ? normalizeOptions(dto.options) : null;
-      const optionCount = options?.length ?? currentOptionCount;
+      const optionCount = options?.length ?? currentOptions.length;
       const voteMode = dto.voteMode ?? poll.voteMode;
       const modeChanged = dto.voteMode != null && dto.voteMode !== poll.voteMode;
       const maxChoices =
         dto.maxChoices ??
         (modeChanged ? (voteMode === 'single' ? 1 : Math.min(2, optionCount)) : poll.maxChoices);
+      const optionsChanged =
+        options != null &&
+        (options.length !== currentOptions.length ||
+          options.some(
+            (option, index) =>
+              option.label !== currentOptions[index]?.label ||
+              option.description !== currentOptions[index]?.description,
+          ));
+      const maxChoicesChanged =
+        dto.maxChoices != null && dto.maxChoices !== poll.maxChoices;
       this.validateRules(voteMode, maxChoices, optionCount);
-      if (voteCount && (options || modeChanged || dto.maxChoices != null)) {
+      if (voteCount && (optionsChanged || modeChanged || maxChoicesChanged)) {
         throw new ConflictException('已经有人投票，只能修改标题、说明、分类或截止时间');
       }
 
@@ -317,7 +330,7 @@ export class PollsService {
       }
       await manager.getRepository(Poll).save(poll);
 
-      if (options) {
+      if (options && optionsChanged) {
         await pollOptions.delete({ pollId: poll.id });
         await pollOptions.save(
           options.map((option, sortOrder) =>

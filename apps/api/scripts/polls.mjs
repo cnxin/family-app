@@ -128,6 +128,21 @@ try {
     '家庭内透明展示票数、比例和参与成员',
   );
 
+  const idempotentRuleUpdate = await request(
+    `/polls/${multiplePoll.data.id}`,
+    mom.token,
+    'PATCH',
+    {
+      description: '重复提交规则时仍可更新说明',
+      voteMode: 'multiple',
+      maxChoices: 2,
+      options: [
+        { label: '逛公园' },
+        { label: '看展览' },
+        { label: '在家做饭' },
+      ],
+    },
+  );
   const lockedRules = await request(
     `/polls/${multiplePoll.data.id}`,
     mom.token,
@@ -141,10 +156,16 @@ try {
     { title: '周末家庭活动测试（已更新）' },
   );
   assert(
+    idempotentRuleUpdate.status === 200 &&
+      idempotentRuleUpdate.data.description === '重复提交规则时仍可更新说明' &&
+      idempotentRuleUpdate.data.totalVotes === 3 &&
+      idempotentRuleUpdate.data.options.every(
+        (option, index) => option.id === optionIds[index],
+      ) &&
     lockedRules.status === 409 &&
       editableMetadata.status === 200 &&
       editableMetadata.data.title.endsWith('（已更新）'),
-    '已有选票后锁定候选项和规则但仍可修改说明信息',
+    '已有选票后允许幂等提交并锁定实际规则变更',
   );
 
   console.log('3. 创建者、管理员、结束和重新开启');

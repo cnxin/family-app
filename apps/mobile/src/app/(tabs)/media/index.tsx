@@ -285,7 +285,7 @@ export default function MediaHomeScreen() {
                     style={styles.textLink}
                   >
                     <Settings2 color={c.tint} size={15} />
-                    <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>数据源设置</Text>
+                    <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>观影设置</Text>
                   </Pressable>
                 ) : null}
               </View>
