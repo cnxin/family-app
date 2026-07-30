@@ -52,6 +52,7 @@ import {
   MediaTitle,
   MediaType,
   Poll,
+  PollOption,
 } from '../entities';
 import { MediaConnectorsService } from './media-connectors.service';
 import {
@@ -573,6 +574,10 @@ export class MediaService {
       throw new BadRequestException('至少需要修改一个字段');
     }
     await this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`poll-source:${user.householdId}:media:${id}`],
+      );
       const entry = await manager
         .getRepository(HouseholdMedia)
         .createQueryBuilder('entry')
@@ -656,6 +661,10 @@ export class MediaService {
 
   async remove(id: string, user: JwtUser) {
     await this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`poll-source:${user.householdId}:media:${id}`],
+      );
       const entry = await manager
         .getRepository(HouseholdMedia)
         .createQueryBuilder('entry')
@@ -669,6 +678,9 @@ export class MediaService {
       if (!entry) throw new NotFoundException('观影片单不存在');
       if (await this.hasActivePoll(manager, entry.id, user.householdId)) {
         throw new ConflictException('请先结束或删除这部影视的家庭投票，再移出片单');
+      }
+      if (await this.hasMediaPollReference(manager, entry.id)) {
+        throw new ConflictException('请先删除包含这部影视的历史选片投票，再移出片单');
       }
       if (await this.hasActiveRequest(manager, entry.id, user.householdId)) {
         throw new ConflictException('请先取消这部影视进行中的 MoviePilot 订阅，再移出片单');
@@ -727,18 +739,21 @@ export class MediaService {
     mediaId: string,
     householdId: string,
   ) {
-    const poll = await manager.getRepository(Poll).findOne({
-      where: {
-        householdId,
-        sourceModule: 'media',
-        sourceId: mediaId,
-        status: 'open',
-        isArchived: false,
-      },
-      order: { createdAt: 'DESC' },
-    });
-    return Boolean(
-      poll && (!poll.closesAt || poll.closesAt.getTime() > Date.now()),
+    const polls = await manager
+      .getRepository(Poll)
+      .createQueryBuilder('poll')
+      .leftJoin('poll.options', 'option')
+      .where('poll.householdId = :householdId', { householdId })
+      .andWhere('poll.status = :status', { status: 'open' })
+      .andWhere('poll.isArchived = false')
+      .andWhere(
+        `((poll."sourceModule" = 'media' AND poll."sourceId" = :mediaId) OR option."mediaId" = :mediaId)`,
+        { mediaId },
+      )
+      .distinct(true)
+      .getMany();
+    return polls.some(
+      (poll) => !poll.closesAt || poll.closesAt.getTime() > Date.now(),
     );
   }
 
@@ -753,6 +768,13 @@ export class MediaService {
         { householdId, householdMediaId: mediaId, status: 'processing' },
       ],
     });
+  }
+
+  private async hasMediaPollReference(
+    manager: EntityManager,
+    mediaId: string,
+  ) {
+    return manager.getRepository(PollOption).existsBy({ mediaId });
   }
 }
 

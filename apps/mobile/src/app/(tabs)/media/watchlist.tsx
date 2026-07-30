@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   Download,
   Film,
   Pencil,
@@ -235,6 +236,10 @@ function MediaCard({
   onSubscribe,
   libraries,
   poll,
+  pollSelectable,
+  pollSelected,
+  pollSelectionActive,
+  onTogglePollCandidate,
 }: {
   entry: HouseholdMedia;
   moviePilot: MediaConnectorSummary | null;
@@ -249,6 +254,10 @@ function MediaCard({
   onSubscribe: () => void;
   libraries: MediaLibraryMatch[];
   poll: HouseholdPoll | null;
+  pollSelectable: boolean;
+  pollSelected: boolean;
+  pollSelectionActive: boolean;
+  onTogglePollCandidate: () => void;
 }) {
   const c = useTheme();
   const colors = statusColors(entry.status, c);
@@ -501,7 +510,33 @@ function MediaCard({
             ))}
           </View>
           <View style={styles.cardActions}>
-            {poll || entry.status === 'watchlist' || entry.status === 'voting' ? (
+            {pollSelectionActive ? (
+              <Pressable
+                accessibilityLabel={`${pollSelected ? '移除' : '选择'}候选影视${entry.mediaTitle.title}`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: pollSelected, disabled: !pollSelectable }}
+                aria-checked={pollSelected}
+                disabled={!pollSelectable}
+                onPress={onTogglePollCandidate}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  {
+                    backgroundColor: pollSelected
+                      ? c.tint
+                      : pressed
+                        ? c.tintSoft
+                        : c.fill,
+                    opacity: pollSelectable ? 1 : 0.4,
+                  },
+                ]}
+              >
+                {pollSelected ? (
+                  <Check color="#FFFFFF" size={17} strokeWidth={3} />
+                ) : (
+                  <Plus color={c.tint} size={17} />
+                )}
+              </Pressable>
+            ) : poll || entry.status === 'watchlist' || entry.status === 'voting' ? (
               <Pressable
                 accessibilityLabel={`${poll ? '查看' : '发起'}${entry.mediaTitle.title}的家庭投票`}
                 accessibilityRole="button"
@@ -514,7 +549,7 @@ function MediaCard({
                 <Vote color={c.accent} size={17} />
               </Pressable>
             ) : null}
-            <Pressable
+            {!pollSelectionActive ? <Pressable
               accessibilityLabel={`编辑${entry.mediaTitle.title}`}
               accessibilityRole="button"
               onPress={onEdit}
@@ -524,8 +559,8 @@ function MediaCard({
               ]}
             >
               <Pencil color={c.tint} size={17} />
-            </Pressable>
-            <Pressable
+            </Pressable> : null}
+            {!pollSelectionActive ? <Pressable
               accessibilityLabel={`移除${entry.mediaTitle.title}`}
               accessibilityRole="button"
               onPress={onDelete}
@@ -535,7 +570,7 @@ function MediaCard({
               ]}
             >
               <Trash2 color={c.red} size={17} />
-            </Pressable>
+            </Pressable> : null}
           </View>
         </View>
       </View>
@@ -1468,6 +1503,8 @@ export default function MediaScreen() {
   const [pendingDelete, setPendingDelete] = useState<HouseholdMedia | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [pollSelectionActive, setPollSelectionActive] = useState(false);
+  const [selectedPollCandidates, setSelectedPollCandidates] = useState<string[]>([]);
   const openedParameter = useRef<string | null>(null);
   const { data: entries, error, isLoading } = useMedia(filter, debouncedSearch);
   const { data: connectors } = useMediaConnectors();
@@ -1495,12 +1532,12 @@ export default function MediaScreen() {
   const pollByMediaId = useMemo(() => {
     const result = new Map<string, HouseholdPoll>();
     for (const poll of polls ?? []) {
-      if (
-        poll.status === 'open' &&
-        poll.sourceModule === 'media' &&
-        poll.sourceId
-      ) {
+      if (poll.status !== 'open') continue;
+      if (poll.sourceModule === 'media' && poll.sourceId) {
         result.set(poll.sourceId, poll);
+      }
+      for (const option of poll.options) {
+        if (option.mediaId) result.set(option.mediaId, poll);
       }
     }
     return result;
@@ -1637,6 +1674,102 @@ export default function MediaScreen() {
           </ScrollView>
         </View>
 
+        <View
+          style={[
+            styles.pollComposeBar,
+            { backgroundColor: c.card, borderColor: c.separator },
+          ]}
+        >
+          {pollSelectionActive ? (
+            <>
+              <View style={styles.pollComposeStatus}>
+                <Vote color={c.accent} size={18} />
+                <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                  已选 {selectedPollCandidates.length} 部
+                </Text>
+              </View>
+              <View style={styles.pollComposeActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setPollSelectionActive(false);
+                    setSelectedPollCandidates([]);
+                  }}
+                  style={({ pressed }) => [
+                    styles.pollComposeSecondary,
+                    { backgroundColor: pressed ? c.fillStrong : c.fill },
+                  ]}
+                >
+                  <X color={c.secondaryLabel} size={16} />
+                  <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>取消</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={selectedPollCandidates.length < 2}
+                  onPress={() => {
+                    const candidateIds = selectedPollCandidates.join(',');
+                    setPollSelectionActive(false);
+                    setSelectedPollCandidates([]);
+                    router.push({
+                      pathname: '/polls',
+                      params: {
+                        candidateIds,
+                        returnTo: 'watchlist',
+                      },
+                    });
+                  }}
+                  style={[
+                    styles.pollComposePrimary,
+                    {
+                      backgroundColor:
+                        selectedPollCandidates.length >= 2 ? c.accent : c.fillStrong,
+                    },
+                  ]}
+                >
+                  <Vote
+                    color={
+                      selectedPollCandidates.length >= 2
+                        ? '#FFFFFF'
+                        : c.tertiaryLabel
+                    }
+                    size={16}
+                  />
+                  <Text
+                    style={[
+                      t.footnote,
+                      {
+                        color:
+                          selectedPollCandidates.length >= 2
+                            ? '#FFFFFF'
+                            : c.tertiaryLabel,
+                        fontWeight: '700',
+                      },
+                    ]}
+                  >
+                    发起投票
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setFilter('all');
+                setSelectedPollCandidates([]);
+                setPollSelectionActive(true);
+              }}
+              style={({ pressed }) => [
+                styles.pollComposeCommand,
+                { backgroundColor: pressed ? c.accentSoft : 'transparent' },
+              ]}
+            >
+              <Vote color={c.accent} size={18} />
+              <Text style={[t.subhead, { color: c.accent, fontWeight: '700' }]}>选片投票</Text>
+            </Pressable>
+          )}
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -1712,6 +1845,23 @@ export default function MediaScreen() {
                     }}
                     libraries={availability?.[entry.id] ?? []}
                     poll={pollByMediaId.get(entry.id) ?? null}
+                    pollSelectable={
+                      (entry.status === 'watchlist' || entry.status === 'voting') &&
+                      !pollByMediaId.has(entry.id) &&
+                      (selectedPollCandidates.includes(entry.id) ||
+                        selectedPollCandidates.length < 12)
+                    }
+                    pollSelected={selectedPollCandidates.includes(entry.id)}
+                    pollSelectionActive={pollSelectionActive}
+                    onTogglePollCandidate={() =>
+                      setSelectedPollCandidates((current) =>
+                        current.includes(entry.id)
+                          ? current.filter((id) => id !== entry.id)
+                          : current.length < 12
+                            ? [...current, entry.id]
+                            : current,
+                      )
+                    }
                     request={requestByMediaId.get(entry.id) ?? null}
                     requestBusy={
                       (refreshRequest.isPending &&
@@ -1880,6 +2030,49 @@ const styles = StyleSheet.create({
   },
   connectorDot: { width: 7, height: 7, borderRadius: radius.full },
   toolbar: { gap: 12, marginTop: 16 },
+  pollComposeBar: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    marginTop: 12,
+    padding: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  pollComposeStatus: {
+    minWidth: 0,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  pollComposeActions: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  pollComposeCommand: {
+    minHeight: 36,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  pollComposeSecondary: {
+    minHeight: 36,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  pollComposePrimary: {
+    minHeight: 36,
+    borderRadius: radius.sm,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   searchBox: {
     height: 44,
     borderWidth: 1,

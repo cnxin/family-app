@@ -295,6 +295,8 @@ M4-D 已新增独立的 `media_requests`，保存 MoviePilot 请求人、影片/
 
 M4-E 已实现豆瓣兼容桥接、TMDB 与 Bangumi 三源并行搜索。来源各自超时和降级，按外部编号或“类型、标准化名称、明确年份”谨慎合并，结果只保存为本地元数据与外部编号快照；任一来源离线时手动录入和家庭片单仍可用。豆瓣不内置非官方签名或网页抓取，只接受自行部署的限权兼容接口。详细边界见 [M4-E 三源影视搜索验收](m4-media-search-acceptance.md)。
 
+M4-F 已为 `poll_options` 增加可选的真实片单引用。家庭成员可从片单选择 2 至 12 部影视发起结构化投票，候选卡展示本地海报、类型和年份并可分别回到片单。单片与多片投票共享家庭隔离、状态保护和有序事务锁；关闭、重开或归档会批量同步候选状态。普通文字投票保持不变。详细边界见 [M4-F 多片候选投票验收](m4-media-candidate-polls-acceptance.md)。
+
 MoviePilot 插件市场的现有实现确认了两条可复用的事件路径：整理完成由 `TransferComplete` 事件触发，Plex/Emby/Jellyfin 的入库、播放开始和播放停止统一进入 `WebhookMessage`。后续同步采用“MoviePilot 负责自动化与整理完成、Plex/Emby 负责实际播放状态”的边界，不要求家庭成员安装或操作 MoviePilot 插件。通用 Webhook 插件会转发全部事件且不提供签名或自定义认证头，因此不能直接作为可信入口；接收端必须增加事件白名单、独立随机密钥、来源限制、幂等键和脱敏日志。
 
 ## 11. 访客系统
@@ -553,7 +555,7 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 - [x] 豆瓣兼容桥接、TMDB 与 Bangumi 三源在线元数据搜索。
 - [x] 家庭级三源设置、加密凭据与服务器默认配置回退。
 - [x] 家庭级 Plex/Emby/MoviePilot 设置、主媒体库与连接测试。
-- [ ] 结构化多片候选投票。
+- [x] 结构化多片候选投票。
 - [x] MoviePilot 请求状态持久化、家庭权限与订阅界面。
 - [ ] 播放进度、观看记录和媒体就绪通知。
 
@@ -586,11 +588,10 @@ M3-E 成员管理与家庭活动批次已于 2026-07-29 完成：新增家庭内
 
 ## 22. 下一次实施范围
 
-前端质量门禁可以通过 `corepack pnpm lint`、`corepack pnpm typecheck` 和 `corepack pnpm test:web` 重复执行。M2、M3 已冻结，M4-A/B/C 的家庭片单、排期、来源投票和媒体连接器基础已经完成。下一次实施范围：
+前端质量门禁可以通过 `corepack pnpm lint`、`corepack pnpm typecheck` 和 `corepack pnpm test:web` 重复执行。M2、M3 已冻结，M4 的片单、三源搜索、单片/多片投票、订阅请求和媒体连接设置已经完成。下一次实施范围：
 
 1. 使用轮换后的 Plex Token 和 MoviePilot API Key 完成 NAS 真实数据只读验收；Emby 部署后复用同一契约验收。
-2. 在已完成的三源在线搜索基础上扩展多片候选投票，不以纯文字保存媒体关联。
-3. 以 MoviePilot `TransferComplete` 接入媒体就绪通知，以 Plex/Emby 播放 Webhook 接入观看记录；统一做事件白名单、认证、幂等和本地快照。
+2. 以 MoviePilot `TransferComplete` 接入媒体就绪通知，以 Plex/Emby 播放 Webhook 接入观看记录；统一做事件白名单、认证、幂等和本地快照。
 
 访客系统继续使用独立临时权限模型，不与正式家庭成员或媒体连接器凭据混用。
 

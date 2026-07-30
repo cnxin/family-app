@@ -70,7 +70,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   { page, request },
   testInfo,
 ) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const runtimeErrors: string[] = [];
   let simulatingUnauthorized = false;
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
@@ -183,6 +183,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   const linkedPollRoute = /\/polls(\?|$)/;
   let linkedPollFixture: Record<string, unknown> | null = null;
   let mediaFixtureStatus = 'watchlist';
+  let mediaFixture2Status = 'watchlist';
   let mediaRequestSequence = 0;
   let mediaRequestFixtures: Record<string, unknown>[] = [];
   let mediaSourceConfigs: {
@@ -330,7 +331,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
           {
             id: 'media-browser-fixture-2',
             householdId: 'household-browser-fixture',
-            status: 'completed',
+            status: mediaFixture2Status,
             scheduledFor: null,
             note: '全家已看完',
             mediaTitle: {
@@ -685,14 +686,26 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       category: string;
       voteMode: string;
       maxChoices: number;
-      sourceModule: string;
-      sourceId: string;
-      options: { label: string }[];
+      sourceModule?: string;
+      sourceId?: string;
+      options: { label?: string; mediaId?: string }[];
     };
-    expect(body.sourceModule).toBe('media');
-    expect(body.sourceId).toBe('media-browser-fixture-1');
+    const structuredCandidates = body.options.every((option) => option.mediaId);
+    if (structuredCandidates) {
+      expect(body.sourceModule).toBeUndefined();
+      expect(body.sourceId).toBeUndefined();
+      expect(body.options.map((option) => option.mediaId)).toEqual([
+        'media-browser-fixture-1',
+        'media-browser-fixture-2',
+      ]);
+    } else {
+      expect(body.sourceModule).toBe('media');
+      expect(body.sourceId).toBe('media-browser-fixture-1');
+    }
     linkedPollFixture = {
-      id: 'poll-browser-fixture-media-1',
+      id: structuredCandidates
+        ? 'poll-browser-fixture-media-2'
+        : 'poll-browser-fixture-media-1',
       title: body.title,
       description: body.description,
       category: 'movie',
@@ -700,8 +713,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       maxChoices: body.maxChoices,
       closesAt: null,
       status: 'open',
-      sourceModule: 'media',
-      sourceId: body.sourceId,
+      sourceModule: structuredCandidates ? null : 'media',
+      sourceId: structuredCandidates ? null : body.sourceId,
       createdById: 'member-browser-fixture',
       createdBy: { id: 'member-browser-fixture', name: '爸爸', avatarEmoji: '👨' },
       closedById: null,
@@ -716,8 +729,40 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       selectedOptionIds: [],
       options: body.options.map((option, index) => ({
         id: `poll-browser-fixture-option-${index + 1}`,
-        label: option.label,
+        label:
+          option.label ??
+          (option.mediaId === 'media-browser-fixture-1'
+            ? '家庭电影回归样例'
+            : '家庭剧集回归样例'),
         description: null,
+        mediaId: option.mediaId ?? null,
+        media: option.mediaId
+          ? {
+              id: option.mediaId,
+              status: 'voting',
+              mediaTitle: {
+                id:
+                  option.mediaId === 'media-browser-fixture-1'
+                    ? 'title-browser-fixture-1'
+                    : 'title-browser-fixture-2',
+                type:
+                  option.mediaId === 'media-browser-fixture-1'
+                    ? 'movie'
+                    : 'series',
+                title:
+                  option.mediaId === 'media-browser-fixture-1'
+                    ? '家庭电影回归样例'
+                    : '家庭剧集回归样例',
+                originalTitle:
+                  option.mediaId === 'media-browser-fixture-1'
+                    ? 'Family Movie Fixture'
+                    : null,
+                year:
+                  option.mediaId === 'media-browser-fixture-1' ? 2099 : 2098,
+                posterUrl: null,
+              },
+            }
+          : null,
         sortOrder: index,
         voteCount: 0,
         percentage: 0,
@@ -725,6 +770,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       })),
     };
     mediaFixtureStatus = 'voting';
+    if (structuredCandidates) mediaFixture2Status = 'voting';
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
@@ -819,6 +865,46 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByLabel('影视名称')).toHaveValue('');
   await page.getByRole('button', { name: '关闭', exact: true }).last().click();
   await expect(page.getByText('加入家庭片单', { exact: true })).not.toBeVisible();
+
+  await page.getByRole('button', { name: '选片投票', exact: true }).click();
+  await page
+    .getByRole('checkbox', { name: '选择候选影视家庭电影回归样例' })
+    .click();
+  await page
+    .getByRole('checkbox', { name: '选择候选影视家庭剧集回归样例' })
+    .click();
+  await expect(page.getByText('已选 2 部', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '发起投票', exact: true }).click();
+  await expect(page).toHaveURL(/\/polls\?.*candidateIds=/);
+  await expect(page.getByText('发起选片投票', { exact: true })).toBeVisible();
+  await expect(page.getByText('家庭片单候选 · 已选 2 部')).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', { name: '移除候选影视家庭电影回归样例' }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole('checkbox', { name: '移除候选影视家庭剧集回归样例' }),
+  ).toBeChecked();
+  await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
+  await expect(page).toHaveURL(/\/media\/watchlist\?.*filter=voting/);
+  await page
+    .getByRole('button', {
+      name: '查看家庭电影回归样例的家庭投票',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByText('这次一起看哪一部？', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', { name: '选择家庭剧集回归样例' }),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: /查看候选影视.*的片单条目/ })).toHaveCount(2);
+  await expectNoHorizontalOverflow(page);
+
+  linkedPollFixture = null;
+  mediaFixtureStatus = 'watchlist';
+  mediaFixture2Status = 'watchlist';
+  await page.goto('/media/watchlist');
+  await expect(page.getByRole('heading', { name: '家庭片单', exact: true })).toBeVisible();
+
   await page
     .getByRole('button', { name: '订阅家庭电影回归样例', exact: true })
     .click();

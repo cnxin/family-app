@@ -694,7 +694,11 @@ export interface PollInput {
   voteMode?: PollVoteMode;
   maxChoices?: number;
   closesAt?: string | null;
-  options?: { label: string; description?: string | null }[];
+  options?: {
+    label?: string;
+    description?: string | null;
+    mediaId?: string;
+  }[];
   sourceModule?: 'media';
   sourceId?: string;
 }

@@ -437,6 +437,160 @@ try {
   await request(`/polls/${concurrentWinner.data.id}`, dad.token, 'DELETE');
   createdPollIds.splice(createdPollIds.indexOf(concurrentWinner.data.id), 1);
 
+  console.log('4.1 多片候选投票与状态保护');
+  const mixedCandidates = await request('/polls', mom.token, 'POST', {
+    title: `混合候选不应创建 ${suffix}`,
+    category: 'movie',
+    options: [{ mediaId: second.data.id }, { label: '普通文字' }],
+  });
+  const duplicateCandidates = await request('/polls', mom.token, 'POST', {
+    title: `重复候选不应创建 ${suffix}`,
+    category: 'movie',
+    options: [{ mediaId: second.data.id }, { mediaId: second.data.id }],
+  });
+  const wrongCategoryCandidates = await request('/polls', mom.token, 'POST', {
+    title: `错误分类不应创建 ${suffix}`,
+    category: 'activity',
+    options: [{ mediaId: second.data.id }, { mediaId: readded.data.id }],
+  });
+  const unknownCandidate = await request('/polls', mom.token, 'POST', {
+    title: `越权候选不应创建 ${suffix}`,
+    category: 'movie',
+    options: [{ mediaId: second.data.id }, { mediaId: randomUUID() }],
+  });
+  assert(
+    mixedCandidates.status === 400 &&
+      duplicateCandidates.status === 400 &&
+      wrongCategoryCandidates.status === 400 &&
+      unknownCandidate.status === 404,
+    '拒绝混合、重复、错误分类和非本家庭的影视候选',
+  );
+
+  const candidatePoll = await request('/polls', mom.token, 'POST', {
+    title: `周末选片 ${suffix}`,
+    category: 'movie',
+    voteMode: 'single',
+    options: [{ mediaId: second.data.id }, { mediaId: readded.data.id }],
+  });
+  assert(
+    candidatePoll.status === 201 &&
+      candidatePoll.data.sourceModule === null &&
+      candidatePoll.data.options.length === 2 &&
+      candidatePoll.data.options[0].mediaId === second.data.id &&
+      candidatePoll.data.options[0].media.id === second.data.id &&
+      candidatePoll.data.options[0].media.mediaTitle.title ===
+        second.data.mediaTitle.title &&
+      candidatePoll.data.options[1].mediaId === readded.data.id &&
+      candidatePoll.data.options[1].media.mediaTitle.posterUrl ===
+        readded.data.mediaTitle.posterUrl,
+    '多片投票保存真实片单引用并返回本地影视快照',
+  );
+  createdPollIds.push(candidatePoll.data.id);
+
+  const candidatesVoting = await request(
+    `/media?status=voting&search=${encodeURIComponent(suffix)}`,
+    dad.token,
+  );
+  const sourceConflict = await request('/polls', dad.token, 'POST', {
+    title: `单片冲突 ${suffix}`,
+    options: [{ label: '想看' }, { label: '不看' }],
+    sourceModule: 'media',
+    sourceId: second.data.id,
+  });
+  const candidateStatusBypass = await request(
+    `/media/${readded.data.id}`,
+    dad.token,
+    'PATCH',
+    { status: 'dropped' },
+  );
+  const candidateDeleteBypass = await request(
+    `/media/${readded.data.id}`,
+    dad.token,
+    'DELETE',
+  );
+  assert(
+    candidatesVoting.data.some((entry) => entry.id === second.data.id) &&
+      candidatesVoting.data.some((entry) => entry.id === readded.data.id) &&
+      sourceConflict.status === 409 &&
+      candidateStatusBypass.status === 409 &&
+      candidateDeleteBypass.status === 409,
+    '候选影视同步投票中状态，并阻止单片投票、状态修改和删除绕过',
+  );
+
+  const closedCandidates = await request(
+    `/polls/${candidatePoll.data.id}/close`,
+    dad.token,
+    'POST',
+  );
+  const candidatesAfterClose = await request(
+    `/media?status=watchlist&search=${encodeURIComponent(suffix)}`,
+    mom.token,
+  );
+  const deleteClosedCandidate = await request(
+    `/media/${readded.data.id}`,
+    dad.token,
+    'DELETE',
+  );
+  const reopenedCandidates = await request(
+    `/polls/${candidatePoll.data.id}/reopen`,
+    dad.token,
+    'POST',
+  );
+  const candidatesAfterReopen = await request(
+    `/media?status=voting&search=${encodeURIComponent(suffix)}`,
+    mom.token,
+  );
+  const archivedCandidates = await request(
+    `/polls/${candidatePoll.data.id}`,
+    mom.token,
+    'DELETE',
+  );
+  createdPollIds.splice(createdPollIds.indexOf(candidatePoll.data.id), 1);
+  const candidatesAfterArchive = await request(
+    `/media?status=watchlist&search=${encodeURIComponent(suffix)}`,
+    dad.token,
+  );
+  assert(
+    closedCandidates.data.status === 'closed' &&
+      deleteClosedCandidate.status === 409 &&
+      candidatesAfterClose.data.some((entry) => entry.id === second.data.id) &&
+      candidatesAfterClose.data.some((entry) => entry.id === readded.data.id) &&
+      reopenedCandidates.data.status === 'open' &&
+      candidatesAfterReopen.data.some((entry) => entry.id === second.data.id) &&
+      candidatesAfterReopen.data.some((entry) => entry.id === readded.data.id) &&
+      archivedCandidates.data.archived === true &&
+      candidatesAfterArchive.data.some((entry) => entry.id === second.data.id) &&
+      candidatesAfterArchive.data.some((entry) => entry.id === readded.data.id),
+    '关闭、重开和归档多片投票会同步恢复所有候选的片单状态',
+  );
+
+  const concurrentCandidatePayload = {
+    title: `并发多片投票 ${suffix}`,
+    category: 'movie',
+    options: [{ mediaId: readded.data.id }, { mediaId: second.data.id }],
+  };
+  const concurrentCandidatePolls = await Promise.all([
+    request('/polls', mom.token, 'POST', concurrentCandidatePayload),
+    request('/polls', dad.token, 'POST', concurrentCandidatePayload),
+  ]);
+  const concurrentCandidateWinner = concurrentCandidatePolls.find(
+    (response) => response.status === 201,
+  );
+  assert(
+    concurrentCandidateWinner &&
+      concurrentCandidatePolls.filter((response) => response.status === 201)
+        .length === 1 &&
+      concurrentCandidatePolls.filter((response) => response.status === 409)
+        .length === 1,
+    '共享候选影视的并发多片投票只会成功创建一个',
+  );
+  createdPollIds.push(concurrentCandidateWinner.data.id);
+  await request(`/polls/${concurrentCandidateWinner.data.id}`, dad.token, 'DELETE');
+  createdPollIds.splice(
+    createdPollIds.indexOf(concurrentCandidateWinner.data.id),
+    1,
+  );
+
   const pollActivity = await request('/activities?limit=100', mom.token);
   assert(
     pollActivity.data.some(

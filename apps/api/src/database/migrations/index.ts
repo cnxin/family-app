@@ -16,6 +16,7 @@ import { AddMediaRequests1785227800000 } from './1785227800000-add-media-request
 import { AddMediaMetadataSources1785227900000 } from './1785227900000-add-media-metadata-sources';
 import { AddHouseholdMediaSourceConfigs1785228000000 } from './1785228000000-add-household-media-source-configs';
 import { AddHouseholdIntegrations1785228100000 } from './1785228100000-add-household-integrations';
+import { AddMediaPollCandidates1785228200000 } from './1785228200000-add-media-poll-candidates';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -36,4 +37,5 @@ export const ALL_MIGRATIONS = [
   AddMediaMetadataSources1785227900000,
   AddHouseholdMediaSourceConfigs1785228000000,
   AddHouseholdIntegrations1785228100000,
+  AddMediaPollCandidates1785228200000,
 ];

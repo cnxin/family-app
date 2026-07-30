@@ -554,6 +554,15 @@ export interface PollOptionResult {
   id: string;
   label: string;
   description: string | null;
+  mediaId: string | null;
+  media: {
+    id: string;
+    status: HouseholdMediaStatus;
+    mediaTitle: Pick<
+      MediaTitle,
+      'id' | 'type' | 'title' | 'originalTitle' | 'year' | 'posterUrl'
+    >;
+  } | null;
   sortOrder: number;
   voteCount: number;
   percentage: number;

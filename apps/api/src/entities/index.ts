@@ -1371,6 +1371,8 @@ export class Poll {
 @Entity('poll_options')
 @Unique('UQ_poll_options_poll_order', ['pollId', 'sortOrder'])
 @Index('IDX_poll_options_poll', ['pollId'])
+@Index('IDX_poll_options_media', ['mediaId'])
+@Index('UQ_poll_options_poll_media', ['pollId', 'mediaId'], { unique: true })
 export class PollOption {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -1390,6 +1392,16 @@ export class PollOption {
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   description: string | null;
+
+  @ManyToOne(() => HouseholdMedia, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'mediaId',
+    foreignKeyConstraintName: 'FK_poll_options_media',
+  })
+  media: HouseholdMedia | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  mediaId: string | null;
 
   @Column({ type: 'int' })
   sortOrder: number;

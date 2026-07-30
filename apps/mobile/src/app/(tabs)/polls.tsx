@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -40,6 +41,7 @@ import {
 import { dateStr, parseDate, todayStr } from '../../lib/date';
 import {
   useArchivePoll,
+  useMedia,
   usePolls,
   useSetPollStatus,
   useUpsertPoll,
@@ -47,6 +49,7 @@ import {
 } from '../../lib/queries';
 import { radius, type as t, useTheme } from '../../lib/theme';
 import type {
+  HouseholdMedia,
   HouseholdPoll,
   PollCategory,
   PollStatus,
@@ -119,12 +122,16 @@ function PollForm({
   onClose,
   onSaved,
   source,
+  mediaCandidates,
+  initialMediaIds,
 }: {
   poll: HouseholdPoll | null;
   visible: boolean;
   onClose: () => void;
   onSaved: (saved: HouseholdPoll) => void;
   source: PollSource | null;
+  mediaCandidates: HouseholdMedia[];
+  initialMediaIds: string[];
 }) {
   const c = useTheme();
   const save = useUpsertPoll();
@@ -137,15 +144,25 @@ function PollForm({
   const [closesOn, setClosesOn] = useState(addDays(todayStr(), 2));
   const [closesTime, setClosesTime] = useState('20:00');
   const [options, setOptions] = useState(['', '']);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
-  const rulesLocked = Boolean(poll?.totalVotes);
+  const structuredPoll = Boolean(poll?.options.some((option) => option.mediaId));
+  const candidateMode = !poll && initialMediaIds.length > 0;
+  const rulesLocked = Boolean(poll?.totalVotes) || structuredPoll;
 
   useEffect(() => {
     if (!visible) return;
     const deadline = deadlineParts(poll?.closesAt ?? null);
-    setTitle(poll?.title ?? (source ? `要一起看《${source.title}》吗？` : ''));
+    setTitle(
+      poll?.title ??
+        (source
+          ? `要一起看《${source.title}》吗？`
+          : candidateMode
+            ? '这次一起看哪一部？'
+            : ''),
+    );
     setDescription(poll?.description ?? '');
-    setCategory(poll?.category ?? (source ? 'movie' : 'general'));
+    setCategory(poll?.category ?? (source || candidateMode ? 'movie' : 'general'));
     setVoteMode(poll?.voteMode ?? 'single');
     setMaxChoices(String(poll?.maxChoices ?? 2));
     setHasDeadline(Boolean(poll?.closesAt));
@@ -155,8 +172,9 @@ function PollForm({
       poll?.options.map((option) => option.label) ??
         (source ? ['想看', '这次先不看'] : ['', '']),
     );
+    setSelectedMediaIds(initialMediaIds);
     setMessage(null);
-  }, [poll, source, visible]);
+  }, [candidateMode, initialMediaIds, poll, source, visible]);
 
   const updateOption = (index: number, value: string) => {
     setOptions((current) =>
@@ -167,20 +185,31 @@ function PollForm({
   const submit = async () => {
     const normalizedTitle = title.trim();
     const normalizedOptions = options.map((option) => option.trim()).filter(Boolean);
+    const optionCount = candidateMode
+      ? selectedMediaIds.length
+      : normalizedOptions.length;
     const max = voteMode === 'single' ? 1 : Number(maxChoices);
     if (!normalizedTitle) {
       setMessage('请填写投票标题');
       return;
     }
-    if (normalizedOptions.length < 2) {
-      setMessage('至少需要两个候选项');
+    if (optionCount < 2) {
+      setMessage(candidateMode ? '至少选择两部候选影视' : '至少需要两个候选项');
       return;
     }
-    if (new Set(normalizedOptions.map((option) => option.toLocaleLowerCase('zh-CN'))).size !== normalizedOptions.length) {
+    if (
+      !candidateMode &&
+      new Set(
+        normalizedOptions.map((option) => option.toLocaleLowerCase('zh-CN')),
+      ).size !== normalizedOptions.length
+    ) {
       setMessage('候选项不能重复');
       return;
     }
-    if (voteMode === 'multiple' && (!Number.isInteger(max) || max < 2 || max > normalizedOptions.length)) {
+    if (
+      voteMode === 'multiple' &&
+      (!Number.isInteger(max) || max < 2 || max > optionCount)
+    ) {
       setMessage('多选数量需要在 2 和候选项总数之间');
       return;
     }
@@ -206,7 +235,9 @@ function PollForm({
           ? {
               voteMode,
               maxChoices: max,
-              options: normalizedOptions.map((label) => ({ label })),
+              options: candidateMode
+                ? selectedMediaIds.map((mediaId) => ({ mediaId }))
+                : normalizedOptions.map((label) => ({ label })),
             }
           : {}),
         ...(!poll && source
@@ -233,7 +264,7 @@ function PollForm({
           <View style={styles.formHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.title2, { color: c.label }]}>
-                {poll ? '编辑家庭投票' : '发起家庭投票'}
+                {poll ? '编辑家庭投票' : candidateMode ? '发起选片投票' : '发起家庭投票'}
               </Text>
               <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
                 {poll ? `${poll.totalVoters} 人已经参与` : '家庭成员都可以参与选择'}
@@ -272,11 +303,13 @@ function PollForm({
 
             <View style={styles.field}>
               <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>分类</Text>
-              {source ? (
+              {source || candidateMode ? (
                 <View style={[styles.sourceNotice, { backgroundColor: c.accentSoft }]}>
                   <Film color={c.accent} size={17} />
                   <Text numberOfLines={2} style={[t.subhead, { color: c.accent, flex: 1, fontWeight: '600' }]}>
-                    来自家庭片单 · {source.title}
+                    {source
+                      ? `来自家庭片单 · ${source.title}`
+                      : `家庭片单候选 · 已选 ${selectedMediaIds.length} 部`}
                   </Text>
                 </View>
               ) : (
@@ -353,8 +386,10 @@ function PollForm({
 
             <View style={styles.field}>
               <View style={styles.optionsHeader}>
-                <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>候选项</Text>
-                {!rulesLocked && options.length < 12 ? (
+                <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>
+                  {candidateMode ? '候选影视' : '候选项'}
+                </Text>
+                {!candidateMode && !rulesLocked && options.length < 12 ? (
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => setOptions((current) => [...current, ''])}
@@ -365,8 +400,81 @@ function PollForm({
                   </Pressable>
                 ) : null}
               </View>
-              <View style={styles.optionInputs}>
-                {options.map((option, index) => (
+              {candidateMode ? (
+                <View style={styles.candidateInputs}>
+                  {mediaCandidates.map((entry) => {
+                    const selected = selectedMediaIds.includes(entry.id);
+                    const eligible =
+                      entry.status === 'watchlist' || entry.status === 'voting';
+                    return (
+                      <Pressable
+                        accessibilityLabel={`${selected ? '移除' : '选择'}候选影视${entry.mediaTitle.title}`}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selected, disabled: !eligible }}
+                        aria-checked={selected}
+                        disabled={!eligible}
+                        key={entry.id}
+                        onPress={() =>
+                          setSelectedMediaIds((current) =>
+                            current.includes(entry.id)
+                              ? current.filter((id) => id !== entry.id)
+                              : current.length < 12
+                                ? [...current, entry.id]
+                                : current,
+                          )
+                        }
+                        style={({ pressed }) => [
+                          styles.candidateInput,
+                          {
+                            backgroundColor: selected
+                              ? c.tintSoft
+                              : pressed
+                                ? c.fill
+                                : c.card,
+                            borderColor: selected ? c.tint : c.separator,
+                            opacity: eligible ? 1 : 0.5,
+                          },
+                        ]}
+                      >
+                        {entry.mediaTitle.posterUrl ? (
+                          <Image
+                            contentFit="cover"
+                            source={{ uri: entry.mediaTitle.posterUrl }}
+                            style={styles.candidatePoster}
+                          />
+                        ) : (
+                          <View style={[styles.candidatePoster, styles.candidatePosterFallback, { backgroundColor: c.fill }]}>
+                            <Film color={c.tertiaryLabel} size={18} />
+                          </View>
+                        )}
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text numberOfLines={2} style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
+                            {entry.mediaTitle.title}
+                          </Text>
+                          <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                            {entry.mediaTitle.type === 'movie' ? '电影' : '剧集'}
+                            {entry.mediaTitle.year ? ` · ${entry.mediaTitle.year}` : ''}
+                            {!eligible ? ' · 当前状态不可投票' : ''}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.choiceIndicator,
+                            {
+                              borderColor: selected ? c.tint : c.fillStrong,
+                              backgroundColor: selected ? c.tint : c.card,
+                            },
+                          ]}
+                        >
+                          {selected ? <Check color="#FFFFFF" size={13} strokeWidth={3} /> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.optionInputs}>
+                  {options.map((option, index) => (
                   <View key={`option-${index}`} style={styles.optionInputRow}>
                     <TextInput
                       accessibilityLabel={`候选项${index + 1}`}
@@ -400,8 +508,9 @@ function PollForm({
                       </Pressable>
                     ) : null}
                   </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
             </View>
 
             <View style={[styles.deadlineRow, { backgroundColor: c.fill, borderColor: c.separator }]}>
@@ -479,7 +588,7 @@ function PollCard({
   onArchive: () => void;
   onClose: () => void;
   onEdit: () => void;
-  onOpenSource: () => void;
+  onOpenSource: (mediaId?: string) => void;
   onRemind: () => void;
   onReopen: () => void;
 }) {
@@ -621,7 +730,7 @@ function PollCard({
           <Pressable
             accessibilityLabel={`查看${poll.title}关联的片单条目`}
             accessibilityRole="button"
-            onPress={onOpenSource}
+            onPress={() => onOpenSource()}
             style={({ pressed }) => [
               styles.reminderButton,
               { backgroundColor: pressed ? c.accentSoft : c.fill },
@@ -683,13 +792,51 @@ function PollCard({
                 >
                   {active ? <Check color="#FFFFFF" size={13} strokeWidth={3} /> : null}
                 </View>
-                <Text numberOfLines={2} style={[t.subhead, { color: c.label, flex: 1, fontWeight: '600' }]}>
-                  {option.label}
-                </Text>
+                {option.media?.mediaTitle.posterUrl ? (
+                  <Image
+                    accessibilityLabel={`${option.label}海报`}
+                    contentFit="cover"
+                    source={{ uri: option.media.mediaTitle.posterUrl }}
+                    style={styles.pollOptionPoster}
+                  />
+                ) : option.media ? (
+                  <View style={[styles.pollOptionPoster, styles.candidatePosterFallback, { backgroundColor: c.fill }]}>
+                    <Film color={c.tertiaryLabel} size={16} />
+                  </View>
+                ) : null}
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={2} style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
+                    {option.label}
+                  </Text>
+                  {option.media ? (
+                    <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                      {option.media.mediaTitle.type === 'movie' ? '电影' : '剧集'}
+                      {option.media.mediaTitle.year
+                        ? ` · ${option.media.mediaTitle.year}`
+                        : ''}
+                    </Text>
+                  ) : null}
+                </View>
                 <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>
                   {option.voteCount} 票 · {option.percentage}%
                 </Text>
               </Pressable>
+              {option.media ? (
+                <Pressable
+                  accessibilityLabel={`查看候选影视${option.label}的片单条目`}
+                  accessibilityRole="link"
+                  onPress={() => onOpenSource(option.media?.id)}
+                  style={({ pressed }) => [
+                    styles.optionSourceLink,
+                    { backgroundColor: pressed ? c.accentSoft : 'transparent' },
+                  ]}
+                >
+                  <Film color={c.accent} size={14} />
+                  <Text style={[t.caption, { color: c.accent, fontWeight: '700' }]}>
+                    查看片单
+                  </Text>
+                </Pressable>
+              ) : null}
               <View style={[styles.progressTrack, { backgroundColor: c.fill }]}>
                 <View
                   style={[
@@ -758,17 +905,49 @@ export default function PollsScreen() {
     sourceId?: string;
     sourceTitle?: string;
     returnTo?: string;
+    candidateIds?: string;
   }>();
   const focusedPollId = firstParam(params.pollId);
   const sourceModule = firstParam(params.sourceModule);
   const sourceId = firstParam(params.sourceId);
   const sourceTitle = firstParam(params.sourceTitle);
   const returnTo = firstParam(params.returnTo);
+  const candidateIdsParam = firstParam(params.candidateIds);
+  const initialMediaIds = useMemo(
+    () =>
+      [...new Set((candidateIdsParam ?? '').split(',').filter(Boolean))].slice(
+        0,
+        12,
+      ),
+    [candidateIdsParam],
+  );
   const source =
     sourceModule === 'media' && sourceId && sourceTitle
       ? { module: 'media' as const, id: sourceId, title: sourceTitle }
       : null;
   const { data: polls, isLoading, error } = usePolls();
+  const { data: householdMedia } = useMedia(
+    'all',
+    '',
+    initialMediaIds.length > 0,
+  );
+  const mediaCandidates = useMemo(
+    () =>
+      [...(householdMedia ?? [])].sort((left, right) => {
+        const leftSelected = initialMediaIds.indexOf(left.id);
+        const rightSelected = initialMediaIds.indexOf(right.id);
+        if (leftSelected >= 0 && rightSelected >= 0) {
+          return leftSelected - rightSelected;
+        }
+        if (leftSelected >= 0) return -1;
+        if (rightSelected >= 0) return 1;
+        return left.mediaTitle.title.localeCompare(
+          right.mediaTitle.title,
+          'zh-CN',
+        );
+      }),
+    [householdMedia, initialMediaIds],
+  );
   const [filter, setFilter] = useState<PollFilter>('open');
   const [formOpen, setFormOpen] = useState(false);
   const [editingPoll, setEditingPoll] = useState<HouseholdPoll | null>(null);
@@ -785,13 +964,15 @@ export default function PollsScreen() {
   }, [focusedPollId, polls]);
 
   useEffect(() => {
-    if (!source) return;
-    const key = `${source.module}:${source.id}`;
+    if (!source && !initialMediaIds.length) return;
+    const key = source
+      ? `${source.module}:${source.id}`
+      : `media-candidates:${initialMediaIds.join(',')}`;
     if (openedSource.current === key) return;
     openedSource.current = key;
     setEditingPoll(null);
     setFormOpen(true);
-  }, [source]);
+  }, [initialMediaIds, source]);
 
   const visiblePolls = useMemo(
     () =>
@@ -872,11 +1053,12 @@ export default function PollsScreen() {
                     setEditingPoll(poll);
                     setFormOpen(true);
                   }}
-                  onOpenSource={() => {
-                    if (!poll.sourceId) return;
+                  onOpenSource={(mediaId) => {
+                    const targetMediaId = mediaId ?? poll.sourceId;
+                    if (!targetMediaId) return;
                     router.push({
-                      pathname: '/media',
-                      params: { mediaId: poll.sourceId },
+                      pathname: '/media/watchlist',
+                      params: { mediaId: targetMediaId },
                     });
                   }}
                   onReopen={() => reopen(poll)}
@@ -906,11 +1088,14 @@ export default function PollsScreen() {
         onClose={() => setFormOpen(false)}
         onSaved={(saved) => {
           setFormOpen(false);
-          if (source) {
+          if (source || initialMediaIds.length) {
             if (returnTo === 'watchlist') {
               router.replace({
                 pathname: '/media/watchlist',
-                params: { mediaId: source.id, filter: 'voting' },
+                params: {
+                  ...(source ? { mediaId: source.id } : {}),
+                  filter: 'voting',
+                },
               });
             } else {
               router.replace({ pathname: '/polls', params: { pollId: saved.id } });
@@ -919,6 +1104,8 @@ export default function PollsScreen() {
         }}
         poll={editingPoll}
         source={!editingPoll ? source : null}
+        mediaCandidates={mediaCandidates}
+        initialMediaIds={!editingPoll ? initialMediaIds : []}
         visible={formOpen}
       />
 
@@ -1058,6 +1245,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pollOptionPoster: { width: 36, height: 52, borderRadius: 4 },
+  optionSourceLink: {
+    alignSelf: 'flex-start',
+    minHeight: 30,
+    borderRadius: radius.sm,
+    paddingHorizontal: 7,
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   progressTrack: { height: 5, borderRadius: 3, marginTop: 6, overflow: 'hidden' },
   progressFill: { height: 5, borderRadius: 3 },
   pollFooter: {
@@ -1149,6 +1347,18 @@ const styles = StyleSheet.create({
   optionsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   addOptionButton: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 4 },
   optionInputs: { gap: 8 },
+  candidateInputs: { gap: 8 },
+  candidateInput: {
+    minHeight: 64,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  candidatePoster: { width: 34, height: 48, borderRadius: 4 },
+  candidatePosterFallback: { alignItems: 'center', justifyContent: 'center' },
   optionInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   optionInput: { flex: 1, minWidth: 0, height: 44, borderRadius: radius.sm, paddingHorizontal: 12 },
   removeOptionButton: {
