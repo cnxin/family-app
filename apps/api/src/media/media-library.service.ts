@@ -516,7 +516,7 @@ export class MediaLibraryService {
       originalTitle: item.originalTitle,
       year: item.year,
       overview: item.overview,
-      posterUrl: item.posterUrl ?? this.posterUrl(item),
+      posterUrl: this.posterUrlForItem(item),
       externalRefs: item.externalRefs,
       playbackUrl: item.playbackUrl,
       householdMediaId: item.mediaTitleId
@@ -524,6 +524,10 @@ export class MediaLibraryService {
         : null,
       lastSeenAt: item.lastSeenAt,
     };
+  }
+
+  posterUrlForItem(item: MediaLibraryItem) {
+    return item.posterUrl ?? this.posterUrl(item);
   }
 
   private posterUrl(item: MediaLibraryItem) {

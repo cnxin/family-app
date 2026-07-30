@@ -408,6 +408,7 @@ export interface MediaConnectorSettings {
   webhookConfigured: boolean;
   webhookSourceIp: string | null;
   webhookUpdatedAt: string | null;
+  playbackServerId: string | null;
   updatedAt: string | null;
 }
 
@@ -435,6 +436,61 @@ export interface MoviePilotWebhookResult {
   callbackPath: string;
   sourceIp: string;
   updatedAt: string;
+}
+
+export interface PlaybackWebhookResult extends MoviePilotWebhookResult {
+  serverId: string;
+}
+
+export type ViewingSessionStatus =
+  | 'active'
+  | 'paused'
+  | 'stopped'
+  | 'completed';
+
+export interface ViewingSession {
+  id: string;
+  provider: 'plex' | 'emby';
+  connectorName: string;
+  mediaLibraryItemId: string | null;
+  mediaTitleId: string | null;
+  libraryItemId: string;
+  contentItemId: string;
+  mediaType: MediaType;
+  title: string;
+  deviceName: string | null;
+  status: ViewingSessionStatus;
+  positionMs: number;
+  durationMs: number | null;
+  percentage: number;
+  startedAt: string;
+  endedAt: string | null;
+  lastEventAt: string;
+  posterUrl: string | null;
+  playbackUrl: string | null;
+  participants: {
+    id: string;
+    member: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+    joinedAt: string;
+    lastSeenAt: string;
+  }[];
+}
+
+export interface ViewingProgress {
+  id: string;
+  provider: 'plex' | 'emby';
+  mediaLibraryItemId: string | null;
+  mediaTitleId: string | null;
+  contentItemId: string;
+  title: string;
+  positionMs: number;
+  durationMs: number | null;
+  percentage: number;
+  completed: boolean;
+  lastWatchedAt: string;
+  posterUrl: string | null;
+  playbackUrl: string | null;
+  member: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
 }
 
 export interface MediaLibraryMatch {

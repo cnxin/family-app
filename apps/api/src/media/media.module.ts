@@ -37,8 +37,10 @@ import {
   Query,
   Req,
   Res,
+  UseInterceptors,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest, Response } from 'express';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
@@ -63,6 +65,9 @@ import {
   Notification,
   Poll,
   PollOption,
+  ViewingParticipant,
+  ViewingProgress,
+  ViewingSession,
 } from '../entities';
 import { MediaConnectorsService } from './media-connectors.service';
 import {
@@ -72,6 +77,8 @@ import {
 import { MediaMetadataService } from './media-metadata.service';
 import { MoviePilotWebhookService } from './moviepilot-webhook.service';
 import { MediaUserMappingsService } from './media-user-mappings.service';
+import { PlaybackWebhookService } from './playback-webhook.service';
+import { ViewingHistoryService } from './viewing-history.service';
 import {
   MediaLibraryQuery,
   MediaLibraryService,
@@ -212,6 +219,22 @@ class RotateMoviePilotWebhookDto {
   @IsString()
   @MaxLength(64)
   sourceIp?: string;
+}
+
+class RotatePlaybackWebhookDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sourceIp?: string;
+}
+
+class ViewingHistoryQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 class MapPlaybackUserDto {
@@ -1288,6 +1311,8 @@ class MediaController {
     private readonly sourceSettings: MediaSourceSettingsService,
     private readonly integrationSettings: IntegrationSettingsService,
     private readonly moviePilotWebhook: MoviePilotWebhookService,
+    private readonly playbackWebhook: PlaybackWebhookService,
+    private readonly viewingHistory: ViewingHistoryService,
     private readonly userMappings: MediaUserMappingsService,
     private readonly connectorsService: MediaConnectorsService,
     private readonly library: MediaLibraryService,
@@ -1413,6 +1438,19 @@ class MediaController {
     return this.moviePilotWebhook.rotate(dto.sourceIp, user);
   }
 
+  @Post('connector-settings/:provider/playback-webhook')
+  @RequireCapabilities('manage_integrations')
+  rotatePlaybackWebhook(
+    @Param('provider') providerValue: string,
+    @Body() dto: RotatePlaybackWebhookDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    if (!this.playbackWebhook.isProvider(providerValue)) {
+      throw new NotFoundException('媒体服务不存在');
+    }
+    return this.playbackWebhook.rotate(providerValue, dto.sourceIp, user);
+  }
+
   @Get('playback-users')
   @RequireCapabilities('manage_integrations')
   playbackUsers(@CurrentUser() user: JwtUser) {
@@ -1457,6 +1495,54 @@ class MediaController {
     @Body() body: unknown,
   ) {
     return this.moviePilotWebhook.receive(integrationId, secret, request, body);
+  }
+
+  @Public()
+  @Post('webhooks/playback/:provider/:integrationId/:secret')
+  @HttpCode(200)
+  @UseInterceptors(
+    AnyFilesInterceptor({
+      limits: {
+        fields: 12,
+        fieldSize: 128 * 1024,
+        files: 1,
+        fileSize: 2 * 1024 * 1024,
+      },
+    }),
+  )
+  receivePlaybackWebhook(
+    @Param('provider') providerValue: string,
+    @Param('integrationId', ParseUUIDPipe) integrationId: string,
+    @Param('secret') secret: string,
+    @Req() request: ExpressRequest,
+    @Body() body: unknown,
+  ) {
+    if (!this.playbackWebhook.isProvider(providerValue)) {
+      throw new NotFoundException('播放回调不存在');
+    }
+    return this.playbackWebhook.receive(
+      providerValue,
+      integrationId,
+      secret,
+      request,
+      body,
+    );
+  }
+
+  @Get('viewing-sessions')
+  viewingSessions(
+    @Query() query: ViewingHistoryQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.viewingHistory.listSessions(user, query.limit ?? 50);
+  }
+
+  @Get('viewing-progress')
+  viewingProgress(
+    @Query() query: ViewingHistoryQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.viewingHistory.listProgress(user, query.limit ?? 100);
   }
 
   @Post('library-availability')
@@ -1576,6 +1662,9 @@ class MediaController {
       MediaExternalRef,
       MediaLibraryItem,
       MediaUserMapping,
+      ViewingSession,
+      ViewingParticipant,
+      ViewingProgress,
       MediaRequest,
       Member,
       Notification,
@@ -1590,6 +1679,8 @@ class MediaController {
     MediaLibraryService,
     IntegrationSettingsService,
     MoviePilotWebhookService,
+    PlaybackWebhookService,
+    ViewingHistoryService,
     MediaUserMappingsService,
     MediaSourceSettingsService,
     MediaMetadataService,

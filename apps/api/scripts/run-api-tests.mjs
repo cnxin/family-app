@@ -237,6 +237,7 @@ try {
   await runScript('scripts/media-connector-settings.mjs');
   await runScript('scripts/moviepilot-webhook.mjs');
   await runScript('scripts/media-library.mjs');
+  await runScript('scripts/playback-webhook.mjs');
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');
   await wait(50);

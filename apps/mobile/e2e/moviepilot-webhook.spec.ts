@@ -60,23 +60,24 @@ test.beforeEach(async ({ page }) => {
   await installSession(page);
 });
 
-test('MoviePilot 回调地址可生成并通过按钮复制', async ({ page, context }, testInfo) => {
+test('Plex 与 MoviePilot 回调地址可生成并通过按钮复制', async ({ page, context }, testInfo) => {
   const connectorSettings = [
     {
       kind: 'plex',
       name: 'Plex',
       role: 'library',
-      mode: 'server_default',
+      mode: 'household',
       isEnabled: true,
-      baseUrl: null,
-      credentialConfigured: false,
-      credentialHint: null,
+      baseUrl: 'http://192.168.50.106:32400',
+      credentialConfigured: true,
+      credentialHint: '****1357',
       isPrimary: true,
-      configured: false,
+      configured: true,
       capabilities: ['library', 'playback'],
       webhookConfigured: false,
-      webhookSourceIp: null,
+      webhookSourceIp: '192.168.50.106',
       webhookUpdatedAt: null,
+      playbackServerId: null,
       updatedAt: null,
     },
     {
@@ -94,6 +95,7 @@ test('MoviePilot 回调地址可生成并通过按钮复制', async ({ page, con
       webhookConfigured: false,
       webhookSourceIp: null,
       webhookUpdatedAt: null,
+      playbackServerId: null,
       updatedAt: null,
     },
     {
@@ -111,6 +113,7 @@ test('MoviePilot 回调地址可生成并通过按钮复制', async ({ page, con
       webhookConfigured: false,
       webhookSourceIp: '192.168.50.106',
       webhookUpdatedAt: null,
+      playbackServerId: null,
       updatedAt: '2099-01-01T08:00:00.000Z',
     },
   ];
@@ -149,6 +152,28 @@ test('MoviePilot 回调地址可生成并通过按钮复制', async ({ page, con
       });
     },
   );
+  await page.route(
+    /\/media\/connector-settings\/plex\/playback-webhook$/,
+    async (route) => {
+      expect(route.request().method()).toBe('POST');
+      expect(route.request().postDataJSON()).toEqual({
+        sourceIp: '192.168.50.106',
+      });
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            callbackPath:
+              '/media/webhooks/playback/plex/00000000-0000-4000-8000-000000000088/one-time-playback-secret',
+            sourceIp: '192.168.50.106',
+            serverId: 'plex-fixture-server',
+            updatedAt: '2099-01-01T09:00:00.000Z',
+          },
+        }),
+      });
+    },
+  );
 
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/media/settings');
@@ -158,22 +183,29 @@ test('MoviePilot 回调地址可生成并通过按钮复制', async ({ page, con
   await expect(page.getByLabel('MoviePilot 回调允许来源 IP')).toHaveValue(
     '192.168.50.106',
   );
-  await page.getByRole('button', { name: '生成回调地址', exact: true }).click();
+  await page.getByRole('button', { name: 'MoviePilot 生成回调地址', exact: true }).click();
 
   const callbackUrl =
     'http://localhost:3100/media/webhooks/moviepilot/00000000-0000-4000-8000-000000000099/one-time-fixture-secret';
   await expect(page.getByLabel('MoviePilot 回调地址')).toHaveValue(callbackUrl);
   await expect(
-    page.getByRole('button', { name: '重新生成', exact: true }),
+    page.getByRole('button', { name: 'MoviePilot 重新生成回调地址', exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: '复制地址', exact: true }).click();
+  await page.getByRole('button', { name: 'MoviePilot 复制回调地址', exact: true }).click();
   await expect(page.getByText('已复制回调地址', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
     callbackUrl,
   );
+  await page.getByRole('button', { name: 'Plex 生成回调地址', exact: true }).click();
+  await expect(page.getByLabel('Plex 回调地址')).toHaveValue(
+    'http://localhost:3100/media/webhooks/playback/plex/00000000-0000-4000-8000-000000000088/one-time-playback-secret',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Plex 重新生成回调地址', exact: true }),
+  ).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await page.screenshot({
-    path: testInfo.outputPath('moviepilot-webhook-settings.png'),
+    path: testInfo.outputPath('media-webhook-settings.png'),
     fullPage: true,
   });
 });

@@ -41,6 +41,7 @@ import {
   useResetMediaConnectorSettings,
   useResetMediaSourceConfig,
   useRotateMoviePilotWebhook,
+  useRotatePlaybackWebhook,
   useTestMediaConnectorSettings,
   useUpdateMediaConnectorSettings,
   useUpdateMediaPlaybackUserMapping,
@@ -332,6 +333,7 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
   const reset = useResetMediaConnectorSettings();
   const test = useTestMediaConnectorSettings();
   const rotateWebhook = useRotateMoviePilotWebhook();
+  const rotatePlaybackWebhook = useRotatePlaybackWebhook();
   const [name, setName] = useState(config.name);
   const [isEnabled, setIsEnabled] = useState(config.isEnabled);
   const [baseUrl, setBaseUrl] = useState(config.baseUrl ?? '');
@@ -347,7 +349,10 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
     (update.isPending && update.variables?.kind === config.kind) ||
     (reset.isPending && reset.variables === config.kind) ||
     (test.isPending && test.variables === config.kind) ||
-    (config.kind === 'moviepilot' && rotateWebhook.isPending);
+    (config.kind === 'moviepilot'
+      ? rotateWebhook.isPending
+      : rotatePlaybackWebhook.isPending &&
+        rotatePlaybackWebhook.variables?.provider === config.kind);
 
   useEffect(() => {
     setName(config.name);
@@ -413,10 +418,16 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
     }
   };
 
-  const rotateMoviePilotWebhook = async () => {
+  const rotateConnectorWebhook = async () => {
     setMessage(null);
     try {
-      const result = await rotateWebhook.mutateAsync(webhookSourceIp);
+      const result =
+        config.kind === 'moviepilot'
+          ? await rotateWebhook.mutateAsync(webhookSourceIp)
+          : await rotatePlaybackWebhook.mutateAsync({
+              provider: config.kind,
+              sourceIp: webhookSourceIp,
+            });
       setWebhookSourceIp(result.sourceIp);
       setCallbackUrl(`${BASE_URL}${result.callbackPath}`);
       setMessage(config.webhookConfigured ? '已重新生成回调地址' : '已生成回调地址');
@@ -428,7 +439,7 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
 
   const confirmWebhookRotation = () => {
     if (!config.webhookConfigured) {
-      void rotateMoviePilotWebhook();
+      void rotateConnectorWebhook();
       return;
     }
     Alert.alert('重新生成回调地址', '现有回调地址将立即失效。', [
@@ -436,7 +447,7 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
       {
         text: '重新生成',
         style: 'destructive',
-        onPress: () => void rotateMoviePilotWebhook(),
+        onPress: () => void rotateConnectorWebhook(),
       },
     ]);
   };
@@ -639,16 +650,21 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
         ) : null}
       </View>
 
-      {config.kind === 'moviepilot' ? (
-        <View style={[styles.webhookSection, { borderColor: c.separator }]}>
+      <View style={[styles.webhookSection, { borderColor: c.separator }]}>
           <View style={styles.webhookHeader}>
             <View style={[styles.webhookIcon, { backgroundColor: c.tintSoft }]}>
               <Link2 color={c.tint} size={17} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>完成通知回调</Text>
+              <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                {config.kind === 'moviepilot' ? '完成通知回调' : '播放记录回调'}
+              </Text>
               <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
-                {config.webhookConfigured ? '已启用' : '未生成'}
+                {config.webhookConfigured
+                  ? config.playbackServerId
+                    ? `已启用 · ${config.playbackServerId.slice(-8)}`
+                    : '已启用'
+                  : '未生成'}
               </Text>
             </View>
           </View>
@@ -656,7 +672,7 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
           <View style={styles.field}>
             <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>允许来源 IP</Text>
             <TextInput
-              accessibilityLabel="MoviePilot 回调允许来源 IP"
+              accessibilityLabel={`${config.name} 回调允许来源 IP`}
               autoCapitalize="none"
               autoCorrect={false}
               editable={!busy}
@@ -670,9 +686,9 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
 
           {callbackUrl ? (
             <View style={styles.field}>
-              <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>MoviePilot 回调地址</Text>
+              <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>{config.name} 回调地址</Text>
               <TextInput
-                accessibilityLabel="MoviePilot 回调地址"
+                accessibilityLabel={`${config.name} 回调地址`}
                 editable={false}
                 multiline
                 selectTextOnFocus
@@ -690,6 +706,9 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
 
           <View style={styles.actions}>
             <Pressable
+              accessibilityLabel={`${config.name} ${
+                config.webhookConfigured ? '重新生成回调地址' : '生成回调地址'
+              }`}
               accessibilityRole="button"
               disabled={busy}
               onPress={confirmWebhookRotation}
@@ -706,6 +725,7 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
             </Pressable>
             {callbackUrl ? (
               <Pressable
+                accessibilityLabel={`${config.name} 复制回调地址`}
                 accessibilityRole="button"
                 disabled={busy}
                 onPress={() => void copyCallbackUrl()}
@@ -719,8 +739,7 @@ function ConnectorEditor({ config }: { config: MediaConnectorSettings }) {
               </Pressable>
             ) : null}
           </View>
-        </View>
-      ) : null}
+      </View>
     </Card>
   );
 }

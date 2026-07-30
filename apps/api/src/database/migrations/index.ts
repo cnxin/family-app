@@ -20,6 +20,7 @@ import { AddMediaPollCandidates1785228200000 } from './1785228200000-add-media-p
 import { AddMediaLibraryItems1785228300000 } from './1785228300000-add-media-library-items';
 import { AddIntegrationEvents1785228400000 } from './1785228400000-add-integration-events';
 import { AddMediaUserMappings1785228500000 } from './1785228500000-add-media-user-mappings';
+import { AddViewingHistory1785228600000 } from './1785228600000-add-viewing-history';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -44,4 +45,5 @@ export const ALL_MIGRATIONS = [
   AddMediaLibraryItems1785228300000,
   AddIntegrationEvents1785228400000,
   AddMediaUserMappings1785228500000,
+  AddViewingHistory1785228600000,
 ];

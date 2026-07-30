@@ -3,6 +3,7 @@ import {
   ArrowRight,
   CalendarDays,
   Film,
+  History,
   Library,
   ListVideo,
   Play,
@@ -28,7 +29,12 @@ import {
 } from '../../../components/app-shell';
 import { Card } from '../../../components/ui';
 import { parseDate } from '../../../lib/date';
-import { useMedia, useMediaConnectors, usePolls } from '../../../lib/queries';
+import {
+  useMedia,
+  useMediaConnectors,
+  usePolls,
+  useViewingSessions,
+} from '../../../lib/queries';
 import { useSession } from '../../../lib/session';
 import { radius, type as t, useTheme } from '../../../lib/theme';
 import type { MediaConnectorSummary } from '../../../lib/types';
@@ -153,6 +159,7 @@ export default function MediaHomeScreen() {
   const { data: entries, isLoading } = useMedia('all', '', !mediaId);
   const { data: connectors } = useMediaConnectors();
   const { data: polls } = usePolls(!mediaId);
+  const { data: viewingSessions } = useViewingSessions(!mediaId);
 
   if (mediaId) {
     return <Redirect href={{ pathname: '/media/watchlist', params: { mediaId } }} />;
@@ -238,6 +245,14 @@ export default function MediaHomeScreen() {
               icon={Vote}
               label="观影投票"
               status={`${mediaPolls.length} 个进行中`}
+            />
+            <ActionCard
+              background={c.greenSoft}
+              color={c.green}
+              href="/media/history"
+              icon={History}
+              label="观看记录"
+              status={`${viewingSessions?.length ?? 0} 次播放`}
             />
           </View>
 

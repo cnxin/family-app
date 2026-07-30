@@ -54,17 +54,17 @@ function integer(value: unknown, minimum: number, maximum: number) {
     : null;
 }
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
+export function canonicalizeWebhookValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeWebhookValue);
   if (!isObject(value)) return value;
   return Object.fromEntries(
     Object.keys(value)
       .sort()
-      .map((key) => [key, canonicalize(value[key])]),
+      .map((key) => [key, canonicalizeWebhookValue(value[key])]),
   );
 }
 
-function hash(value: string) {
+export function hashWebhookValue(value: string) {
   return createHash('sha256').update(value).digest('hex');
 }
 
@@ -90,7 +90,7 @@ export function literalIpFromBaseUrl(value: string | null | undefined) {
   }
 }
 
-function secretMatches(secret: string, storedHash: string) {
+export function webhookSecretMatches(secret: string, storedHash: string) {
   if (!/^[a-f0-9]{64}$/i.test(storedHash)) return false;
   const actual = createHash('sha256').update(secret).digest();
   const expected = Buffer.from(storedHash, 'hex');
@@ -143,7 +143,7 @@ export class MoviePilotWebhookService {
         throw new BadRequestException('回调来源 IP 必须是有效的 IPv4 或 IPv6 地址');
       }
       const wasConfigured = Boolean(integration.webhookSecretHash);
-      integration.webhookSecretHash = hash(secret);
+    integration.webhookSecretHash = hashWebhookValue(secret);
       integration.webhookSourceIp = normalizedSourceIp;
       integration.webhookUpdatedAt = updatedAt;
       await manager.getRepository(Integration).save(integration);
@@ -182,7 +182,7 @@ export class MoviePilotWebhookService {
       .getOne();
     if (
       !integration?.webhookSecretHash ||
-      !secretMatches(secret, integration.webhookSecretHash)
+      !webhookSecretMatches(secret, integration.webhookSecretHash)
     ) {
       throw new NotFoundException('MoviePilot 回调不存在');
     }
@@ -195,7 +195,7 @@ export class MoviePilotWebhookService {
     }
     if (!isObject(body)) throw new BadRequestException('回调数据格式无效');
 
-    const serialized = JSON.stringify(canonicalize(body));
+    const serialized = JSON.stringify(canonicalizeWebhookValue(body));
     if (Buffer.byteLength(serialized, 'utf8') > MAX_WEBHOOK_BYTES) {
       throw new PayloadTooLargeException('MoviePilot 回调数据不能超过 64 KiB');
     }
@@ -205,7 +205,7 @@ export class MoviePilotWebhookService {
     }
 
     const snapshot = transferSnapshot(body);
-    const idempotencyKey = hash(serialized);
+    const idempotencyKey = hashWebhookValue(serialized);
     const inserted = (await this.dataSource.query(
       `INSERT INTO "integration_events"
         ("householdId", "integrationId", "provider", "eventType",

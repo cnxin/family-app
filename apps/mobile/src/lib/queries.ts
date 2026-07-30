@@ -29,6 +29,7 @@ import type {
   MediaLibrarySyncResponse,
   MediaPlaybackUserDirectory,
   MoviePilotWebhookResult,
+  PlaybackWebhookResult,
   MediaRequest,
   MediaSearchResponse,
   MediaSourceConfig,
@@ -54,6 +55,8 @@ import type {
   TaskInstanceStatus,
   TaskOccurrence,
   TaskRecurrence,
+  ViewingProgress,
+  ViewingSession,
 } from './types';
 
 export function useMembers(enabled = true) {
@@ -421,6 +424,62 @@ export function useRotateMoviePilotWebhook() {
       );
       void qc.invalidateQueries({ queryKey: ['activities'] });
     },
+  });
+}
+
+export function useRotatePlaybackWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      provider,
+      sourceIp,
+    }: {
+      provider: 'plex' | 'emby';
+      sourceIp: string;
+    }) =>
+      api<PlaybackWebhookResult>(
+        `/media/connector-settings/${provider}/playback-webhook`,
+        {
+          method: 'POST',
+          body: { ...(sourceIp.trim() ? { sourceIp: sourceIp.trim() } : {}) },
+        },
+      ),
+    onSuccess: (result, variables) => {
+      qc.setQueryData<MediaConnectorSettings[]>(
+        ['media-connector-settings'],
+        (settings) =>
+          settings?.map((setting) =>
+            setting.kind === variables.provider
+              ? {
+                  ...setting,
+                  webhookConfigured: true,
+                  webhookSourceIp: result.sourceIp,
+                  webhookUpdatedAt: result.updatedAt,
+                  playbackServerId: result.serverId,
+                }
+              : setting,
+          ),
+      );
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useViewingSessions(enabled = true) {
+  return useQuery({
+    queryKey: ['viewing-sessions'],
+    queryFn: () => api<ViewingSession[]>('/media/viewing-sessions'),
+    enabled,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useViewingProgress(enabled = true) {
+  return useQuery({
+    queryKey: ['viewing-progress'],
+    queryFn: () => api<ViewingProgress[]>('/media/viewing-progress'),
+    enabled,
+    refetchInterval: 30_000,
   });
 }
 
