@@ -81,12 +81,21 @@ export interface MediaLibraryCatalogItem {
   metadata: Record<string, unknown>;
 }
 
+export interface MediaLibraryPoster {
+  body: Buffer;
+  contentType: string;
+}
+
 export interface MediaLibraryProvider {
   readonly provider: MediaExternalProvider;
   listItems(): Promise<MediaLibraryCatalogItem[]>;
   findByExternalRefs(
     externalRefs: MediaExternalReference[],
   ): Promise<MediaLibraryMatch[]>;
+  getPoster(
+    libraryItemId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<MediaLibraryPoster | null>;
   getPlaybackTarget(libraryItemId: string): Promise<string | null>;
   health(): Promise<MediaProviderHealth>;
 }

@@ -73,6 +73,7 @@ async function testPlex() {
                 title: 'Fight Club',
                 year: 1999,
                 summary: 'An insomniac meets a soap maker.',
+                thumb: '/library/metadata/242/thumb/poster-tag',
                 Guid: [
                   { id: 'tmdb://550' },
                   { id: 'imdb://tt0137523' },
@@ -80,6 +81,11 @@ async function testPlex() {
               },
             ],
           },
+        });
+      }
+      if (url.pathname === '/library/metadata/242/thumb/poster-tag') {
+        return new Response('plex-poster', {
+          headers: { 'Content-Type': 'image/jpeg' },
         });
       }
       if (url.pathname === '/library/all') {
@@ -106,6 +112,11 @@ async function testPlex() {
   const health = await provider.health();
   const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
+  const poster = await provider.getPoster('242', library[0].metadata);
+  const requestCount = requests.length;
+  const untrustedPoster = await provider.getPoster('242', {
+    thumb: '//untrusted.test/poster.jpg',
+  });
   assert(health.available && health.message === 'Plex 1.43.0', '读取 Plex 版本');
   assert(matches.length === 1 && matches[0].libraryItemId === '242', '按外部 ID 匹配 Plex 条目');
   assert(
@@ -120,13 +131,25 @@ async function testPlex() {
       !requests.some((url) => url.search.includes('contract-secret')),
     'Plex 播放链接和查询参数不泄露 Token',
   );
+  assert(
+    poster?.contentType === 'image/jpeg' &&
+      poster.body.toString() === 'plex-poster' &&
+      !requests.some((url) => url.search.includes('contract-secret')),
+    '通过请求头安全读取 Plex 海报',
+  );
+  assert(
+    untrustedPoster === null && requests.length === requestCount,
+    'Plex 海报代理拒绝跨服务器图片路径',
+  );
 }
 
 async function testEmby() {
+  const requests: URL[] = [];
   const provider = new EmbyLibraryProvider(
     config('emby'),
     (async (input, init) => {
       const url = new URL(String(input));
+      requests.push(url);
       assert(
         new Headers(init?.headers).get('X-Emby-Token') === 'contract-secret',
         'Emby API Key 只通过请求头发送',
@@ -150,8 +173,14 @@ async function testEmby() {
               Name: 'Fight Club',
               ProductionYear: 1999,
               ProviderIds: { Tmdb: '550', Imdb: 'tt0137523' },
+              ImageTags: { Primary: 'emby-poster-tag' },
             },
           ],
+        });
+      }
+      if (url.pathname === '/Items/emby-item-7/Images/Primary') {
+        return new Response('emby-poster', {
+          headers: { 'Content-Type': 'image/png' },
         });
       }
       return json({}, 404);
@@ -160,6 +189,7 @@ async function testEmby() {
   const health = await provider.health();
   const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
+  const poster = await provider.getPoster('emby-item-7', library[0].metadata);
   assert(health.available && health.message === 'Emby 4.9.1', '读取 Emby 版本');
   assert(
     matches.length === 1 &&
@@ -170,6 +200,12 @@ async function testEmby() {
   assert(
     library.length === 1 && library[0].externalRefs.length === 2,
     '分页读取 Emby 媒体库及外部编号',
+  );
+  assert(
+    poster?.contentType === 'image/png' &&
+      poster.body.toString() === 'emby-poster' &&
+      !requests.some((url) => url.search.includes('contract-secret')),
+    '通过请求头安全读取 Emby 海报',
   );
 }
 

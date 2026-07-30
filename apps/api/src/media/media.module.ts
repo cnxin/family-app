@@ -34,12 +34,14 @@ import {
   Post,
   Put,
   Query,
+  Res,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { Response } from 'express';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
-import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import {
   HouseholdMedia,
   HouseholdMediaSourceConfig,
@@ -308,6 +310,17 @@ class MediaLibraryQueryDto implements MediaLibraryQuery {
   @Min(12)
   @Max(60)
   pageSize?: number;
+}
+
+class MediaPosterQueryDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expires: number;
+
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/)
+  signature: string;
 }
 
 class SyncMediaLibraryDto {
@@ -1383,6 +1396,25 @@ class MediaController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.library.list(query, user);
+  }
+
+  @Public()
+  @Get('library/:libraryItemId/poster')
+  async mediaLibraryPoster(
+    @Param('libraryItemId', ParseUUIDPipe) libraryItemId: string,
+    @Query() query: MediaPosterQueryDto,
+    @Res() response: Response,
+  ) {
+    const poster = await this.library.poster(
+      libraryItemId,
+      query.expires,
+      query.signature,
+    );
+    response.setHeader('Content-Type', poster.contentType);
+    response.setHeader('Content-Length', String(poster.body.length));
+    response.setHeader('Cache-Control', 'private, max-age=3600');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.status(200).end(poster.body);
   }
 
   @Post('library/sync')

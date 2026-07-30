@@ -38,6 +38,11 @@ const plex = createServer((req, res) => {
     res.end('{}');
     return;
   }
+  if (url.pathname === '/library/metadata/library-contract-242/thumb/poster-tag') {
+    res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+    res.end('media-library-poster');
+    return;
+  }
   let body;
   if (url.pathname === '/identity') {
     body = {
@@ -64,6 +69,7 @@ const plex = createServer((req, res) => {
             originalTitle: 'Media Library API Fixture',
             year: 2099,
             summary: 'Plex 媒体库本地快照与片单导入测试。',
+            thumb: '/library/metadata/library-contract-242/thumb/poster-tag',
             Guid: [
               { id: 'tmdb://990055' },
               { id: 'imdb://tt9900550' },
@@ -134,9 +140,23 @@ try {
       library.body.data.total === 1 &&
       item.title === '媒体库 API 回归样例' &&
       item.externalRefs.some((ref) => ref.provider === 'tmdb') &&
+      item.posterUrl.startsWith(`/media/library/${item.id}/poster?`) &&
+      !item.posterUrl.includes(CREDENTIAL) &&
       !item.playbackUrl.includes(CREDENTIAL),
     '家庭成员可以浏览脱敏后的 Plex 快照和播放入口',
   );
+
+  const poster = await fetch(`${BASE}${item.posterUrl}`);
+  assert(
+    poster.status === 200 &&
+      poster.headers.get('content-type') === 'image/jpeg' &&
+      (await poster.text()) === 'media-library-poster',
+    '签名海报地址可由 API 安全代理 Plex 图片',
+  );
+  const invalidPosterUrl = new URL(item.posterUrl, BASE);
+  invalidPosterUrl.searchParams.set('signature', 'A'.repeat(43));
+  const invalidPoster = await fetch(invalidPosterUrl);
+  assert(invalidPoster.status === 403, '篡改后的海报地址会被拒绝');
 
   const added = await request(
     `/media/library/${item.id}/add`,

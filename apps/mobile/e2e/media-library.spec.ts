@@ -63,6 +63,20 @@ test('媒体库可同步、播放并加入家庭片单', async ({ page }, testIn
   const libraryRoute = /\/media\/library(?:\?.*)?$/;
   const syncRoute = /\/media\/library\/sync$/;
   const addRoute = /\/media\/library\/library-focused-fixture\/add$/;
+  const posterRoute = /\/media\/library\/poster-focused-fixture\/poster(?:\?.*)?$/;
+  let posterRequested = false;
+
+  await page.route(posterRoute, async (route) => {
+    posterRequested = true;
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    });
+  });
 
   await page.route(libraryRoute, async (route) => {
     if (route.request().resourceType() === 'document') {
@@ -86,7 +100,8 @@ test('媒体库可同步、播放并加入家庭片单', async ({ page }, testIn
               originalTitle: 'Focused Library Regression',
               year: 2099,
               overview: '验证媒体库同步、播放入口与家庭片单导入。',
-              posterUrl: null,
+              posterUrl:
+                '/media/library/poster-focused-fixture/poster?expires=4070908800&signature=test',
               externalRefs: [
                 { provider: 'tmdb', mediaType: 'movie', externalId: '550' },
                 { provider: 'imdb', mediaType: 'movie', externalId: 'tt0137523' },
@@ -149,6 +164,10 @@ test('媒体库可同步、播放并加入家庭片单', async ({ page }, testIn
   await page.goto('/media/library');
   await expect(page.getByRole('heading', { name: '我的媒体库' })).toBeVisible();
   await expect(page.getByText('媒体库聚焦回归', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('img', { name: '媒体库聚焦回归海报', exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => posterRequested).toBe(true);
   await expect(
     page.getByRole('link', { name: '用Plex播放媒体库聚焦回归' }),
   ).toBeVisible();

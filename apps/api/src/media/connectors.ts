@@ -8,6 +8,7 @@ import {
   MediaExternalReference,
   MediaLibraryCatalogItem,
   MediaLibraryMatch,
+  MediaLibraryPoster,
   MediaLibraryProvider,
   MediaMetadataSnapshot,
   MediaProviderHealth,
@@ -84,6 +85,59 @@ async function fetchJson(
     return (await response.json()) as unknown;
   } catch {
     throw new MediaConnectorError('服务返回了无法识别的数据');
+  }
+}
+
+const ALLOWED_POSTER_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+const MAX_POSTER_BYTES = 10 * 1024 * 1024;
+
+async function fetchPoster(
+  fetcher: Fetcher,
+  url: URL,
+  init: RequestInit,
+  timeoutMs = 8000,
+): Promise<MediaLibraryPoster> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetcher(url, { ...init, signal: controller.signal });
+    if (!response.ok) {
+      throw new MediaConnectorError(
+        `海报服务返回 HTTP ${response.status}`,
+        response.status,
+      );
+    }
+    const contentType = response.headers
+      .get('content-type')
+      ?.split(';', 1)[0]
+      .trim()
+      .toLowerCase();
+    if (!contentType || !ALLOWED_POSTER_TYPES.has(contentType)) {
+      throw new MediaConnectorError('海报服务返回了不支持的文件类型');
+    }
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_POSTER_BYTES) {
+      throw new MediaConnectorError('海报文件过大');
+    }
+    const body = Buffer.from(await response.arrayBuffer());
+    if (!body.length || body.length > MAX_POSTER_BYTES) {
+      throw new MediaConnectorError(body.length ? '海报文件过大' : '海报文件为空');
+    }
+    return { body, contentType };
+  } catch (error) {
+    if (error instanceof MediaConnectorError) throw error;
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new MediaConnectorError('海报读取超时');
+    }
+    throw new MediaConnectorError('无法读取海报');
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -317,6 +371,24 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
     return matches;
   }
 
+  async getPoster(
+    _libraryItemId: string,
+    metadata: Record<string, unknown>,
+  ) {
+    if (!this.config.baseUrl || !this.config.credential) {
+      throw new MediaConnectorError('尚未配置地址或 Token');
+    }
+    const thumb = asString(metadata.thumb);
+    if (!thumb?.startsWith('/')) return null;
+    const posterUrl = buildUrl(this.config.baseUrl, thumb);
+    if (posterUrl.origin !== new URL(this.config.baseUrl).origin) return null;
+    return fetchPoster(
+      this.fetcher,
+      posterUrl,
+      { headers: this.headers() },
+    );
+  }
+
   async getPlaybackTarget(libraryItemId: string) {
     if (!this.config.baseUrl) return null;
     const identity = await this.getIdentity();
@@ -475,6 +547,32 @@ export class EmbyLibraryProvider implements MediaLibraryProvider {
       });
     }
     return matches;
+  }
+
+  async getPoster(
+    libraryItemId: string,
+    metadata: Record<string, unknown>,
+  ) {
+    if (!this.config.baseUrl || !this.config.credential) {
+      throw new MediaConnectorError('尚未配置地址或 API Key');
+    }
+    const primaryTag = asString(asRecord(metadata.imageTags).Primary);
+    if (!primaryTag) return null;
+    const params = new URLSearchParams({ maxWidth: '500', quality: '90' });
+    return fetchPoster(
+      this.fetcher,
+      buildUrl(
+        this.config.baseUrl,
+        `/Items/${encodeURIComponent(libraryItemId)}/Images/Primary`,
+        params,
+      ),
+      {
+        headers: {
+          Accept: 'image/avif,image/webp,image/jpeg,image/png',
+          'X-Emby-Token': this.config.credential,
+        },
+      },
+    );
   }
 
   async getPlaybackTarget(libraryItemId: string) {

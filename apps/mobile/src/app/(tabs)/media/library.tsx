@@ -35,6 +35,7 @@ import {
   type MediaDetailAction,
 } from '../../../components/media-detail-dialog';
 import { Card, EmptyState, Segmented } from '../../../components/ui';
+import { photoUri } from '../../../lib/api';
 import {
   useAddLibraryItemToWatchlist,
   useMediaLibrary,
@@ -59,7 +60,8 @@ function formatSyncedAt(value: string | null) {
 function Poster({ item }: { item: MediaLibraryItem }) {
   const c = useTheme();
   const [failed, setFailed] = useState(false);
-  if (!item.posterUrl || failed) {
+  const posterUrl = photoUri(item.posterUrl);
+  if (!posterUrl || failed) {
     return (
       <View style={[styles.poster, styles.posterFallback, { backgroundColor: c.fill }]}>
         <Film color={c.tertiaryLabel} size={30} />
@@ -71,7 +73,7 @@ function Poster({ item }: { item: MediaLibraryItem }) {
       accessibilityLabel={`${item.title}海报`}
       contentFit="cover"
       onError={() => setFailed(true)}
-      source={{ uri: item.posterUrl }}
+      source={{ uri: posterUrl }}
       style={styles.poster}
       transition={120}
     />
@@ -501,7 +503,7 @@ export default function MediaLibraryScreen() {
         onClose={() => setDetailItem(null)}
         originalTitle={detailItem?.originalTitle}
         overview={detailItem?.overview}
-        posterUrl={detailItem?.posterUrl}
+        posterUrl={photoUri(detailItem?.posterUrl ?? null)}
         references={(detailItem?.externalRefs ?? []).map((reference) => ({
           label: reference.provider.toUpperCase(),
           value: reference.externalId,

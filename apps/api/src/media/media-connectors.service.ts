@@ -15,6 +15,7 @@ import {
   MediaExternalReference,
   MediaLibraryCatalogItem,
   MediaLibraryMatch,
+  MediaLibraryPoster,
   MediaLibraryProvider,
   MediaMetadataSnapshot,
   MediaProviderHealth,
@@ -225,6 +226,20 @@ export class MediaConnectorsService {
         items: await provider.listItems(),
       })),
     );
+  }
+
+  async getLibraryPoster(
+    householdId: string,
+    connectorKey: string,
+    libraryItemId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<MediaLibraryPoster | null> {
+    const context = await this.context(householdId);
+    const library = context.libraries.find(
+      (entry) => entry.config.key === connectorKey,
+    );
+    if (!library) throw new MediaConnectorError('媒体库尚未配置或已停用');
+    return library.provider.getPoster(libraryItemId, metadata);
   }
 
   async getRequest(

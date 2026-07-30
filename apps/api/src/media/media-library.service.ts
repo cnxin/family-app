@@ -1,13 +1,16 @@
 import {
   BadGatewayException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { DataSource, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
+import { jwtSecret } from '../common/config';
 import {
   HouseholdMedia,
   Integration,
@@ -27,6 +30,24 @@ export interface MediaLibraryQuery {
   search?: string;
   page?: number;
   pageSize?: number;
+}
+
+const POSTER_URL_TTL_SECONDS = 24 * 60 * 60;
+
+function hasConnectorPoster(item: MediaLibraryItem) {
+  if (item.provider === 'plex') {
+    return (
+      typeof item.metadata.thumb === 'string' &&
+      item.metadata.thumb.startsWith('/')
+    );
+  }
+  const imageTags = item.metadata.imageTags;
+  return Boolean(
+    imageTags &&
+      typeof imageTags === 'object' &&
+      !Array.isArray(imageTags) &&
+      typeof (imageTags as Record<string, unknown>).Primary === 'string',
+  );
 }
 
 function normalizeText(value: string) {
@@ -57,6 +78,8 @@ function errorMessage(error: unknown) {
 
 @Injectable()
 export class MediaLibraryService {
+  private readonly posterSigningSecret = jwtSecret();
+
   constructor(
     @InjectRepository(MediaLibraryItem)
     private readonly libraryItems: Repository<MediaLibraryItem>,
@@ -297,6 +320,27 @@ export class MediaLibraryService {
     return { results };
   }
 
+  async poster(itemId: string, expires: number, signature: string) {
+    this.verifyPosterSignature(itemId, expires, signature);
+    const item = await this.libraryItems.findOne({ where: { id: itemId } });
+    if (!item || !hasConnectorPoster(item)) {
+      throw new NotFoundException('海报不存在');
+    }
+    try {
+      const poster = await this.connectors.getLibraryPoster(
+        item.householdId,
+        item.connectorKey,
+        item.libraryItemId,
+        item.metadata,
+      );
+      if (!poster) throw new NotFoundException('海报不存在');
+      return poster;
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new BadGatewayException(`海报读取失败：${errorMessage(error)}`);
+    }
+  }
+
   async addToWatchlist(id: string, user: JwtUser) {
     return this.dataSource.transaction(async (manager) => {
       const item = await manager.getRepository(MediaLibraryItem).findOne({
@@ -472,7 +516,7 @@ export class MediaLibraryService {
       originalTitle: item.originalTitle,
       year: item.year,
       overview: item.overview,
-      posterUrl: item.posterUrl,
+      posterUrl: item.posterUrl ?? this.posterUrl(item),
       externalRefs: item.externalRefs,
       playbackUrl: item.playbackUrl,
       householdMediaId: item.mediaTitleId
@@ -480,5 +524,41 @@ export class MediaLibraryService {
         : null,
       lastSeenAt: item.lastSeenAt,
     };
+  }
+
+  private posterUrl(item: MediaLibraryItem) {
+    if (!hasConnectorPoster(item)) return null;
+    const expires = Math.floor(Date.now() / 1000) + POSTER_URL_TTL_SECONDS;
+    const signature = this.signPoster(item.id, expires);
+    return `/media/library/${item.id}/poster?expires=${expires}&signature=${signature}`;
+  }
+
+  private signPoster(itemId: string, expires: number) {
+    return createHmac('sha256', this.posterSigningSecret)
+      .update(`media-library-poster:${itemId}:${expires}`)
+      .digest('base64url');
+  }
+
+  private verifyPosterSignature(
+    itemId: string,
+    expires: number,
+    signature: string,
+  ) {
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !Number.isSafeInteger(expires) ||
+      expires < now ||
+      expires > now + POSTER_URL_TTL_SECONDS + 60
+    ) {
+      throw new ForbiddenException('海报链接已过期');
+    }
+    const expected = Buffer.from(this.signPoster(itemId, expires), 'utf8');
+    const received = Buffer.from(signature, 'utf8');
+    if (
+      expected.length !== received.length ||
+      !timingSafeEqual(expected, received)
+    ) {
+      throw new ForbiddenException('海报链接无效');
+    }
   }
 }
