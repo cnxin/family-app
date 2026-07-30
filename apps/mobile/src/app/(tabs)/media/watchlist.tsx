@@ -13,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Server,
   Trash2,
   Vote,
   X,
@@ -189,51 +188,6 @@ function Poster({ entry }: { entry: HouseholdMedia }) {
       style={styles.poster}
       transition={160}
     />
-  );
-}
-
-function ConnectorStrip({ connectors }: { connectors: MediaConnectorSummary[] }) {
-  const c = useTheme();
-  const visible = connectors.filter(
-    (connector) => connector.state !== 'not_configured',
-  );
-  if (!visible.length) return null;
-
-  return (
-    <View
-      accessibilityLabel="媒体连接状态"
-      style={[
-        styles.connectorStrip,
-        { backgroundColor: c.card, borderColor: c.separator },
-      ]}
-    >
-      <Server color={c.secondaryLabel} size={18} />
-      <View style={styles.connectorItems}>
-        {visible.map((connector) => {
-          const statusColor = connector.available
-            ? c.green
-            : connector.state === 'offline'
-              ? c.red
-              : c.orange;
-          return (
-            <View
-              key={connector.key}
-              style={[styles.connectorStatus, { backgroundColor: c.fill }]}
-            >
-              <View
-                style={[styles.connectorDot, { backgroundColor: statusColor }]}
-              />
-              <Text
-                numberOfLines={1}
-                style={[t.caption, { color: c.label, fontWeight: '600' }]}
-              >
-                {connector.name} · {connector.message}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
   );
 }
 
@@ -1698,7 +1652,12 @@ export default function MediaScreen() {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
-      <PageContainer maxWidth={1180} style={[styles.page, desktop && styles.pageDesktop]}>
+      <ScrollView
+        contentContainerStyle={styles.pageScrollContent}
+        showsVerticalScrollIndicator={false}
+        style={styles.pageScroll}
+      >
+        <PageContainer maxWidth={1180} style={[styles.page, desktop && styles.pageDesktop]}>
         <View style={styles.pageHeader}>
           <ModuleBackButton href="/media" label="家庭观影" />
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -1729,8 +1688,6 @@ export default function MediaScreen() {
             </Text>
           </Pressable>
         </View>
-
-        <ConnectorStrip connectors={connectors ?? []} />
 
         <View style={styles.toolbar}>
           <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.separator }]}> 
@@ -1889,10 +1846,7 @@ export default function MediaScreen() {
           )}
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.listContent}>
           {isLoading ? (
             <ActivityIndicator color={c.tint} style={styles.loader} />
           ) : error ? (
@@ -2012,8 +1966,9 @@ export default function MediaScreen() {
               {requestError}
             </Text>
           ) : null}
-        </ScrollView>
-      </PageContainer>
+        </View>
+        </PageContainer>
+      </ScrollView>
 
       <MediaDetailDialog
         actions={detailActions}
@@ -2155,7 +2110,9 @@ export default function MediaScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  page: { flex: 1, paddingTop: 8 },
+  pageScroll: { flex: 1 },
+  pageScrollContent: { paddingBottom: 36 },
+  page: { paddingTop: 8 },
   pageDesktop: { paddingTop: 22 },
   pageHeader: {
     minHeight: 58,
@@ -2179,33 +2136,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
-  connectorStrip: {
-    minHeight: 48,
-    marginTop: 12,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    overflow: 'hidden',
-  },
-  connectorItems: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
-  connectorStatus: {
-    minHeight: 30,
-    maxWidth: 260,
-    borderRadius: radius.full,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  connectorDot: { width: 7, height: 7, borderRadius: radius.full },
   toolbar: { gap: 12, marginTop: 16 },
   pollComposeBar: {
     minHeight: 48,
@@ -2270,7 +2200,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listContent: { flexGrow: 1, paddingTop: 18, paddingBottom: 36 },
+  listContent: { paddingTop: 18 },
   mediaGrid: { gap: 12 },
   mediaGridDesktop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch' },
   desktopCardCell: { width: '49%', minWidth: 0 },

@@ -293,13 +293,42 @@ test('家庭片单可打开完整影视详情', async ({ page }, testInfo) => {
             createdAt: '2099-01-02T08:30:00.000Z',
             updatedAt: '2099-01-02T08:30:00.000Z',
           },
+          ...Array.from({ length: 7 }, (_, index) => {
+            const number = index + 2;
+            return {
+              id: `watchlist-scroll-fixture-${number}`,
+              householdId: 'household-media-detail-fixture',
+              status: 'watchlist',
+              scheduledFor: null,
+              note: null,
+              mediaTitle: {
+                id: `title-watchlist-scroll-fixture-${number}`,
+                type: number % 2 === 0 ? 'series' : 'movie',
+                title: `家庭片单滚动样例 ${number}`,
+                originalTitle: null,
+                year: 2099 - number,
+                overview: '用于验证整页滚动时，标题、搜索与筛选区域不会固定。',
+                posterUrl: null,
+                externalRefs: [],
+              },
+              createdBy: {
+                id: 'member-media-detail-fixture',
+                name: '影视测试成员',
+                avatarEmoji: '🎬',
+              },
+              createdAt: '2099-01-02T08:30:00.000Z',
+              updatedAt: '2099-01-02T08:30:00.000Z',
+            };
+          }),
         ],
       }),
     });
   });
 
   await page.goto('/media/watchlist');
-  await expect(page.getByRole('heading', { name: '家庭片单', exact: true })).toBeVisible();
+  const watchlistHeading = page.getByRole('heading', { name: '家庭片单', exact: true });
+  await expect(watchlistHeading).toBeVisible();
+  await expect(page.getByLabel('媒体连接状态')).toHaveCount(0);
   await page
     .getByRole('button', { name: '查看家庭片单详情回归详情', exact: true })
     .click();
@@ -335,5 +364,19 @@ test('家庭片单可打开完整影视详情', async ({ page }, testInfo) => {
   await page.screenshot({
     path: testInfo.outputPath('watchlist-detail.png'),
     fullPage: true,
+  });
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(watchlistDialog).not.toBeVisible();
+
+  const lastEntry = page.getByText('家庭片单滚动样例 8', { exact: true });
+  await lastEntry.scrollIntoViewIfNeeded();
+  await expect(lastEntry).toBeVisible();
+  const headingBottom = await watchlistHeading.evaluate(
+    (element) => element.getBoundingClientRect().bottom,
+  );
+  expect(headingBottom).toBeLessThan(0);
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('watchlist-scrolled.png'),
   });
 });
