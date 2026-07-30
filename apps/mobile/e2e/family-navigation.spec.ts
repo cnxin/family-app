@@ -168,6 +168,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
 
   const mediaRoute = /\/media(\?|$)/;
   const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;
+  const mediaSearchRoute = /\/media\/search\?/;
   const mediaAvailabilityRoute = /\/media\/library-availability(\?|$)/;
   const mediaRequestsRoute = /\/media\/requests(\?|$)/;
   const mediaRequestActionRoute =
@@ -276,6 +277,69 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
             checkedAt: '2099-01-01T00:00:00.000Z',
           },
         ],
+      }),
+    });
+  });
+  await page.route(mediaSearchRoute, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get('query')).toBe('三源搜索样例');
+    expect(url.searchParams.get('type')).toBe('movie');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          query: '三源搜索样例',
+          results: [
+            {
+              key: 'douban:movie:browser-search-1',
+              type: 'movie',
+              title: '三源搜索候选电影',
+              originalTitle: 'Three-source Search Fixture',
+              year: 2097,
+              overview: '来自豆瓣与 TMDB 合并后的家庭片单候选。',
+              posterUrl: null,
+              sources: ['douban', 'tmdb'],
+              externalRefs: [
+                {
+                  provider: 'douban',
+                  mediaType: 'movie',
+                  externalId: 'browser-douban-1',
+                },
+                {
+                  provider: 'tmdb',
+                  mediaType: 'movie',
+                  externalId: '999101',
+                },
+              ],
+              metadata: {},
+            },
+          ],
+          sources: [
+            {
+              provider: 'douban',
+              name: '豆瓣',
+              state: 'online',
+              resultCount: 1,
+              message: '找到 1 条',
+            },
+            {
+              provider: 'tmdb',
+              name: 'TMDB',
+              state: 'online',
+              resultCount: 1,
+              message: '找到 1 条',
+            },
+            {
+              provider: 'bangumi',
+              name: 'Bangumi',
+              state: 'offline',
+              resultCount: 0,
+              message: '连接超时',
+            },
+          ],
+        },
       }),
     });
   });
@@ -462,8 +526,26 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByLabel('搜索家庭片单')).toBeVisible();
   await page.getByRole('button', { name: '加入片单', exact: true }).first().click();
   await expect(page.getByText('加入家庭片单', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('搜索在线影视')).toBeVisible();
+  await page.getByLabel('搜索在线影视').fill('三源搜索样例');
+  await page.getByRole('button', { name: '搜索', exact: true }).click();
+  await expect(page.getByText('豆瓣 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('TMDB 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Bangumi 不可用', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '选择三源搜索候选电影' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: testInfo.outputPath('media-search.png'),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: '选择三源搜索候选电影' }).click();
   await expect(page.getByLabel('影视名称')).toBeVisible();
+  await expect(page.getByLabel('影视名称')).toHaveValue('三源搜索候选电影');
+  await expect(page.getByLabel('豆瓣 ID')).toHaveValue('browser-douban-1');
   await expect(page.getByLabel('安排观影日期')).toBeVisible();
+  await page.getByRole('button', { name: '返回影视搜索' }).click();
+  await page.getByRole('button', { name: '手动录入', exact: true }).click();
+  await expect(page.getByLabel('影视名称')).toHaveValue('');
   await page.getByRole('button', { name: '关闭', exact: true }).last().click();
   await expect(page.getByText('加入家庭片单', { exact: true })).not.toBeVisible();
   await page
@@ -538,6 +620,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   }
   await page.unroute(mediaAvailabilityRoute);
   await page.unroute(mediaConnectorsRoute);
+  await page.unroute(mediaSearchRoute);
   await page.unroute(mediaRequestActionRoute);
   await page.unroute(mediaSubscribeRoute);
   await page.unroute(mediaRequestsRoute);

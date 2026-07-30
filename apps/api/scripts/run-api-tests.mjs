@@ -27,6 +27,12 @@ const testEnvironment = {
   EMBY_API_KEY: '',
   MOVIEPILOT_BASE_URL: '',
   MOVIEPILOT_API_KEY: '',
+  TMDB_API_TOKEN: '',
+  TMDB_API_KEY: '',
+  DOUBAN_API_BASE_URL: '',
+  DOUBAN_API_TOKEN: '',
+  BANGUMI_API_BASE_URL: 'http://127.0.0.1:1',
+  BANGUMI_ACCESS_TOKEN: '',
   SMOKE_DATE: '2199-12-28',
 };
 
@@ -180,6 +186,11 @@ try {
     '-r',
     'ts-node/register',
     'scripts/media-connectors.contract.ts',
+  ]);
+  await runProcess(process.execPath, [
+    '-r',
+    'ts-node/register',
+    'scripts/media-metadata.contract.ts',
   ]);
   await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
   databaseCreated = true;

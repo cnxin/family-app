@@ -25,6 +25,7 @@ import type {
   MediaConnectorSummary,
   MediaLibraryAvailability,
   MediaRequest,
+  MediaSearchResponse,
   InventoryCategory,
   InventoryItem,
   Member,
@@ -197,6 +198,22 @@ export function useMedia(
   });
 }
 
+export function useMediaSearch(
+  query: string,
+  type: MediaType,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['media-search', query, type],
+    queryFn: () => {
+      const params = new URLSearchParams({ query, type });
+      return api<MediaSearchResponse>(`/media/search?${params.toString()}`);
+    },
+    enabled: enabled && Boolean(query.trim()),
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useMediaConnectors() {
   return useQuery({
     queryKey: ['media-connectors'],
@@ -283,7 +300,7 @@ export interface CreateMediaInput {
   scheduledFor?: string | null;
   note?: string | null;
   externalRefs?: {
-    provider: 'tmdb' | 'imdb';
+    provider: 'tmdb' | 'imdb' | 'douban' | 'bangumi';
     externalId: string;
   }[];
 }

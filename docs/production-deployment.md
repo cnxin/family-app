@@ -37,6 +37,13 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 例如先创建 `deploy/secrets/plex_token.txt`，再设置 `PLEX_TOKEN_FILE=/run/integration-secrets/plex_token.txt`。密钥文件权限保持 `600`。
 - API 镜像以内置 `node` 用户（UID 1000）运行。在 Linux/NAS 上应将连接器密钥文件属主设为 UID 1000，或使用只授予该 UID 读取权限的 ACL；不要通过放宽为全员可读来绕过权限问题。启动后用连接器状态接口确认文件可读。
 
+可选影视元数据：
+
+- TMDB 推荐配置 `TMDB_API_TOKEN_FILE`，也兼容 `TMDB_API_KEY_FILE`；Bangumi 匿名搜索默认可用，长期部署应填写能识别当前实例的 `BANGUMI_USER_AGENT`。
+- 豆瓣没有稳定的官方公共影视搜索 API。`DOUBAN_API_BASE_URL` 只能指向自行审核、限权的兼容桥接服务，不应复用 MoviePilot 管理端账号或 API Key。
+- 三个来源会独立超时和降级，任何来源不可用都不会阻断家庭片单与手动录入。完整变量和豆瓣响应契约见 [M4-E 三源影视搜索验收](m4-media-search-acceptance.md)。
+- 元数据凭据同样优先使用 `/run/integration-secrets/` 下的 `*_FILE`，文件权限规则与媒体连接器一致。
+
 环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥以及未来的连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效。
 
 ## 3. 校验并启动

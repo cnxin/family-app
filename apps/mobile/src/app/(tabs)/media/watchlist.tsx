@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  ArrowLeft,
   CalendarDays,
   Download,
   Film,
@@ -50,6 +51,7 @@ import {
   useMediaConnectors,
   useMediaLibraryAvailability,
   useMediaRequests,
+  useMediaSearch,
   usePolls,
   useRefreshMediaRequest,
   useUpdateMedia,
@@ -61,8 +63,11 @@ import type {
   HouseholdPoll,
   MediaConnectorSummary,
   MediaLibraryMatch,
+  MediaMetadataSource,
   MediaRequest,
   MediaRequestStatus,
+  MediaSearchResult,
+  MediaSourceSearchStatus,
   MediaType,
 } from '../../../lib/types';
 
@@ -552,6 +557,8 @@ function MediaForm({
   const c = useTheme();
   const create = useCreateMedia();
   const update = useUpdateMedia();
+  const [formStep, setFormStep] = useState<'search' | 'details'>('search');
+  const [selectedSources, setSelectedSources] = useState<MediaMetadataSource[]>([]);
   const [mediaType, setMediaType] = useState<MediaType>('movie');
   const [title, setTitle] = useState('');
   const [originalTitle, setOriginalTitle] = useState('');
@@ -560,6 +567,8 @@ function MediaForm({
   const [posterUrl, setPosterUrl] = useState('');
   const [tmdbId, setTmdbId] = useState('');
   const [imdbId, setImdbId] = useState('');
+  const [doubanId, setDoubanId] = useState('');
+  const [bangumiId, setBangumiId] = useState('');
   const [status, setStatus] = useState<HouseholdMediaStatus>('watchlist');
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledFor, setScheduledFor] = useState(todayStr());
@@ -573,6 +582,8 @@ function MediaForm({
   useEffect(() => {
     if (!visible) return;
     const date = entry?.scheduledFor ?? todayStr();
+    setFormStep(entry ? 'details' : 'search');
+    setSelectedSources([]);
     setMediaType(entry?.mediaTitle.type ?? 'movie');
     setTitle(entry?.mediaTitle.title ?? '');
     setOriginalTitle(entry?.mediaTitle.originalTitle ?? '');
@@ -587,6 +598,14 @@ function MediaForm({
       entry?.mediaTitle.externalRefs.find((ref) => ref.provider === 'imdb')
         ?.externalId ?? '',
     );
+    setDoubanId(
+      entry?.mediaTitle.externalRefs.find((ref) => ref.provider === 'douban')
+        ?.externalId ?? '',
+    );
+    setBangumiId(
+      entry?.mediaTitle.externalRefs.find((ref) => ref.provider === 'bangumi')
+        ?.externalId ?? '',
+    );
     setStatus(entry?.status ?? 'watchlist');
     setScheduleEnabled(Boolean(entry?.scheduledFor));
     setScheduledFor(date);
@@ -594,6 +613,39 @@ function MediaForm({
     setNote(entry?.note ?? '');
     setMessage(null);
   }, [entry, visible]);
+
+  const selectSearchResult = (result: MediaSearchResult) => {
+    const externalId = (provider: string) =>
+      result.externalRefs.find((ref) => ref.provider === provider)?.externalId ?? '';
+    setMediaType(result.type);
+    setTitle(result.title);
+    setOriginalTitle(result.originalTitle ?? '');
+    setYear(result.year ? String(result.year) : '');
+    setOverview(result.overview ?? '');
+    setPosterUrl(result.posterUrl ?? '');
+    setTmdbId(externalId('tmdb'));
+    setImdbId(externalId('imdb'));
+    setDoubanId(externalId('douban'));
+    setBangumiId(externalId('bangumi'));
+    setSelectedSources(result.sources);
+    setMessage(null);
+    setFormStep('details');
+  };
+
+  const startManualEntry = () => {
+    setTitle('');
+    setOriginalTitle('');
+    setYear('');
+    setOverview('');
+    setPosterUrl('');
+    setTmdbId('');
+    setImdbId('');
+    setDoubanId('');
+    setBangumiId('');
+    setSelectedSources([]);
+    setMessage(null);
+    setFormStep('details');
+  };
 
   const allowedStatuses = entry
     ? new Set([entry.status, ...STATUS_TRANSITIONS[entry.status]])
@@ -656,6 +708,12 @@ function MediaForm({
             : []),
           ...(imdbId.trim()
             ? [{ provider: 'imdb' as const, externalId: imdbId.trim() }]
+            : []),
+          ...(doubanId.trim()
+            ? [{ provider: 'douban' as const, externalId: doubanId.trim() }]
+            : []),
+          ...(bangumiId.trim()
+            ? [{ provider: 'bangumi' as const, externalId: bangumiId.trim() }]
             : []),
         ];
         await create.mutateAsync({
@@ -720,8 +778,45 @@ function MediaForm({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {!entry ? (
+            {!entry && formStep === 'search' ? (
+              <MetadataSearchPanel
+                mediaType={mediaType}
+                onManual={startManualEntry}
+                onSelect={selectSearchResult}
+                onTypeChange={setMediaType}
+                visible={visible}
+              />
+            ) : (
               <>
+                {!entry ? (
+                  <View style={styles.selectionToolbar}>
+                    <Pressable
+                      accessibilityLabel="返回影视搜索"
+                      accessibilityRole="button"
+                      onPress={() => setFormStep('search')}
+                      style={({ pressed }) => [
+                        styles.backToSearch,
+                        { backgroundColor: pressed ? c.fillStrong : c.fill },
+                      ]}
+                    >
+                      <ArrowLeft color={c.tint} size={17} />
+                      <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>
+                        返回搜索
+                      </Text>
+                    </Pressable>
+                    {selectedSources.length ? (
+                      <View style={styles.selectedSources}>
+                        {selectedSources.map((source) => (
+                          <MediaSourceBadge key={source} source={source} />
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={[t.footnote, { color: c.secondaryLabel }]}>手动录入</Text>
+                    )}
+                  </View>
+                ) : null}
+                {!entry ? (
+                  <>
                 <Field label="类型">
                   <Segmented<MediaType>
                     onChange={setMediaType}
@@ -800,8 +895,28 @@ function MediaForm({
                     />
                   </Field>
                 </View>
-              </>
-            ) : null}
+                <View style={styles.twoColumns}>
+                  <Field label="豆瓣 ID" style={styles.columnField}>
+                    <FormInput
+                      accessibilityLabel="豆瓣 ID"
+                      autoCapitalize="none"
+                      onChangeText={setDoubanId}
+                      placeholder="可不填"
+                      value={doubanId}
+                    />
+                  </Field>
+                  <Field label="Bangumi ID" style={styles.columnField}>
+                    <FormInput
+                      accessibilityLabel="Bangumi ID"
+                      autoCapitalize="none"
+                      onChangeText={setBangumiId}
+                      placeholder="可不填"
+                      value={bangumiId}
+                    />
+                  </Field>
+                </View>
+                  </>
+                ) : null}
 
             <Field label="状态">
               <View style={styles.statusOptions}>
@@ -894,6 +1009,8 @@ function MediaForm({
               onPress={() => void submit()}
               title={entry ? '保存安排' : '加入片单'}
             />
+              </>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -1050,6 +1167,278 @@ function FormInput(props: React.ComponentProps<typeof TextInput>) {
         props.style,
       ]}
     />
+  );
+}
+
+const MEDIA_SOURCE_LABELS: Record<MediaMetadataSource, string> = {
+  douban: '豆瓣',
+  tmdb: 'TMDB',
+  bangumi: 'Bangumi',
+};
+
+function sourceColors(
+  source: MediaMetadataSource,
+  c: ReturnType<typeof useTheme>,
+) {
+  if (source === 'tmdb') return { color: c.blue, backgroundColor: c.blueSoft };
+  if (source === 'bangumi') {
+    return { color: c.orange, backgroundColor: c.orangeSoft };
+  }
+  return { color: c.green, backgroundColor: c.greenSoft };
+}
+
+function MediaSourceBadge({ source }: { source: MediaMetadataSource }) {
+  const c = useTheme();
+  const colors = sourceColors(source, c);
+  return (
+    <View style={[styles.sourceBadge, { backgroundColor: colors.backgroundColor }]}>
+      <Text style={[t.caption, { color: colors.color, fontWeight: '700' }]}>
+        {MEDIA_SOURCE_LABELS[source]}
+      </Text>
+    </View>
+  );
+}
+
+function SourceSearchStatus({ status }: { status: MediaSourceSearchStatus }) {
+  const c = useTheme();
+  const source = sourceColors(status.provider, c);
+  const available = status.state === 'online';
+  const color = available ? source.color : c.secondaryLabel;
+  const backgroundColor = available ? source.backgroundColor : c.fill;
+  const stateLabel =
+    status.state === 'online'
+      ? String(status.resultCount)
+      : status.state === 'not_configured'
+        ? '未配置'
+        : '不可用';
+  return (
+    <View
+      accessibilityLabel={`${status.name}${stateLabel}，${status.message}`}
+      style={[styles.sourceStatus, { backgroundColor }]}
+    >
+      <View style={[styles.sourceStatusDot, { backgroundColor: color }]} />
+      <Text style={[t.caption, { color, fontWeight: '700' }]}>
+        {status.name} {stateLabel}
+      </Text>
+    </View>
+  );
+}
+
+function SearchResultPoster({ result }: { result: MediaSearchResult }) {
+  const c = useTheme();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [result.posterUrl]);
+  if (!result.posterUrl || failed) {
+    return (
+      <View
+        style={[
+          styles.searchResultPoster,
+          styles.posterFallback,
+          { backgroundColor: c.fill },
+        ]}
+      >
+        <Film color={c.tertiaryLabel} size={25} />
+      </View>
+    );
+  }
+  return (
+    <Image
+      accessibilityLabel={`${result.title}海报`}
+      contentFit="cover"
+      onError={() => setFailed(true)}
+      source={{ uri: result.posterUrl }}
+      style={styles.searchResultPoster}
+      transition={120}
+    />
+  );
+}
+
+function MetadataSearchPanel({
+  mediaType,
+  onManual,
+  onSelect,
+  onTypeChange,
+  visible,
+}: {
+  mediaType: MediaType;
+  onManual: () => void;
+  onSelect: (result: MediaSearchResult) => void;
+  onTypeChange: (type: MediaType) => void;
+  visible: boolean;
+}) {
+  const c = useTheme();
+  const [query, setQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+  const searchResult = useMediaSearch(
+    submittedQuery,
+    mediaType,
+    visible && Boolean(submittedQuery),
+  );
+
+  useEffect(() => {
+    if (!visible) return;
+    setQuery('');
+    setSubmittedQuery('');
+    setMessage(null);
+  }, [visible]);
+
+  const submitSearch = () => {
+    const normalized = query.trim();
+    if (!normalized) {
+      setMessage('请输入影视名称');
+      return;
+    }
+    setMessage(null);
+    if (normalized === submittedQuery) {
+      void searchResult.refetch();
+    } else {
+      setSubmittedQuery(normalized);
+    }
+  };
+
+  return (
+    <View style={styles.metadataSearchPanel}>
+      <Segmented<MediaType>
+        onChange={onTypeChange}
+        options={[
+          { label: '电影', value: 'movie' },
+          { label: '剧集', value: 'series' },
+        ]}
+        value={mediaType}
+      />
+
+      <View style={styles.metadataSearchRow}>
+        <View
+          style={[
+            styles.metadataSearchInput,
+            { backgroundColor: c.fill, borderColor: c.separator },
+          ]}
+        >
+          <Search color={c.tertiaryLabel} size={18} />
+          <TextInput
+            accessibilityLabel="搜索在线影视"
+            autoCapitalize="none"
+            onChangeText={setQuery}
+            onSubmitEditing={submitSearch}
+            placeholder="输入电影或剧集名称"
+            placeholderTextColor={c.tertiaryLabel}
+            returnKeyType="search"
+            style={[t.body, styles.metadataSearchText, { color: c.label }]}
+            value={query}
+          />
+          {query ? (
+            <Pressable
+              accessibilityLabel="清除在线搜索"
+              accessibilityRole="button"
+              onPress={() => setQuery('')}
+              style={styles.clearSearch}
+            >
+              <X color={c.secondaryLabel} size={17} />
+            </Pressable>
+          ) : null}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          disabled={searchResult.isFetching}
+          onPress={submitSearch}
+          style={({ pressed }) => [
+            styles.metadataSearchButton,
+            { backgroundColor: pressed ? c.green : c.tint },
+          ]}
+        >
+          {searchResult.isFetching ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Search color="#FFFFFF" size={18} />
+          )}
+          <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>搜索</Text>
+        </Pressable>
+      </View>
+
+      {searchResult.data ? (
+        <View style={styles.sourceStatuses}>
+          {searchResult.data.sources.map((status) => (
+            <SourceSearchStatus key={status.provider} status={status} />
+          ))}
+        </View>
+      ) : null}
+
+      {message || searchResult.error ? (
+        <Text style={[t.footnote, { color: c.red, textAlign: 'center' }]}>
+          {message ?? searchResult.error?.message}
+        </Text>
+      ) : null}
+
+      {searchResult.data?.results.length ? (
+        <View style={[styles.searchResults, { borderColor: c.separator }]}>
+          {searchResult.data.results.map((result, index) => (
+            <Pressable
+              accessibilityLabel={`选择${result.title}`}
+              accessibilityRole="button"
+              key={result.key}
+              onPress={() => onSelect(result)}
+              style={({ pressed }) => [
+                styles.searchResult,
+                index > 0 && { borderTopColor: c.separator, borderTopWidth: 1 },
+                { backgroundColor: pressed ? c.cardPressed : c.card },
+              ]}
+            >
+              <SearchResultPoster result={result} />
+              <View style={styles.searchResultBody}>
+                <View style={styles.searchResultTitleRow}>
+                  <Text
+                    numberOfLines={2}
+                    style={[t.headline, { color: c.label, flex: 1 }]}
+                  >
+                    {result.title}
+                  </Text>
+                  <View style={styles.selectedSources}>
+                    {result.sources.map((source) => (
+                      <MediaSourceBadge key={source} source={source} />
+                    ))}
+                  </View>
+                </View>
+                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}>
+                  {result.type === 'movie' ? '电影' : '剧集'}
+                  {result.year ? ` · ${result.year}` : ''}
+                  {result.originalTitle ? ` · ${result.originalTitle}` : ''}
+                </Text>
+                {result.overview ? (
+                  <Text
+                    numberOfLines={3}
+                    style={[t.footnote, styles.searchResultOverview, { color: c.secondaryLabel }]}
+                  >
+                    {result.overview}
+                  </Text>
+                ) : null}
+                <View style={styles.selectResultCue}>
+                  <Plus color={c.tint} size={15} />
+                  <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>选择</Text>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : searchResult.data && !searchResult.isFetching ? (
+        <EmptyState emoji="?" title="没有找到匹配条目" />
+      ) : null}
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={onManual}
+        style={({ pressed }) => [
+          styles.manualEntryButton,
+          {
+            backgroundColor: pressed ? c.fill : c.card,
+            borderColor: c.separator,
+          },
+        ]}
+      >
+        <Pencil color={c.tint} size={17} />
+        <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>手动录入</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -1642,6 +2031,111 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   formContent: { padding: 18, paddingTop: 6, paddingBottom: 24, gap: 17 },
+  metadataSearchPanel: { gap: 16 },
+  metadataSearchRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  metadataSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingLeft: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  metadataSearchText: {
+    flex: 1,
+    minWidth: 0,
+    height: '100%',
+    paddingVertical: 0,
+    outlineStyle: 'none',
+  } as never,
+  metadataSearchButton: {
+    width: 92,
+    minHeight: 46,
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  sourceStatuses: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  sourceStatus: {
+    minHeight: 28,
+    borderRadius: radius.full,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sourceStatusDot: { width: 7, height: 7, borderRadius: radius.full },
+  sourceBadge: {
+    minHeight: 23,
+    borderRadius: radius.sm,
+    paddingHorizontal: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchResults: { borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  searchResult: {
+    minHeight: 138,
+    padding: 11,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+  },
+  searchResultPoster: { width: 78, height: 116, borderRadius: radius.sm },
+  searchResultBody: { flex: 1, minWidth: 0 },
+  searchResultTitleRow: {
+    minHeight: 25,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+  },
+  searchResultOverview: { lineHeight: 18, marginTop: 8 },
+  selectResultCue: {
+    minHeight: 26,
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  manualEntryButton: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  selectionToolbar: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  backToSearch: {
+    minHeight: 38,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  selectedSources: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 5,
+  },
   field: { gap: 7 },
   fieldLabel: { fontWeight: '600' },
   input: {

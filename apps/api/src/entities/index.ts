@@ -35,6 +35,8 @@ export type MediaType = 'movie' | 'series';
 export type MediaExternalProvider =
   | 'tmdb'
   | 'imdb'
+  | 'douban'
+  | 'bangumi'
   | 'plex'
   | 'emby'
   | 'moviepilot';
@@ -1498,12 +1500,12 @@ export class MediaTitle {
 @Entity('media_external_refs')
 @Check(
   'CHK_media_external_refs_provider',
-  `"provider" IN ('tmdb', 'imdb', 'plex', 'emby', 'moviepilot')`,
+  `"provider" IN ('tmdb', 'imdb', 'douban', 'bangumi', 'plex', 'emby', 'moviepilot')`,
 )
 @Check('CHK_media_external_refs_type', `"mediaType" IN ('movie', 'series')`)
 @Check(
   'CHK_media_external_refs_scope',
-  `("provider" IN ('tmdb', 'imdb') AND "connectorKey" IS NULL) OR ("provider" IN ('plex', 'emby', 'moviepilot') AND "connectorKey" IS NOT NULL)`,
+  `("provider" IN ('tmdb', 'imdb', 'douban', 'bangumi') AND "connectorKey" IS NULL) OR ("provider" IN ('plex', 'emby', 'moviepilot') AND "connectorKey" IS NOT NULL)`,
 )
 @Index(
   'UQ_media_external_refs_tmdb_type_id',
@@ -1514,6 +1516,16 @@ export class MediaTitle {
   'UQ_media_external_refs_imdb_id',
   ['provider', 'externalId'],
   { unique: true, where: `"provider" = 'imdb'` },
+)
+@Index(
+  'UQ_media_external_refs_douban_id',
+  ['provider', 'externalId'],
+  { unique: true, where: `"provider" = 'douban'` },
+)
+@Index(
+  'UQ_media_external_refs_bangumi_id',
+  ['provider', 'externalId'],
+  { unique: true, where: `"provider" = 'bangumi'` },
 )
 @Index(
   'UQ_media_external_refs_connector_id',

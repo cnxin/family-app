@@ -12,6 +12,7 @@
     "seed": "ts-node -r dotenv/config src/seed.ts",
     "test:api": "node scripts/run-api-tests.mjs",
     "test:connectors": "node -r ts-node/register scripts/media-connectors.contract.ts",
+    "test:metadata": "node -r ts-node/register scripts/media-metadata.contract.ts",
     "test:isolation": "node scripts/household-isolation.mjs",
     "test:schema": "ts-node scripts/check-schema-drift.ts"
   },

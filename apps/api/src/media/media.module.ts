@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -47,6 +48,7 @@ import {
   Poll,
 } from '../entities';
 import { MediaConnectorsService } from './media-connectors.service';
+import { MediaMetadataService } from './media-metadata.service';
 
 const MEDIA_STATUSES: HouseholdMediaStatus[] = [
   'watchlist',
@@ -89,9 +91,30 @@ class MediaQueryDto {
   search?: string;
 }
 
+class MediaSearchDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  query: string;
+
+  @IsOptional()
+  @IsIn(['movie', 'series'])
+  type?: MediaType;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1878)
+  @Max(2199)
+  year?: number;
+}
+
 class MediaExternalRefDto {
-  @IsIn(['tmdb', 'imdb'])
-  provider: Extract<MediaExternalProvider, 'tmdb' | 'imdb'>;
+  @IsIn(['tmdb', 'imdb', 'douban', 'bangumi'])
+  provider: Extract<
+    MediaExternalProvider,
+    'tmdb' | 'imdb' | 'douban' | 'bangumi'
+  >;
 
   @IsString()
   @MaxLength(180)
@@ -1058,7 +1081,21 @@ class MediaController {
   constructor(
     private readonly service: MediaService,
     private readonly requests: MediaRequestsService,
+    private readonly metadata: MediaMetadataService,
   ) {}
+
+  @Get('search')
+  search(@Query() query: MediaSearchDto) {
+    const normalizedQuery = normalizeText(query.query);
+    if (!normalizedQuery) {
+      throw new BadRequestException('请输入影视名称');
+    }
+    return this.metadata.search({
+      query: normalizedQuery,
+      type: query.type,
+      year: query.year,
+    });
+  }
 
   @Get()
   list(@Query() query: MediaQueryDto, @CurrentUser() user: JwtUser) {
@@ -1142,7 +1179,12 @@ class MediaController {
     ]),
   ],
   controllers: [MediaController],
-  providers: [MediaService, MediaRequestsService, MediaConnectorsService],
+  providers: [
+    MediaService,
+    MediaRequestsService,
+    MediaConnectorsService,
+    MediaMetadataService,
+  ],
   exports: [MediaService, MediaRequestsService, MediaConnectorsService],
 })
 export class MediaModule {}

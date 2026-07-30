@@ -40,6 +40,8 @@ const createdPollIds = [];
 const suffix = Date.now().toString(36);
 const tmdbId = `m4-tmdb-${suffix}`;
 const imdbId = `tt-m4-${suffix}`;
+const doubanId = `m4-douban-${suffix}`;
+const bangumiId = `m4-bangumi-${suffix}`;
 const db = new Client({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
@@ -65,6 +67,38 @@ try {
     '未配置连接器时返回明确状态且不暴露地址或凭据',
   );
 
+  const metadataSearch = await request(
+    `/media/search?query=${encodeURIComponent(`搜索降级 ${suffix}`)}&type=movie`,
+    mom.token,
+  );
+  assert(
+    metadataSearch.status === 200 &&
+      metadataSearch.data.results.length === 0 &&
+      metadataSearch.data.sources.length === 3 &&
+      metadataSearch.data.sources.some(
+        (source) =>
+          source.provider === 'douban' && source.state === 'not_configured',
+      ) &&
+      metadataSearch.data.sources.some(
+        (source) => source.provider === 'tmdb' && source.state === 'not_configured',
+      ) &&
+      metadataSearch.data.sources.some(
+        (source) => source.provider === 'bangumi' && source.state === 'offline',
+      ) &&
+      !Object.hasOwn(metadataSearch.data.sources[0], 'baseUrl') &&
+      !Object.hasOwn(metadataSearch.data.sources[0], 'credential'),
+    '在线搜索逐源降级且不暴露元数据服务配置',
+  );
+
+  const unauthenticatedSearch = await request(
+    '/media/search?query=test&type=movie',
+    null,
+  );
+  assert(unauthenticatedSearch.status === 401, '在线元数据搜索需要家庭登录');
+
+  const blankSearch = await request('/media/search?query=%20&type=movie', mom.token);
+  assert(blankSearch.status === 400, '在线元数据搜索拒绝空关键词');
+
   const missingSchedule = await request('/media', mom.token, 'POST', {
     type: 'movie',
     title: `缺少日期的排期 ${suffix}`,
@@ -82,14 +116,26 @@ try {
     status: 'scheduled',
     scheduledFor: '2199-12-29',
     note: '周末一起看',
-    externalRefs: [{ provider: 'tmdb', externalId: tmdbId }],
+    externalRefs: [
+      { provider: 'tmdb', externalId: tmdbId },
+      { provider: 'douban', externalId: doubanId },
+      { provider: 'bangumi', externalId: bangumiId },
+    ],
   });
   assert(
     created.status === 201 &&
       created.data.status === 'scheduled' &&
       created.data.scheduledFor === '2199-12-29' &&
-      created.data.mediaTitle.externalRefs[0].externalId === tmdbId,
-    '没有配置 Plex、Emby 或 MoviePilot 时仍可建立带元数据的家庭片单',
+      created.data.mediaTitle.externalRefs.some(
+        (ref) => ref.provider === 'tmdb' && ref.externalId === tmdbId,
+      ) &&
+      created.data.mediaTitle.externalRefs.some(
+        (ref) => ref.provider === 'douban' && ref.externalId === doubanId,
+      ) &&
+      created.data.mediaTitle.externalRefs.some(
+        (ref) => ref.provider === 'bangumi' && ref.externalId === bangumiId,
+      ),
+    '没有配置外部系统时仍可建立带三源编号快照的家庭片单',
   );
   createdIds.push(created.data.id);
   const originalMediaTitleId = created.data.mediaTitle.id;

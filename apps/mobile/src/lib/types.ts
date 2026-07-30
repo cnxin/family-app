@@ -279,6 +279,10 @@ export interface MenuDateCount {
 }
 
 export type MediaType = 'movie' | 'series';
+export type MediaMetadataSource = 'tmdb' | 'douban' | 'bangumi';
+export type MediaMetadataExternalProvider =
+  | MediaMetadataSource
+  | 'imdb';
 export type HouseholdMediaStatus =
   | 'watchlist'
   | 'voting'
@@ -289,9 +293,44 @@ export type HouseholdMediaStatus =
 
 export interface MediaExternalRef {
   id: string;
-  provider: 'tmdb' | 'imdb' | 'plex' | 'emby' | 'moviepilot';
+  provider:
+    | MediaMetadataExternalProvider
+    | 'plex'
+    | 'emby'
+    | 'moviepilot';
   externalId: string;
   connectorKey: string | null;
+}
+
+export interface MediaSearchResult {
+  key: string;
+  type: MediaType;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  overview: string | null;
+  posterUrl: string | null;
+  sources: MediaMetadataSource[];
+  externalRefs: {
+    provider: MediaMetadataExternalProvider;
+    mediaType: MediaType;
+    externalId: string;
+  }[];
+  metadata: Record<string, unknown>;
+}
+
+export interface MediaSourceSearchStatus {
+  provider: MediaMetadataSource;
+  name: string;
+  state: 'not_configured' | 'online' | 'offline';
+  resultCount: number;
+  message: string;
+}
+
+export interface MediaSearchResponse {
+  query: string;
+  results: MediaSearchResult[];
+  sources: MediaSourceSearchStatus[];
 }
 
 export interface MediaTitle {
