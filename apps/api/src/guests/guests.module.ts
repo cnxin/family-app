@@ -42,6 +42,7 @@ import {
   GuestPollVote,
   GuestWifiProfile,
   GuestWifiSecurity,
+  HouseholdActivityLog,
   MealType,
   Member,
   Menu,
@@ -311,6 +312,7 @@ function profileGuest(guest: Guest) {
     avatarEmoji: guest.avatarEmoji,
     note: guest.note,
     isActive: guest.isActive,
+    anonymizedAt: guest.anonymizedAt,
     createdAt: guest.createdAt,
     updatedAt: guest.updatedAt,
   };
@@ -451,6 +453,7 @@ export class GuestsService {
     if (!Object.keys(dto).length) throw new BadRequestException('至少需要修改一个字段');
     const guest = await this.guests.findOneBy({ id, householdId: user.householdId });
     if (!guest) throw new NotFoundException('访客不存在');
+    if (guest.anonymizedAt) throw new ConflictException('已匿名化的访客不能再编辑或启用');
     if (dto.name !== undefined) {
       const name = dto.name.trim();
       if (!name) throw new BadRequestException('访客姓名不能为空');
@@ -470,6 +473,55 @@ export class GuestsService {
       }),
     );
     return profileGuest(saved);
+  }
+
+  async anonymizeGuest(id: string, user: JwtUser) {
+    return this.dataSource.transaction(async (manager) => {
+      const guests = manager.getRepository(Guest);
+      const guest = await guests.findOneBy({ id, householdId: user.householdId });
+      if (!guest) throw new NotFoundException('访客不存在');
+      if (guest.anonymizedAt) return profileGuest(guest);
+      const scheduledVisitCount = await manager.getRepository(VisitGuest)
+        .createQueryBuilder('visitGuest')
+        .innerJoin('visitGuest.visit', 'visit')
+        .where('visitGuest.guestId = :guestId', { guestId: guest.id })
+        .andWhere('visit.householdId = :householdId', { householdId: user.householdId })
+        .andWhere('visit.status = :status', { status: 'scheduled' })
+        .getCount();
+      if (scheduledVisitCount) {
+        throw new ConflictException('该访客仍有已安排的来访，请结束或取消后再匿名化');
+      }
+      const now = new Date();
+      guest.name = '已匿名访客';
+      guest.avatarEmoji = '👤';
+      guest.note = null;
+      guest.isActive = false;
+      guest.anonymizedAt = now;
+      const saved = await guests.save(guest);
+      await manager.getRepository(GuestInvitation).update(
+        { guestId: guest.id, revokedAt: IsNull(), expiresAt: MoreThan(now) },
+        { revokedAt: now },
+      );
+      await manager.getRepository(HouseholdActivityLog)
+        .createQueryBuilder()
+        .update(HouseholdActivityLog)
+        .set({
+          summary: '已匿名化的访客资料',
+          detail: null,
+          metadata: { anonymizedGuest: true },
+        })
+        .where('"householdId" = :householdId', { householdId: user.householdId })
+        .andWhere('metadata @> :guestMetadata', { guestMetadata: JSON.stringify({ guestId: guest.id }) })
+        .execute();
+      await recordActivity(manager, user, {
+        module: 'guest',
+        action: 'guest_anonymized',
+        summary: `${user.name} 匿名化了一位访客资料`,
+        targetPath: '/guests',
+        metadata: { anonymizedGuest: true },
+      });
+      return profileGuest(saved);
+    });
   }
 
   async listGuestWifiProfiles(user: JwtUser) {
@@ -1235,6 +1287,12 @@ export class GuestsController {
     return this.service.updateGuest(id, dto, user);
   }
 
+  @Post('guests/:id/anonymize')
+  @RequireCapabilities('manage_guests')
+  anonymizeGuest(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.anonymizeGuest(id, user);
+  }
+
   @Get('guest-wifi-profiles')
   @RequireCapabilities('manage_guests')
   listGuestWifiProfiles(@CurrentUser() user: JwtUser) {
@@ -1350,7 +1408,7 @@ export class GuestsController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Menu, MenuItem, Member, Notification])],
+  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Menu, MenuItem, Member, Notification, HouseholdActivityLog])],
   controllers: [GuestsController],
   providers: [GuestsService],
   exports: [GuestsService],

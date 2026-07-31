@@ -293,7 +293,23 @@ const restrictedMealRequests = await request(
 );
 assert(restrictedMealRequests.status === 404, '未显式授权的访客邀请不能读取点菜请求');
 
+const scheduledAnonymize = await request(`/guests/${guest.id}/anonymize`, adminToken, 'POST');
+assert(scheduledAnonymize.status === 409, '已安排来访期间不能匿名化访客资料');
 const cancelled = await request(`/visits/${visit.id}`, adminToken, 'PATCH', { status: 'cancelled' });
 assert(cancelled.status === 200 && cancelled.body.data.status === 'cancelled', '管理员可以结束或取消来访计划');
+
+const memberAnonymize = await request(`/guests/${guest.id}/anonymize`, memberToken, 'POST');
+assert(memberAnonymize.status === 403, '普通成员不能匿名化访客资料');
+const anonymized = await request(`/guests/${guest.id}/anonymize`, adminToken, 'POST');
+assert(
+  anonymized.status === 201 &&
+    anonymized.body.data.name === '已匿名访客' &&
+    anonymized.body.data.note === null &&
+    anonymized.body.data.isActive === false &&
+    typeof anonymized.body.data.anonymizedAt === 'string',
+  '取消来访后管理员可以匿名化访客资料并移除身份字段',
+);
+const reenableAnonymized = await request(`/guests/${guest.id}`, adminToken, 'PATCH', { isActive: true });
+assert(reenableAnonymized.status === 409, '匿名化访客不能重新启用或编辑');
 
 console.log('\n访客与来访测试全部通过');

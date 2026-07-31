@@ -150,6 +150,18 @@ export function useUpdateGuest() {
   });
 }
 
+export function useAnonymizeGuest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<Guest>(`/guests/${id}/anonymize`, { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['guests'] });
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 export function useVisits(status?: VisitStatus, enabled = true) {
   return useQuery({
     queryKey: ['visits', status ?? 'all'],

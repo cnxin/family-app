@@ -638,6 +638,7 @@ export interface Guest {
   avatarEmoji: string;
   note: string | null;
   isActive: boolean;
+  anonymizedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

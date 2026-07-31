@@ -1091,6 +1091,9 @@ export class Guest {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  anonymizedAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
