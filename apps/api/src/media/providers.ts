@@ -70,6 +70,13 @@ export interface MediaLibraryMatch {
   available: boolean;
   playbackUrl: string | null;
   metadata: Record<string, unknown>;
+  seasons: MediaLibrarySeasonAvailability[];
+}
+
+export interface MediaLibrarySeasonAvailability {
+  season: number;
+  // This is the number found on the media server, not an expected episode count.
+  episodeCount: number | null;
 }
 
 export interface MediaLibraryCatalogItem {
@@ -107,6 +114,7 @@ export interface MediaLibraryProvider {
   listUsers(): Promise<MediaServerUserDirectory>;
   findByExternalRefs(
     externalRefs: MediaExternalReference[],
+    options?: { seasons?: number[] },
   ): Promise<MediaLibraryMatch[]>;
   getPoster(
     libraryItemId: string,

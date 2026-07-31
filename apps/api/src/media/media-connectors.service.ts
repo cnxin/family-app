@@ -46,6 +46,10 @@ export interface PublicLibraryMatch {
   primary: boolean;
   libraryItemId: string;
   playbackUrl: string | null;
+  seasons: {
+    season: number;
+    episodeCount: number | null;
+  }[];
 }
 
 interface LibraryConnector {
@@ -148,7 +152,11 @@ export class MediaConnectorsService {
 
   async availability(
     householdId: string,
-    media: { id: string; externalRefs: MediaExternalReference[] }[],
+    media: {
+      id: string;
+      externalRefs: MediaExternalReference[];
+      requestedSeasons?: number[];
+    }[],
   ): Promise<Record<string, PublicLibraryMatch[]>> {
     const context = await this.context(householdId);
     const result = Object.fromEntries(media.map((entry) => [entry.id, []])) as Record<
@@ -177,6 +185,7 @@ export class MediaConnectorsService {
             context.version,
             library,
             entry.externalRefs,
+            entry.requestedSeasons,
           ).catch((): MediaLibraryMatch[] => []);
           result[entry.id].push(
             ...matches
@@ -188,6 +197,7 @@ export class MediaConnectorsService {
                 primary: library.config.primary,
                 libraryItemId: match.libraryItemId,
                 playbackUrl: match.playbackUrl,
+                seasons: match.seasons,
               })),
           );
         }),
@@ -456,6 +466,7 @@ export class MediaConnectorsService {
     version: string,
     library: LibraryConnector,
     refs: MediaExternalReference[],
+    requestedSeasons: number[] | undefined,
   ): Promise<MediaLibraryMatch[]> {
     const refKey = refs
       .filter((ref) => ref.provider === 'tmdb' || ref.provider === 'imdb')
@@ -463,10 +474,13 @@ export class MediaConnectorsService {
       .sort()
       .join('|');
     if (!refKey) return Promise.resolve([] as MediaLibraryMatch[]);
-    const key = `${householdId}:${version}:${library.config.key}:${refKey}`;
+    const seasons = [...new Set(requestedSeasons ?? [])]
+      .filter((season) => Number.isInteger(season) && season >= 1 && season <= 999)
+      .sort((left, right) => left - right);
+    const key = `${householdId}:${version}:${library.config.key}:${refKey}:seasons=${seasons.join(',')}`;
     const current = this.availabilityCache.get(key);
     if (current && current.expiresAt > Date.now()) return current.value;
-    const value = library.provider.findByExternalRefs(refs);
+    const value = library.provider.findByExternalRefs(refs, { seasons });
     this.availabilityCache.set(key, {
       expiresAt: Date.now() + 60_000,
       value,

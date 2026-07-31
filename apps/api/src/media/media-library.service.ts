@@ -478,6 +478,7 @@ export class MediaLibraryService {
         primary: false,
         libraryItemId: item.libraryItemId,
         playbackUrl: item.playbackUrl,
+        seasons: [],
       });
     }
     return result;

@@ -500,6 +500,11 @@ export interface MediaLibraryMatch {
   primary: boolean;
   libraryItemId: string;
   playbackUrl: string | null;
+  seasons: {
+    season: number;
+    // Number reported by the media server; it is not an expected total.
+    episodeCount: number | null;
+  }[];
 }
 
 export type MediaLibraryAvailability = Record<string, MediaLibraryMatch[]>;

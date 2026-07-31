@@ -43,7 +43,7 @@ import {
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest, Response } from 'express';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
@@ -464,6 +464,8 @@ export class MediaService {
   constructor(
     @InjectRepository(HouseholdMedia)
     private readonly householdMedia: Repository<HouseholdMedia>,
+    @InjectRepository(MediaRequest)
+    private readonly mediaRequests: Repository<MediaRequest>,
     private readonly dataSource: DataSource,
     private readonly connectors: MediaConnectorsService,
     private readonly library: MediaLibraryService,
@@ -517,9 +519,28 @@ export class MediaService {
       where: mediaIds.map((id) => ({ id, householdId: user.householdId })),
       relations: { mediaTitle: { externalRefs: true } },
     });
+    const requests = await this.mediaRequests.find({
+      where: {
+        householdId: user.householdId,
+        householdMediaId: In(entries.map((entry) => entry.id)),
+      },
+      order: { updatedAt: 'DESC' },
+    });
+    const requestedSeasonsByMedia = new Map<string, number[]>();
+    for (const request of requests) {
+      if (requestedSeasonsByMedia.has(request.householdMediaId)) continue;
+      if (!request.season || request.status === 'cancelled') {
+        requestedSeasonsByMedia.set(request.householdMediaId, []);
+        continue;
+      }
+      const seasons = requestedSeasonsByMedia.get(request.householdMediaId) ?? [];
+      seasons.push(request.season);
+      requestedSeasonsByMedia.set(request.householdMediaId, seasons);
+    }
     const media = entries.map((entry) => ({
       id: entry.id,
       mediaTitleId: entry.mediaTitleId,
+      requestedSeasons: requestedSeasonsByMedia.get(entry.id) ?? [],
       externalRefs: (entry.mediaTitle.externalRefs ?? []).map((ref) => ({
         provider: ref.provider,
         mediaType: ref.mediaType,
@@ -533,6 +554,7 @@ export class MediaService {
       media.map((entry) => ({
         id: entry.id,
         externalRefs: entry.externalRefs,
+        requestedSeasons: entry.requestedSeasons,
       })),
       ),
       this.library.availability(user.householdId, media),

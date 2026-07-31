@@ -185,6 +185,12 @@ function integerOrNull(value: unknown) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+function requestedSeasons(options: { seasons?: number[] } = {}) {
+  return [...new Set(options.seasons ?? [])]
+    .filter((season) => Number.isInteger(season) && season >= 1 && season <= 999)
+    .sort((left, right) => left - right);
+}
+
 function sortedUniqueUsers(users: MediaServerUser[]) {
   const byId = new Map<string, MediaServerUser>();
   for (const user of users) byId.set(user.externalUserId, user);
@@ -341,6 +347,7 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
 
   async findByExternalRefs(
     externalRefs: MediaExternalReference[],
+    options: { seasons?: number[] } = {},
   ): Promise<MediaLibraryMatch[]> {
     const references = relevantExternalRefs(externalRefs);
     if (!references.length) return [];
@@ -364,6 +371,7 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
       }
     }
     const requestedKeys = new Set(references.map(externalRefKey));
+    const seasons = requestedSeasons(options);
     const matches: MediaLibraryMatch[] = [];
     for (const [libraryItemId, item] of items) {
       const itemRefs = plexExternalRefs(
@@ -378,19 +386,24 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
       ) {
         continue;
       }
+      const mediaType: MediaType = item.type === 'show' ? 'series' : 'movie';
       matches.push({
         libraryItemId,
         externalRefs: [
           ...itemRefs,
           {
             provider: 'plex',
-            mediaType: item.type === 'show' ? 'series' : 'movie',
+            mediaType,
             externalId: libraryItemId,
             connectorKey: this.config.key,
           },
         ],
         available: true,
         playbackUrl: await this.getPlaybackTarget(libraryItemId),
+        seasons:
+          mediaType === 'series' && seasons.length
+            ? await this.seasonsForShow(libraryItemId, seasons)
+            : [],
         metadata: {
           title: asString(item.title),
           year: item.year ?? null,
@@ -398,6 +411,36 @@ export class PlexLibraryProvider implements MediaLibraryProvider {
       });
     }
     return matches;
+  }
+
+  private async seasonsForShow(libraryItemId: string, seasons: number[]) {
+    const body = asRecord(
+      await this.request(
+        `/library/metadata/${encodeURIComponent(libraryItemId)}/children`,
+      ),
+    );
+    const container = asRecord(body.MediaContainer);
+    const requested = new Set(seasons);
+    return [
+      ...asArray(container.Metadata),
+      ...asArray(container.Directory),
+    ]
+      .map(asRecord)
+      .flatMap((item) => {
+        const season = integerOrNull(item.index);
+        if (item.type !== 'season' || season == null || !requested.has(season)) {
+          return [];
+        }
+        const episodeCount = integerOrNull(item.leafCount);
+        return [
+          {
+            season,
+            episodeCount:
+              episodeCount != null && episodeCount >= 0 ? episodeCount : null,
+          },
+        ];
+      })
+      .sort((left, right) => left.season - right.season);
   }
 
   async getPoster(
@@ -548,6 +591,7 @@ export class EmbyLibraryProvider implements MediaLibraryProvider {
 
   async findByExternalRefs(
     externalRefs: MediaExternalReference[],
+    options: { seasons?: number[] } = {},
   ): Promise<MediaLibraryMatch[]> {
     const references = relevantExternalRefs(externalRefs);
     if (!references.length) return [];
@@ -564,6 +608,7 @@ export class EmbyLibraryProvider implements MediaLibraryProvider {
     });
     const body = asRecord(await this.request('/Items', params));
     const matches: MediaLibraryMatch[] = [];
+    const seasons = requestedSeasons(options);
     for (const value of asArray(body.Items)) {
       const item = asRecord(value);
       const libraryItemId = asString(item.Id);
@@ -592,6 +637,10 @@ export class EmbyLibraryProvider implements MediaLibraryProvider {
         ],
         available: true,
         playbackUrl: await this.getPlaybackTarget(libraryItemId),
+        seasons:
+          mediaType === 'series' && seasons.length
+            ? await this.seasonsForSeries(libraryItemId, seasons)
+            : [],
         metadata: {
           title: asString(item.Name),
           productionYear: item.ProductionYear ?? null,
@@ -599,6 +648,31 @@ export class EmbyLibraryProvider implements MediaLibraryProvider {
       });
     }
     return matches;
+  }
+
+  private async seasonsForSeries(libraryItemId: string, seasons: number[]) {
+    const body = asRecord(
+      await this.request(
+        `/Shows/${encodeURIComponent(libraryItemId)}/Seasons`,
+        new URLSearchParams({ Fields: 'ChildCount,IndexNumber' }),
+      ),
+    );
+    const requested = new Set(seasons);
+    return asArray(body.Items)
+      .map(asRecord)
+      .flatMap((item) => {
+        const season = integerOrNull(item.IndexNumber);
+        if (season == null || !requested.has(season)) return [];
+        const episodeCount = integerOrNull(item.ChildCount);
+        return [
+          {
+            season,
+            episodeCount:
+              episodeCount != null && episodeCount >= 0 ? episodeCount : null,
+          },
+        ];
+      })
+      .sort((left, right) => left.season - right.season);
   }
 
   async getPoster(

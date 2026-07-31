@@ -170,6 +170,37 @@ function requestStatusColors(
   return { color: c.orange, background: c.orangeSoft };
 }
 
+function seriesRequestAvailability(
+  request: MediaRequest | null,
+  mediaType: MediaType,
+  libraries: MediaLibraryMatch[],
+) {
+  if (mediaType !== 'series' || !request?.season) return null;
+  const sources = libraries.flatMap((library) =>
+    library.seasons
+      .filter((season) => season.season === request.season)
+      .map((season) => ({ name: library.name, episodeCount: season.episodeCount })),
+  );
+  if (!sources.length) {
+    return {
+      verified: false,
+      label: libraries.length
+        ? `已发现剧集条目，等待第 ${request.season} 季核验`
+        : `等待媒体库同步第 ${request.season} 季`,
+    };
+  }
+  return {
+    verified: true,
+    label: `第 ${request.season} 季可播放 · ${sources
+      .map((source) =>
+        source.episodeCount && source.episodeCount > 0
+          ? `${source.name} 已发现 ${source.episodeCount} 集`
+          : `${source.name} 集数待核验`,
+      )
+      .join(' · ')}`,
+  };
+}
+
 function Poster({ entry }: { entry: HouseholdMedia }) {
   const c = useTheme();
   const [failed, setFailed] = useState(false);
@@ -242,6 +273,11 @@ function MediaCard({
   const c = useTheme();
   const colors = statusColors(entry.status, c);
   const requestColors = request ? requestStatusColors(request.status, c) : null;
+  const seasonAvailability = seriesRequestAvailability(
+    request,
+    entry.mediaTitle.type,
+    libraries,
+  );
   const refs = entry.mediaTitle.externalRefs.filter(
     (ref) => ref.provider === 'tmdb' || ref.provider === 'imdb',
   );
@@ -391,6 +427,33 @@ function MediaCard({
               >
                 {request.message}
               </Text>
+            ) : null}
+            {seasonAvailability ? (
+              <View
+                style={[
+                  styles.seasonAvailability,
+                  {
+                    backgroundColor: seasonAvailability.verified ? c.greenSoft : c.fillStrong,
+                  },
+                ]}
+              >
+                {seasonAvailability.verified ? (
+                  <Check color={c.green} size={14} />
+                ) : (
+                  <Eye color={c.secondaryLabel} size={14} />
+                )}
+                <Text
+                  style={[
+                    t.caption,
+                    {
+                      color: seasonAvailability.verified ? c.green : c.secondaryLabel,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  {seasonAvailability.label}
+                </Text>
+              </View>
             ) : null}
             <View style={styles.requestActions}>
               {request.status !== 'completed' && request.status !== 'cancelled' ? (
@@ -2071,6 +2134,13 @@ export default function MediaScreen() {
 
   const detailLibraries = detailEntry ? availability?.[detailEntry.id] ?? [] : [];
   const detailRequest = detailEntry ? requestByMediaId.get(detailEntry.id) ?? null : null;
+  const detailSeasonAvailability = detailEntry
+    ? seriesRequestAvailability(
+        detailRequest,
+        detailEntry.mediaTitle.type,
+        detailLibraries,
+      )
+    : null;
   const detailPoll = detailEntry ? pollByMediaId.get(detailEntry.id) ?? null : null;
   const detailActions: MediaDetailAction[] = detailEntry
     ? [
@@ -2463,6 +2533,14 @@ export default function MediaScreen() {
                       },
                     ]
                   : []),
+                ...(detailSeasonAvailability
+                  ? [
+                      {
+                        label: '季入库核验',
+                        value: detailSeasonAvailability.label,
+                      },
+                    ]
+                  : []),
               ]
             : []
         }
@@ -2746,6 +2824,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   requestMessage: { lineHeight: 17 },
+  seasonAvailability: {
+    minHeight: 30,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
   requestActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   requestActionButton: {
     minHeight: 31,

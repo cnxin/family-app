@@ -35,6 +35,9 @@ const references = [
   { provider: 'tmdb' as const, mediaType: 'movie' as const, externalId: '550' },
   { provider: 'imdb' as const, mediaType: 'movie' as const, externalId: 'tt0137523' },
 ];
+const seriesReferences = [
+  { provider: 'tmdb' as const, mediaType: 'series' as const, externalId: '1399' },
+];
 
 async function testPlex() {
   const requests: URL[] = [];
@@ -58,7 +61,10 @@ async function testPlex() {
       if (url.pathname === '/library/sections') {
         return json({
           MediaContainer: {
-            Directory: [{ key: '1', type: 'movie', title: '电影' }],
+            Directory: [
+              { key: '1', type: 'movie', title: '电影' },
+              { key: '2', type: 'show', title: '剧集' },
+            ],
           },
         });
       }
@@ -93,12 +99,39 @@ async function testPlex() {
           },
         });
       }
+      if (url.pathname === '/library/sections/2/all') {
+        return json({ MediaContainer: { totalSize: 0, Metadata: [] } });
+      }
       if (url.pathname === '/library/metadata/242/thumb/poster-tag') {
         return new Response('plex-poster', {
           headers: { 'Content-Type': 'image/jpeg' },
         });
       }
+      if (url.pathname === '/library/metadata/series-1/children') {
+        return json({
+          MediaContainer: {
+            Metadata: [
+              { type: 'season', index: 1, leafCount: 12 },
+              { type: 'season', index: 2, leafCount: 10 },
+            ],
+          },
+        });
+      }
       if (url.pathname === '/library/all') {
+        if (url.searchParams.get('guid') === 'tmdb://1399') {
+          return json({
+            MediaContainer: {
+              Metadata: [
+                {
+                  ratingKey: 'series-1',
+                  type: 'show',
+                  title: 'Game of Thrones',
+                  Guid: [{ id: 'tmdb://1399' }],
+                },
+              ],
+            },
+          });
+        }
         return json({
           MediaContainer: {
             Metadata: [
@@ -123,6 +156,9 @@ async function testPlex() {
   const users = await provider.listUsers();
   const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
+  const seriesMatches = await provider.findByExternalRefs(seriesReferences, {
+    seasons: [2],
+  });
   const poster = await provider.getPoster('242', library[0].metadata);
   const requestCount = requests.length;
   const untrustedPoster = await provider.getPoster('242', {
@@ -135,6 +171,11 @@ async function testPlex() {
     '读取 Plex 稳定服务器标识和用户目录',
   );
   assert(matches.length === 1 && matches[0].libraryItemId === '242', '按外部 ID 匹配 Plex 条目');
+  assert(
+    seriesMatches[0]?.seasons[0]?.season === 2 &&
+      seriesMatches[0]?.seasons[0]?.episodeCount === 10,
+    'Plex 只返回请求季的已发现集数',
+  );
   assert(
     library.length === 1 &&
       library[0].title === 'Fight Club' &&
@@ -176,9 +217,22 @@ async function testEmby() {
       if (url.pathname === '/Items') {
         if (url.searchParams.has('AnyProviderIdEquals')) {
           assert(
-            url.searchParams.get('AnyProviderIdEquals')?.includes('Tmdb.550'),
+            url.searchParams.get('AnyProviderIdEquals')?.includes('Tmdb.'),
             '使用 TMDB ProviderId 查询 Emby',
           );
+          if (url.searchParams.get('AnyProviderIdEquals')?.includes('Tmdb.1399')) {
+            return json({
+              TotalRecordCount: 1,
+              Items: [
+                {
+                  Id: 'emby-series-7',
+                  Type: 'Series',
+                  Name: 'Game of Thrones',
+                  ProviderIds: { Tmdb: '1399' },
+                },
+              ],
+            });
+          }
         }
         return json({
           TotalRecordCount: 1,
@@ -205,6 +259,14 @@ async function testEmby() {
           headers: { 'Content-Type': 'image/png' },
         });
       }
+      if (url.pathname === '/Shows/emby-series-7/Seasons') {
+        return json({
+          Items: [
+            { IndexNumber: 1, ChildCount: 12 },
+            { IndexNumber: 2, ChildCount: 10 },
+          ],
+        });
+      }
       return json({}, 404);
     }) as typeof fetch,
   );
@@ -212,6 +274,9 @@ async function testEmby() {
   const users = await provider.listUsers();
   const library = await provider.listItems();
   const matches = await provider.findByExternalRefs(references);
+  const seriesMatches = await provider.findByExternalRefs(seriesReferences, {
+    seasons: [2],
+  });
   const poster = await provider.getPoster('emby-item-7', library[0].metadata);
   assert(health.available && health.message === 'Emby 4.9.1', '读取 Emby 版本');
   assert(
@@ -225,6 +290,11 @@ async function testEmby() {
       matches[0].playbackUrl ===
         'http://emby.test/web/index.html#!/item?id=emby-item-7&serverId=emby-server-id',
     '匹配 Emby 条目并生成无密钥播放链接',
+  );
+  assert(
+    seriesMatches[0]?.seasons[0]?.season === 2 &&
+      seriesMatches[0]?.seasons[0]?.episodeCount === 10,
+    'Emby 只返回请求季的已发现集数',
   );
   assert(
     library.length === 1 && library[0].externalRefs.length === 2,
