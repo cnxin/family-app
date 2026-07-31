@@ -294,12 +294,21 @@ async function testMoviePilot() {
           data: {
             list: [
               {
-                id: 203,
+                id: 204,
                 tmdbid: 1160901,
                 seasons: '',
                 download_hash: 'dragon-current',
                 status: false,
                 errmsg: '/media/龙与魔女.mkv 已存在',
+                src: '/downloads/dragon-03.mkv',
+              },
+              {
+                id: 203,
+                tmdbid: 1160901,
+                seasons: '',
+                download_hash: 'dragon-current',
+                status: true,
+                src: '/downloads/dragon-02.mkv',
               },
               {
                 id: 202,
@@ -307,6 +316,16 @@ async function testMoviePilot() {
                 seasons: '',
                 download_hash: 'dragon-current',
                 status: true,
+                src: '/downloads/dragon-01.mkv',
+              },
+              {
+                id: 201,
+                tmdbid: 1160901,
+                seasons: '',
+                download_hash: 'dragon-current',
+                status: false,
+                errmsg: '/media/龙与魔女.mkv 已存在',
+                src: '/downloads/dragon-02.mkv',
               },
               {
                 id: 101,
@@ -426,8 +445,8 @@ async function testMoviePilot() {
   assert(
     incompleteTransfer?.status === 'failed' &&
       incompleteTransfer.message ===
-        'MoviePilot 整理不完整 · 1 成功 / 1 失败 · 目标文件已存在',
-    '同一下载批次存在失败文件时不误报整理完成',
+        'MoviePilot 整理不完整 · 2 成功 / 1 失败 · 目标文件已存在',
+    '同一下载批次按源文件只取最新结果，且不误报部分失败为完成',
   );
   const completedTransfer = await provider.findRequest(mediaWithTmdbId('888'));
   assert(

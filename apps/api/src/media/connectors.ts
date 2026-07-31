@@ -668,6 +668,8 @@ interface MoviePilotTransferHistory extends MoviePilotDownloadHistory {
   status?: boolean;
   errmsg?: string;
   date?: string;
+  src?: string;
+  src_fileitem?: JsonRecord;
 }
 
 export class MoviePilotAutomationProvider implements MediaAutomationProvider {
@@ -944,20 +946,33 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
 
   private latestTransferBatch(histories: MoviePilotTransferHistory[]) {
     if (histories.length < 2) return histories;
-    const newest = [...histories].sort((left, right) => {
+    const ordered = [...histories].sort((left, right) => {
       const idDifference =
         (integerOrNull(right.id) ?? 0) - (integerOrNull(left.id) ?? 0);
       if (idDifference) return idDifference;
       return (asString(right.date) ?? '').localeCompare(
         asString(left.date) ?? '',
       );
-    })[0];
+    });
+    const newest = ordered[0];
     const downloadHash = asString(newest.download_hash);
-    return downloadHash
-      ? histories.filter(
+    const batch = downloadHash
+      ? ordered.filter(
           (history) => asString(history.download_hash) === downloadHash,
         )
-      : histories;
+      : ordered;
+    const latestBySource = new Map<string, MoviePilotTransferHistory>();
+    const unkeyed: MoviePilotTransferHistory[] = [];
+    for (const history of batch) {
+      const source =
+        asString(history.src) ?? asString(asRecord(history.src_fileitem).path);
+      if (!source) {
+        unkeyed.push(history);
+      } else if (!latestBySource.has(source)) {
+        latestBySource.set(source, history);
+      }
+    }
+    return [...latestBySource.values(), ...unkeyed];
   }
 
   private transferFailureReason(histories: MoviePilotTransferHistory[]) {
