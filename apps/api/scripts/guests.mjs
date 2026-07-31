@@ -114,6 +114,17 @@ assert(
 );
 const visit = created.body.data;
 
+const dishes = await request('/dishes', adminToken);
+const visitMenu = await request(`/menus?date=${VISIT_DATE}&mealType=dinner`, adminToken);
+const visitMenuItems = await request(`/menus/${visitMenu.body.data.id}/items`, adminToken, 'POST', {
+  items: [{ dishId: dishes.body.data[0].id }],
+});
+assert(
+  dishes.status === 200 && visitMenu.status === 200 && visitMenuItems.status === 201 && visitMenuItems.body.data.items.length === 1,
+  '家庭可以先安排本次来访的正式菜单',
+);
+const visitMenuItem = visitMenuItems.body.data.items[0];
+
 const calendar = await request(`/calendar?start=${VISIT_DATE}&end=${VISIT_DATE}`, adminToken);
 assert(
   calendar.status === 200 && calendar.body.data.some((entry) => entry.module === 'guest' && entry.sourceId === visit.id),
@@ -183,9 +194,24 @@ assert(
   '家庭投票统计会计入访客选票但不创建家庭成员身份',
 );
 
+const mealOptions = await request(`/guest-invitations/${invitation.invitationToken}/meal-options`, null);
+assert(
+  mealOptions.status === 200 && mealOptions.body.data[0]?.items.some((item) => item.id === visitMenuItem.id) && !('requestedBy' in mealOptions.body.data[0].items[0]),
+  '访客只能查看本次来访期间的菜单菜品，不读取下单成员或菜谱详情',
+);
+const claimedMealOption = await request(
+  `/guest-invitations/${invitation.invitationToken}/meal-options/${visitMenuItem.id}/request`,
+  null,
+  'POST',
+);
+assert(
+  claimedMealOption.status === 201 && claimedMealOption.body.data.menuItemId === visitMenuItem.id,
+  '访客可以从家庭菜单中选择菜品且保留独立请求身份',
+);
+
 const mealRequestsBefore = await request(`/guest-invitations/${invitation.invitationToken}/meal-requests`, null);
 assert(
-  mealRequestsBefore.status === 200 && mealRequestsBefore.body.data.length === 0,
+  mealRequestsBefore.status === 200 && mealRequestsBefore.body.data.length === 1,
   '经授权访客只能读取自己的点菜请求列表',
 );
 const mealRequest = await request(`/guest-invitations/${invitation.invitationToken}/meal-requests`, null, 'POST', {

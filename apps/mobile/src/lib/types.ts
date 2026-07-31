@@ -706,6 +706,7 @@ export interface GuestInvitationPreview {
 
 export interface GuestMealRequest {
   id: string;
+  menuItemId: string | null;
   mealDate: string;
   mealType: MealType;
   dishName: string;
@@ -716,6 +717,19 @@ export interface GuestMealRequest {
   createdAt: string;
   updatedAt: string;
   guest?: Pick<Guest, 'id' | 'name' | 'avatarEmoji'> | null;
+}
+
+export interface GuestMealOption {
+  id: string;
+  mealDate: string;
+  mealType: MealType;
+  items: {
+    id: string;
+    dishName: string;
+    dishCategory: DishCategory;
+    photoUrl: string | null;
+    request: GuestMealRequest | null;
+  }[];
 }
 
 export interface GuestMoviePoll {

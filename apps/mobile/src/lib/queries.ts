@@ -15,6 +15,7 @@ import type {
   Guest,
   GuestInvitationPreview,
   GuestMealRequest,
+  GuestMealOption,
   GuestMoviePoll,
   GuestWifiProfile,
   HouseholdPoll,
@@ -274,6 +275,26 @@ export function useGuestMealRequests(token: string | undefined, enabled = true) 
     queryFn: () => api<GuestMealRequest[]>(`/guest-invitations/${encodeURIComponent(token ?? '')}/meal-requests`, { auth: false }),
     enabled: Boolean(token) && enabled,
     retry: false,
+  });
+}
+
+export function useGuestMealOptions(token: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['guest-meal-options', token],
+    queryFn: () => api<GuestMealOption[]>(`/guest-invitations/${encodeURIComponent(token ?? '')}/meal-options`, { auth: false }),
+    enabled: Boolean(token) && enabled,
+    retry: false,
+  });
+}
+
+export function useClaimGuestMealOption(token: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (menuItemId: string) => api<GuestMealRequest>(`/guest-invitations/${encodeURIComponent(token ?? '')}/meal-options/${menuItemId}/request`, { method: 'POST', auth: false }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['guest-meal-options', token] });
+      void qc.invalidateQueries({ queryKey: ['guest-meal-requests', token] });
+    },
   });
 }
 

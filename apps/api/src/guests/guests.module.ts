@@ -44,6 +44,8 @@ import {
   GuestWifiSecurity,
   MealType,
   Member,
+  Menu,
+  MenuItem,
   Notification,
   Poll,
   PollOption,
@@ -343,6 +345,7 @@ function profileGuestWifi(profile: GuestWifiProfile) {
 function profileGuestMealRequest(request: GuestMealRequest) {
   return {
     id: request.id,
+    menuItemId: request.menuItemId,
     mealDate: request.mealDate,
     mealType: request.mealType,
     dishName: request.dishName,
@@ -407,6 +410,7 @@ export class GuestsService {
     private readonly guestPollVotes: Repository<GuestPollVote>,
     @InjectRepository(GuestMealRequest)
     private readonly guestMealRequests: Repository<GuestMealRequest>,
+    @InjectRepository(Menu) private readonly menus: Repository<Menu>,
     @InjectRepository(Member) private readonly members: Repository<Member>,
     private readonly dataSource: DataSource,
   ) {}
@@ -807,6 +811,88 @@ export class GuestsService {
       order: { mealDate: 'ASC', mealType: 'ASC' },
     });
     return requests.map(profileGuestMealRequest);
+  }
+
+  async publicMealOptions(token: string) {
+    const invitation = await this.activeInvitation(token);
+    this.assertMealRequestsAllowed(invitation);
+    const dates = visitMealDates(invitation.visit);
+    const [menus, requests] = await Promise.all([
+      this.menus.find({
+        where: { householdId: invitation.visit.householdId, date: In(dates), status: 'open' },
+        relations: { items: { dish: true } },
+        order: { date: 'ASC', mealType: 'ASC', items: { createdAt: 'ASC' } },
+      }),
+      this.guestMealRequests.find({ where: { invitationId: invitation.id } }),
+    ]);
+    const requestByMenuItem = new Map(
+      requests.filter((request) => request.menuItemId).map((request) => [request.menuItemId!, request]),
+    );
+    return menus.map((menu) => ({
+      id: menu.id,
+      mealDate: menu.date,
+      mealType: menu.mealType,
+      items: (menu.items ?? [])
+        .filter((item) => item.status !== 'rejected' && item.dish.isActive)
+        .map((item) => ({
+          id: item.id,
+          dishName: item.dish.name,
+          dishCategory: item.dish.category,
+          photoUrl: item.dish.photoUrl,
+          request: requestByMenuItem.has(item.id)
+            ? profileGuestMealRequest(requestByMenuItem.get(item.id)!)
+            : null,
+        })),
+    })).filter((menu) => menu.items.length);
+  }
+
+  async claimMealOption(token: string, menuItemId: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const invitation = await this.activeInvitation(token, manager);
+      this.assertMealRequestsAllowed(invitation);
+      const item = await manager.getRepository(MenuItem)
+        .createQueryBuilder('item')
+        .innerJoinAndSelect('item.menu', 'menu')
+        .innerJoinAndSelect('item.dish', 'dish')
+        .where('item.id = :menuItemId', { menuItemId })
+        .andWhere('menu.householdId = :householdId', { householdId: invitation.visit.householdId })
+        .andWhere('menu.status = :status', { status: 'open' })
+        .andWhere('item.status != :rejected', { rejected: 'rejected' })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!item || !item.dish.isActive || !visitMealDates(invitation.visit).includes(item.menu.date)) {
+        throw new NotFoundException('可选择的菜单菜品不存在');
+      }
+      const requests = manager.getRepository(GuestMealRequest);
+      const existing = await requests.findOneBy({ invitationId: invitation.id, menuItemId: item.id });
+      if (existing) return profileGuestMealRequest(existing);
+      const saved = await requests.save(requests.create({
+        householdId: invitation.visit.householdId,
+        visitId: invitation.visitId,
+        invitationId: invitation.id,
+        menuItemId: item.id,
+        mealDate: item.menu.date,
+        mealType: item.menu.mealType,
+        dishName: item.dish.name,
+        note: null,
+        status: 'pending',
+        reviewNote: null,
+        reviewedById: null,
+        reviewedAt: null,
+      }));
+      await manager.getRepository(Notification).save(manager.getRepository(Notification).create({
+        householdId: invitation.visit.householdId,
+        recipientId: invitation.visit.hostMemberId,
+        module: 'guest',
+        type: 'guest_menu_selection',
+        sourceId: saved.id,
+        title: '访客选择了菜单菜品',
+        body: `${invitation.guest.name} 选择了${item.dish.name}`,
+        targetPath: `/guests?visitId=${invitation.visitId}`,
+        readAt: null,
+      }));
+      return profileGuestMealRequest(saved);
+    });
   }
 
   async submitMealRequest(token: string, dto: GuestMealRequestDto) {
@@ -1235,6 +1321,18 @@ export class GuestsController {
   }
 
   @Public()
+  @Get('guest-invitations/:token/meal-options')
+  publicMealOptions(@Param('token') token: string) {
+    return this.service.publicMealOptions(token);
+  }
+
+  @Public()
+  @Post('guest-invitations/:token/meal-options/:menuItemId/request')
+  claimMealOption(@Param('token') token: string, @Param('menuItemId') menuItemId: string) {
+    return this.service.claimMealOption(token, menuItemId);
+  }
+
+  @Public()
   @Post('guest-invitations/:token/meal-requests')
   submitMealRequest(@Param('token') token: string, @Body() dto: GuestMealRequestDto) {
     return this.service.submitMealRequest(token, dto);
@@ -1252,7 +1350,7 @@ export class GuestsController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Member, Notification])],
+  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Menu, MenuItem, Member, Notification])],
   controllers: [GuestsController],
   providers: [GuestsService],
   exports: [GuestsService],

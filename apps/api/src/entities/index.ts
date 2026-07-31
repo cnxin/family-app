@@ -1786,7 +1786,10 @@ export class GuestPollVote {
 
 @Entity('guest_meal_requests')
 @Check('CHK_guest_meal_requests_status', `"status" IN ('pending', 'accepted', 'rejected')`)
-@Unique('UQ_guest_meal_requests_invitation_meal', ['invitationId', 'mealDate', 'mealType'])
+@Index('UQ_guest_meal_requests_invitation_menu_item', ['invitationId', 'menuItemId'], {
+  unique: true,
+  where: `"menuItemId" IS NOT NULL`,
+})
 @Index('IDX_guest_meal_requests_household_visit', ['householdId', 'visitId'])
 export class GuestMealRequest {
   @PrimaryGeneratedColumn('uuid')
@@ -1821,6 +1824,16 @@ export class GuestMealRequest {
 
   @Column('uuid')
   invitationId: string;
+
+  @ManyToOne(() => MenuItem, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'menuItemId',
+    foreignKeyConstraintName: 'FK_guest_meal_requests_menu_item',
+  })
+  menuItem: MenuItem | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  menuItemId: string | null;
 
   @Column({ type: 'date' })
   mealDate: string;

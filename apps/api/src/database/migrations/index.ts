@@ -25,6 +25,7 @@ import { AddGuestVisits1785228700000 } from './1785228700000-add-guest-visits';
 import { AddGuestWifiProfiles1785228800000 } from './1785228800000-add-guest-wifi-profiles';
 import { AddGuestMovieVotes1785228900000 } from './1785228900000-add-guest-movie-votes';
 import { AddGuestMealRequests1785229000000 } from './1785229000000-add-guest-meal-requests';
+import { LinkGuestMealRequestsToMenu1785229100000 } from './1785229100000-link-guest-meal-requests-to-menu';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -54,4 +55,5 @@ export const ALL_MIGRATIONS = [
   AddGuestWifiProfiles1785228800000,
   AddGuestMovieVotes1785228900000,
   AddGuestMealRequests1785229000000,
+  LinkGuestMealRequestsToMenu1785229100000,
 ];
