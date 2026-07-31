@@ -254,7 +254,56 @@ async function testMoviePilot() {
         return json({ data: { version: 'v2.9.0' } });
       }
       if (url.pathname === '/api/v1/subscribe/media/themoviedb%3A550') {
+        return json({ id: 88, state: 'R', type: '电影', tmdbid: 550 });
+      }
+      if (url.pathname === '/api/v1/subscribe/media/themoviedb%3A1399') {
+        assert(url.searchParams.get('season') === '2', '按季找回剧集订阅');
+        return json({ id: 99, state: 'N', type: '电视剧', tmdbid: 1399 });
+      }
+      if (
+        url.pathname === '/api/v1/subscribe/media/themoviedb%3A568160' ||
+        url.pathname === '/api/v1/subscribe/media/themoviedb%3A1160901' ||
+        url.pathname === '/api/v1/subscribe/media/themoviedb%3A777'
+      ) {
         return json({});
+      }
+      if (url.pathname === '/api/v1/download/' && method === 'GET') {
+        return json([
+          {
+            downloader: 'qBittorrent',
+            hash: 'weathering-hash',
+            progress: 58.7,
+            media: { tmdbid: 568160, season: '' },
+          },
+        ]);
+      }
+      if (
+        url.pathname === '/api/v1/download/weathering-hash' &&
+        method === 'DELETE'
+      ) {
+        assert(
+          url.searchParams.get('name') === 'qBittorrent',
+          '取消下载时指定正确的 MoviePilot 下载器',
+        );
+        return json({ success: true });
+      }
+      if (url.pathname === '/api/v1/history/transfer') {
+        return json({
+          success: true,
+          data: {
+            list: [
+              {
+                tmdbid: 1160901,
+                seasons: '',
+                status: true,
+              },
+            ],
+            total: 1,
+          },
+        });
+      }
+      if (url.pathname === '/api/v1/history/download') {
+        return json([{ tmdbid: 777, seasons: '' }]);
       }
       if (url.pathname === '/api/v1/subscribe/' && method === 'POST') {
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -293,6 +342,72 @@ async function testMoviePilot() {
     !methods.includes('GET /api/v1/subscribe/88') &&
       !methods.includes('GET /api/v1/subscribe/media/themoviedb%3A550'),
     '创建订阅不执行多余的前置或确认查询',
+  );
+  const recovered = await provider.findRequest(media);
+  assert(
+    recovered?.requestId === '88' && recovered.status === 'processing',
+    '可以按 TMDB ID 找回 MoviePilot 订阅编号和状态',
+  );
+  const recoveredSeason = await provider.findRequest(
+    {
+      ...media,
+      type: 'series',
+      title: 'Game of Thrones',
+      externalRefs: [
+        {
+          provider: 'tmdb',
+          mediaType: 'series',
+          externalId: '1399',
+        },
+      ],
+    },
+    { season: 2 },
+  );
+  assert(
+    recoveredSeason?.requestId === '99' && recoveredSeason.status === 'pending',
+    '剧集可以按 TMDB ID 和季数找回 MoviePilot 订阅',
+  );
+  const mediaWithTmdbId = (tmdbId: string): MediaMetadataSnapshot => ({
+    ...media,
+    externalRefs: [
+      {
+        provider: 'tmdb',
+        mediaType: 'movie',
+        externalId: tmdbId,
+      },
+    ],
+  });
+  const activeDownload = await provider.findRequest(mediaWithTmdbId('568160'));
+  assert(
+    activeDownload?.status === 'processing' &&
+      activeDownload.requestId.startsWith('media-download:') &&
+      activeDownload.message?.includes('59%'),
+    '订阅转入下载器后可以按 TMDB ID 恢复下载进度',
+  );
+  const refreshedDownload = await provider.getRequest(activeDownload.requestId);
+  assert(
+    refreshedDownload?.status === 'processing',
+    '恢复下载编号后可以继续刷新 MoviePilot 下载状态',
+  );
+  const cancelledDownload = await provider.cancelRequest(activeDownload.requestId);
+  assert(
+    cancelledDownload.status === 'cancelled' &&
+      methods.includes('DELETE /api/v1/download/weathering-hash'),
+    '取消已开始的 MoviePilot 下载任务',
+  );
+  const completedTransfer = await provider.findRequest(
+    mediaWithTmdbId('1160901'),
+  );
+  assert(
+    completedTransfer?.status === 'completed' &&
+      completedTransfer.message === 'MoviePilot 已完成整理',
+    '订阅离开下载器后可以从整理历史确认完成',
+  );
+  const pendingTransfer = await provider.findRequest(mediaWithTmdbId('777'));
+  assert(
+    pendingTransfer?.status === 'processing' &&
+      pendingTransfer.message === 'MoviePilot 已接收下载，等待整理完成',
+    '只有下载历史时保持等待整理状态',
   );
   const cancelled = await provider.cancelRequest(request.requestId);
   assert(

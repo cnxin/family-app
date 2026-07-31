@@ -55,6 +55,10 @@ export interface MediaAutomationProvider {
     idempotencyKey: string,
     options?: { season?: number },
   ): Promise<MediaAutomationRequest>;
+  findRequest(
+    media: MediaMetadataSnapshot,
+    options?: { season?: number },
+  ): Promise<MediaAutomationRequest | null>;
   getRequest(requestId: string): Promise<MediaAutomationRequest | null>;
   cancelRequest(requestId: string): Promise<MediaAutomationRequest>;
   health(): Promise<MediaProviderHealth>;

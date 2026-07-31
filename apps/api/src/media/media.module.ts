@@ -71,6 +71,7 @@ import {
   ViewingSession,
 } from '../entities';
 import { MediaConnectorsService } from './media-connectors.service';
+import { MediaConnectorError } from './connectors';
 import {
   IntegrationSettingsService,
   UpdateIntegrationSettingsInput,
@@ -1183,19 +1184,21 @@ export class MediaRequestsService {
     if (current.status === 'completed' || current.status === 'cancelled') {
       throw new ConflictException('已结束的订阅不能刷新');
     }
-    if (!current.externalRequestId) {
-      throw new ConflictException('订阅尚未取得 MoviePilot 请求编号');
-    }
 
     let externalRequest: Awaited<
       ReturnType<MediaConnectorsService['getRequest']>
     >;
     try {
-      externalRequest = await this.connectors.getRequest(
-        user.householdId,
-        current.connectorKey,
-        current.externalRequestId,
-      );
+      externalRequest = current.externalRequestId
+        ? await this.connectors.getRequest(
+            user.householdId,
+            current.connectorKey,
+            current.externalRequestId,
+          )
+        : null;
+      if (!externalRequest) {
+        externalRequest = await this.findExternalRequest(current, user);
+      }
     } catch (error) {
       const message = connectorErrorMessage(error);
       await this.recordSyncError(current.id, message, user);
@@ -1214,6 +1217,9 @@ export class MediaRequestsService {
         request.status = 'failed';
         request.message = 'MoviePilot 中已找不到这条订阅';
       } else {
+        request.externalRequestId = this.externalRequestIdForPersistence(
+          externalRequest.requestId,
+        );
         request.status = externalRequest.status;
         request.message = externalRequest.message?.slice(0, 1000) ?? null;
         request.lastSyncedAt = externalRequest.updatedAt;
@@ -1259,15 +1265,38 @@ export class MediaRequestsService {
     ) {
       throw new ForbiddenException('只有请求人或家庭管理员可以取消订阅');
     }
-    if (!current.externalRequestId) {
-      throw new ConflictException('订阅正在提交，请稍后再取消');
+    let externalRequest: Awaited<
+      ReturnType<MediaConnectorsService['getRequest']>
+    > = null;
+
+    try {
+      if (current.externalRequestId) {
+        externalRequest = await this.connectors.getRequest(
+          user.householdId,
+          current.connectorKey,
+          current.externalRequestId,
+        );
+      }
+      if (!externalRequest) {
+        externalRequest = await this.findExternalRequest(current, user);
+      }
+      if (!externalRequest) {
+        throw new MediaConnectorError('MoviePilot 中已找不到这条订阅或下载任务');
+      }
+    } catch (error) {
+      const message = connectorErrorMessage(error);
+      await this.recordSyncError(current.id, message, user);
+      throw new BadGatewayException(`取消 MoviePilot 订阅失败：${message}`);
+    }
+    if (externalRequest.status === 'completed') {
+      throw new ConflictException('MoviePilot 已完成整理，请刷新订阅状态');
     }
 
     try {
       await this.connectors.cancelRequest(
         user.householdId,
         current.connectorKey,
-        current.externalRequestId,
+        externalRequest.requestId,
       );
     } catch (error) {
       const message = connectorErrorMessage(error);
@@ -1281,6 +1310,9 @@ export class MediaRequestsService {
       if (!['pending', 'processing'].includes(request.status)) {
         throw new ConflictException('订阅状态已经发生变化，请刷新后重试');
       }
+      request.externalRequestId = this.externalRequestIdForPersistence(
+        externalRequest.requestId,
+      );
       request.status = 'cancelled';
       request.cancelledById = user.memberId;
       request.message = null;
@@ -1335,12 +1367,30 @@ export class MediaRequestsService {
   }
 
   private async mediaTitle(mediaId: string, user: JwtUser) {
+    return (await this.mediaTitleEntity(mediaId, user)).title;
+  }
+
+  private async mediaTitleEntity(mediaId: string, user: JwtUser) {
     const entry = await this.dataSource.manager.getRepository(HouseholdMedia).findOne({
       where: { id: mediaId, householdId: user.householdId },
-      relations: { mediaTitle: true },
+      relations: { mediaTitle: { externalRefs: true } },
     });
     if (!entry) throw new NotFoundException('观影片单不存在');
-    return entry.mediaTitle.title;
+    return entry.mediaTitle;
+  }
+
+  private async findExternalRequest(request: MediaRequest, user: JwtUser) {
+    const title = await this.mediaTitleEntity(request.householdMediaId, user);
+    return this.connectors.findRequest(
+      user.householdId,
+      request.connectorKey,
+      this.metadataSnapshot(title),
+      request.season ? { season: request.season } : {},
+    );
+  }
+
+  private externalRequestIdForPersistence(requestId: string) {
+    return requestId.startsWith('media-') ? null : requestId;
   }
 
   private metadataSnapshot(title: MediaTitle) {

@@ -324,6 +324,18 @@ export class MediaConnectorsService {
     );
   }
 
+  async findRequest(
+    householdId: string,
+    connectorKey: string,
+    media: MediaMetadataSnapshot,
+    options: { season?: number } = {},
+  ): Promise<MediaAutomationRequest | null> {
+    return (await this.automation(householdId, connectorKey)).findRequest(
+      media,
+      options,
+    );
+  }
+
   async cancelRequest(
     householdId: string,
     connectorKey: string,

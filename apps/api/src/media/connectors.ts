@@ -644,6 +644,28 @@ interface MoviePilotSubscription extends JsonRecord {
   type?: string;
 }
 
+interface MoviePilotMediaIdentity {
+  mediaType: MediaType;
+  tmdbId: string;
+  season?: number;
+}
+
+interface MoviePilotDownload extends JsonRecord {
+  downloader?: string;
+  hash?: string;
+  progress?: number;
+  media?: JsonRecord;
+}
+
+interface MoviePilotDownloadHistory extends JsonRecord {
+  tmdbid?: number;
+  seasons?: string;
+}
+
+interface MoviePilotTransferHistory extends MoviePilotDownloadHistory {
+  status?: boolean;
+}
+
 export class MoviePilotAutomationProvider implements MediaAutomationProvider {
   readonly provider: MediaExternalProvider = 'moviepilot';
 
@@ -705,7 +727,6 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
     if (media.type === 'series' && (!season || season < 1)) {
       throw new MediaConnectorError('剧集订阅需要选择季数');
     }
-    const mediaKey = `themoviedb:${tmdb.externalId}`;
     const mediaType = media.type === 'movie' ? '电影' : '电视剧';
     let response: JsonRecord;
     try {
@@ -736,14 +757,8 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
 
       // The POST may have completed in MoviePilot after the client timed out.
       try {
-        const existing = asRecord(
-          await this.request(
-            `/api/v1/subscribe/media/${encodeURIComponent(mediaKey)}`,
-            {},
-            season ? new URLSearchParams({ season: String(season) }) : undefined,
-          ),
-        ) as MoviePilotSubscription;
-        if (existing.id) return this.present(existing, media.externalRefs);
+        const existing = await this.findSubscription(media, options);
+        if (existing) return existing;
       } catch {
         // Preserve the actionable timeout below when confirmation also fails.
       }
@@ -769,7 +784,65 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
     );
   }
 
+  async findRequest(
+    media: MediaMetadataSnapshot,
+    options: { season?: number } = {},
+  ): Promise<MediaAutomationRequest | null> {
+    const identity = this.mediaIdentity(media, options);
+    const subscription = await this.findSubscription(media, options);
+    if (subscription) return subscription;
+    return this.findMediaActivity(identity, media.externalRefs);
+  }
+
+  private async findSubscription(
+    media: MediaMetadataSnapshot,
+    options: { season?: number } = {},
+  ): Promise<MediaAutomationRequest | null> {
+    const identity = this.mediaIdentity(media, options);
+    const body = asRecord(
+      await this.request(
+        `/api/v1/subscribe/media/${encodeURIComponent(`themoviedb:${identity.tmdbId}`)}`,
+        {},
+        identity.season
+          ? new URLSearchParams({ season: String(identity.season) })
+          : undefined,
+      ),
+    ) as MoviePilotSubscription;
+    return body.id ? this.present(body, media.externalRefs) : null;
+  }
+
+  private mediaIdentity(
+    media: MediaMetadataSnapshot,
+    options: { season?: number } = {},
+  ): MoviePilotMediaIdentity {
+    const tmdb = media.externalRefs.find(
+      (reference) => reference.provider === 'tmdb',
+    );
+    if (!tmdb || !/^\d+$/.test(tmdb.externalId)) {
+      throw new MediaConnectorError('查找 MoviePilot 订阅需要有效的 TMDB ID');
+    }
+    const season = media.type === 'series' ? options.season : undefined;
+    if (media.type === 'series' && (!season || season < 1)) {
+      throw new MediaConnectorError('查找剧集订阅需要选择季数');
+    }
+    return {
+      mediaType: media.type,
+      tmdbId: tmdb.externalId,
+      season,
+    };
+  }
+
   async getRequest(requestId: string): Promise<MediaAutomationRequest | null> {
+    const mediaRequest = this.parseMediaRequestId(requestId);
+    if (mediaRequest) {
+      return this.findMediaActivity(mediaRequest, [
+        {
+          provider: 'tmdb',
+          mediaType: mediaRequest.mediaType,
+          externalId: mediaRequest.tmdbId,
+        },
+      ]);
+    }
     const body = asRecord(
       await this.request(
         `/api/v1/subscribe/${encodeURIComponent(requestId)}`,
@@ -780,6 +853,8 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
   }
 
   async cancelRequest(requestId: string): Promise<MediaAutomationRequest> {
+    const mediaRequest = this.parseMediaRequestId(requestId);
+    if (mediaRequest) return this.cancelDownloads(mediaRequest);
     const existing = await this.getRequest(requestId);
     if (!existing) throw new MediaConnectorError('MoviePilot 订阅不存在');
     const body = asRecord(
@@ -793,6 +868,169 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
       );
     }
     return { ...existing, status: 'cancelled', updatedAt: new Date() };
+  }
+
+  private mediaRequestId(
+    stage: 'download' | 'history' | 'transfer',
+    identity: MoviePilotMediaIdentity,
+  ) {
+    return `media-${stage}:${identity.mediaType}:${identity.tmdbId}:${identity.season ?? 0}`;
+  }
+
+  private parseMediaRequestId(
+    requestId: string,
+  ): MoviePilotMediaIdentity | null {
+    const match = /^media-(?:download|history|transfer):(movie|series):(\d+):(\d+)$/.exec(
+      requestId,
+    );
+    if (!match) return null;
+    const season = Number(match[3]);
+    return {
+      mediaType: match[1] as MediaType,
+      tmdbId: match[2],
+      season: season > 0 ? season : undefined,
+    };
+  }
+
+  private matchesIdentity(
+    identity: MoviePilotMediaIdentity,
+    tmdbId: unknown,
+    season: unknown,
+  ) {
+    if (String(tmdbId ?? '') !== identity.tmdbId) return false;
+    if (identity.mediaType === 'movie') return true;
+    const numericSeason = integerOrNull(season);
+    if (numericSeason != null) return numericSeason === identity.season;
+    const seasonMatch = /S(\d+)/i.exec(asString(season) ?? '');
+    return seasonMatch ? Number(seasonMatch[1]) === identity.season : false;
+  }
+
+  private async downloads(identity: MoviePilotMediaIdentity) {
+    return asArray(await this.request('/api/v1/download/'))
+      .map((value) => asRecord(value) as MoviePilotDownload)
+      .filter((download) => {
+        const media = asRecord(download.media);
+        return this.matchesIdentity(
+          identity,
+          media.tmdbid ?? media.tmdb_id,
+          media.season,
+        );
+      });
+  }
+
+  private async transferHistory(identity: MoviePilotMediaIdentity) {
+    const response = asRecord(
+      await this.request(
+        '/api/v1/history/transfer',
+        {},
+        new URLSearchParams({ page: '1', count: '1000' }),
+      ),
+    );
+    return asArray(asRecord(response.data).list)
+      .map((value) => asRecord(value) as MoviePilotTransferHistory)
+      .filter(
+        (history) =>
+          history.status === true &&
+          this.matchesIdentity(
+            identity,
+            history.tmdbid,
+            history.seasons,
+          ),
+      );
+  }
+
+  private async downloadHistory(identity: MoviePilotMediaIdentity) {
+    return asArray(
+      await this.request(
+        '/api/v1/history/download',
+        {},
+        new URLSearchParams({ page: '1', count: '1000' }),
+      ),
+    )
+      .map((value) => asRecord(value) as MoviePilotDownloadHistory)
+      .filter((history) =>
+        this.matchesIdentity(identity, history.tmdbid, history.seasons),
+      );
+  }
+
+  private async findMediaActivity(
+    identity: MoviePilotMediaIdentity,
+    externalRefs: MediaExternalReference[],
+  ): Promise<MediaAutomationRequest | null> {
+    const downloads = await this.downloads(identity);
+    if (downloads.length) {
+      const progress = Math.max(
+        ...downloads.map((download) => Number(download.progress) || 0),
+      );
+      return {
+        requestId: this.mediaRequestId('download', identity),
+        status: 'processing',
+        externalRefs,
+        updatedAt: new Date(),
+        message: `MoviePilot 下载中 · ${Math.round(progress)}%${downloads.length > 1 ? ` · ${downloads.length} 个任务` : ''}`,
+      };
+    }
+    const transfers = await this.transferHistory(identity);
+    if (transfers.length) {
+      return {
+        requestId: this.mediaRequestId('transfer', identity),
+        status: 'completed',
+        externalRefs,
+        updatedAt: new Date(),
+        message: 'MoviePilot 已完成整理',
+      };
+    }
+    const history = await this.downloadHistory(identity);
+    if (history.length) {
+      return {
+        requestId: this.mediaRequestId('history', identity),
+        status: 'processing',
+        externalRefs,
+        updatedAt: new Date(),
+        message: 'MoviePilot 已接收下载，等待整理完成',
+      };
+    }
+    return null;
+  }
+
+  private async cancelDownloads(
+    identity: MoviePilotMediaIdentity,
+  ): Promise<MediaAutomationRequest> {
+    const downloads = await this.downloads(identity);
+    if (!downloads.length) {
+      throw new MediaConnectorError('MoviePilot 中没有可取消的活动下载任务');
+    }
+    for (const download of downloads) {
+      if (!download.hash) {
+        throw new MediaConnectorError('MoviePilot 下载任务缺少任务编号');
+      }
+      const response = asRecord(
+        await this.request(
+          `/api/v1/download/${encodeURIComponent(download.hash)}`,
+          { method: 'DELETE' },
+          download.downloader
+            ? new URLSearchParams({ name: download.downloader })
+            : undefined,
+        ),
+      );
+      if (response.success !== true) {
+        throw new MediaConnectorError(
+          asString(response.message) ?? '取消 MoviePilot 下载任务失败',
+        );
+      }
+    }
+    return {
+      requestId: this.mediaRequestId('download', identity),
+      status: 'cancelled',
+      externalRefs: [
+        {
+          provider: 'tmdb',
+          mediaType: identity.mediaType,
+          externalId: identity.tmdbId,
+        },
+      ],
+      updatedAt: new Date(),
+    };
   }
 
   private present(

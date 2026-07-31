@@ -1143,6 +1143,9 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     })
     .click();
   await expect(page.getByText('取消 MoviePilot 订阅？', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(/MoviePilot 会同时删除匹配的下载任务及其文件/),
+  ).toBeVisible();
   await page.getByRole('button', { name: '取消订阅', exact: true }).click();
   await expect(page.getByText('已取消', { exact: true }).first()).toBeVisible();
   await page

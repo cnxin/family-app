@@ -397,13 +397,13 @@ function MediaCard({
                 <Pressable
                   accessibilityLabel={`刷新${entry.mediaTitle.title}的MoviePilot订阅状态`}
                   accessibilityRole="button"
-                  disabled={requestBusy || !request.externalRequestId}
+                  disabled={requestBusy}
                   onPress={onRefreshRequest}
                   style={({ pressed }) => [
                     styles.requestActionButton,
                     {
                       backgroundColor: pressed ? c.tintSoft : c.card,
-                      opacity: requestBusy || !request.externalRequestId ? 0.45 : 1,
+                      opacity: requestBusy ? 0.45 : 1,
                     },
                   ]}
                 >
@@ -2522,7 +2522,7 @@ export default function MediaScreen() {
       <ConfirmDialog
         confirmLabel="取消订阅"
         loading={cancelRequest.isPending}
-        message={`取消「${pendingCancel?.entry.mediaTitle.title ?? ''}」${pendingCancel?.request.season ? `第 ${pendingCancel.request.season} 季` : ''}的 MoviePilot 订阅。`}
+        message={`取消「${pendingCancel?.entry.mediaTitle.title ?? ''}」${pendingCancel?.request.season ? `第 ${pendingCancel.request.season} 季` : ''}的 MoviePilot 订阅。若已开始下载，MoviePilot 会同时删除匹配的下载任务及其文件。`}
         onCancel={() => {
           if (!cancelRequest.isPending) setPendingCancel(null);
         }}
