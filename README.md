@@ -34,6 +34,7 @@
 - 活动记录、成员管理、积分与奖励
 - 结构化多片候选投票
 - MoviePilot 订阅状态持久化、媒体就绪通知和 Plex/Emby 播放进度
+- MoviePilot 后台自动对账、遗漏回调恢复和部分整理失败识别
 - 访客邀请、临时权限和访客 Wi-Fi
 - 中兴或其他家庭网络设备连接器
 - 家庭资产、维护周期和知识资料
@@ -210,6 +211,7 @@ docs/
 ├── m4-media-polls-acceptance.md  # 片单来源投票验收约定
 ├── m4-media-connectors-acceptance.md # 媒体连接器验收约定
 ├── m4-media-search-acceptance.md # 三源影视搜索验收约定
+├── m4-moviepilot-reconciliation-acceptance.md # MoviePilot 后台对账验收约定
 ├── m3-tasks-acceptance.md        # 家庭任务与通用通知验收约定
 └── recipe-variants-acceptance.md # 独立菜谱与多人做法验收约定
 ```

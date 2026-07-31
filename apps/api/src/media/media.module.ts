@@ -78,6 +78,7 @@ import {
 } from './integration-settings.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { MoviePilotWebhookService } from './moviepilot-webhook.service';
+import { MoviePilotReconciliationService } from './moviepilot-reconciliation.service';
 import { MediaUserMappingsService } from './media-user-mappings.service';
 import { PlaybackWebhookService } from './playback-webhook.service';
 import { ViewingHistoryService } from './viewing-history.service';
@@ -1869,6 +1870,7 @@ class MediaController {
     MediaLibraryService,
     IntegrationSettingsService,
     MoviePilotWebhookService,
+    MoviePilotReconciliationService,
     PlaybackWebhookService,
     ViewingHistoryService,
     MediaUserMappingsService,

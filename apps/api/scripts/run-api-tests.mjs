@@ -27,6 +27,7 @@ const testEnvironment = {
   EMBY_API_KEY: '',
   MOVIEPILOT_BASE_URL: '',
   MOVIEPILOT_API_KEY: '',
+  MOVIEPILOT_RECONCILE_ENABLED: 'false',
   TMDB_API_TOKEN: '',
   TMDB_API_KEY: '',
   DOUBAN_API_BASE_URL: '',
@@ -186,6 +187,11 @@ try {
     '-r',
     'ts-node/register',
     'scripts/media-connectors.contract.ts',
+  ]);
+  await runProcess(process.execPath, [
+    '-r',
+    'ts-node/register',
+    'scripts/moviepilot-reconciliation.contract.ts',
   ]);
   await runProcess(process.execPath, [
     '-r',
