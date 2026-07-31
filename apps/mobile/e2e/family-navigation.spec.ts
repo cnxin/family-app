@@ -184,10 +184,14 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     /\/media\/requests\/media-request-browser-fixture-\d+(\/refresh)?$/;
   const mediaSubscribeRoute =
     /\/media\/media-browser-fixture-1\/requests$/;
+  const mediaExternalRefsRoute =
+    /\/media\/media-browser-fixture-2\/external-refs$/;
   const linkedPollRoute = /\/polls(\?|$)/;
+  const linkedPollVoteRoute = /\/polls\/poll-browser-fixture-media-[12]\/votes$/;
   let linkedPollFixture: Record<string, unknown> | null = null;
   let mediaFixtureStatus = 'watchlist';
   let mediaFixture2Status = 'watchlist';
+  let mediaFixture2TmdbId: string | null = null;
   let mediaRequestSequence = 0;
   let mediaRequestFixtures: Record<string, unknown>[] = [];
   let libraryHouseholdMediaId: string | null = null;
@@ -349,6 +353,15 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
               posterUrl: null,
               externalRefs: [
                 { id: 'ref-browser-fixture-2', provider: 'imdb', externalId: 'tt999002' },
+                ...(mediaFixture2TmdbId
+                  ? [
+                      {
+                        id: 'ref-browser-fixture-2-tmdb',
+                        provider: 'tmdb',
+                        externalId: mediaFixture2TmdbId,
+                      },
+                    ]
+                  : []),
               ],
             },
             createdBy: { id: 'member-browser-fixture', name: '爸爸', avatarEmoji: '👨' },
@@ -593,6 +606,21 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       body: JSON.stringify({
         data: { householdMediaId: libraryHouseholdMediaId, added: true },
       }),
+    });
+  });
+  await page.route(mediaExternalRefsRoute, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    const body = route.request().postDataJSON() as {
+      externalRefs: { provider: string; externalId: string }[];
+    };
+    expect(body.externalRefs).toEqual([
+      { provider: 'tmdb', externalId: '999002' },
+    ]);
+    mediaFixture2TmdbId = '999002';
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { id: 'media-browser-fixture-2' } }),
     });
   });
   await page.route(mediaSearchRoute, async (route) => {
@@ -859,6 +887,34 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       body: JSON.stringify({ data: linkedPollFixture }),
     });
   });
+  await page.route(linkedPollVoteRoute, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(linkedPollFixture).not.toBeNull();
+    const body = route.request().postDataJSON() as { optionIds: string[] };
+    const current = linkedPollFixture as {
+      selectedOptionIds: string[];
+      options: {
+        id: string;
+        voteCount: number;
+        percentage: number;
+        voters: unknown[];
+      }[];
+    };
+    current.selectedOptionIds = body.optionIds;
+    current.options = current.options.map((option) => ({
+      ...option,
+      voteCount: body.optionIds.includes(option.id) ? 1 : 0,
+      percentage: body.optionIds.includes(option.id) ? 100 : 0,
+      voters: body.optionIds.includes(option.id)
+        ? [{ id: 'member-browser-fixture', name: '爸爸', avatarEmoji: '👨' }]
+        : [],
+    }));
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: current }),
+    });
+  });
 
   // 首页会预取片单；重载后让新建的路由 mock 填充查询缓存。
   await page.reload();
@@ -975,7 +1031,23 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await mediaDetailDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await page
+    .getByRole('button', {
+      name: '补全家庭剧集回归样例的TMDB资料',
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: '补全 TMDB 资料', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '手动填写 TMDB ID', exact: true }).click();
+  await page.getByLabel('补全 TMDB ID').fill('999002');
+  await page.getByRole('button', { name: '保存 TMDB ID', exact: true }).click();
+  await expect(page.getByText('补全 TMDB 资料', { exact: true })).not.toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '订阅家庭剧集回归样例', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: '加入片单', exact: true }).first()).toBeVisible();
   await expect(page.getByLabel('搜索家庭片单')).toBeVisible();
   await page.getByRole('button', { name: '加入片单', exact: true }).first().click();
@@ -1012,29 +1084,43 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     .click();
   await expect(page.getByText('已选 2 部', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '发起投票', exact: true }).click();
-  await expect(page).toHaveURL(/\/media\/polls\?.*candidateIds=/);
-  await expect(page.getByText('发起选片投票', { exact: true })).toBeVisible();
-  await expect(page.getByText('家庭片单候选 · 已选 2 部')).toBeVisible();
+  await expect(page).toHaveURL(/\/media\/watchlist$/);
   await expect(
-    page.getByRole('checkbox', { name: '移除候选影视家庭电影回归样例' }),
-  ).toBeChecked();
-  await expect(
-    page.getByRole('checkbox', { name: '移除候选影视家庭剧集回归样例' }),
-  ).toBeChecked();
+    page.getByRole('heading', { name: '发起选片投票', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('已选 2 部候选影视', { exact: true })).toBeVisible();
+  await expect(page.getByText('家庭电影回归样例', { exact: true }).last()).toBeVisible();
+  await expect(page.getByText('家庭剧集回归样例', { exact: true }).last()).toBeVisible();
   await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
-  await expect(page).toHaveURL(/\/media\/watchlist\?.*filter=voting/);
+  await expect(page).toHaveURL(/\/media\/watchlist$/);
+  await expect(
+    page.getByRole('heading', { name: '观影投票', exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('checkbox', { name: '选择家庭电影回归样例', exact: true })
+    .click();
+  await page.getByRole('button', { name: '保存选择', exact: true }).click();
+  await expect(page.getByText('选择已保存', { exact: true })).toBeVisible();
+  await page
+    .getByTestId('media-poll-dialog').last()
+    .getByRole('button', { name: '关闭', exact: true })
+    .click();
   await page
     .getByRole('button', {
       name: '查看家庭电影回归样例的家庭投票',
       exact: true,
     })
     .click();
+  await expect(page).toHaveURL(/\/media\/watchlist$/);
   await expect(page.getByText('这次一起看哪一部？', { exact: true })).toBeVisible();
   await expect(
     page.getByRole('checkbox', { name: '选择家庭剧集回归样例' }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: /查看候选影视.*的片单条目/ })).toHaveCount(2);
   await expectNoHorizontalOverflow(page);
+  await page
+    .getByTestId('media-poll-dialog').last()
+    .getByRole('button', { name: '关闭', exact: true })
+    .click();
 
   linkedPollFixture = null;
   mediaFixtureStatus = 'watchlist';
@@ -1078,24 +1164,24 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       exact: true,
     })
     .click();
-  await expect(page).toHaveURL(/\/media\/polls\?.*sourceModule=media/);
-  await expect(page.getByText('来自家庭片单 · 家庭电影回归样例')).toBeVisible();
+  await expect(page).toHaveURL(/\/media\/watchlist$/);
+  await expect(
+    page.getByRole('heading', { name: '发起观影投票', exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel('投票标题')).toHaveValue(
     '要一起看《家庭电影回归样例》吗？',
   );
-  await expect(
-    page.getByRole('textbox', { name: '候选项1', exact: true }),
-  ).toHaveValue('想看');
-  await expect(
-    page.getByRole('textbox', { name: '候选项2', exact: true }),
-  ).toHaveValue('这次先不看');
+  await expect(page.getByText('想看', { exact: true }).last()).toBeVisible();
+  await expect(page.getByText('这次先不看', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
-  await expect(page).toHaveURL(
-    /\/media\/watchlist\?(?=[^#]*mediaId=media-browser-fixture-1)(?=[^#]*filter=voting)/,
-  );
-  await expect(page.getByText('编辑观影安排', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '关闭', exact: true }).first().click();
-  await expect(page.getByText('编辑观影安排', { exact: true })).not.toBeVisible();
+  await expect(page).toHaveURL(/\/media\/watchlist$/);
+  await expect(
+    page.getByRole('heading', { name: '观影投票', exact: true }),
+  ).toBeVisible();
+  await page
+    .getByTestId('media-poll-dialog').last()
+    .getByRole('button', { name: '关闭', exact: true })
+    .click();
   await expect(
     page.getByRole('button', { name: '投票中 1', exact: true }),
   ).toBeVisible();

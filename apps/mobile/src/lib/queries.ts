@@ -649,6 +649,31 @@ export function useUpdateMedia() {
   });
 }
 
+export function useAddMediaExternalRefs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      externalRefs,
+    }: {
+      id: string;
+      externalRefs: {
+        provider: 'tmdb' | 'imdb' | 'douban' | 'bangumi';
+        externalId: string;
+      }[];
+    }) =>
+      api<HouseholdMedia>(`/media/${id}/external-refs`, {
+        method: 'POST',
+        body: { externalRefs },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['media'] });
+      void qc.invalidateQueries({ queryKey: ['media-library-availability'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 export function useDeleteMedia() {
   const qc = useQueryClient();
   return useMutation({

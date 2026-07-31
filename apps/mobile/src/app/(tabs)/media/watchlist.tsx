@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
   CalendarDays,
@@ -50,6 +50,7 @@ import { parseDate, todayStr } from '../../../lib/date';
 import {
   useCreateMedia,
   useCreateMediaRequest,
+  useAddMediaExternalRefs,
   useCancelMediaRequest,
   useDeleteMedia,
   useMedia,
@@ -59,7 +60,9 @@ import {
   useMediaSearch,
   usePolls,
   useRefreshMediaRequest,
+  useUpsertPoll,
   useUpdateMedia,
+  useVotePoll,
 } from '../../../lib/queries';
 import { radius, type as t, useTheme } from '../../../lib/theme';
 import type {
@@ -77,6 +80,10 @@ import type {
 } from '../../../lib/types';
 
 type MediaFilter = HouseholdMediaStatus | 'all';
+type MediaPollDialogState = {
+  poll: HouseholdPoll | null;
+  entries: HouseholdMedia[];
+};
 
 const STATUS_OPTIONS: { label: string; value: HouseholdMediaStatus }[] = [
   { label: '想看', value: 'watchlist' },
@@ -203,6 +210,7 @@ function MediaCard({
   onPlay,
   onPoll,
   onRefreshRequest,
+  onResolveMetadata,
   onSubscribe,
   libraries,
   poll,
@@ -222,6 +230,7 @@ function MediaCard({
   onPlay: (match: MediaLibraryMatch) => void;
   onPoll: () => void;
   onRefreshRequest: () => void;
+  onResolveMetadata: () => void;
   onSubscribe: () => void;
   libraries: MediaLibraryMatch[];
   poll: HouseholdPoll | null;
@@ -450,35 +459,47 @@ function MediaCard({
           <Pressable
             accessibilityLabel={
               !hasTmdb
-                ? `${entry.mediaTitle.title}缺少TMDB ID，不能订阅`
+                ? `补全${entry.mediaTitle.title}的TMDB资料`
                 : !moviePilot?.available
                   ? 'MoviePilot当前不可用'
                   : `订阅${entry.mediaTitle.title}`
             }
             accessibilityRole="button"
-            disabled={!canStartRequest}
-            onPress={onSubscribe}
+            disabled={hasTmdb && !canStartRequest}
+            onPress={hasTmdb ? onSubscribe : onResolveMetadata}
             style={({ pressed }) => [
               styles.subscribeButton,
               {
-                backgroundColor: pressed ? c.greenSoft : c.fill,
-                opacity: canStartRequest ? 1 : 0.58,
+                backgroundColor: pressed
+                  ? hasTmdb
+                    ? c.greenSoft
+                    : c.tintSoft
+                  : c.fill,
+                opacity: !hasTmdb || canStartRequest ? 1 : 0.58,
               },
             ]}
           >
-            <Download color={canStartRequest ? c.green : c.tertiaryLabel} size={16} />
+            {!hasTmdb ? (
+              <Search color={c.tint} size={16} />
+            ) : (
+              <Download color={canStartRequest ? c.green : c.tertiaryLabel} size={16} />
+            )}
             <Text
               numberOfLines={1}
               style={[
                 t.caption,
                 {
-                  color: canStartRequest ? c.green : c.secondaryLabel,
+                  color: !hasTmdb
+                    ? c.tint
+                    : canStartRequest
+                      ? c.green
+                      : c.secondaryLabel,
                   fontWeight: '700',
                 },
               ]}
             >
               {!hasTmdb
-                ? '缺少 TMDB ID'
+                ? '补全 TMDB 后订阅'
                 : !moviePilot?.available
                   ? 'MoviePilot 不可用'
                   : '提交订阅'}
@@ -1051,6 +1072,289 @@ function MediaForm({
   );
 }
 
+function MediaPollDialog({
+  state,
+  onClose,
+  onCreated,
+}: {
+  state: MediaPollDialogState | null;
+  onClose: () => void;
+  onCreated: (poll: HouseholdPoll) => void;
+}) {
+  const c = useTheme();
+  const createPoll = useUpsertPoll();
+  const votePoll = useVotePoll();
+  const [poll, setPoll] = useState<HouseholdPoll | null>(null);
+  const [title, setTitle] = useState('');
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const entries = state?.entries ?? [];
+  const candidateMode = entries.length > 1;
+
+  useEffect(() => {
+    if (!state) return;
+    setPoll(state.poll);
+    setTitle(
+      state.poll?.title ??
+        (state.entries.length > 1
+          ? '这次一起看哪一部？'
+          : `要一起看《${state.entries[0]?.mediaTitle.title ?? ''}》吗？`),
+    );
+    setSelectedOptionIds(state.poll?.selectedOptionIds ?? []);
+    setMessage(null);
+  }, [state]);
+
+  const create = async () => {
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
+      setMessage('请填写投票标题');
+      return;
+    }
+    if (!entries.length) return;
+    setMessage(null);
+    try {
+      const saved = await createPoll.mutateAsync({
+        title: normalizedTitle,
+        description: null,
+        category: 'movie',
+        voteMode: 'single',
+        maxChoices: 1,
+        closesAt: null,
+        options: candidateMode
+          ? entries.map((entry) => ({ mediaId: entry.id }))
+          : [{ label: '想看' }, { label: '这次先不看' }],
+        ...(!candidateMode
+          ? { sourceModule: 'media' as const, sourceId: entries[0].id }
+          : {}),
+      });
+      setPoll(saved);
+      setSelectedOptionIds(saved.selectedOptionIds);
+      onCreated(saved);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '发起投票失败，请稍后再试');
+    }
+  };
+
+  const toggleOption = (optionId: string) => {
+    if (!poll || poll.status !== 'open' || !poll.canVote) return;
+    setSelectedOptionIds((current) => {
+      if (poll.voteMode === 'single') {
+        return current.includes(optionId) ? [] : [optionId];
+      }
+      if (current.includes(optionId)) {
+        return current.filter((id) => id !== optionId);
+      }
+      return current.length < poll.maxChoices ? [...current, optionId] : current;
+    });
+    setMessage(null);
+  };
+
+  const submitVote = async () => {
+    if (!poll) return;
+    if (!selectedOptionIds.length && !poll.selectedOptionIds.length) {
+      setMessage('请先选择一个选项');
+      return;
+    }
+    setMessage(null);
+    try {
+      const updated = await votePoll.mutateAsync({
+        id: poll.id,
+        optionIds: selectedOptionIds,
+      });
+      setPoll(updated);
+      setSelectedOptionIds(updated.selectedOptionIds);
+      setMessage(selectedOptionIds.length ? '选择已保存' : '已撤回选择');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '投票失败，请稍后再试');
+    }
+  };
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={Boolean(state)}
+    >
+      <View style={styles.modalOverlay}>
+        <Pressable
+          accessibilityLabel="关闭观影投票"
+          accessibilityRole="button"
+          disabled={createPoll.isPending || votePoll.isPending}
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          testID="media-poll-dialog"
+          style={[
+            styles.pollDialogSheet,
+            { backgroundColor: c.card, borderColor: c.separator },
+          ]}
+        >
+          <View style={styles.formHeader}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text accessibilityRole="header" style={[t.title2, { color: c.label }]}>
+                {poll ? '观影投票' : candidateMode ? '发起选片投票' : '发起观影投票'}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}
+              >
+                {poll
+                  ? `${poll.totalVoters} 人已参与`
+                  : candidateMode
+                    ? `已选 ${entries.length} 部候选影视`
+                    : entries[0]?.mediaTitle.title}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭"
+              accessibilityRole="button"
+              disabled={createPoll.isPending || votePoll.isPending}
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.closeButton,
+                { backgroundColor: pressed ? c.fill : 'transparent' },
+              ]}
+            >
+              <X color={c.secondaryLabel} size={20} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.pollDialogContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {!poll ? (
+              <>
+                <Field label="投票标题">
+                  <FormInput
+                    accessibilityLabel="投票标题"
+                    maxLength={120}
+                    onChangeText={setTitle}
+                    value={title}
+                  />
+                </Field>
+                <View style={styles.pollPreviewOptions}>
+                  {(candidateMode
+                    ? entries.map((entry) => entry.mediaTitle.title)
+                    : ['想看', '这次先不看']
+                  ).map((label) => (
+                    <View
+                      key={label}
+                      style={[styles.pollPreviewOption, { backgroundColor: c.fill }]}
+                    >
+                      <View style={[styles.pollChoiceIndicator, { borderColor: c.separator }]} />
+                      <Text numberOfLines={2} style={[t.subhead, { color: c.label, flex: 1 }]}>
+                        {label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                {message ? (
+                  <Text style={[t.footnote, styles.formMessage, { color: c.red }]}>
+                    {message}
+                  </Text>
+                ) : null}
+                <PrimaryButton
+                  loading={createPoll.isPending}
+                  onPress={() => void create()}
+                  title="发起投票"
+                />
+              </>
+            ) : (
+              <>
+                <Text style={[t.headline, { color: c.label }]}>{poll.title}</Text>
+                {poll.description ? (
+                  <Text style={[t.footnote, { color: c.secondaryLabel }]}>
+                    {poll.description}
+                  </Text>
+                ) : null}
+                <View style={styles.pollDialogOptions}>
+                  {poll.options.map((option) => {
+                    const selected = selectedOptionIds.includes(option.id);
+                    const disabled = poll.status !== 'open' || !poll.canVote;
+                    return (
+                      <Pressable
+                        accessibilityLabel={`选择${option.label}`}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selected, disabled }}
+                        aria-checked={selected}
+                        disabled={disabled}
+                        key={option.id}
+                        onPress={() => toggleOption(option.id)}
+                        style={({ pressed }) => [
+                          styles.pollDialogOption,
+                          {
+                            backgroundColor: selected
+                              ? c.accentSoft
+                              : pressed
+                                ? c.fillStrong
+                                : c.fill,
+                            borderColor: selected ? c.accent : c.separator,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.pollChoiceIndicator,
+                            {
+                              backgroundColor: selected ? c.accent : c.card,
+                              borderColor: selected ? c.accent : c.separator,
+                            },
+                          ]}
+                        >
+                          {selected ? <Check color="#FFFFFF" size={13} strokeWidth={3} /> : null}
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text numberOfLines={2} style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                            {option.label}
+                          </Text>
+                          <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>
+                            {option.voteCount} 票 · {option.percentage}%
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {message ? (
+                  <Text
+                    style={[
+                      t.footnote,
+                      styles.formMessage,
+                      { color: message.includes('失败') ? c.red : c.green },
+                    ]}
+                  >
+                    {message}
+                  </Text>
+                ) : null}
+                {poll.status === 'open' && poll.canVote ? (
+                  <PrimaryButton
+                    loading={votePoll.isPending}
+                    onPress={() => void submitVote()}
+                    title={
+                      !selectedOptionIds.length && poll.selectedOptionIds.length
+                        ? '撤回选择'
+                        : '保存选择'
+                    }
+                  />
+                ) : (
+                  <View style={[styles.pollClosedNotice, { backgroundColor: c.fill }]}>
+                    <Text style={[t.subhead, { color: c.secondaryLabel }]}>投票已结束</Text>
+                  </View>
+                )}
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function SubscriptionDialog({
   entry,
   onClose,
@@ -1287,16 +1591,22 @@ function SearchResultPoster({ result }: { result: MediaSearchResult }) {
 }
 
 function MetadataSearchPanel({
+  initialQuery = '',
+  manualLabel = '手动录入',
   mediaType,
   onManual,
   onSelect,
   onTypeChange,
+  showTypeSelector = true,
   visible,
 }: {
+  initialQuery?: string;
+  manualLabel?: string;
   mediaType: MediaType;
   onManual: () => void;
   onSelect: (result: MediaSearchResult) => void;
   onTypeChange: (type: MediaType) => void;
+  showTypeSelector?: boolean;
   visible: boolean;
 }) {
   const c = useTheme();
@@ -1311,10 +1621,10 @@ function MetadataSearchPanel({
 
   useEffect(() => {
     if (!visible) return;
-    setQuery('');
+    setQuery(initialQuery);
     setSubmittedQuery('');
     setMessage(null);
-  }, [visible]);
+  }, [initialQuery, visible]);
 
   const submitSearch = () => {
     const normalized = query.trim();
@@ -1332,14 +1642,16 @@ function MetadataSearchPanel({
 
   return (
     <View style={styles.metadataSearchPanel}>
-      <Segmented<MediaType>
-        onChange={onTypeChange}
-        options={[
-          { label: '电影', value: 'movie' },
-          { label: '剧集', value: 'series' },
-        ]}
-        value={mediaType}
-      />
+      {showTypeSelector ? (
+        <Segmented<MediaType>
+          onChange={onTypeChange}
+          options={[
+            { label: '电影', value: 'movie' },
+            { label: '剧集', value: 'series' },
+          ]}
+          value={mediaType}
+        />
+      ) : null}
 
       <View style={styles.metadataSearchRow}>
         <View
@@ -1469,16 +1781,184 @@ function MetadataSearchPanel({
         ]}
       >
         <Pencil color={c.tint} size={17} />
-        <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>手动录入</Text>
+        <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>{manualLabel}</Text>
       </Pressable>
     </View>
+  );
+}
+
+function MetadataLinkDialog({
+  entry,
+  onClose,
+  onLinked,
+}: {
+  entry: HouseholdMedia | null;
+  onClose: () => void;
+  onLinked: () => void;
+}) {
+  const c = useTheme();
+  const addRefs = useAddMediaExternalRefs();
+  const [manual, setManual] = useState(false);
+  const [tmdbId, setTmdbId] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!entry) return;
+    setManual(false);
+    setTmdbId('');
+    setMessage(null);
+  }, [entry]);
+
+  const linkTmdb = async (externalId: string) => {
+    if (!entry) return;
+    const normalized = externalId.trim();
+    if (!/^\d+$/.test(normalized)) {
+      setMessage('TMDB ID 只能填写数字');
+      return;
+    }
+    setMessage(null);
+    try {
+      await addRefs.mutateAsync({
+        id: entry.id,
+        externalRefs: [{ provider: 'tmdb', externalId: normalized }],
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onLinked();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '补充 TMDB ID 失败');
+    }
+  };
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={Boolean(entry)}
+    >
+      <View style={styles.modalOverlay}>
+        <Pressable
+          accessibilityLabel="关闭TMDB资料补全"
+          accessibilityRole="button"
+          disabled={addRefs.isPending}
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          testID="metadata-link-dialog"
+          style={[
+            styles.metadataLinkSheet,
+            { backgroundColor: c.card, borderColor: c.separator },
+          ]}
+        >
+          <View style={styles.formHeader}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text accessibilityRole="header" style={[t.title2, { color: c.label }]}>
+                补全 TMDB 资料
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}
+              >
+                {entry?.mediaTitle.title}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭"
+              accessibilityRole="button"
+              disabled={addRefs.isPending}
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.closeButton,
+                { backgroundColor: pressed ? c.fill : 'transparent' },
+              ]}
+            >
+              <X color={c.secondaryLabel} size={20} />
+            </Pressable>
+          </View>
+          <ScrollView
+            contentContainerStyle={styles.metadataLinkContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {manual ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setManual(false);
+                    setMessage(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.backToSearch,
+                    { backgroundColor: pressed ? c.fillStrong : c.fill },
+                  ]}
+                >
+                  <ArrowLeft color={c.tint} size={17} />
+                  <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>返回搜索</Text>
+                </Pressable>
+                <Field label="TMDB ID">
+                  <FormInput
+                    accessibilityLabel="补全 TMDB ID"
+                    inputMode="numeric"
+                    maxLength={18}
+                    onChangeText={setTmdbId}
+                    placeholder="例如 550"
+                    value={tmdbId}
+                  />
+                </Field>
+                {message ? (
+                  <Text style={[t.footnote, styles.formMessage, { color: c.red }]}>
+                    {message}
+                  </Text>
+                ) : null}
+                <PrimaryButton
+                  loading={addRefs.isPending}
+                  onPress={() => void linkTmdb(tmdbId)}
+                  title="保存 TMDB ID"
+                />
+              </>
+            ) : (
+              <>
+                <MetadataSearchPanel
+                  initialQuery={entry?.mediaTitle.title ?? ''}
+                  manualLabel="手动填写 TMDB ID"
+                  mediaType={entry?.mediaTitle.type ?? 'movie'}
+                  onManual={() => {
+                    setManual(true);
+                    setMessage(null);
+                  }}
+                  onSelect={(result) => {
+                    const tmdb = result.externalRefs.find(
+                      (reference) => reference.provider === 'tmdb',
+                    );
+                    if (!tmdb) {
+                      setMessage('这个搜索结果没有 TMDB ID，请选择其他结果');
+                      return;
+                    }
+                    void linkTmdb(tmdb.externalId);
+                  }}
+                  onTypeChange={() => undefined}
+                  showTypeSelector={false}
+                  visible={Boolean(entry)}
+                />
+                {message ? (
+                  <Text style={[t.footnote, styles.formMessage, { color: c.red }]}>
+                    {message}
+                  </Text>
+                ) : null}
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 export default function MediaScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
-  const router = useRouter();
   const params = useLocalSearchParams<{
     mediaId?: string;
     filter?: string;
@@ -1500,6 +1980,7 @@ export default function MediaScreen() {
   const [detailEntry, setDetailEntry] = useState<HouseholdMedia | null>(null);
   const [subscriptionEntry, setSubscriptionEntry] =
     useState<HouseholdMedia | null>(null);
+  const [metadataEntry, setMetadataEntry] = useState<HouseholdMedia | null>(null);
   const [pendingCancel, setPendingCancel] = useState<{
     entry: HouseholdMedia;
     request: MediaRequest;
@@ -1509,6 +1990,7 @@ export default function MediaScreen() {
   const [requestError, setRequestError] = useState<string | null>(null);
   const [pollSelectionActive, setPollSelectionActive] = useState(false);
   const [selectedPollCandidates, setSelectedPollCandidates] = useState<string[]>([]);
+  const [pollDialog, setPollDialog] = useState<MediaPollDialogState | null>(null);
   const openedParameter = useRef<string | null>(null);
   const { data: entries, error, isLoading } = useMedia(filter, debouncedSearch);
   const { data: connectors } = useMediaConnectors();
@@ -1628,22 +2110,7 @@ export default function MediaScreen() {
                   icon: Vote,
                   onPress: () => {
                     setDetailEntry(null);
-                    router.push(
-                      detailPoll
-                        ? {
-                            pathname: '/media/polls',
-                            params: { pollId: detailPoll.id, returnTo: 'watchlist' },
-                          }
-                        : {
-                            pathname: '/media/polls',
-                            params: {
-                              sourceModule: 'media',
-                              sourceId: detailEntry.id,
-                              sourceTitle: detailEntry.mediaTitle.title,
-                              returnTo: 'watchlist',
-                            },
-                          },
-                    );
+                    setPollDialog({ poll: detailPoll, entries: [detailEntry] });
                   },
                   tone: 'accent' as const,
                 },
@@ -1786,16 +2253,11 @@ export default function MediaScreen() {
                   accessibilityRole="button"
                   disabled={selectedPollCandidates.length < 2}
                   onPress={() => {
-                    const candidateIds = selectedPollCandidates.join(',');
-                    setPollSelectionActive(false);
-                    setSelectedPollCandidates([]);
-                    router.push({
-                      pathname: '/media/polls',
-                      params: {
-                        candidateIds,
-                        returnTo: 'watchlist',
-                      },
-                    });
+                    const candidates = (entries ?? []).filter((entry) =>
+                      selectedPollCandidates.includes(entry.id),
+                    );
+                    if (candidates.length < 2) return;
+                    setPollDialog({ poll: null, entries: candidates });
                   }}
                   style={[
                     styles.pollComposePrimary,
@@ -1883,22 +2345,7 @@ export default function MediaScreen() {
                     }}
                     onPoll={() => {
                       const poll = pollByMediaId.get(entry.id);
-                      router.push(
-                        poll
-                          ? {
-                              pathname: '/media/polls',
-                              params: { pollId: poll.id, returnTo: 'watchlist' },
-                            }
-                          : {
-                              pathname: '/media/polls',
-                              params: {
-                                sourceModule: 'media',
-                                sourceId: entry.id,
-                                sourceTitle: entry.mediaTitle.title,
-                                returnTo: 'watchlist',
-                              },
-                            },
-                      );
+                      setPollDialog({ poll: poll ?? null, entries: [entry] });
                     }}
                     onRefreshRequest={() => {
                       const request = requestByMediaId.get(entry.id);
@@ -1919,6 +2366,7 @@ export default function MediaScreen() {
                         },
                       });
                     }}
+                    onResolveMetadata={() => setMetadataEntry(entry)}
                     onSubscribe={() => {
                       setRequestError(null);
                       setSubscriptionEntry(entry);
@@ -2050,6 +2498,25 @@ export default function MediaScreen() {
           setSubscriptionEntry(null);
         }}
         onSubmitted={() => setSubscriptionEntry(null)}
+      />
+
+      <MetadataLinkDialog
+        entry={metadataEntry}
+        onClose={() => setMetadataEntry(null)}
+        onLinked={() => setMetadataEntry(null)}
+      />
+
+      <MediaPollDialog
+        onClose={() => setPollDialog(null)}
+        onCreated={(poll) => {
+          setPollDialog((current) =>
+            current ? { ...current, poll } : current,
+          );
+          setFilter('voting');
+          setPollSelectionActive(false);
+          setSelectedPollCandidates([]);
+        }}
+        state={pollDialog}
       />
 
       <ConfirmDialog
@@ -2335,12 +2802,64 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: 'hidden',
   },
+  metadataLinkSheet: {
+    width: '100%',
+    maxWidth: 680,
+    maxHeight: '92%',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  metadataLinkContent: { padding: 18, paddingTop: 6, paddingBottom: 22, gap: 16 },
   subscriptionSheet: {
     width: '100%',
     maxWidth: 460,
     borderWidth: 1,
     borderRadius: radius.md,
     overflow: 'hidden',
+  },
+  pollDialogSheet: {
+    width: '100%',
+    maxWidth: 560,
+    maxHeight: '90%',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  pollDialogContent: { padding: 18, paddingTop: 6, paddingBottom: 22, gap: 16 },
+  pollPreviewOptions: { gap: 8 },
+  pollPreviewOption: {
+    minHeight: 48,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pollDialogOptions: { gap: 9 },
+  pollDialogOption: {
+    minHeight: 58,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pollChoiceIndicator: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pollClosedNotice: {
+    minHeight: 46,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   subscriptionContent: { padding: 18, paddingTop: 6, gap: 17 },
   formHeader: {

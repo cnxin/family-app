@@ -42,6 +42,7 @@ const tmdbId = `m4-tmdb-${suffix}`;
 const imdbId = `tt-m4-${suffix}`;
 const doubanId = `m4-douban-${suffix}`;
 const bangumiId = `m4-bangumi-${suffix}`;
+const enrichedTmdbId = String(Date.now() + 1);
 const db = new Client({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
@@ -243,6 +244,46 @@ try {
   });
   assert(second.status === 201, '同一家庭可以加入另一部影视');
   createdIds.push(second.data.id);
+
+  const enriched = await request(
+    `/media/${second.data.id}/external-refs`,
+    mom.token,
+    'POST',
+    { externalRefs: [{ provider: 'tmdb', externalId: enrichedTmdbId }] },
+  );
+  assert(
+    enriched.status === 201 &&
+      enriched.data.mediaTitle.externalRefs.some(
+        (ref) =>
+          ref.provider === 'tmdb' && ref.externalId === enrichedTmdbId,
+      ),
+    '现有片单可以补充 MoviePilot 所需的 TMDB ID',
+  );
+
+  const invalidTmdbId = await request(
+    `/media/${second.data.id}/external-refs`,
+    mom.token,
+    'POST',
+    { externalRefs: [{ provider: 'tmdb', externalId: 'not-a-number' }] },
+  );
+  const replaceExistingProvider = await request(
+    `/media/${second.data.id}/external-refs`,
+    mom.token,
+    'POST',
+    { externalRefs: [{ provider: 'tmdb', externalId: String(Date.now() + 2) }] },
+  );
+  const conflictingMetadata = await request(
+    `/media/${second.data.id}/external-refs`,
+    mom.token,
+    'POST',
+    { externalRefs: [{ provider: 'douban', externalId: doubanId }] },
+  );
+  assert(
+    invalidTmdbId.status === 400 &&
+      replaceExistingProvider.status === 409 &&
+      conflictingMetadata.status === 409,
+    '补充影视编号必须有效，且不能覆盖已有来源或占用其他影视的编号',
+  );
 
   const conflictingRefs = await request('/media', mom.token, 'POST', {
     type: 'movie',
