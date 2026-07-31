@@ -14,6 +14,7 @@ import type {
   Dish,
   Guest,
   GuestInvitationPreview,
+  GuestMealRequest,
   GuestMoviePoll,
   GuestWifiProfile,
   HouseholdPoll,
@@ -201,7 +202,7 @@ export function useUpdateVisit() {
 export function useCreateGuestInvitation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ visitId, ...body }: { visitId: string; guestId: string; expiresInHours?: number; allowsMovieVoting?: boolean }) =>
+    mutationFn: ({ visitId, ...body }: { visitId: string; guestId: string; expiresInHours?: number; allowsMovieVoting?: boolean; allowsMealRequests?: boolean }) =>
       api<CreatedGuestInvitation>(`/visits/${visitId}/invitations`, { method: 'POST', body }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['visits'] });
@@ -264,6 +265,40 @@ export function useVoteGuestMoviePoll(token: string | undefined) {
         body: { optionIds },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['guest-movie-polls', token] }),
+  });
+}
+
+export function useGuestMealRequests(token: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['guest-meal-requests', token],
+    queryFn: () => api<GuestMealRequest[]>(`/guest-invitations/${encodeURIComponent(token ?? '')}/meal-requests`, { auth: false }),
+    enabled: Boolean(token) && enabled,
+    retry: false,
+  });
+}
+
+export function useSubmitGuestMealRequest(token: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { mealDate: string; mealType: MealType; dishName: string; note?: string | null }) =>
+      api<GuestMealRequest>(`/guest-invitations/${encodeURIComponent(token ?? '')}/meal-requests`, {
+        method: 'POST',
+        auth: false,
+        body,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['guest-meal-requests', token] }),
+  });
+}
+
+export function useReviewGuestMealRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; status: 'accepted' | 'rejected'; reviewNote?: string | null }) =>
+      api<GuestMealRequest>(`/guest-meal-requests/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
   });
 }
 

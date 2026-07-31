@@ -136,6 +136,7 @@ const invitationCreated = await request(`/visits/${visit.id}/invitations`, admin
   guestId: guest.id,
   expiresInHours: 24,
   allowsMovieVoting: true,
+  allowsMealRequests: true,
 });
 const invitation = invitationCreated.body.data;
 assert(
@@ -149,6 +150,7 @@ assert(
     preview.body.data.guest.name === guest.name &&
     preview.body.data.visit.title === visit.title &&
     preview.body.data.capabilities?.movieVoting === true &&
+    preview.body.data.capabilities?.mealRequests === true &&
     preview.body.data.wifi?.ssid === wifiProfile.ssid &&
     typeof preview.body.data.wifi?.qrPayload === 'string' &&
     !('hostMember' in preview.body.data) &&
@@ -180,6 +182,40 @@ assert(
   moviePollAfterGuestVote.status === 200 && moviePollAfterGuestVote.body.data.totalVoters === 1,
   '家庭投票统计会计入访客选票但不创建家庭成员身份',
 );
+
+const mealRequestsBefore = await request(`/guest-invitations/${invitation.invitationToken}/meal-requests`, null);
+assert(
+  mealRequestsBefore.status === 200 && mealRequestsBefore.body.data.length === 0,
+  '经授权访客只能读取自己的点菜请求列表',
+);
+const mealRequest = await request(`/guest-invitations/${invitation.invitationToken}/meal-requests`, null, 'POST', {
+  mealDate: VISIT_DATE,
+  mealType: 'dinner',
+  dishName: '清蒸鲈鱼',
+  note: '少放辣椒',
+});
+assert(
+  mealRequest.status === 201 && mealRequest.body.data.status === 'pending' && mealRequest.body.data.dishName === '清蒸鲈鱼',
+  '访客可以提交独立点菜请求而不创建菜单项或成员身份',
+);
+const memberMealRequestReview = await request(`/guest-meal-requests/${mealRequest.body.data.id}`, memberToken, 'PATCH', {
+  status: 'accepted',
+});
+assert(memberMealRequestReview.status === 403, '普通成员不能处理访客点菜请求');
+const mealRequestReview = await request(`/guest-meal-requests/${mealRequest.body.data.id}`, adminToken, 'PATCH', {
+  status: 'accepted',
+  reviewNote: '晚餐安排',
+});
+assert(
+  mealRequestReview.status === 200 && mealRequestReview.body.data.status === 'accepted',
+  '家庭管理员可以接受访客点菜请求',
+);
+const mealRequestAfterReview = await request(`/guest-invitations/${invitation.invitationToken}/meal-requests`, null, 'POST', {
+  mealDate: VISIT_DATE,
+  mealType: 'dinner',
+  dishName: '红烧肉',
+});
+assert(mealRequestAfterReview.status === 409, '已处理的访客点菜请求不能被访客覆盖');
 
 const disabledWifi = await request(`/guest-wifi-profiles/${wifiProfile.id}`, adminToken, 'PATCH', { isActive: false });
 const disabledWifiPreview = await request(`/guest-invitations/${invitation.invitationToken}`, null);
@@ -225,6 +261,11 @@ assert(
   restrictedInvitationCreated.status === 201 && restrictedMoviePolls.status === 404,
   '未显式授权的访客邀请不能读取观影投票',
 );
+const restrictedMealRequests = await request(
+  `/guest-invitations/${restrictedInvitationCreated.body.data.invitationToken}/meal-requests`,
+  null,
+);
+assert(restrictedMealRequests.status === 404, '未显式授权的访客邀请不能读取点菜请求');
 
 const cancelled = await request(`/visits/${visit.id}`, adminToken, 'PATCH', { status: 'cancelled' });
 assert(cancelled.status === 200 && cancelled.body.data.status === 'cancelled', '管理员可以结束或取消来访计划');

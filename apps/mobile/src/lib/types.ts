@@ -644,6 +644,7 @@ export interface Guest {
 
 export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
 export type GuestWifiSecurity = 'WPA' | 'nopass';
+export type GuestMealRequestStatus = 'pending' | 'accepted' | 'rejected';
 
 export interface GuestWifiProfile {
   id: string;
@@ -662,6 +663,7 @@ export interface GuestInvitation {
   expiresAt: string;
   acceptedAt: string | null;
   allowsMovieVoting: boolean;
+  allowsMealRequests: boolean;
   revokedAt: string | null;
   createdAt: string;
 }
@@ -686,6 +688,7 @@ export interface Visit {
     respondedAt: string | null;
     invitation: GuestInvitation | null;
   }[];
+  mealRequests: GuestMealRequest[];
   createdAt: string;
   updatedAt: string;
 }
@@ -695,9 +698,24 @@ export interface GuestInvitationPreview {
   householdName: string;
   visit: Pick<Visit, 'title' | 'startsAt' | 'endsAt' | 'note'>;
   response: { attending: boolean | null; respondedAt: string | null };
-  capabilities: { movieVoting: boolean };
+  capabilities: { movieVoting: boolean; mealRequests: boolean };
+  mealRequestDates: string[];
   wifi: { ssid: string; security: GuestWifiSecurity; qrPayload: string } | null;
   expiresAt: string;
+}
+
+export interface GuestMealRequest {
+  id: string;
+  mealDate: string;
+  mealType: MealType;
+  dishName: string;
+  note: string | null;
+  status: GuestMealRequestStatus;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  guest?: Pick<Guest, 'id' | 'name' | 'avatarEmoji'> | null;
 }
 
 export interface GuestMoviePoll {

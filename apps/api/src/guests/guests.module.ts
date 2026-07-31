@@ -37,9 +37,12 @@ import { decryptIntegrationCredential, encryptIntegrationCredential } from '../c
 import {
   Guest,
   GuestInvitation,
+  GuestMealRequest,
+  GuestMealRequestStatus,
   GuestPollVote,
   GuestWifiProfile,
   GuestWifiSecurity,
+  MealType,
   Member,
   Notification,
   Poll,
@@ -170,6 +173,10 @@ class CreateGuestInvitationDto {
   @IsOptional()
   @IsBoolean()
   allowsMovieVoting?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowsMealRequests?: boolean;
 }
 
 class GuestResponseDto {
@@ -181,6 +188,34 @@ class GuestPollVoteDto {
   @IsArray()
   @IsUUID('4', { each: true })
   optionIds: string[];
+}
+
+class GuestMealRequestDto {
+  @IsDateString()
+  mealDate: string;
+
+  @IsIn(['breakfast', 'lunch', 'dinner'])
+  mealType: MealType;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  dishName: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string | null;
+}
+
+class ReviewGuestMealRequestDto {
+  @IsIn(['accepted', 'rejected'])
+  status: Extract<GuestMealRequestStatus, 'accepted' | 'rejected'>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  reviewNote?: string | null;
 }
 
 class CreateGuestWifiProfileDto {
@@ -246,6 +281,27 @@ function validRange(startsAt: Date, endsAt: Date | null) {
   }
 }
 
+function dateOnly(value: string, field: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new BadRequestException(`${field}必须为日期`);
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new BadRequestException(`${field}无效`);
+  }
+  return value;
+}
+
+function visitMealDates(visit: Visit) {
+  const start = visit.startsAt.toISOString().slice(0, 10);
+  const end = (visit.endsAt ?? visit.startsAt).toISOString().slice(0, 10);
+  const dates: string[] = [];
+  for (let current = new Date(`${start}T00:00:00.000Z`); current <= new Date(`${end}T00:00:00.000Z`); current.setUTCDate(current.getUTCDate() + 1)) {
+    dates.push(current.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
 function profileGuest(guest: Guest) {
   return {
     id: guest.id,
@@ -265,6 +321,7 @@ function invitationProfile(invitation: GuestInvitation) {
     expiresAt: invitation.expiresAt,
     acceptedAt: invitation.acceptedAt,
     allowsMovieVoting: invitation.allowsMovieVoting,
+    allowsMealRequests: invitation.allowsMealRequests,
     revokedAt: invitation.revokedAt,
     createdAt: invitation.createdAt,
   };
@@ -283,7 +340,22 @@ function profileGuestWifi(profile: GuestWifiProfile) {
   };
 }
 
-function profileVisit(visit: Visit, invitations: GuestInvitation[]) {
+function profileGuestMealRequest(request: GuestMealRequest) {
+  return {
+    id: request.id,
+    mealDate: request.mealDate,
+    mealType: request.mealType,
+    dishName: request.dishName,
+    note: request.note,
+    status: request.status,
+    reviewNote: request.reviewNote,
+    reviewedAt: request.reviewedAt,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
+  };
+}
+
+function profileVisit(visit: Visit, invitations: GuestInvitation[], mealRequests: GuestMealRequest[]) {
   const invitationsByGuest = new Map(invitations.map((entry) => [entry.guestId, entry]));
   return {
     id: visit.id,
@@ -309,6 +381,10 @@ function profileVisit(visit: Visit, invitations: GuestInvitation[]) {
         ? invitationProfile(invitationsByGuest.get(entry.guestId)!)
         : null,
     })),
+    mealRequests: mealRequests.map((request) => ({
+      ...profileGuestMealRequest(request),
+      guest: request.invitation?.guest ? profileGuest(request.invitation.guest) : null,
+    })),
     createdAt: visit.createdAt,
     updatedAt: visit.updatedAt,
   };
@@ -329,6 +405,8 @@ export class GuestsService {
     @InjectRepository(PollOption) private readonly pollOptions: Repository<PollOption>,
     @InjectRepository(GuestPollVote)
     private readonly guestPollVotes: Repository<GuestPollVote>,
+    @InjectRepository(GuestMealRequest)
+    private readonly guestMealRequests: Repository<GuestMealRequest>,
     @InjectRepository(Member) private readonly members: Repository<Member>,
     private readonly dataSource: DataSource,
   ) {}
@@ -482,11 +560,22 @@ export class GuestsService {
     const invitationRows = visits.length
       ? await this.invitations.find({ where: { visitId: In(visits.map((visit) => visit.id)) } })
       : [];
+    const mealRequestRows = visits.length
+      ? await this.guestMealRequests.find({
+          where: { householdId: user.householdId, visitId: In(visits.map((visit) => visit.id)) },
+          relations: { invitation: { guest: true } },
+          order: { mealDate: 'ASC', mealType: 'ASC', createdAt: 'ASC' },
+        })
+      : [];
     const grouped = new Map<string, GuestInvitation[]>();
     for (const invitation of invitationRows) {
       grouped.set(invitation.visitId, [...(grouped.get(invitation.visitId) ?? []), invitation]);
     }
-    return visits.map((visit) => profileVisit(visit, grouped.get(visit.id) ?? []));
+    const requestsByVisit = new Map<string, GuestMealRequest[]>();
+    for (const request of mealRequestRows) {
+      requestsByVisit.set(request.visitId, [...(requestsByVisit.get(request.visitId) ?? []), request]);
+    }
+    return visits.map((visit) => profileVisit(visit, grouped.get(visit.id) ?? [], requestsByVisit.get(visit.id) ?? []));
   }
 
   async createVisit(dto: CreateVisitDto, user: JwtUser) {
@@ -602,6 +691,7 @@ export class GuestsService {
           revokedAt: null,
           acceptedAt: null,
           allowsMovieVoting: dto.allowsMovieVoting ?? false,
+          allowsMealRequests: dto.allowsMealRequests ?? false,
           createdById: user.memberId,
         }),
       );
@@ -709,6 +799,99 @@ export class GuestsService {
       .map((poll) => this.publicMoviePollProfile(poll, selectedByPoll.get(poll.id) ?? []));
   }
 
+  async publicMealRequests(token: string) {
+    const invitation = await this.activeInvitation(token);
+    this.assertMealRequestsAllowed(invitation);
+    const requests = await this.guestMealRequests.find({
+      where: { invitationId: invitation.id },
+      order: { mealDate: 'ASC', mealType: 'ASC' },
+    });
+    return requests.map(profileGuestMealRequest);
+  }
+
+  async submitMealRequest(token: string, dto: GuestMealRequestDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const invitation = await this.activeInvitation(token, manager);
+      this.assertMealRequestsAllowed(invitation);
+      const mealDate = dateOnly(dto.mealDate, '点菜日期');
+      if (!visitMealDates(invitation.visit).includes(mealDate)) {
+        throw new BadRequestException('点菜日期不在本次来访期间');
+      }
+      const dishName = dto.dishName.trim();
+      if (!dishName) throw new BadRequestException('想吃的菜不能为空');
+      const requests = manager.getRepository(GuestMealRequest);
+      let request = await requests
+        .createQueryBuilder('request')
+        .where('request.invitationId = :invitationId', { invitationId: invitation.id })
+        .andWhere('request.mealDate = :mealDate', { mealDate })
+        .andWhere('request.mealType = :mealType', { mealType: dto.mealType })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (request?.status && request.status !== 'pending') {
+        throw new ConflictException('这条点菜请求已被处理，无法再修改');
+      }
+      const isNew = !request;
+      if (!request) {
+        request = requests.create({
+          householdId: invitation.visit.householdId,
+          visitId: invitation.visitId,
+          invitationId: invitation.id,
+          mealDate,
+          mealType: dto.mealType,
+          dishName,
+          note: dto.note?.trim() || null,
+          status: 'pending',
+          reviewNote: null,
+          reviewedById: null,
+          reviewedAt: null,
+        });
+      } else {
+        request.dishName = dishName;
+        request.note = dto.note?.trim() || null;
+      }
+      const saved = await requests.save(request);
+      if (isNew) {
+        await manager.getRepository(Notification).save(
+          manager.getRepository(Notification).create({
+            householdId: invitation.visit.householdId,
+            recipientId: invitation.visit.hostMemberId,
+            module: 'guest',
+            type: 'guest_meal_request',
+            sourceId: saved.id,
+            title: '访客提交点菜请求',
+            body: `${invitation.guest.name} 希望在${mealDate}的${this.mealLabel(dto.mealType)}吃${dishName}`,
+            targetPath: `/guests?visitId=${invitation.visitId}`,
+            readAt: null,
+          }),
+        );
+      }
+      return profileGuestMealRequest(saved);
+    });
+  }
+
+  async reviewMealRequest(id: string, dto: ReviewGuestMealRequestDto, user: JwtUser) {
+    return this.dataSource.transaction(async (manager) => {
+      const request = await manager.getRepository(GuestMealRequest).findOne({
+        where: { id, householdId: user.householdId },
+        relations: { invitation: { guest: true }, visit: true },
+      });
+      if (!request) throw new NotFoundException('访客点菜请求不存在');
+      request.status = dto.status;
+      request.reviewNote = dto.reviewNote?.trim() || null;
+      request.reviewedById = user.memberId;
+      request.reviewedAt = new Date();
+      const saved = await manager.getRepository(GuestMealRequest).save(request);
+      await recordActivity(manager, user, {
+        module: 'guest',
+        action: `guest_meal_request_${dto.status}`,
+        summary: `${user.name}${dto.status === 'accepted' ? '接受了' : '婉拒了'} ${request.invitation.guest.name} 的点菜请求`,
+        targetPath: `/guests?visitId=${request.visitId}`,
+        metadata: { guestMealRequestId: request.id, visitId: request.visitId, status: dto.status },
+      });
+      return profileGuestMealRequest(saved);
+    });
+  }
+
   async voteMoviePoll(token: string, pollId: string, dto: GuestPollVoteDto) {
     return this.dataSource.transaction(async (manager) => {
       const invitation = await this.activeInvitation(token, manager);
@@ -809,7 +992,8 @@ export class GuestsService {
         attending: participant?.isAttending ?? null,
         respondedAt: participant?.respondedAt ?? null,
       },
-      capabilities: { movieVoting: invitation.allowsMovieVoting },
+      capabilities: { movieVoting: invitation.allowsMovieVoting, mealRequests: invitation.allowsMealRequests },
+      mealRequestDates: invitation.allowsMealRequests ? visitMealDates(invitation.visit) : [],
       wifi,
       expiresAt: invitation.expiresAt,
     };
@@ -835,6 +1019,16 @@ export class GuestsService {
     if (!invitation.allowsMovieVoting) {
       throw new NotFoundException('此邀请未开放观影投票');
     }
+  }
+
+  private assertMealRequestsAllowed(invitation: GuestInvitation) {
+    if (!invitation.allowsMealRequests) {
+      throw new NotFoundException('此邀请未开放点菜请求');
+    }
+  }
+
+  private mealLabel(mealType: MealType) {
+    return { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' }[mealType];
   }
 
   private publicMoviePollProfile(poll: Poll, selectedOptionIds: string[]) {
@@ -924,7 +1118,12 @@ export class GuestsService {
   private async getVisit(id: string, householdId: string, manager = this.dataSource.manager) {
     const visit = await this.findVisit(id, householdId, manager);
     const invitations = await manager.getRepository(GuestInvitation).find({ where: { visitId: id } });
-    return profileVisit(visit, invitations);
+    const mealRequests = await manager.getRepository(GuestMealRequest).find({
+      where: { householdId, visitId: id },
+      relations: { invitation: { guest: true } },
+      order: { mealDate: 'ASC', mealType: 'ASC', createdAt: 'ASC' },
+    });
+    return profileVisit(visit, invitations, mealRequests);
   }
 }
 
@@ -1028,10 +1227,32 @@ export class GuestsController {
   ) {
     return this.service.voteMoviePoll(token, pollId, dto);
   }
+
+  @Public()
+  @Get('guest-invitations/:token/meal-requests')
+  publicMealRequests(@Param('token') token: string) {
+    return this.service.publicMealRequests(token);
+  }
+
+  @Public()
+  @Post('guest-invitations/:token/meal-requests')
+  submitMealRequest(@Param('token') token: string, @Body() dto: GuestMealRequestDto) {
+    return this.service.submitMealRequest(token, dto);
+  }
+
+  @Patch('guest-meal-requests/:id')
+  @RequireCapabilities('manage_guests')
+  reviewMealRequest(
+    @Param('id') id: string,
+    @Body() dto: ReviewGuestMealRequestDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.reviewMealRequest(id, dto, user);
+  }
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestWifiProfile, GuestPollVote, Poll, PollOption, Member, Notification])],
+  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Member, Notification])],
   controllers: [GuestsController],
   providers: [GuestsService],
   exports: [GuestsService],

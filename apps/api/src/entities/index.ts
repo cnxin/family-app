@@ -68,6 +68,7 @@ export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
 export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
 export type GuestWifiSecurity = 'WPA' | 'nopass';
+export type GuestMealRequestStatus = 'pending' | 'accepted' | 'rejected';
 export type ActivityModule =
   | 'member'
   | 'invitation'
@@ -1251,6 +1252,9 @@ export class GuestInvitation {
   @Column({ default: false })
   allowsMovieVoting: boolean;
 
+  @Column({ default: false })
+  allowsMealRequests: boolean;
+
   @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({
     name: 'createdById',
@@ -1263,6 +1267,9 @@ export class GuestInvitation {
 
   @OneToMany(() => GuestPollVote, (vote) => vote.invitation)
   pollVotes: GuestPollVote[];
+
+  @OneToMany(() => GuestMealRequest, (request) => request.invitation)
+  mealRequests: GuestMealRequest[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -1775,6 +1782,82 @@ export class GuestPollVote {
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
+}
+
+@Entity('guest_meal_requests')
+@Check('CHK_guest_meal_requests_status', `"status" IN ('pending', 'accepted', 'rejected')`)
+@Unique('UQ_guest_meal_requests_invitation_meal', ['invitationId', 'mealDate', 'mealType'])
+@Index('IDX_guest_meal_requests_household_visit', ['householdId', 'visitId'])
+export class GuestMealRequest {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_guest_meal_requests_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Visit, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'visitId',
+    foreignKeyConstraintName: 'FK_guest_meal_requests_visit',
+  })
+  visit: Visit;
+
+  @Column('uuid')
+  visitId: string;
+
+  @ManyToOne(() => GuestInvitation, (invitation) => invitation.mealRequests, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'invitationId',
+    foreignKeyConstraintName: 'FK_guest_meal_requests_invitation',
+  })
+  invitation: GuestInvitation;
+
+  @Column('uuid')
+  invitationId: string;
+
+  @Column({ type: 'date' })
+  mealDate: string;
+
+  @Column({ type: 'varchar' })
+  mealType: MealType;
+
+  @Column({ type: 'varchar', length: 120 })
+  dishName: string;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'varchar', default: 'pending' })
+  status: GuestMealRequestStatus;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  reviewNote: string | null;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'reviewedById',
+    foreignKeyConstraintName: 'FK_guest_meal_requests_reviewed_by',
+  })
+  reviewedBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reviewedById: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  reviewedAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
 }
 
 @Entity('media_titles')
@@ -3009,6 +3092,7 @@ export const ALL_ENTITIES = [
   PollOption,
   PollVote,
   GuestPollVote,
+  GuestMealRequest,
   MediaTitle,
   MediaExternalRef,
   HouseholdMediaSourceConfig,
