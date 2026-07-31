@@ -1248,6 +1248,9 @@ export class GuestInvitation {
   @Column({ type: 'timestamptz', nullable: true })
   acceptedAt: Date | null;
 
+  @Column({ default: false })
+  allowsMovieVoting: boolean;
+
   @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({
     name: 'createdById',
@@ -1257,6 +1260,9 @@ export class GuestInvitation {
 
   @Column({ type: 'uuid', nullable: true })
   createdById: string | null;
+
+  @OneToMany(() => GuestPollVote, (vote) => vote.invitation)
+  pollVotes: GuestPollVote[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -1660,6 +1666,9 @@ export class PollOption {
   @OneToMany(() => PollVote, (vote) => vote.option)
   votes: PollVote[];
 
+  @OneToMany(() => GuestPollVote, (vote) => vote.option)
+  guestVotes: GuestPollVote[];
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }
@@ -1711,6 +1720,58 @@ export class PollVote {
 
   @Column('uuid')
   memberId: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('guest_poll_votes')
+@Unique('UQ_guest_poll_votes_poll_invitation_option', ['pollId', 'invitationId', 'optionId'])
+@Index('IDX_guest_poll_votes_household_poll', ['householdId', 'pollId'])
+@Index('IDX_guest_poll_votes_invitation_poll', ['invitationId', 'pollId'])
+export class GuestPollVote {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_guest_poll_votes_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => GuestInvitation, (invitation) => invitation.pollVotes, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'invitationId',
+    foreignKeyConstraintName: 'FK_guest_poll_votes_invitation',
+  })
+  invitation: GuestInvitation;
+
+  @Column('uuid')
+  invitationId: string;
+
+  @ManyToOne(() => Poll, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'pollId',
+    foreignKeyConstraintName: 'FK_guest_poll_votes_poll',
+  })
+  poll: Poll;
+
+  @Column('uuid')
+  pollId: string;
+
+  @ManyToOne(() => PollOption, (option) => option.guestVotes, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'optionId',
+    foreignKeyConstraintName: 'FK_guest_poll_votes_option',
+  })
+  option: PollOption;
+
+  @Column('uuid')
+  optionId: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
@@ -2947,6 +3008,7 @@ export const ALL_ENTITIES = [
   Poll,
   PollOption,
   PollVote,
+  GuestPollVote,
   MediaTitle,
   MediaExternalRef,
   HouseholdMediaSourceConfig,

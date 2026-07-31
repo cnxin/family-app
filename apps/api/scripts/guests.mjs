@@ -120,9 +120,22 @@ assert(
   '统一日历聚合已安排的来访计划',
 );
 
+const moviePollCreated = await request('/polls', adminToken, 'POST', {
+  title: '访客观影验收投票',
+  category: 'movie',
+  voteMode: 'single',
+  options: [
+    { label: '家庭电影甲' },
+    { label: '家庭电影乙' },
+  ],
+});
+assert(moviePollCreated.status === 201, '管理员可以创建供访客参与的观影投票');
+const moviePoll = moviePollCreated.body.data;
+
 const invitationCreated = await request(`/visits/${visit.id}/invitations`, adminToken, 'POST', {
   guestId: guest.id,
   expiresInHours: 24,
+  allowsMovieVoting: true,
 });
 const invitation = invitationCreated.body.data;
 assert(
@@ -135,6 +148,7 @@ assert(
   preview.status === 200 &&
     preview.body.data.guest.name === guest.name &&
     preview.body.data.visit.title === visit.title &&
+    preview.body.data.capabilities?.movieVoting === true &&
     preview.body.data.wifi?.ssid === wifiProfile.ssid &&
     typeof preview.body.data.wifi?.qrPayload === 'string' &&
     !('hostMember' in preview.body.data) &&
@@ -142,6 +156,29 @@ assert(
     !('password' in preview.body.data.wifi ?? {}) &&
     !('tokenHash' in preview.body.data),
   '公开邀请页只返回本次来访的 Wi-Fi 二维码载荷，不返回密码字段、家庭成员或令牌摘要',
+);
+
+const moviePolls = await request(`/guest-invitations/${invitation.invitationToken}/movie-polls`, null);
+assert(
+  moviePolls.status === 200 &&
+    moviePolls.body.data.some((poll) => poll.id === moviePoll.id) &&
+    !('voters' in moviePolls.body.data.find((poll) => poll.id === moviePoll.id).options[0]),
+  '经授权访客只能读取开放中的观影投票及匿名票数',
+);
+const guestMovieVote = await request(
+  `/guest-invitations/${invitation.invitationToken}/movie-polls/${moviePoll.id}/votes`,
+  null,
+  'POST',
+  { optionIds: [moviePolls.body.data.find((poll) => poll.id === moviePoll.id).options[0].id] },
+);
+assert(
+  guestMovieVote.status === 201 && guestMovieVote.body.data.selectedOptionIds.length === 1,
+  '经授权访客可以独立提交观影投票',
+);
+const moviePollAfterGuestVote = await request(`/polls/${moviePoll.id}`, adminToken);
+assert(
+  moviePollAfterGuestVote.status === 200 && moviePollAfterGuestVote.body.data.totalVoters === 1,
+  '家庭投票统计会计入访客选票但不创建家庭成员身份',
 );
 
 const disabledWifi = await request(`/guest-wifi-profiles/${wifiProfile.id}`, adminToken, 'PATCH', { isActive: false });
@@ -175,6 +212,18 @@ const expiredPreview = await request(`/guest-invitations/${invitation.invitation
 assert(
   revoked.status === 200 && revoked.body.data.revoked === true && expiredPreview.status === 404,
   '撤销邀请后公开链接立即失效',
+);
+
+const restrictedInvitationCreated = await request(`/visits/${visit.id}/invitations`, adminToken, 'POST', {
+  guestId: guest.id,
+});
+const restrictedMoviePolls = await request(
+  `/guest-invitations/${restrictedInvitationCreated.body.data.invitationToken}/movie-polls`,
+  null,
+);
+assert(
+  restrictedInvitationCreated.status === 201 && restrictedMoviePolls.status === 404,
+  '未显式授权的访客邀请不能读取观影投票',
 );
 
 const cancelled = await request(`/visits/${visit.id}`, adminToken, 'PATCH', { status: 'cancelled' });

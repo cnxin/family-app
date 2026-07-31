@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { CalendarDays, Copy, KeyRound, Link2, Plus, Send, UserPlus, UsersRound, Wifi, X } from 'lucide-react-native';
+import { CalendarDays, Copy, Film, KeyRound, Link2, Plus, Send, UserPlus, UsersRound, Wifi, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -356,19 +356,26 @@ export default function GuestsScreen() {
   const [visitForm, setVisitForm] = useState(false);
   const [wifiProfileForm, setWifiProfileForm] = useState<GuestWifiProfile | 'new' | null>(null);
   const [visitWifiForm, setVisitWifiForm] = useState<Visit | null>(null);
+  const [inviteDraft, setInviteDraft] = useState<{ visit: Visit; guest: Guest } | null>(null);
+  const [allowMovieVoting, setAllowMovieVoting] = useState(false);
   const [share, setShare] = useState<{ url: string; guestName: string } | null>(null);
   const activeGuests = useMemo(() => guests?.filter((guest) => guest.isActive) ?? [], [guests]);
   const activeGuestWifiProfiles = useMemo(() => guestWifiProfiles?.filter((profile) => profile.isActive && (profile.security === 'nopass' || profile.passwordConfigured)) ?? [], [guestWifiProfiles]);
   const scheduledVisits = visits?.filter((visit) => visit.status === 'scheduled') ?? [];
 
-  const makeInvitation = async (visit: Visit, guest: Guest) => {
+  const makeInvitation = async (visit: Visit, guest: Guest, allowsMovieVoting: boolean) => {
     try {
-      const result = await createInvitation.mutateAsync({ visitId: visit.id, guestId: guest.id });
+      const result = await createInvitation.mutateAsync({ visitId: visit.id, guestId: guest.id, allowsMovieVoting });
       setShare({ url: publicInvitationUrl(result.invitationToken), guestName: guest.name });
+      setInviteDraft(null);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       Alert.alert('创建邀请失败', error instanceof Error ? error.message : '请稍后重试');
     }
+  };
+  const openInvitation = (visit: Visit, guest: Guest) => {
+    setAllowMovieVoting(false);
+    setInviteDraft({ visit, guest });
   };
   const copyInvitation = async () => {
     if (!share) return;
@@ -395,7 +402,7 @@ export default function GuestsScreen() {
             <View style={styles.visitHeader}><View style={{ flex: 1, minWidth: 0 }}><Text style={[t.headline, { color: c.label }]} numberOfLines={1}>{visit.title}</Text><Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>{visitTime(visit)} · 接待 {visit.hostMember?.name ?? '家庭成员'}</Text></View><CalendarDays color={c.tint} size={20} /></View>
             {visit.note ? <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 9 }]}>{visit.note}</Text> : null}
             <Pressable accessibilityRole="button" accessibilityLabel={`设置 ${visit.title} 的访客 Wi-Fi`} onPress={() => setVisitWifiForm(visit)} style={[styles.wifiAssignment, { backgroundColor: visit.guestWifiProfile ? c.blueSoft : c.fill }]}><Wifi color={visit.guestWifiProfile ? c.blue : c.secondaryLabel} size={16} /><Text style={[t.footnote, { color: visit.guestWifiProfile ? c.blue : c.secondaryLabel, flex: 1 }]}>{visit.guestWifiProfile ? `访客 Wi-Fi：${visit.guestWifiProfile.name}` : '未提供访客 Wi-Fi'}</Text><Text style={[t.caption, { color: visit.guestWifiProfile ? c.blue : c.secondaryLabel }]}>更改</Text></Pressable>
-            <View style={[styles.participantList, { borderTopColor: c.separator }]}>{visit.guests.map((participant) => <View key={participant.id} style={styles.participantRow}><Text style={{ fontSize: 20 }}>{participant.guest.avatarEmoji}</Text><Text style={[t.subhead, { color: c.label, flex: 1 }]}>{participant.guest.name}</Text><Text style={[t.caption, { color: participant.isAttending === true ? c.green : participant.isAttending === false ? c.orange : c.secondaryLabel }]}>{participant.isAttending === true ? '已确认' : participant.isAttending === false ? '无法参加' : '待确认'}</Text>{participant.invitation && !participant.invitation.revokedAt ? <Pressable accessibilityRole="button" accessibilityLabel={`撤销 ${participant.guest.name} 的邀请`} onPress={() => void revokeInvitation.mutateAsync(participant.invitation!.id)} style={[styles.iconAction, { backgroundColor: c.fill }]}><X color={c.secondaryLabel} size={15} /></Pressable> : <Pressable accessibilityRole="button" accessibilityLabel={`生成 ${participant.guest.name} 的邀请`} onPress={() => void makeInvitation(visit, participant.guest)} style={[styles.inviteButton, { backgroundColor: c.tintSoft }]}><Send color={c.tint} size={14} /><Text style={[t.caption, { color: c.tint, fontWeight: '700' }]}>邀请</Text></Pressable>}</View>)}</View>
+            <View style={[styles.participantList, { borderTopColor: c.separator }]}>{visit.guests.map((participant) => <View key={participant.id} style={styles.participantRow}><Text style={{ fontSize: 20 }}>{participant.guest.avatarEmoji}</Text><Text style={[t.subhead, { color: c.label, flex: 1 }]}>{participant.guest.name}</Text><Text style={[t.caption, { color: participant.isAttending === true ? c.green : participant.isAttending === false ? c.orange : c.secondaryLabel }]}>{participant.isAttending === true ? '已确认' : participant.isAttending === false ? '无法参加' : '待确认'}</Text>{participant.invitation && !participant.invitation.revokedAt ? <Pressable accessibilityRole="button" accessibilityLabel={`撤销 ${participant.guest.name} 的邀请`} onPress={() => void revokeInvitation.mutateAsync(participant.invitation!.id)} style={[styles.iconAction, { backgroundColor: c.fill }]}><X color={c.secondaryLabel} size={15} /></Pressable> : <Pressable accessibilityRole="button" accessibilityLabel={`生成 ${participant.guest.name} 的邀请`} onPress={() => openInvitation(visit, participant.guest)} style={[styles.inviteButton, { backgroundColor: c.tintSoft }]}><Send color={c.tint} size={14} /><Text style={[t.caption, { color: c.tint, fontWeight: '700' }]}>邀请</Text></Pressable>}</View>)}</View>
             <View style={styles.visitActions}><Pressable accessibilityRole="button" onPress={() => void updateVisit.mutateAsync({ id: visit.id, status: 'completed' })} style={[styles.textAction, { backgroundColor: c.fill }]}><Text style={[t.footnote, { color: c.label, fontWeight: '700' }]}>标记结束</Text></Pressable><Pressable accessibilityRole="button" onPress={() => Alert.alert('取消来访', '已生成的邀请会同时失效。', [{ text: '返回' }, { text: '取消来访', style: 'destructive', onPress: () => void updateVisit.mutateAsync({ id: visit.id, status: 'cancelled' }) }])} style={[styles.textAction, { backgroundColor: c.redSoft }]}><Text style={[t.footnote, { color: c.red, fontWeight: '700' }]}>取消来访</Text></Pressable></View>
           </Card>)}</View> : <Card><EmptyState emoji="👋" title="还没有来访计划" hint="新增访客后，即可安排来访并发送确认链接。" /></Card>}
 
@@ -410,6 +417,7 @@ export default function GuestsScreen() {
       <VisitForm guests={activeGuests} wifiProfiles={activeGuestWifiProfiles} visible={visitForm} onClose={() => setVisitForm(false)} />
       <GuestWifiProfileForm profile={wifiProfileForm === 'new' ? null : wifiProfileForm} visible={Boolean(wifiProfileForm)} onClose={() => setWifiProfileForm(null)} />
       <VisitWifiForm visit={visitWifiForm} profiles={activeGuestWifiProfiles} visible={Boolean(visitWifiForm)} onClose={() => setVisitWifiForm(null)} />
+      <ModalFrame title="创建访客邀请" visible={Boolean(inviteDraft)} onClose={() => setInviteDraft(null)}><Text style={[t.subhead, { color: c.label }]}>发送给 {inviteDraft?.guest.name}</Text><Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 5 }]}>链接默认只用于来访确认和已绑定的 Wi-Fi。下面的权限仅对此链接生效。</Text><View style={[styles.permissionRow, { backgroundColor: c.fill }]}><View style={[styles.permissionMark, { backgroundColor: c.tintSoft }]}><Film color={c.tint} size={18} /></View><View style={{ flex: 1, minWidth: 0 }}><Text style={[t.headline, { color: c.label }]}>允许参与观影投票</Text><Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>只显示开放中的影视投票和匿名票数。</Text></View><Switch value={allowMovieVoting} onValueChange={setAllowMovieVoting} trackColor={{ false: c.fillStrong, true: c.tintSoft }} thumbColor={allowMovieVoting ? c.tint : c.tertiaryLabel} accessibilityLabel="允许参与观影投票" /></View><PrimaryButton title="生成邀请链接" onPress={() => inviteDraft && void makeInvitation(inviteDraft.visit, inviteDraft.guest, allowMovieVoting)} loading={createInvitation.isPending} icon={<Send color="#fff" size={17} />} style={{ marginTop: 18 }} /></ModalFrame>
       <ModalFrame title="访客确认链接" visible={Boolean(share)} onClose={() => setShare(null)}><View style={[styles.shareMark, { backgroundColor: c.tintSoft }]}><Link2 color={c.tint} size={22} /></View><Text style={[t.headline, { color: c.label, textAlign: 'center', marginTop: 12 }]}>发送给 {share?.guestName}</Text><Text style={[t.footnote, { color: c.secondaryLabel, textAlign: 'center', marginTop: 6 }]}>链接仅在此刻显示一次，访客无需登录即可确认是否参加。</Text><View style={[styles.urlBox, { backgroundColor: c.fill }]}><Text numberOfLines={2} selectable style={[t.caption, { color: c.label, flex: 1 }]}>{share?.url}</Text></View><PrimaryButton title="复制邀请链接" onPress={() => void copyInvitation()} icon={<Copy color="#fff" size={17} />} style={{ marginTop: 16 }} /></ModalFrame>
     </SafeAreaView>
   );
@@ -424,6 +432,7 @@ const styles = StyleSheet.create({
   inviteButton: { minHeight: 30, paddingHorizontal: 8, borderRadius: radius.sm, flexDirection: 'row', alignItems: 'center', gap: 4 }, iconAction: { width: 30, height: 30, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' }, visitActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 10 }, textAction: { minHeight: 32, paddingHorizontal: 10, borderRadius: radius.sm, justifyContent: 'center' },
   addGuest: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 5 }, guestGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, guestCard: { width: '47%', minWidth: 150, flexGrow: 1, padding: 13 }, guestCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
   wifiCard: { padding: 14 }, wifiCardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 }, wifiMark: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' }, wifiChoices: { marginTop: 14, borderTopWidth: StyleSheet.hairlineWidth, gap: 2, paddingTop: 6 }, wifiChoice: { minHeight: 52, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  permissionRow: { minHeight: 64, borderRadius: radius.sm, padding: 10, marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 9 }, permissionMark: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)', justifyContent: 'center', padding: 18 }, sheet: { width: '100%', maxWidth: 560, maxHeight: '88%', alignSelf: 'center', borderWidth: 1, borderRadius: radius.md, padding: 18 }, sheetHeader: { minHeight: 34, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }, closeButton: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   fieldRow: { flexDirection: 'row', gap: 10, marginTop: 16 }, input: { minHeight: 42, borderRadius: radius.sm, paddingHorizontal: 11 }, noteInput: { minHeight: 76, borderRadius: radius.sm, paddingHorizontal: 11, paddingTop: 10, textAlignVertical: 'top' }, dateRow: { flexDirection: 'row', gap: 12, marginTop: 14, alignItems: 'flex-end' }, guestPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, guestChoice: { minHeight: 38, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', gap: 5 },
   shareMark: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' }, urlBox: { minHeight: 58, borderRadius: radius.sm, padding: 10, marginTop: 14, justifyContent: 'center' },

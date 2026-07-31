@@ -14,6 +14,7 @@ import type {
   Dish,
   Guest,
   GuestInvitationPreview,
+  GuestMoviePoll,
   GuestWifiProfile,
   HouseholdPoll,
   HouseholdReminder,
@@ -200,7 +201,7 @@ export function useUpdateVisit() {
 export function useCreateGuestInvitation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ visitId, ...body }: { visitId: string; guestId: string; expiresInHours?: number }) =>
+    mutationFn: ({ visitId, ...body }: { visitId: string; guestId: string; expiresInHours?: number; allowsMovieVoting?: boolean }) =>
       api<CreatedGuestInvitation>(`/visits/${visitId}/invitations`, { method: 'POST', body }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['visits'] });
@@ -241,6 +242,28 @@ export function useRespondGuestInvitation(token: string | undefined) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['guest-invitation', token] });
     },
+  });
+}
+
+export function useGuestMoviePolls(token: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['guest-movie-polls', token],
+    queryFn: () => api<GuestMoviePoll[]>(`/guest-invitations/${encodeURIComponent(token ?? '')}/movie-polls`, { auth: false }),
+    enabled: Boolean(token) && enabled,
+    retry: false,
+  });
+}
+
+export function useVoteGuestMoviePoll(token: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pollId, optionIds }: { pollId: string; optionIds: string[] }) =>
+      api<GuestMoviePoll>(`/guest-invitations/${encodeURIComponent(token ?? '')}/movie-polls/${pollId}/votes`, {
+        method: 'POST',
+        auth: false,
+        body: { optionIds },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['guest-movie-polls', token] }),
   });
 }
 

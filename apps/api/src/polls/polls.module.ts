@@ -37,6 +37,7 @@ import { recordActivity } from '../activities/activity-log';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   HouseholdMedia,
+  GuestPollVote,
   Member,
   Notification,
   Poll,
@@ -220,7 +221,7 @@ export class PollsService {
     const polls = await this.polls.find({
       where: { householdId: user.householdId, isArchived: false },
       relations: {
-        options: { media: { mediaTitle: true }, votes: { member: true } },
+        options: { media: { mediaTitle: true }, votes: { member: true }, guestVotes: true },
       },
       order: { createdAt: 'DESC', options: { sortOrder: 'ASC' } },
       take: 50,
@@ -350,7 +351,9 @@ export class PollsService {
       this.assertManageable(poll, user);
       const votes = manager.getRepository(PollVote);
       const pollOptions = manager.getRepository(PollOption);
-      const voteCount = await votes.countBy({ pollId: poll.id });
+      const voteCount =
+        (await votes.countBy({ pollId: poll.id })) +
+        (await manager.getRepository(GuestPollVote).countBy({ pollId: poll.id }));
       const currentOptions = await pollOptions.find({
         where: { pollId: poll.id },
         order: { sortOrder: 'ASC' },
@@ -549,7 +552,7 @@ export class PollsService {
     const poll = await this.polls.findOne({
       where: { id, householdId: user.householdId, isArchived: false },
       relations: {
-        options: { media: { mediaTitle: true }, votes: { member: true } },
+        options: { media: { mediaTitle: true }, votes: { member: true }, guestVotes: true },
       },
       order: { options: { sortOrder: 'ASC' } },
     });
@@ -562,7 +565,10 @@ export class PollsService {
       (left, right) => left.sortOrder - right.sortOrder,
     );
     const voterIds = new Set(
-      options.flatMap((option) => option.votes.map((vote) => vote.memberId)),
+      options.flatMap((option) => [
+        ...option.votes.map((vote) => `member:${vote.memberId}`),
+        ...option.guestVotes.map((vote) => `guest:${vote.invitationId}`),
+      ]),
     );
     const selectedOptionIds = options
       .filter((option) =>
@@ -592,7 +598,7 @@ export class PollsService {
       canManage: poll.createdById === user.memberId || isAdmin(user),
       canVote: status === 'open',
       totalVoters,
-      totalVotes: options.reduce((sum, option) => sum + option.votes.length, 0),
+      totalVotes: options.reduce((sum, option) => sum + option.votes.length + option.guestVotes.length, 0),
       selectedOptionIds,
       options: options.map((option) => ({
         id: option.id,
@@ -614,9 +620,9 @@ export class PollsService {
             }
           : null,
         sortOrder: option.sortOrder,
-        voteCount: option.votes.length,
+        voteCount: option.votes.length + option.guestVotes.length,
         percentage: totalVoters
-          ? Math.round((option.votes.length / totalVoters) * 100)
+          ? Math.round(((option.votes.length + option.guestVotes.length) / totalVoters) * 100)
           : 0,
         voters: option.votes
           .map((vote) => vote.member)
@@ -942,6 +948,11 @@ export class PollsController {
   @Get('polls')
   list(@Query() query: PollQueryDto, @CurrentUser() user: JwtUser) {
     return this.service.list(query, user);
+  }
+
+  @Get('polls/:id')
+  get(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.get(id, user);
   }
 
   @Post('polls')

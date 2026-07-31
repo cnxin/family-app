@@ -661,6 +661,7 @@ export interface GuestInvitation {
   guestId: string;
   expiresAt: string;
   acceptedAt: string | null;
+  allowsMovieVoting: boolean;
   revokedAt: string | null;
   createdAt: string;
 }
@@ -694,8 +695,27 @@ export interface GuestInvitationPreview {
   householdName: string;
   visit: Pick<Visit, 'title' | 'startsAt' | 'endsAt' | 'note'>;
   response: { attending: boolean | null; respondedAt: string | null };
+  capabilities: { movieVoting: boolean };
   wifi: { ssid: string; security: GuestWifiSecurity; qrPayload: string } | null;
   expiresAt: string;
+}
+
+export interface GuestMoviePoll {
+  id: string;
+  title: string;
+  description: string | null;
+  voteMode: PollVoteMode;
+  maxChoices: number;
+  closesAt: string | null;
+  totalVoters: number;
+  selectedOptionIds: string[];
+  options: {
+    id: string;
+    label: string;
+    description: string | null;
+    voteCount: number;
+    media: { title: string; originalTitle: string | null; year: number | null; posterUrl: string | null } | null;
+  }[];
 }
 
 export type TaskRecurrence = 'once' | 'daily' | 'weekly' | 'monthly';

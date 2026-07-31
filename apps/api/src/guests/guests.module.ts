@@ -37,10 +37,13 @@ import { decryptIntegrationCredential, encryptIntegrationCredential } from '../c
 import {
   Guest,
   GuestInvitation,
+  GuestPollVote,
   GuestWifiProfile,
   GuestWifiSecurity,
   Member,
   Notification,
+  Poll,
+  PollOption,
   Visit,
   VisitGuest,
   VisitStatus,
@@ -163,11 +166,21 @@ class CreateGuestInvitationDto {
   @Min(1)
   @Max(24 * 30)
   expiresInHours?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  allowsMovieVoting?: boolean;
 }
 
 class GuestResponseDto {
   @IsBoolean()
   attending: boolean;
+}
+
+class GuestPollVoteDto {
+  @IsArray()
+  @IsUUID('4', { each: true })
+  optionIds: string[];
 }
 
 class CreateGuestWifiProfileDto {
@@ -251,6 +264,7 @@ function invitationProfile(invitation: GuestInvitation) {
     guestId: invitation.guestId,
     expiresAt: invitation.expiresAt,
     acceptedAt: invitation.acceptedAt,
+    allowsMovieVoting: invitation.allowsMovieVoting,
     revokedAt: invitation.revokedAt,
     createdAt: invitation.createdAt,
   };
@@ -311,6 +325,10 @@ export class GuestsService {
     private readonly invitations: Repository<GuestInvitation>,
     @InjectRepository(GuestWifiProfile)
     private readonly guestWifiProfiles: Repository<GuestWifiProfile>,
+    @InjectRepository(Poll) private readonly polls: Repository<Poll>,
+    @InjectRepository(PollOption) private readonly pollOptions: Repository<PollOption>,
+    @InjectRepository(GuestPollVote)
+    private readonly guestPollVotes: Repository<GuestPollVote>,
     @InjectRepository(Member) private readonly members: Repository<Member>,
     private readonly dataSource: DataSource,
   ) {}
@@ -583,6 +601,7 @@ export class GuestsService {
           expiresAt: new Date(now.getTime() + (dto.expiresInHours ?? 72) * 3_600_000),
           revokedAt: null,
           acceptedAt: null,
+          allowsMovieVoting: dto.allowsMovieVoting ?? false,
           createdById: user.memberId,
         }),
       );
@@ -664,6 +683,85 @@ export class GuestsService {
     });
   }
 
+  async publicMoviePolls(token: string) {
+    const invitation = await this.activeInvitation(token);
+    this.assertMovieVotingAllowed(invitation);
+    const polls = await this.polls.find({
+      where: {
+        householdId: invitation.visit.householdId,
+        category: 'movie',
+        status: 'open',
+        isArchived: false,
+      },
+      relations: { options: { media: { mediaTitle: true }, votes: true, guestVotes: true } },
+      order: { createdAt: 'DESC', options: { sortOrder: 'ASC' } },
+      take: 20,
+    });
+    const current = await this.guestPollVotes.find({
+      where: { invitationId: invitation.id },
+    });
+    const selectedByPoll = new Map<string, string[]>();
+    for (const vote of current) {
+      selectedByPoll.set(vote.pollId, [...(selectedByPoll.get(vote.pollId) ?? []), vote.optionId]);
+    }
+    return polls
+      .filter((poll) => !poll.closesAt || poll.closesAt.getTime() > Date.now())
+      .map((poll) => this.publicMoviePollProfile(poll, selectedByPoll.get(poll.id) ?? []));
+  }
+
+  async voteMoviePoll(token: string, pollId: string, dto: GuestPollVoteDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const invitation = await this.activeInvitation(token, manager);
+      this.assertMovieVotingAllowed(invitation);
+      const poll = await manager
+        .getRepository(Poll)
+        .createQueryBuilder('poll')
+        .where('poll.id = :pollId', { pollId })
+        .andWhere('poll.householdId = :householdId', { householdId: invitation.visit.householdId })
+        .andWhere('poll.category = :category', { category: 'movie' })
+        .andWhere('poll.status = :status', { status: 'open' })
+        .andWhere('poll.isArchived = false')
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!poll || (poll.closesAt && poll.closesAt.getTime() <= Date.now())) {
+        throw new NotFoundException('可参与的观影投票不存在或已结束');
+      }
+      const optionIds = [...new Set(dto.optionIds)];
+      if (optionIds.length > poll.maxChoices) {
+        throw new BadRequestException(`最多选择 ${poll.maxChoices} 项`);
+      }
+      if (poll.voteMode === 'single' && optionIds.length > 1) {
+        throw new BadRequestException('这是单选投票');
+      }
+      const options = await manager.getRepository(PollOption).findBy({ pollId: poll.id });
+      const validIds = new Set(options.map((option) => option.id));
+      if (optionIds.some((optionId) => !validIds.has(optionId))) {
+        throw new NotFoundException('候选项不属于这个投票');
+      }
+      const votes = manager.getRepository(GuestPollVote);
+      await votes.delete({ invitationId: invitation.id, pollId: poll.id });
+      if (optionIds.length) {
+        await votes.save(
+          optionIds.map((optionId) =>
+            votes.create({
+              householdId: invitation.visit.householdId,
+              invitationId: invitation.id,
+              pollId: poll.id,
+              optionId,
+            }),
+          ),
+        );
+      }
+      const refreshed = await manager.getRepository(Poll).findOne({
+        where: { id: poll.id },
+        relations: { options: { media: { mediaTitle: true }, votes: true, guestVotes: true } },
+        order: { options: { sortOrder: 'ASC' } },
+      });
+      if (!refreshed) throw new NotFoundException('观影投票不存在');
+      return this.publicMoviePollProfile(refreshed, optionIds);
+    });
+  }
+
   private async activeInvitation(token: string, manager?: DataSource['manager']) {
     if (!/^[A-Za-z0-9_-]{32,256}$/.test(token)) throw new NotFoundException('邀请不存在或已失效');
     const repository = (manager ?? this.dataSource.manager).getRepository(GuestInvitation);
@@ -711,6 +809,7 @@ export class GuestsService {
         attending: participant?.isAttending ?? null,
         respondedAt: participant?.respondedAt ?? null,
       },
+      capabilities: { movieVoting: invitation.allowsMovieVoting },
       wifi,
       expiresAt: invitation.expiresAt,
     };
@@ -730,6 +829,44 @@ export class GuestsService {
     } catch {
       return null;
     }
+  }
+
+  private assertMovieVotingAllowed(invitation: GuestInvitation) {
+    if (!invitation.allowsMovieVoting) {
+      throw new NotFoundException('此邀请未开放观影投票');
+    }
+  }
+
+  private publicMoviePollProfile(poll: Poll, selectedOptionIds: string[]) {
+    const options = [...(poll.options ?? [])].sort((left, right) => left.sortOrder - right.sortOrder);
+    const voterIds = new Set([
+      ...options.flatMap((option) => option.votes.map((vote) => `member:${vote.memberId}`)),
+      ...options.flatMap((option) => option.guestVotes.map((vote) => `guest:${vote.invitationId}`)),
+    ]);
+    return {
+      id: poll.id,
+      title: poll.title,
+      description: poll.description,
+      voteMode: poll.voteMode,
+      maxChoices: poll.maxChoices,
+      closesAt: poll.closesAt,
+      totalVoters: voterIds.size,
+      selectedOptionIds,
+      options: options.map((option) => ({
+        id: option.id,
+        label: option.label,
+        description: option.description,
+        voteCount: option.votes.length + option.guestVotes.length,
+        media: option.media
+          ? {
+              title: option.media.mediaTitle.title,
+              originalTitle: option.media.mediaTitle.originalTitle,
+              year: option.media.mediaTitle.year,
+              posterUrl: option.media.mediaTitle.posterUrl,
+            }
+          : null,
+      })),
+    };
   }
 
   private async findActiveMember(id: string, user: JwtUser) {
@@ -875,10 +1012,26 @@ export class GuestsController {
   respond(@Param('token') token: string, @Body() dto: GuestResponseDto) {
     return this.service.respond(token, dto);
   }
+
+  @Public()
+  @Get('guest-invitations/:token/movie-polls')
+  publicMoviePolls(@Param('token') token: string) {
+    return this.service.publicMoviePolls(token);
+  }
+
+  @Public()
+  @Post('guest-invitations/:token/movie-polls/:pollId/votes')
+  voteMoviePoll(
+    @Param('token') token: string,
+    @Param('pollId') pollId: string,
+    @Body() dto: GuestPollVoteDto,
+  ) {
+    return this.service.voteMoviePoll(token, pollId, dto);
+  }
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestWifiProfile, Member, Notification])],
+  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestWifiProfile, GuestPollVote, Poll, PollOption, Member, Notification])],
   controllers: [GuestsController],
   providers: [GuestsService],
   exports: [GuestsService],
