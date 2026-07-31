@@ -287,7 +287,7 @@ try {
   );
 
   const completedPayload = {
-    type: 'TransferComplete',
+    type: 'transfer.complete',
     data: {
       mediainfo: {
         title: created.body.data.mediaTitle.title,
@@ -301,7 +301,10 @@ try {
     },
   };
   const completed = await request(callbackPath, null, 'POST', completedPayload);
-  const duplicate = await request(callbackPath, null, 'POST', completedPayload);
+  const duplicate = await request(callbackPath, null, 'POST', {
+    ...completedPayload,
+    type: 'TransferComplete',
+  });
   const requests = await request(
     `/media/requests?mediaId=${mediaId}`,
     requester.accessToken,
@@ -341,7 +344,7 @@ try {
       !ownerNotifications.body.data.some(
         (item) => item.type === 'media_ready' && item.sourceId === mediaId,
       ),
-    '完成事件只处理一次并只通知原申请人',
+    'V1/V2 完成事件只处理一次并只通知原申请人',
   );
   assert(
     otherRequest.rows[0].status === 'pending',

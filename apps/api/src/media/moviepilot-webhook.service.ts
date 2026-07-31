@@ -113,6 +113,12 @@ function transferSnapshot(body: JsonObject): TransferCompleteSnapshot {
   };
 }
 
+function normalizeMoviePilotEventType(value: string | null) {
+  return value === 'TransferComplete' || value === 'transfer.complete'
+    ? 'TransferComplete'
+    : value;
+}
+
 @Injectable()
 export class MoviePilotWebhookService {
   constructor(private readonly dataSource: DataSource) {}
@@ -195,16 +201,21 @@ export class MoviePilotWebhookService {
     }
     if (!isObject(body)) throw new BadRequestException('回调数据格式无效');
 
-    const serialized = JSON.stringify(canonicalizeWebhookValue(body));
-    if (Buffer.byteLength(serialized, 'utf8') > MAX_WEBHOOK_BYTES) {
+    const rawSerialized = JSON.stringify(canonicalizeWebhookValue(body));
+    if (Buffer.byteLength(rawSerialized, 'utf8') > MAX_WEBHOOK_BYTES) {
       throw new PayloadTooLargeException('MoviePilot 回调数据不能超过 64 KiB');
     }
-    const eventType = trimmedString(body.type, 80);
+    const eventType = normalizeMoviePilotEventType(
+      trimmedString(body.type, 80),
+    );
     if (eventType !== 'TransferComplete') {
       return { accepted: true, ignored: true, duplicate: false, matched: false };
     }
 
     const snapshot = transferSnapshot(body);
+    const serialized = JSON.stringify(
+      canonicalizeWebhookValue({ ...body, type: eventType }),
+    );
     const idempotencyKey = hashWebhookValue(serialized);
     const inserted = (await this.dataSource.query(
       `INSERT INTO "integration_events"
