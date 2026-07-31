@@ -663,7 +663,11 @@ interface MoviePilotDownloadHistory extends JsonRecord {
 }
 
 interface MoviePilotTransferHistory extends MoviePilotDownloadHistory {
+  id?: number;
+  download_hash?: string;
   status?: boolean;
+  errmsg?: string;
+  date?: string;
 }
 
 export class MoviePilotAutomationProvider implements MediaAutomationProvider {
@@ -930,13 +934,39 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
       .map((value) => asRecord(value) as MoviePilotTransferHistory)
       .filter(
         (history) =>
-          history.status === true &&
           this.matchesIdentity(
             identity,
             history.tmdbid,
             history.seasons,
           ),
       );
+  }
+
+  private latestTransferBatch(histories: MoviePilotTransferHistory[]) {
+    if (histories.length < 2) return histories;
+    const newest = [...histories].sort((left, right) => {
+      const idDifference =
+        (integerOrNull(right.id) ?? 0) - (integerOrNull(left.id) ?? 0);
+      if (idDifference) return idDifference;
+      return (asString(right.date) ?? '').localeCompare(
+        asString(left.date) ?? '',
+      );
+    })[0];
+    const downloadHash = asString(newest.download_hash);
+    return downloadHash
+      ? histories.filter(
+          (history) => asString(history.download_hash) === downloadHash,
+        )
+      : histories;
+  }
+
+  private transferFailureReason(histories: MoviePilotTransferHistory[]) {
+    const message = histories
+      .map((history) => asString(history.errmsg)?.trim())
+      .find((value): value is string => Boolean(value));
+    if (!message) return null;
+    if (message.includes('已存在')) return '目标文件已存在';
+    return message.slice(0, 160);
   }
 
   private async downloadHistory(identity: MoviePilotMediaIdentity) {
@@ -970,8 +1000,26 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
         message: `MoviePilot 下载中 · ${Math.round(progress)}%${downloads.length > 1 ? ` · ${downloads.length} 个任务` : ''}`,
       };
     }
-    const transfers = await this.transferHistory(identity);
-    if (transfers.length) {
+    const transfers = this.latestTransferBatch(
+      await this.transferHistory(identity),
+    );
+    const successfulTransfers = transfers.filter(
+      (transfer) => transfer.status === true,
+    );
+    const failedTransfers = transfers.filter(
+      (transfer) => transfer.status !== true,
+    );
+    if (failedTransfers.length) {
+      const reason = this.transferFailureReason(failedTransfers);
+      return {
+        requestId: this.mediaRequestId('transfer', identity),
+        status: 'failed',
+        externalRefs,
+        updatedAt: new Date(),
+        message: `MoviePilot 整理不完整 · ${successfulTransfers.length} 成功 / ${failedTransfers.length} 失败${reason ? ` · ${reason}` : ''}`,
+      };
+    }
+    if (successfulTransfers.length) {
       return {
         requestId: this.mediaRequestId('transfer', identity),
         status: 'completed',

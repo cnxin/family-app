@@ -263,6 +263,7 @@ async function testMoviePilot() {
       if (
         url.pathname === '/api/v1/subscribe/media/themoviedb%3A568160' ||
         url.pathname === '/api/v1/subscribe/media/themoviedb%3A1160901' ||
+        url.pathname === '/api/v1/subscribe/media/themoviedb%3A888' ||
         url.pathname === '/api/v1/subscribe/media/themoviedb%3A777'
       ) {
         return json({});
@@ -293,8 +294,32 @@ async function testMoviePilot() {
           data: {
             list: [
               {
+                id: 203,
                 tmdbid: 1160901,
                 seasons: '',
+                download_hash: 'dragon-current',
+                status: false,
+                errmsg: '/media/龙与魔女.mkv 已存在',
+              },
+              {
+                id: 202,
+                tmdbid: 1160901,
+                seasons: '',
+                download_hash: 'dragon-current',
+                status: true,
+              },
+              {
+                id: 101,
+                tmdbid: 1160901,
+                seasons: '',
+                download_hash: 'dragon-old',
+                status: true,
+              },
+              {
+                id: 100,
+                tmdbid: 888,
+                seasons: '',
+                download_hash: 'completed-movie',
                 status: true,
               },
             ],
@@ -395,9 +420,16 @@ async function testMoviePilot() {
       methods.includes('DELETE /api/v1/download/weathering-hash'),
     '取消已开始的 MoviePilot 下载任务',
   );
-  const completedTransfer = await provider.findRequest(
+  const incompleteTransfer = await provider.findRequest(
     mediaWithTmdbId('1160901'),
   );
+  assert(
+    incompleteTransfer?.status === 'failed' &&
+      incompleteTransfer.message ===
+        'MoviePilot 整理不完整 · 1 成功 / 1 失败 · 目标文件已存在',
+    '同一下载批次存在失败文件时不误报整理完成',
+  );
+  const completedTransfer = await provider.findRequest(mediaWithTmdbId('888'));
   assert(
     completedTransfer?.status === 'completed' &&
       completedTransfer.message === 'MoviePilot 已完成整理',
