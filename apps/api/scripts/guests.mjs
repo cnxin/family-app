@@ -1,3 +1,6 @@
+import pg from 'pg';
+
+const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
 const VISIT_DATE = '2200-02-02';
 
@@ -34,6 +37,51 @@ const memberToken = await login('妈妈');
 const memberRead = await request('/guests', memberToken);
 assert(memberRead.status === 403, '普通成员不能读取访客目录');
 
+const memberWifiRead = await request('/guest-wifi-profiles', memberToken);
+assert(memberWifiRead.status === 403, '普通成员不能读取或管理访客 Wi-Fi 配置');
+
+const invalidWifi = await request('/guest-wifi-profiles', adminToken, 'POST', {
+  name: '无效网络',
+  ssid: 'Family-Guest',
+  security: 'WPA',
+  password: 'short',
+});
+assert(invalidWifi.status === 400, 'WPA 访客 Wi-Fi 拒绝弱密码');
+
+const wifiCreated = await request('/guest-wifi-profiles', adminToken, 'POST', {
+  name: '验收访客网络',
+  ssid: 'Family-Guest-Test',
+  security: 'WPA',
+  password: 'guest-pass-2468',
+});
+const wifiProfile = wifiCreated.body.data;
+assert(
+  wifiCreated.status === 201 &&
+    wifiProfile.passwordConfigured === true &&
+    !('password' in wifiProfile) &&
+    !('passwordEncrypted' in wifiProfile),
+  '访客 Wi-Fi 管理响应不返回密码或密文',
+);
+
+const database = new Client({
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.DB_PORT || 5433),
+  user: process.env.DB_USER || 'family',
+  password: process.env.DB_PASSWORD || 'family123',
+  database: process.env.DB_NAME,
+});
+await database.connect();
+const encryptedPassword = await database.query(
+  'SELECT "passwordEncrypted" FROM "guest_wifi_profiles" WHERE "id" = $1',
+  [wifiProfile.id],
+);
+await database.end();
+assert(
+  encryptedPassword.rows[0]?.passwordEncrypted?.startsWith('v1:') &&
+    encryptedPassword.rows[0].passwordEncrypted !== 'guest-pass-2468',
+  '访客 Wi-Fi 密码以家庭范围的加密密文保存',
+);
+
 const guestCreated = await request('/guests', adminToken, 'POST', {
   name: '访客验收小林',
   avatarEmoji: '🪴',
@@ -56,10 +104,13 @@ const created = await request('/visits', adminToken, 'POST', {
   endsAt: `${VISIT_DATE}T21:00:00.000Z`,
   note: '请在门铃处确认',
   guestIds: [guest.id],
+  guestWifiProfileId: wifiProfile.id,
 });
 assert(
-  created.status === 201 && created.body.data.guests[0]?.guest.id === guest.id,
-  '管理员可以安排多访客模型中的单次来访',
+  created.status === 201 &&
+    created.body.data.guests[0]?.guest.id === guest.id &&
+    created.body.data.guestWifiProfile?.id === wifiProfile.id,
+  '管理员可以将加密的访客 Wi-Fi 配置绑定到单次来访',
 );
 const visit = created.body.data;
 
@@ -84,11 +135,22 @@ assert(
   preview.status === 200 &&
     preview.body.data.guest.name === guest.name &&
     preview.body.data.visit.title === visit.title &&
+    preview.body.data.wifi?.ssid === wifiProfile.ssid &&
+    typeof preview.body.data.wifi?.qrPayload === 'string' &&
     !('hostMember' in preview.body.data) &&
     !('householdId' in preview.body.data) &&
+    !('password' in preview.body.data.wifi ?? {}) &&
     !('tokenHash' in preview.body.data),
-  '公开邀请页只返回该访客的来访信息，不返回家庭成员或令牌摘要',
+  '公开邀请页只返回本次来访的 Wi-Fi 二维码载荷，不返回密码字段、家庭成员或令牌摘要',
 );
+
+const disabledWifi = await request(`/guest-wifi-profiles/${wifiProfile.id}`, adminToken, 'PATCH', { isActive: false });
+const disabledWifiPreview = await request(`/guest-invitations/${invitation.invitationToken}`, null);
+assert(
+  disabledWifi.status === 200 && disabledWifiPreview.status === 200 && disabledWifiPreview.body.data.wifi === null,
+  '停用 Wi-Fi 配置后，仍有效邀请立即隐藏二维码',
+);
+await request(`/guest-wifi-profiles/${wifiProfile.id}`, adminToken, 'PATCH', { isActive: true });
 
 const response = await request(
   `/guest-invitations/${invitation.invitationToken}/response`,

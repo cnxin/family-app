@@ -67,6 +67,7 @@ export type MediaLibraryProviderKind = 'plex' | 'emby';
 export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
 export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
+export type GuestWifiSecurity = 'WPA' | 'nopass';
 export type ActivityModule =
   | 'member'
   | 'invitation'
@@ -1128,6 +1129,16 @@ export class Visit {
   @Column({ type: 'varchar', default: 'scheduled' })
   status: VisitStatus;
 
+  @ManyToOne(() => GuestWifiProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'guestWifiProfileId',
+    foreignKeyConstraintName: 'FK_visits_guest_wifi_profile',
+  })
+  guestWifiProfile: GuestWifiProfile | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  guestWifiProfileId: string | null;
+
   @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
   @JoinColumn({
     name: 'hostMemberId',
@@ -1249,6 +1260,45 @@ export class GuestInvitation {
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
+}
+
+@Entity('guest_wifi_profiles')
+@Check('CHK_guest_wifi_profiles_security', `"security" IN ('WPA', 'nopass')`)
+@Index('IDX_guest_wifi_profiles_household_active', ['householdId', 'isActive'])
+export class GuestWifiProfile {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_guest_wifi_profiles_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  name: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  ssid: string;
+
+  @Column({ type: 'varchar', length: 8 })
+  security: GuestWifiSecurity;
+
+  @Column({ type: 'text', nullable: true, select: false })
+  passwordEncrypted: string | null;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
 }
 
 @Entity('household_tasks')
@@ -2890,6 +2940,7 @@ export const ALL_ENTITIES = [
   Visit,
   VisitGuest,
   GuestInvitation,
+  GuestWifiProfile,
   HouseholdTask,
   HouseholdTaskInstance,
   Notification,

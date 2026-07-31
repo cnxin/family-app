@@ -214,6 +214,7 @@ docs/
 ├── m4-moviepilot-reconciliation-acceptance.md # MoviePilot 后台对账验收约定
 ├── m4-series-availability-acceptance.md # 剧集季入库核验验收约定
 ├── m5-guest-visits-acceptance.md # 访客与来访计划验收约定
+├── m5-guest-wifi-acceptance.md   # 手动访客 Wi-Fi 二维码验收约定
 ├── m3-tasks-acceptance.md        # 家庭任务与通用通知验收约定
 └── recipe-variants-acceptance.md # 独立菜谱与多人做法验收约定
 ```

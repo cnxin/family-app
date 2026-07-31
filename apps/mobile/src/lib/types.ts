@@ -643,6 +643,18 @@ export interface Guest {
 }
 
 export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
+export type GuestWifiSecurity = 'WPA' | 'nopass';
+
+export interface GuestWifiProfile {
+  id: string;
+  name: string;
+  ssid: string;
+  security: GuestWifiSecurity;
+  passwordConfigured: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface GuestInvitation {
   id: string;
@@ -664,6 +676,7 @@ export interface Visit {
   endsAt: string | null;
   note: string | null;
   status: VisitStatus;
+  guestWifiProfile: GuestWifiProfile | null;
   hostMember: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
   guests: {
     id: string;
@@ -681,6 +694,7 @@ export interface GuestInvitationPreview {
   householdName: string;
   visit: Pick<Visit, 'title' | 'startsAt' | 'endsAt' | 'note'>;
   response: { attending: boolean | null; respondedAt: string | null };
+  wifi: { ssid: string; security: GuestWifiSecurity; qrPayload: string } | null;
   expiresAt: string;
 }
 

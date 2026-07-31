@@ -33,9 +33,12 @@ import { DataSource, In, IsNull, MoreThan, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { RequireCapabilities } from '../auth/capabilities';
+import { decryptIntegrationCredential, encryptIntegrationCredential } from '../common/integration-credentials';
 import {
   Guest,
   GuestInvitation,
+  GuestWifiProfile,
+  GuestWifiSecurity,
   Member,
   Notification,
   Visit,
@@ -104,6 +107,10 @@ class CreateVisitDto {
   @IsUUID()
   hostMemberId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  guestWifiProfileId?: string | null;
+
   @IsArray()
   @IsUUID('4', { each: true })
   guestIds: string[];
@@ -134,6 +141,10 @@ class UpdateVisitDto {
   hostMemberId?: string;
 
   @IsOptional()
+  @IsUUID()
+  guestWifiProfileId?: string | null;
+
+  @IsOptional()
   @IsIn(['scheduled', 'cancelled', 'completed'])
   status?: VisitStatus;
 
@@ -157,6 +168,53 @@ class CreateGuestInvitationDto {
 class GuestResponseDto {
   @IsBoolean()
   attending: boolean;
+}
+
+class CreateGuestWifiProfileDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  name: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  ssid: string;
+
+  @IsIn(['WPA', 'nopass'])
+  security: GuestWifiSecurity;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(63)
+  password?: string | null;
+}
+
+class UpdateGuestWifiProfileDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  ssid?: string;
+
+  @IsOptional()
+  @IsIn(['WPA', 'nopass'])
+  security?: GuestWifiSecurity;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(63)
+  password?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 function hashToken(token: string) {
@@ -198,6 +256,19 @@ function invitationProfile(invitation: GuestInvitation) {
   };
 }
 
+function profileGuestWifi(profile: GuestWifiProfile) {
+  return {
+    id: profile.id,
+    name: profile.name,
+    ssid: profile.ssid,
+    security: profile.security,
+    passwordConfigured: profile.security === 'WPA' && profile.passwordEncrypted !== null,
+    isActive: profile.isActive,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+}
+
 function profileVisit(visit: Visit, invitations: GuestInvitation[]) {
   const invitationsByGuest = new Map(invitations.map((entry) => [entry.guestId, entry]));
   return {
@@ -207,6 +278,7 @@ function profileVisit(visit: Visit, invitations: GuestInvitation[]) {
     endsAt: visit.endsAt,
     note: visit.note,
     status: visit.status,
+    guestWifiProfile: visit.guestWifiProfile ? profileGuestWifi(visit.guestWifiProfile) : null,
     hostMember: visit.hostMember
       ? {
           id: visit.hostMember.id,
@@ -237,6 +309,8 @@ export class GuestsService {
     private readonly visitGuests: Repository<VisitGuest>,
     @InjectRepository(GuestInvitation)
     private readonly invitations: Repository<GuestInvitation>,
+    @InjectRepository(GuestWifiProfile)
+    private readonly guestWifiProfiles: Repository<GuestWifiProfile>,
     @InjectRepository(Member) private readonly members: Repository<Member>,
     private readonly dataSource: DataSource,
   ) {}
@@ -298,10 +372,92 @@ export class GuestsService {
     return profileGuest(saved);
   }
 
+  async listGuestWifiProfiles(user: JwtUser) {
+    const profiles = await this.guestWifiProfiles.find({
+      where: { householdId: user.householdId },
+      order: { isActive: 'DESC', updatedAt: 'DESC' },
+    });
+    return profiles.map(profileGuestWifi);
+  }
+
+  async createGuestWifiProfile(dto: CreateGuestWifiProfileDto, user: JwtUser) {
+    const name = dto.name.trim();
+    const ssid = dto.ssid.trim();
+    if (!name) throw new BadRequestException('配置名称不能为空');
+    if (!ssid) throw new BadRequestException('Wi-Fi 名称不能为空');
+    const password = this.validateWifiPassword(dto.security, dto.password);
+    const profile = await this.guestWifiProfiles.save(
+      this.guestWifiProfiles.create({
+        householdId: user.householdId,
+        name,
+        ssid,
+        security: dto.security,
+        passwordEncrypted: password
+          ? encryptIntegrationCredential(password, user.householdId, 'guest-wifi')
+          : null,
+        isActive: true,
+      }),
+    );
+    await this.dataSource.transaction((manager) =>
+      recordActivity(manager, user, {
+        module: 'guest',
+        action: 'guest_wifi_profile_created',
+        summary: `${user.name} 新增了访客 Wi-Fi 配置`,
+        targetPath: '/guests',
+        metadata: { guestWifiProfileId: profile.id },
+      }),
+    );
+    return profileGuestWifi(profile);
+  }
+
+  async updateGuestWifiProfile(id: string, dto: UpdateGuestWifiProfileDto, user: JwtUser) {
+    if (!Object.keys(dto).length) throw new BadRequestException('至少需要修改一个字段');
+    const profile = await this.guestWifiProfiles
+      .createQueryBuilder('guestWifiProfile')
+      .addSelect('guestWifiProfile.passwordEncrypted')
+      .where('guestWifiProfile.id = :id', { id })
+      .andWhere('guestWifiProfile.householdId = :householdId', { householdId: user.householdId })
+      .getOne();
+    if (!profile) throw new NotFoundException('访客 Wi-Fi 配置不存在');
+    const security = dto.security ?? profile.security;
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (!name) throw new BadRequestException('配置名称不能为空');
+      profile.name = name;
+    }
+    if (dto.ssid !== undefined) {
+      const ssid = dto.ssid.trim();
+      if (!ssid) throw new BadRequestException('Wi-Fi 名称不能为空');
+      profile.ssid = ssid;
+    }
+    profile.security = security;
+    if (security === 'nopass') {
+      if (dto.password && dto.password.trim()) throw new BadRequestException('开放网络不能设置密码');
+      profile.passwordEncrypted = null;
+    } else if (dto.password !== undefined) {
+      const password = this.validateWifiPassword(security, dto.password);
+      profile.passwordEncrypted = encryptIntegrationCredential(password!, user.householdId, 'guest-wifi');
+    } else if (!profile.passwordEncrypted) {
+      throw new BadRequestException('WPA 网络必须设置 8 到 63 位密码');
+    }
+    if (dto.isActive !== undefined) profile.isActive = dto.isActive;
+    const saved = await this.guestWifiProfiles.save(profile);
+    await this.dataSource.transaction((manager) =>
+      recordActivity(manager, user, {
+        module: 'guest',
+        action: saved.isActive ? 'guest_wifi_profile_updated' : 'guest_wifi_profile_disabled',
+        summary: `${user.name} 更新了访客 Wi-Fi 配置`,
+        targetPath: '/guests',
+        metadata: { guestWifiProfileId: saved.id },
+      }),
+    );
+    return profileGuestWifi(saved);
+  }
+
   async listVisits(user: JwtUser, status?: VisitStatus) {
     const visits = await this.visits.find({
       where: { householdId: user.householdId, ...(status ? { status } : {}) },
-      relations: { hostMember: true, guests: { guest: true } },
+      relations: { hostMember: true, guestWifiProfile: true, guests: { guest: true } },
       order: { startsAt: 'ASC', createdAt: 'DESC' },
       take: 100,
     });
@@ -321,9 +477,10 @@ export class GuestsService {
     validRange(startsAt, endsAt);
     const guestIds = [...new Set(dto.guestIds)];
     if (!guestIds.length) throw new BadRequestException('至少选择一位访客');
-    const [host, guests] = await Promise.all([
+    const [host, guests, guestWifiProfile] = await Promise.all([
       this.findActiveMember(dto.hostMemberId ?? user.memberId, user),
       this.guests.findBy({ id: In(guestIds), householdId: user.householdId, isActive: true }),
+      this.findActiveGuestWifiProfile(dto.guestWifiProfileId, user.householdId),
     ]);
     if (guests.length !== guestIds.length) throw new BadRequestException('包含不存在或已停用的访客');
     const title = dto.title.trim();
@@ -337,6 +494,7 @@ export class GuestsService {
           endsAt,
           note: dto.note?.trim() || null,
           status: 'scheduled',
+          guestWifiProfileId: guestWifiProfile?.id ?? null,
           hostMemberId: host.id,
           createdById: user.memberId,
         }),
@@ -373,6 +531,11 @@ export class GuestsService {
       if (dto.status !== undefined) visit.status = dto.status;
       if (dto.hostMemberId !== undefined) {
         visit.hostMemberId = (await this.findActiveMember(dto.hostMemberId, user)).id;
+      }
+      if (dto.guestWifiProfileId !== undefined) {
+        visit.guestWifiProfileId = (
+          await this.findActiveGuestWifiProfile(dto.guestWifiProfileId, user.householdId, manager)
+        )?.id ?? null;
       }
       await manager.getRepository(Visit).save(visit);
       if (dto.guestIds !== undefined) {
@@ -511,6 +674,8 @@ export class GuestsService {
       .innerJoinAndSelect('invitation.visit', 'visit')
       .innerJoinAndSelect('invitation.guest', 'guest')
       .innerJoinAndSelect('visit.household', 'household')
+      .leftJoinAndSelect('visit.guestWifiProfile', 'guestWifiProfile')
+      .addSelect('guestWifiProfile.passwordEncrypted')
       .where('invitation.tokenHash = :tokenHash', { tokenHash: presented.toString('utf8') })
       .getOne();
     const stored = invitation ? Buffer.from(invitation.tokenHash, 'utf8') : null;
@@ -529,6 +694,10 @@ export class GuestsService {
   }
 
   private publicProfile(invitation: GuestInvitation, participant?: VisitGuest | null) {
+    const guestWifiProfile = invitation.visit.guestWifiProfile;
+    const wifi = guestWifiProfile?.isActive
+      ? this.publicWifiProfile(guestWifiProfile, invitation.visit.householdId)
+      : null;
     return {
       guest: { name: invitation.guest.name, avatarEmoji: invitation.guest.avatarEmoji },
       householdName: invitation.visit.household.name,
@@ -542,8 +711,25 @@ export class GuestsService {
         attending: participant?.isAttending ?? null,
         respondedAt: participant?.respondedAt ?? null,
       },
+      wifi,
       expiresAt: invitation.expiresAt,
     };
+  }
+
+  private publicWifiProfile(profile: GuestWifiProfile, householdId: string) {
+    try {
+      const password = profile.security === 'WPA'
+        ? decryptIntegrationCredential(profile.passwordEncrypted, householdId, 'guest-wifi', '访客 Wi-Fi')
+        : null;
+      if (profile.security === 'WPA' && !password) return null;
+      const escape = (value: string) => value.replace(/([\\\\;,:\"])/g, '\\\\$1');
+      const qrPayload = profile.security === 'WPA'
+        ? `WIFI:T:WPA;S:${escape(profile.ssid)};P:${escape(password!)};;`
+        : `WIFI:T:nopass;S:${escape(profile.ssid)};;`;
+      return { ssid: profile.ssid, security: profile.security, qrPayload };
+    } catch {
+      return null;
+    }
   }
 
   private async findActiveMember(id: string, user: JwtUser) {
@@ -556,10 +742,43 @@ export class GuestsService {
     return member;
   }
 
+  private async findActiveGuestWifiProfile(
+    id: string | null | undefined,
+    householdId: string,
+    manager = this.dataSource.manager,
+  ) {
+    if (id === undefined || id === null) return null;
+    const profile = await manager
+      .getRepository(GuestWifiProfile)
+      .createQueryBuilder('guestWifiProfile')
+      .addSelect('guestWifiProfile.passwordEncrypted')
+      .where('guestWifiProfile.id = :id', { id })
+      .andWhere('guestWifiProfile.householdId = :householdId', { householdId })
+      .andWhere('guestWifiProfile.isActive = true')
+      .getOne();
+    if (!profile) throw new BadRequestException('访客 Wi-Fi 配置不存在、已停用或不属于当前家庭');
+    if (profile.security === 'WPA' && !profile.passwordEncrypted) {
+      throw new BadRequestException('访客 Wi-Fi 配置缺少密码');
+    }
+    return profile;
+  }
+
+  private validateWifiPassword(security: GuestWifiSecurity, provided: string | null | undefined) {
+    if (security === 'nopass') {
+      if (provided && provided.trim()) throw new BadRequestException('开放网络不能设置密码');
+      return null;
+    }
+    const password = provided?.trim() ?? '';
+    if (password.length < 8 || password.length > 63) {
+      throw new BadRequestException('WPA 网络密码必须为 8 到 63 位');
+    }
+    return password;
+  }
+
   private async findVisit(id: string, householdId: string, manager = this.dataSource.manager) {
     const visit = await manager.getRepository(Visit).findOne({
       where: { id, householdId },
-      relations: { hostMember: true, guests: { guest: true } },
+      relations: { hostMember: true, guestWifiProfile: true, guests: { guest: true } },
     });
     if (!visit) throw new NotFoundException('来访计划不存在');
     return visit;
@@ -592,6 +811,24 @@ export class GuestsController {
   @RequireCapabilities('manage_guests')
   updateGuest(@Param('id') id: string, @Body() dto: UpdateGuestDto, @CurrentUser() user: JwtUser) {
     return this.service.updateGuest(id, dto, user);
+  }
+
+  @Get('guest-wifi-profiles')
+  @RequireCapabilities('manage_guests')
+  listGuestWifiProfiles(@CurrentUser() user: JwtUser) {
+    return this.service.listGuestWifiProfiles(user);
+  }
+
+  @Post('guest-wifi-profiles')
+  @RequireCapabilities('manage_guests')
+  createGuestWifiProfile(@Body() dto: CreateGuestWifiProfileDto, @CurrentUser() user: JwtUser) {
+    return this.service.createGuestWifiProfile(dto, user);
+  }
+
+  @Patch('guest-wifi-profiles/:id')
+  @RequireCapabilities('manage_guests')
+  updateGuestWifiProfile(@Param('id') id: string, @Body() dto: UpdateGuestWifiProfileDto, @CurrentUser() user: JwtUser) {
+    return this.service.updateGuestWifiProfile(id, dto, user);
   }
 
   @Get('visits')
@@ -641,7 +878,7 @@ export class GuestsController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, Member, Notification])],
+  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestWifiProfile, Member, Notification])],
   controllers: [GuestsController],
   providers: [GuestsService],
   exports: [GuestsService],

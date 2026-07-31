@@ -22,6 +22,7 @@ import { AddIntegrationEvents1785228400000 } from './1785228400000-add-integrati
 import { AddMediaUserMappings1785228500000 } from './1785228500000-add-media-user-mappings';
 import { AddViewingHistory1785228600000 } from './1785228600000-add-viewing-history';
 import { AddGuestVisits1785228700000 } from './1785228700000-add-guest-visits';
+import { AddGuestWifiProfiles1785228800000 } from './1785228800000-add-guest-wifi-profiles';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -48,4 +49,5 @@ export const ALL_MIGRATIONS = [
   AddMediaUserMappings1785228500000,
   AddViewingHistory1785228600000,
   AddGuestVisits1785228700000,
+  AddGuestWifiProfiles1785228800000,
 ];

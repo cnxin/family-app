@@ -14,6 +14,7 @@ import type {
   Dish,
   Guest,
   GuestInvitationPreview,
+  GuestWifiProfile,
   HouseholdPoll,
   HouseholdReminder,
   DishRecipeVariant,
@@ -88,6 +89,39 @@ export function useGuests(enabled = true) {
   });
 }
 
+export function useGuestWifiProfiles(enabled = true) {
+  return useQuery({
+    queryKey: ['guest-wifi-profiles'],
+    queryFn: () => api<GuestWifiProfile[]>('/guest-wifi-profiles'),
+    enabled,
+  });
+}
+
+export function useCreateGuestWifiProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; ssid: string; security: 'WPA' | 'nopass'; password?: string | null }) =>
+      api<GuestWifiProfile>('/guest-wifi-profiles', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['guest-wifi-profiles'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useUpdateGuestWifiProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; name?: string; ssid?: string; security?: 'WPA' | 'nopass'; password?: string | null; isActive?: boolean }) =>
+      api<GuestWifiProfile>(`/guest-wifi-profiles/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['guest-wifi-profiles'] });
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
 export function useCreateGuest() {
   const qc = useQueryClient();
   return useMutation({
@@ -130,6 +164,7 @@ export function useCreateVisit() {
       endsAt?: string | null;
       note?: string | null;
       hostMemberId?: string;
+      guestWifiProfileId?: string | null;
       guestIds: string[];
     }) => api<Visit>('/visits', { method: 'POST', body }),
     onSuccess: () => {
@@ -150,6 +185,7 @@ export function useUpdateVisit() {
       endsAt?: string | null;
       note?: string | null;
       hostMemberId?: string;
+      guestWifiProfileId?: string | null;
       status?: VisitStatus;
       guestIds?: string[];
     }) => api<Visit>(`/visits/${id}`, { method: 'PATCH', body }),
