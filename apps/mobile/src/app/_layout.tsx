@@ -21,6 +21,7 @@ function RootStack() {
       }}
     >
       <Stack.Screen name="login" />
+      <Stack.Screen name="guest/[token]" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen
         name="dish/[id]"

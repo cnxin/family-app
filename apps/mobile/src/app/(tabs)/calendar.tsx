@@ -11,6 +11,7 @@ import {
   Plus,
   Trash2,
   UserRound,
+  UsersRound,
   X,
 } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -333,6 +334,7 @@ function ScheduleRow({
   onOpenMenu,
   onOpenMedia,
   onOpenTask,
+  onOpenGuest,
   onRemind,
 }: {
   entry: CalendarEntry;
@@ -341,6 +343,7 @@ function ScheduleRow({
   onOpenMenu: () => void;
   onOpenMedia: () => void;
   onOpenTask: () => void;
+  onOpenGuest: () => void;
   onRemind: () => void;
 }) {
   const c = useTheme();
@@ -348,8 +351,9 @@ function ScheduleRow({
   const isTask = entry.module === 'task';
   const isCalendar = entry.module === 'calendar';
   const isMedia = entry.module === 'media';
+  const isGuest = entry.module === 'guest';
   const canManage = isCalendar && Boolean(entry.metadata.canManage);
-  const interactive = isMenu || isTask || isMedia;
+  const interactive = isMenu || isTask || isMedia || isGuest;
   const canRemind =
     entry.date >= todayStr() &&
     (isCalendar ||
@@ -362,7 +366,15 @@ function ScheduleRow({
         accessibilityRole={interactive ? 'button' : undefined}
         disabled={!interactive}
         onPress={
-          isMenu ? onOpenMenu : isTask ? onOpenTask : isMedia ? onOpenMedia : undefined
+          isMenu
+            ? onOpenMenu
+            : isTask
+              ? onOpenTask
+              : isMedia
+                ? onOpenMedia
+                : isGuest
+                  ? onOpenGuest
+                  : undefined
         }
         style={({ pressed }) => [
           styles.scheduleMain,
@@ -379,7 +391,9 @@ function ScheduleRow({
                   ? c.blueSoft
                   : isMedia
                     ? c.accentSoft
-                  : c.tintSoft,
+                    : isGuest
+                      ? c.blueSoft
+                    : c.tintSoft,
             },
           ]}
         >
@@ -389,6 +403,8 @@ function ScheduleRow({
             <ListTodo color={c.blue} size={19} />
           ) : isMedia ? (
             <Film color={c.accent} size={19} />
+          ) : isGuest ? (
+            <UsersRound color={c.blue} size={19} />
           ) : (
             <CalendarDays color={c.tint} size={19} />
           )}
@@ -416,6 +432,8 @@ function ScheduleRow({
                       : entry.status === 'watching'
                         ? '观看中'
                         : '观影安排'
+                  : isGuest
+                    ? `${entry.metadata.guestCount ?? 0} 位访客`
                   : eventTime(entry)}
             </Text>
           </View>
@@ -623,6 +641,7 @@ export default function CalendarScreen() {
                       onOpenMenu={() => openMenu(entry)}
                       onOpenMedia={() => openMedia(entry)}
                       onOpenTask={() => openTask(entry)}
+                      onOpenGuest={() => router.push('/guests')}
                       onRemind={() =>
                         router.push({
                           pathname: '/reminders',

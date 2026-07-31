@@ -138,6 +138,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="guests"
+        options={{
+          title: '访客',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="media"
         options={{
           title: '观影',

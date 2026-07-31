@@ -52,6 +52,7 @@ export type ActivityModule =
   | 'inventory'
   | 'recipe'
   | 'media'
+  | 'guest'
   | 'system';
 
 export interface HouseholdActivity {
@@ -597,7 +598,7 @@ export interface CalendarEvent {
 export interface CalendarEntry {
   id: string;
   sourceId: string;
-  module: 'menu' | 'calendar' | 'task' | 'media';
+  module: 'menu' | 'calendar' | 'task' | 'media' | 'guest';
   date: string;
   startsAt: string | null;
   endsAt: string | null;
@@ -609,6 +610,8 @@ export interface CalendarEntry {
     | 'scheduled'
     | 'pending'
     | 'skipped'
+    | 'cancelled'
+    | 'completed'
     | HouseholdMediaStatus;
   targetPath: string;
   metadata: {
@@ -623,7 +626,62 @@ export interface CalendarEntry {
     recurrence?: TaskRecurrence;
     mediaType?: MediaType;
     year?: number | null;
+    hostMemberId?: string;
+    hostMemberName?: string;
+    guestCount?: number;
   };
+}
+
+export interface Guest {
+  id: string;
+  name: string;
+  avatarEmoji: string;
+  note: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
+
+export interface GuestInvitation {
+  id: string;
+  guestId: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreatedGuestInvitation extends GuestInvitation {
+  invitationToken: string;
+}
+
+export interface Visit {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string | null;
+  note: string | null;
+  status: VisitStatus;
+  hostMember: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
+  guests: {
+    id: string;
+    guest: Guest;
+    isAttending: boolean | null;
+    respondedAt: string | null;
+    invitation: GuestInvitation | null;
+  }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GuestInvitationPreview {
+  guest: Pick<Guest, 'name' | 'avatarEmoji'>;
+  householdName: string;
+  visit: Pick<Visit, 'title' | 'startsAt' | 'endsAt' | 'note'>;
+  response: { attending: boolean | null; respondedAt: string | null };
+  expiresAt: string;
 }
 
 export type TaskRecurrence = 'once' | 'daily' | 'weekly' | 'monthly';
@@ -668,6 +726,7 @@ export type NotificationModule =
   | 'calendar'
   | 'reminder'
   | 'media'
+  | 'guest'
   | 'system';
 
 export interface AppNotification {

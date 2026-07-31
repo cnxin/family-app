@@ -127,6 +127,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },
   { label: '采购与库存', href: '/shopping', icon: ShoppingCart, matches: (pathname) => pathname === '/shopping' },
   { label: '家庭任务', href: '/tasks', icon: ListTodo, matches: (pathname) => pathname === '/tasks' },
+  { label: '访客来访', href: '/guests', icon: UsersRound, matches: (pathname) => pathname === '/guests' },
   { label: '家庭日历', href: '/calendar', icon: CalendarDays, matches: (pathname) => pathname === '/calendar' },
   { label: '提醒中心', href: '/reminders', icon: BellRing, matches: (pathname) => pathname === '/reminders' },
   { label: '家庭活动', href: '/activity', icon: History, matches: (pathname) => pathname === '/activity' },

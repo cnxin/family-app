@@ -22,7 +22,7 @@ import {
 } from 'class-validator';
 import { Between, Repository } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { CalendarEvent, HouseholdMedia, MealType, Menu } from '../entities';
+import { CalendarEvent, HouseholdMedia, MealType, Menu, Visit } from '../entities';
 import { TasksModule, TasksService } from '../tasks/tasks.module';
 
 class CalendarRangeDto {
@@ -156,6 +156,7 @@ export class CalendarService {
     @InjectRepository(Menu) private readonly menus: Repository<Menu>,
     @InjectRepository(HouseholdMedia)
     private readonly householdMedia: Repository<HouseholdMedia>,
+    @InjectRepository(Visit) private readonly visits: Repository<Visit>,
     private readonly tasks: TasksService,
   ) {}
 
@@ -169,7 +170,7 @@ export class CalendarService {
       throw new BadRequestException('单次最多查询 371 天');
     }
 
-    const [events, menuRows, taskRows, mediaRows] = await Promise.all([
+    const [events, menuRows, taskRows, mediaRows, visits] = await Promise.all([
       this.events.find({
         where: { householdId: user.householdId, date: Between(start, end) },
         order: { date: 'ASC', startsAt: 'ASC', createdAt: 'ASC' },
@@ -208,6 +209,15 @@ export class CalendarService {
         },
         relations: { mediaTitle: true },
         order: { scheduledFor: 'ASC', updatedAt: 'DESC' },
+      }),
+      this.visits.find({
+        where: {
+          householdId: user.householdId,
+          status: 'scheduled',
+          startsAt: Between(new Date(`${start}T00:00:00.000Z`), new Date(`${end}T23:59:59.999Z`)),
+        },
+        relations: { hostMember: true, guests: { guest: true } },
+        order: { startsAt: 'ASC' },
       }),
     ]);
 
@@ -293,13 +303,30 @@ export class CalendarService {
           year: entry.mediaTitle.year,
         },
       })),
+      ...visits.map((visit) => ({
+        id: `visit:${visit.id}`,
+        sourceId: visit.id,
+        module: 'guest' as const,
+        date: visit.startsAt.toISOString().slice(0, 10),
+        startsAt: visit.startsAt.toISOString(),
+        endsAt: visit.endsAt?.toISOString() ?? null,
+        title: visit.title,
+        summary: visit.guests.map((entry) => entry.guest.name).join('、') || '访客来访',
+        status: visit.status,
+        targetPath: `/guests?visitId=${visit.id}`,
+        metadata: {
+          hostMemberId: visit.hostMemberId,
+          hostMemberName: visit.hostMember.name,
+          guestCount: visit.guests.length,
+        },
+      })),
     ];
 
     return rows.sort((left, right) => {
       const dateOrder = left.date.localeCompare(right.date);
       if (dateOrder) return dateOrder;
       if (left.module !== right.module) {
-        const moduleOrder = { calendar: 0, task: 1, media: 2, menu: 3 };
+        const moduleOrder = { calendar: 0, guest: 1, task: 2, media: 3, menu: 4 };
         return moduleOrder[left.module] - moduleOrder[right.module];
       }
       if (left.module === 'menu' && right.module === 'menu') {
@@ -382,7 +409,7 @@ export class CalendarController {
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CalendarEvent, Menu, HouseholdMedia]),
+    TypeOrmModule.forFeature([CalendarEvent, Menu, HouseholdMedia, Visit]),
     TasksModule,
   ],
   controllers: [CalendarController],

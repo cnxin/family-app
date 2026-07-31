@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { databaseOptions } from './database/database.options';
 import { DishesModule } from './dishes/dishes.module';
+import { GuestsModule } from './guests/guests.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { MenusModule } from './menus/menus.module';
 import { MediaModule } from './media/media.module';
@@ -24,6 +25,7 @@ import { UploadModule } from './upload/upload.module';
     AuthModule,
     CalendarModule,
     DishesModule,
+    GuestsModule,
     InventoryModule,
     MenusModule,
     MediaModule,

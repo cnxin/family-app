@@ -234,6 +234,7 @@ try {
   await runScript('scripts/smoke.mjs');
   await runScript('scripts/recipes.mjs');
   await runScript('scripts/calendar.mjs');
+  await runScript('scripts/guests.mjs');
   await runScript('scripts/tasks.mjs');
   await runScript('scripts/polls.mjs');
   await runScript('scripts/reminders.mjs');

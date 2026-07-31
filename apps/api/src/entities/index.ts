@@ -66,6 +66,7 @@ export type MediaRequestStatus =
 export type MediaLibraryProviderKind = 'plex' | 'emby';
 export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
+export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
 export type ActivityModule =
   | 'member'
   | 'invitation'
@@ -78,6 +79,7 @@ export type ActivityModule =
   | 'inventory'
   | 'recipe'
   | 'media'
+  | 'guest'
   | 'system';
 export type NotificationModule =
   | 'menu'
@@ -86,6 +88,7 @@ export type NotificationModule =
   | 'calendar'
   | 'reminder'
   | 'media'
+  | 'guest'
   | 'system';
 
 export interface DishRecipeStep {
@@ -1056,6 +1059,196 @@ export class CalendarEvent {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
+}
+
+@Entity('guests')
+@Index('IDX_guests_household_name', ['householdId', 'name'])
+export class Guest {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_guests_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  name: string;
+
+  @Column({ type: 'varchar', length: 16, default: '👋' })
+  avatarEmoji: string;
+
+  @Column({ type: 'varchar', length: 240, nullable: true })
+  note: string | null;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('visits')
+@Check('CHK_visits_status', `"status" IN ('scheduled', 'cancelled', 'completed')`)
+@Index('IDX_visits_household_start', ['householdId', 'startsAt'])
+export class Visit {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_visits_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'timestamptz' })
+  startsAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  endsAt: Date | null;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'varchar', default: 'scheduled' })
+  status: VisitStatus;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'hostMemberId',
+    foreignKeyConstraintName: 'FK_visits_host_member',
+  })
+  hostMember: Member;
+
+  @Column('uuid')
+  hostMemberId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_visits_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @OneToMany(() => VisitGuest, (visitGuest) => visitGuest.visit)
+  guests: VisitGuest[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('visit_guests')
+@Unique('UQ_visit_guests_visit_guest', ['visitId', 'guestId'])
+@Index('IDX_visit_guests_guest', ['guestId'])
+export class VisitGuest {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Visit, (visit) => visit.guests, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'visitId',
+    foreignKeyConstraintName: 'FK_visit_guests_visit',
+  })
+  visit: Visit;
+
+  @Column('uuid')
+  visitId: string;
+
+  @ManyToOne(() => Guest, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'guestId',
+    foreignKeyConstraintName: 'FK_visit_guests_guest',
+  })
+  guest: Guest;
+
+  @Column('uuid')
+  guestId: string;
+
+  @Column({ type: 'boolean', nullable: true })
+  isAttending: boolean | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  respondedAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('guest_invitations')
+@Index('UQ_guest_invitations_token_hash', ['tokenHash'], { unique: true })
+@Index('IDX_guest_invitations_visit_guest', ['visitId', 'guestId'])
+export class GuestInvitation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Visit, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'visitId',
+    foreignKeyConstraintName: 'FK_guest_invitations_visit',
+  })
+  visit: Visit;
+
+  @Column('uuid')
+  visitId: string;
+
+  @ManyToOne(() => Guest, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'guestId',
+    foreignKeyConstraintName: 'FK_guest_invitations_guest',
+  })
+  guest: Guest;
+
+  @Column('uuid')
+  guestId: string;
+
+  @Column({ type: 'varchar', length: 64, select: false })
+  tokenHash: string;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  revokedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  acceptedAt: Date | null;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_guest_invitations_created_by',
+  })
+  createdBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  createdById: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
 }
 
 @Entity('household_tasks')
@@ -2693,6 +2886,10 @@ export const ALL_ENTITIES = [
   MenuItem,
   MenuEvent,
   CalendarEvent,
+  Guest,
+  Visit,
+  VisitGuest,
+  GuestInvitation,
   HouseholdTask,
   HouseholdTaskInstance,
   Notification,

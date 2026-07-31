@@ -9,8 +9,11 @@ import type {
   AppNotification,
   CalendarEntry,
   CalendarEvent,
+  CreatedGuestInvitation,
   CreatedHouseholdInvitation,
   Dish,
+  Guest,
+  GuestInvitationPreview,
   HouseholdPoll,
   HouseholdReminder,
   DishRecipeVariant,
@@ -57,6 +60,8 @@ import type {
   TaskRecurrence,
   ViewingProgress,
   ViewingSession,
+  Visit,
+  VisitStatus,
 } from './types';
 
 export function useMembers(enabled = true) {
@@ -72,6 +77,134 @@ export function useManagedMembers(enabled = true) {
     queryKey: ['household-members'],
     queryFn: () => api<ManagedMember[]>('/household/members'),
     enabled,
+  });
+}
+
+export function useGuests(enabled = true) {
+  return useQuery({
+    queryKey: ['guests'],
+    queryFn: () => api<Guest[]>('/guests'),
+    enabled,
+  });
+}
+
+export function useCreateGuest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; avatarEmoji?: string; note?: string | null }) =>
+      api<Guest>('/guests', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['guests'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useUpdateGuest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; name?: string; avatarEmoji?: string; note?: string | null; isActive?: boolean }) =>
+      api<Guest>(`/guests/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['guests'] });
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useVisits(status?: VisitStatus, enabled = true) {
+  return useQuery({
+    queryKey: ['visits', status ?? 'all'],
+    queryFn: () => api<Visit[]>(`/visits${status ? `?status=${status}` : ''}`),
+    enabled,
+  });
+}
+
+export function useCreateVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      title: string;
+      startsAt: string;
+      endsAt?: string | null;
+      note?: string | null;
+      hostMemberId?: string;
+      guestIds: string[];
+    }) => api<Visit>('/visits', { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useUpdateVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      title?: string;
+      startsAt?: string;
+      endsAt?: string | null;
+      note?: string | null;
+      hostMemberId?: string;
+      status?: VisitStatus;
+      guestIds?: string[];
+    }) => api<Visit>(`/visits/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['calendar'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useCreateGuestInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ visitId, ...body }: { visitId: string; guestId: string; expiresInHours?: number }) =>
+      api<CreatedGuestInvitation>(`/visits/${visitId}/invitations`, { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useRevokeGuestInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<{ id: string; revoked: true }>(`/guest-invitations/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['visits'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useGuestInvitation(token: string | undefined) {
+  return useQuery({
+    queryKey: ['guest-invitation', token],
+    queryFn: () => api<GuestInvitationPreview>(`/guest-invitations/${encodeURIComponent(token ?? '')}`, { auth: false }),
+    enabled: Boolean(token),
+    retry: false,
+  });
+}
+
+export function useRespondGuestInvitation(token: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attending: boolean) =>
+      api<GuestInvitationPreview>(`/guest-invitations/${encodeURIComponent(token ?? '')}/response`, {
+        method: 'POST',
+        auth: false,
+        body: { attending },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['guest-invitation', token] });
+    },
   });
 }
 
