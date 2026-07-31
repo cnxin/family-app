@@ -285,12 +285,20 @@ async function testMoviePilot() {
   };
   const health = await provider.health();
   const request = await provider.requestMedia(media, 'contract-idempotency');
+  assert(
+    request.requestId === '88' && request.status === 'pending',
+    '创建 MoviePilot 订阅后直接返回待处理状态',
+  );
+  assert(
+    !methods.includes('GET /api/v1/subscribe/88') &&
+      !methods.includes('GET /api/v1/subscribe/media/themoviedb%3A550'),
+    '创建订阅不执行多余的前置或确认查询',
+  );
   const cancelled = await provider.cancelRequest(request.requestId);
   assert(
     health.available && health.message === 'MoviePilot v2.9.0',
     '读取 MoviePilot 版本',
   );
-  assert(request.requestId === '88' && request.status === 'processing', '创建并读取 MoviePilot 订阅');
   assert(cancelled.status === 'cancelled', '取消 MoviePilot 订阅');
   assert(methods.filter((value) => value === 'POST /api/v1/subscribe/').length === 1, '创建订阅只调用一次');
 }

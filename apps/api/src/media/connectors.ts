@@ -656,6 +656,7 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
     path: string,
     init: RequestInit = {},
     params?: URLSearchParams,
+    timeoutMs = 10000,
   ) {
     if (!this.config.baseUrl || !this.config.credential) {
       throw new MediaConnectorError('尚未配置地址或 API Key');
@@ -668,6 +669,7 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
       this.fetcher,
       buildUrl(this.config.baseUrl, path, params),
       { ...init, headers },
+      timeoutMs,
     );
   }
 
@@ -704,27 +706,51 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
       throw new MediaConnectorError('剧集订阅需要选择季数');
     }
     const mediaKey = `themoviedb:${tmdb.externalId}`;
-    const existing = asRecord(
-      await this.request(
-        `/api/v1/subscribe/media/${encodeURIComponent(mediaKey)}`,
-        {},
-        season ? new URLSearchParams({ season: String(season) }) : undefined,
-      ),
-    ) as MoviePilotSubscription;
-    if (existing.id) return this.present(existing, media.externalRefs);
+    const mediaType = media.type === 'movie' ? '电影' : '电视剧';
+    let response: JsonRecord;
+    try {
+      response = asRecord(
+        await this.request(
+          '/api/v1/subscribe/',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              name: media.title,
+              year: media.year ? String(media.year) : undefined,
+              type: mediaType,
+              tmdbid: Number(tmdb.externalId),
+              season,
+            }),
+          },
+          undefined,
+          30000,
+        ),
+      );
+    } catch (error) {
+      if (
+        !(error instanceof MediaConnectorError) ||
+        error.message !== '连接超时'
+      ) {
+        throw error;
+      }
 
-    const response = asRecord(
-      await this.request('/api/v1/subscribe/', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: media.title,
-          year: media.year ? String(media.year) : undefined,
-          type: media.type === 'movie' ? '电影' : '电视剧',
-          tmdbid: Number(tmdb.externalId),
-          season,
-        }),
-      }),
-    );
+      // The POST may have completed in MoviePilot after the client timed out.
+      try {
+        const existing = asRecord(
+          await this.request(
+            `/api/v1/subscribe/media/${encodeURIComponent(mediaKey)}`,
+            {},
+            season ? new URLSearchParams({ season: String(season) }) : undefined,
+          ),
+        ) as MoviePilotSubscription;
+        if (existing.id) return this.present(existing, media.externalRefs);
+      } catch {
+        // Preserve the actionable timeout below when confirmation also fails.
+      }
+      throw new MediaConnectorError(
+        '订阅提交响应超时，请稍后重新提交以确认结果',
+      );
+    }
     if (response.success !== true) {
       throw new MediaConnectorError(
         asString(response.message) ?? 'MoviePilot 创建订阅失败',
@@ -732,8 +758,15 @@ export class MoviePilotAutomationProvider implements MediaAutomationProvider {
     }
     const id = asString(asRecord(response.data).id);
     if (!id) throw new MediaConnectorError('MoviePilot 未返回订阅编号');
-    const created = asRecord(await this.request(`/api/v1/subscribe/${id}`));
-    return this.present({ ...created, id: Number(id) }, media.externalRefs);
+    return this.present(
+      {
+        id: Number(id),
+        state: 'N',
+        type: mediaType,
+        tmdbid: Number(tmdb.externalId),
+      },
+      media.externalRefs,
+    );
   }
 
   async getRequest(requestId: string): Promise<MediaAutomationRequest | null> {
