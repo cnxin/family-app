@@ -9,6 +9,7 @@ import {
   Clapperboard,
   CookingPot,
   ListTodo,
+  UsersRound,
   Vote,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
@@ -41,6 +42,7 @@ const MODULE_LABELS: Record<NotificationModule, string> = {
   calendar: '日历',
   reminder: '提醒',
   media: '观影',
+  guest: '访客',
   system: '系统',
 };
 
@@ -62,6 +64,7 @@ function NotificationIcon({ module }: { module: NotificationModule }) {
   if (module === 'calendar') return <CalendarDays {...props} />;
   if (module === 'reminder') return <BellRing {...props} />;
   if (module === 'media') return <Clapperboard {...props} color={c.green} />;
+  if (module === 'guest') return <UsersRound {...props} color={c.blue} />;
   return <Bell {...props} />;
 }
 
@@ -85,6 +88,8 @@ function NotificationRow({
           ? c.accentSoft
           : notification.module === 'media'
             ? c.greenSoft
+            : notification.module === 'guest'
+              ? c.blueSoft
         : c.tintSoft;
   return (
     <View

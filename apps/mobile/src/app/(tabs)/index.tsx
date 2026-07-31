@@ -7,6 +7,7 @@ import {
   Film,
   ListTodo,
   ShoppingCart,
+  UsersRound,
   Vote,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -32,6 +33,7 @@ import {
   useReminders,
   useShoppingList,
   useTasks,
+  useVisits,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
@@ -162,6 +164,7 @@ export default function HomeScreen() {
   const { data: polls } = usePolls();
   const { data: media } = useMedia('all');
   const { data: reminders, isLoading: remindersLoading } = useReminders('scheduled');
+  const { data: visits } = useVisits('scheduled');
 
   const menuItems =
     menus?.reduce(
@@ -175,6 +178,7 @@ export default function HomeScreen() {
   const activeMedia =
     media?.filter((entry) => entry.status !== 'completed' && entry.status !== 'dropped').length ?? 0;
   const upcomingReminder = reminders?.[0];
+  const upcomingVisits = visits?.filter((visit) => new Date(visit.startsAt) >= new Date()).length ?? 0;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -254,6 +258,15 @@ export default function HomeScreen() {
               icon={ListTodo}
               label="家庭任务"
               status={`${pendingTasks.length} 项待办`}
+            />
+            <ModuleCard
+              background={c.blueSoft}
+              color={c.blue}
+              desktop={desktop}
+              href="/guests"
+              icon={UsersRound}
+              label="访客来访"
+              status={`${upcomingVisits} 次待安排`}
             />
           </View>
 
