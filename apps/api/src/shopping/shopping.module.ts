@@ -20,10 +20,10 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { Menu, ShoppingItem } from '../entities';
+import { InventoryItem, Menu, ShoppingItem } from '../entities';
 
 class GenerateDto {
   @IsISO8601()
@@ -94,7 +94,12 @@ export class ShoppingService {
 
       const merged = new Map<
         string,
-        { ingredientId: string; unit: string; qty: number }
+        {
+          ingredientId: string;
+          unit: string;
+          requiredQty: number;
+          isPantryStaple: boolean;
+        }
       >();
       for (const item of wanted) {
         const recipeIngredients = item.recipeSnapshot
@@ -106,16 +111,49 @@ export class ShoppingService {
               unit: dishIngredient.unit,
             }));
         for (const ingredient of recipeIngredients) {
-          if (ingredient.isPantryStaple) continue;
           const key = `${ingredient.ingredientId}|${ingredient.unit}`;
           const previous = merged.get(key);
           merged.set(key, {
             ingredientId: ingredient.ingredientId,
             unit: ingredient.unit,
-            qty: (previous?.qty ?? 0) + Number(ingredient.quantity),
+            requiredQty:
+              (previous?.requiredQty ?? 0) + Number(ingredient.quantity),
+            isPantryStaple:
+              (previous?.isPantryStaple ?? true) &&
+              ingredient.isPantryStaple,
           });
         }
       }
+
+      const inventory = merged.size
+        ? await manager.getRepository(InventoryItem).find({
+            where: {
+              householdId,
+              ingredientId: In(
+                [...new Set([...merged.values()].map((item) => item.ingredientId))],
+              ),
+            },
+          })
+        : [];
+      const inventoryByKey = new Map(
+        inventory.map((item) => [
+          `${item.ingredientId}|${item.unit}`,
+          Number(item.quantity),
+        ]),
+      );
+      const suggested = [...merged.entries()].flatMap(([key, entry]) => {
+        const hasLinkedInventory = inventoryByKey.has(key);
+        if (entry.isPantryStaple && !hasLinkedInventory) return [];
+        const requiredQty = Math.round(entry.requiredQty * 100) / 100;
+        const availableQty = inventoryByKey.get(key) ?? 0;
+        const totalQty = Math.max(
+          0,
+          Math.round((requiredQty - availableQty) * 100) / 100,
+        );
+        return totalQty > 0
+          ? [{ ...entry, requiredQty, availableQty, totalQty }]
+          : [];
+      });
 
       const oldAuto = await items.find({
         where: { householdId, date, source: 'auto' },
@@ -127,12 +165,14 @@ export class ShoppingService {
       );
       await items.delete({ householdId, date, source: 'auto' });
       await items.save(
-        [...merged.values()].map((entry) =>
+        suggested.map((entry) =>
           items.create({
             householdId,
             date,
             ingredientId: entry.ingredientId,
-            totalQty: String(entry.qty),
+            requiredQty: String(entry.requiredQty),
+            availableQty: String(entry.availableQty),
+            totalQty: String(entry.totalQty),
             unit: entry.unit,
             checked: checkedKeys.has(`${entry.ingredientId}|${entry.unit}`),
             source: 'auto',

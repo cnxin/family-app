@@ -258,6 +258,8 @@ export interface ShoppingItem {
   ingredient: Ingredient | null;
   customName: string | null;
   totalQty: string | null;
+  requiredQty: string | null;
+  availableQty: string | null;
   unit: string | null;
   checked: boolean;
   source: 'auto' | 'manual';
@@ -265,6 +267,8 @@ export interface ShoppingItem {
 
 export interface InventoryItem {
   id: string;
+  ingredientId: string | null;
+  ingredient: Ingredient | null;
   name: string;
   category: InventoryCategory;
   quantity: string;

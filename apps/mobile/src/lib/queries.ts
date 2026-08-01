@@ -1474,6 +1474,7 @@ export function useDeleteShoppingItem() {
 
 export interface InventoryUpsertInput {
   id?: string;
+  ingredientId?: string | null;
   name: string;
   category: InventoryCategory;
   quantity: number;

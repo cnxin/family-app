@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Link2,
   Minus,
   Package,
   Plus,
@@ -24,11 +25,12 @@ import { todayStr } from '../lib/date';
 import {
   useAddManualShoppingItem,
   useDeleteInventoryItem,
+  useIngredients,
   useInventory,
   useShoppingList,
   useUpsertInventoryItem,
 } from '../lib/queries';
-import type { InventoryCategory, InventoryItem } from '../lib/types';
+import type { Ingredient, InventoryCategory, InventoryItem } from '../lib/types';
 import { radius, type as t, useTheme } from '../lib/theme';
 import {
   Card,
@@ -60,6 +62,7 @@ const CATEGORY_EMOJI: Record<InventoryCategory, string> = {
 function inventoryInput(item: InventoryItem, quantity = Number(item.quantity)) {
   return {
     id: item.id,
+    ingredientId: item.ingredientId,
     name: item.name,
     category: item.category,
     quantity,
@@ -67,6 +70,13 @@ function inventoryInput(item: InventoryItem, quantity = Number(item.quantity)) {
     lowStockThreshold: Number(item.lowStockThreshold),
     restockQuantity: Number(item.restockQuantity),
   };
+}
+
+function inventoryCategoryForIngredient(ingredient: Ingredient): InventoryCategory {
+  if (ingredient.category === '调料' || ingredient.category === '主食') {
+    return ingredient.category;
+  }
+  return '其他';
 }
 
 function InventoryEditor({
@@ -80,6 +90,11 @@ function InventoryEditor({
 }) {
   const c = useTheme();
   const upsert = useUpsertInventoryItem();
+  const { data: ingredients } = useIngredients();
+  const [ingredientId, setIngredientId] = useState<string | null>(
+    item?.ingredientId ?? null,
+  );
+  const [ingredientSearch, setIngredientSearch] = useState('');
   const [name, setName] = useState(item?.name ?? '');
   const [category, setCategory] = useState<InventoryCategory>(item?.category ?? '调料');
   const [quantity, setQuantity] = useState(item ? String(Number(item.quantity)) : '0');
@@ -91,6 +106,20 @@ function InventoryEditor({
     item ? String(Number(item.restockQuantity)) : '1',
   );
   const [error, setError] = useState<string | null>(null);
+  const selectedIngredient =
+    ingredients?.find((ingredient) => ingredient.id === ingredientId) ??
+    (ingredientId && item?.ingredientId === ingredientId ? item.ingredient : null);
+  const ingredientResults = useMemo(() => {
+    const keyword = ingredientSearch.trim().toLocaleLowerCase('zh-CN');
+    if (!keyword) return [];
+    return (ingredients ?? [])
+      .filter(
+        (ingredient) =>
+          ingredient.id !== ingredientId &&
+          ingredient.name.toLocaleLowerCase('zh-CN').includes(keyword),
+      )
+      .slice(0, 8);
+  }, [ingredientId, ingredientSearch, ingredients]);
 
   const values = [quantity, threshold, restockQuantity].map(Number);
   const valid =
@@ -107,6 +136,7 @@ function InventoryEditor({
     try {
       await upsert.mutateAsync({
         id: item?.id,
+        ingredientId,
         name: name.trim(),
         category,
         quantity: values[0],
@@ -158,10 +188,90 @@ function InventoryEditor({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>关联食材</Text>
+            {selectedIngredient ? (
+              <View
+                style={[
+                  styles.linkedIngredient,
+                  { backgroundColor: c.tintSoft, borderColor: c.tint },
+                ]}
+              >
+                <Link2 color={c.tint} size={17} />
+                <View style={styles.linkedIngredientText}>
+                  <Text style={[t.body, { color: c.label, fontWeight: '700' }]}>
+                    {selectedIngredient.name}
+                  </Text>
+                  <Text style={[t.caption, { color: c.secondaryLabel }]}>
+                    {selectedIngredient.category} · {selectedIngredient.defaultUnit}
+                  </Text>
+                </View>
+                <PressableScale
+                  accessibilityLabel={`取消关联${selectedIngredient.name}`}
+                  haptic={false}
+                  onPress={() => {
+                    setIngredientId(null);
+                    setIngredientSearch('');
+                  }}
+                  style={styles.unlinkIngredient}
+                >
+                  <X color={c.secondaryLabel} size={17} />
+                </PressableScale>
+              </View>
+            ) : (
+              <>
+                <TextInput
+                  accessibilityLabel="搜索关联食材"
+                  autoFocus={!item}
+                  onChangeText={setIngredientSearch}
+                  placeholder="搜索菜谱中的食材（可选）"
+                  placeholderTextColor={c.tertiaryLabel}
+                  style={[styles.input, t.body, { backgroundColor: c.fill, color: c.label }]}
+                  value={ingredientSearch}
+                />
+                {ingredientSearch.trim() ? (
+                  <View style={[styles.ingredientResults, { borderColor: c.separator }]}>
+                    {ingredientResults.length ? (
+                      ingredientResults.map((ingredient) => (
+                        <Pressable
+                          accessibilityLabel={`关联食材${ingredient.name}`}
+                          accessibilityRole="button"
+                          key={ingredient.id}
+                          onPress={() => {
+                            setIngredientId(ingredient.id);
+                            setIngredientSearch('');
+                            setName(ingredient.name);
+                            setUnit(ingredient.defaultUnit);
+                            setCategory(inventoryCategoryForIngredient(ingredient));
+                          }}
+                          style={({ pressed }) => [
+                            styles.ingredientResult,
+                            {
+                              backgroundColor: pressed ? c.fill : c.card,
+                              borderBottomColor: c.separator,
+                            },
+                          ]}
+                        >
+                          <Text style={[t.body, { color: c.label, fontWeight: '700' }]}>
+                            {ingredient.name}
+                          </Text>
+                          <Text style={[t.caption, { color: c.secondaryLabel }]}>
+                            {ingredient.category} · {ingredient.defaultUnit}
+                          </Text>
+                        </Pressable>
+                      ))
+                    ) : (
+                      <Text style={[t.footnote, styles.noIngredientResult, { color: c.secondaryLabel }]}>
+                        没有匹配的食材
+                      </Text>
+                    )}
+                  </View>
+                ) : null}
+              </>
+            )}
+
             <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>名称</Text>
             <TextInput
               accessibilityLabel="库存名称"
-              autoFocus={!item}
               onChangeText={setName}
               placeholder="比如：大米、酱油、牛奶"
               placeholderTextColor={c.tertiaryLabel}
@@ -463,6 +573,7 @@ export function InventoryPanel() {
                           <Text style={[t.body, { color: c.label, fontWeight: '700' }]} numberOfLines={1}>
                             {item.name}
                           </Text>
+                          {item.ingredient ? <Link2 color={c.tint} size={13} /> : null}
                           {low ? (
                             <View style={[styles.lowBadge, { backgroundColor: c.orange }]}>
                               <Text style={styles.lowBadgeText}>待补货</Text>
@@ -654,6 +765,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 0,
   },
+  linkedIngredient: {
+    minHeight: 50,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingLeft: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  linkedIngredientText: { flex: 1, minWidth: 0 },
+  unlinkIngredient: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ingredientResults: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  ingredientResult: {
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+  },
+  noIngredientResult: { paddingHorizontal: 12, paddingVertical: 14 },
   categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   categoryChip: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 7 },
   formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

@@ -3025,6 +3025,12 @@ export class ShoppingItem {
   @Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
   totalQty: string | null;
 
+  @Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
+  requiredQty: string | null;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2, nullable: true })
+  availableQty: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   unit: string | null;
 
@@ -3038,6 +3044,10 @@ export class ShoppingItem {
 @Entity('inventory_items')
 @Unique('UQ_inventory_household_name', ['householdId', 'name'])
 @Index('IDX_inventory_household', ['householdId'])
+@Index('UQ_inventory_household_ingredient_unit', ['householdId', 'ingredientId', 'unit'], {
+  unique: true,
+  where: '"ingredientId" IS NOT NULL',
+})
 export class InventoryItem {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -3051,6 +3061,16 @@ export class InventoryItem {
 
   @Column('uuid')
   householdId: string;
+
+  @ManyToOne(() => Ingredient, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'ingredientId',
+    foreignKeyConstraintName: 'FK_inventory_items_ingredient',
+  })
+  ingredient: Ingredient | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  ingredientId: string | null;
 
   @Column()
   name: string;

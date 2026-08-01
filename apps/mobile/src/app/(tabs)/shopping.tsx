@@ -31,10 +31,22 @@ import {
 import { radius, type as t, useTheme } from '../../lib/theme';
 import type { ShoppingItem } from '../../lib/types';
 
+function quantityLabel(value: string | null) {
+  return value == null ? '0' : String(Number(value));
+}
+
 function ItemRow({ item, onDelete }: { item: ShoppingItem; onDelete: () => void }) {
   const c = useTheme();
   const check = useCheckShoppingItem();
   const name = item.ingredient?.name ?? item.customName ?? '未知';
+  const hasInventoryBreakdown =
+    item.source === 'auto' &&
+    item.requiredQty != null &&
+    item.availableQty != null;
+  const unit = item.unit ? ` ${item.unit}` : '';
+  const inventoryBreakdown = hasInventoryBreakdown
+    ? `需要 ${quantityLabel(item.requiredQty)}${unit} · 库存 ${quantityLabel(item.availableQty)}${unit} · 建议买 ${quantityLabel(item.totalQty)}${unit}`
+    : null;
 
   return (
     <View style={[styles.itemRow, { borderBottomColor: c.separator }]}>
@@ -64,20 +76,31 @@ function ItemRow({ item, onDelete }: { item: ShoppingItem; onDelete: () => void 
             <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>✓</Text>
           ) : null}
         </View>
-        <Text
-          style={[
-            t.body,
-            {
-              flex: 1,
-              marginLeft: 12,
-              color: item.checked ? c.tertiaryLabel : c.label,
-              textDecorationLine: item.checked ? 'line-through' : 'none',
-            },
-          ]}
-        >
-          {name}
-        </Text>
-        {item.totalQty ? (
+        <View style={styles.itemText}>
+          <Text
+            style={[
+              t.body,
+              {
+                color: item.checked ? c.tertiaryLabel : c.label,
+                textDecorationLine: item.checked ? 'line-through' : 'none',
+              },
+            ]}
+          >
+            {name}
+          </Text>
+          {hasInventoryBreakdown ? (
+            <Text
+              style={[
+                t.caption,
+                styles.itemBreakdown,
+                { color: item.checked ? c.tertiaryLabel : c.secondaryLabel },
+              ]}
+            >
+              {inventoryBreakdown}
+            </Text>
+          ) : null}
+        </View>
+        {!hasInventoryBreakdown && item.totalQty ? (
           <Text style={[t.subhead, { color: c.secondaryLabel }]}>
             {Number(item.totalQty)} {item.unit ?? ''}
           </Text>
@@ -362,6 +385,8 @@ const styles = StyleSheet.create({
     paddingLeft: 14,
     paddingVertical: 12,
   },
+  itemText: { flex: 1, minWidth: 0, marginLeft: 12 },
+  itemBreakdown: { marginTop: 3, lineHeight: 17 },
   deleteButton: {
     width: 44,
     height: 44,

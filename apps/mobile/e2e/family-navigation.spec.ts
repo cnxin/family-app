@@ -1381,6 +1381,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   ).toBeVisible();
   await page.getByRole('button', { name: '家庭库存', exact: true }).click();
   await expect(page.getByRole('button', { name: '新增库存' })).toBeVisible();
+  await page.getByRole('button', { name: '新增库存', exact: true }).click();
+  await expect(page.getByLabel('搜索关联食材')).toBeVisible();
+  await page.getByLabel('搜索关联食材').fill('番茄');
+  await page.getByRole('button', { name: '关联食材番茄', exact: true }).click();
+  await expect(page.getByLabel('库存名称')).toHaveValue('番茄');
+  await expect(page.getByLabel('库存单位')).toHaveValue('个');
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
   await expectNoHorizontalOverflow(page);
 
   await openSection(page, testInfo.project.name, 'calendar');
