@@ -26,6 +26,17 @@ export type MenuEventType =
   | 'meal_chef_assigned'
   | 'menu_completed';
 export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
+export type InventoryTransactionType =
+  | 'receipt'
+  | 'consumption'
+  | 'adjustment'
+  | 'reversal';
+export type InventoryTransactionSourceType =
+  | 'shopping_item'
+  | 'menu'
+  | 'inventory_item'
+  | 'manual_adjustment'
+  | 'inventory_transaction';
 export type DishSkillLevel = 'learning' | 'can_cook' | 'signature';
 export type TaskRecurrence = 'once' | 'daily' | 'weekly' | 'monthly';
 export type TaskInstanceStatus = 'pending' | 'done' | 'skipped';
@@ -3097,6 +3108,125 @@ export class InventoryItem {
   updatedAt: Date;
 }
 
+@Entity('inventory_transactions')
+@Check(
+  'CHK_inventory_transactions_type',
+  `"type" IN ('receipt', 'consumption', 'adjustment', 'reversal')`,
+)
+@Check(
+  'CHK_inventory_transactions_source_type',
+  `"sourceType" IN ('shopping_item', 'menu', 'inventory_item', 'manual_adjustment', 'inventory_transaction')`,
+)
+@Check(
+  'CHK_inventory_transactions_quantities',
+  `"quantityBefore" >= 0 AND "quantityAfter" >= 0 AND "delta" <> 0 AND "quantityAfter" = "quantityBefore" + "delta"`,
+)
+@Check(
+  'CHK_inventory_transactions_reversal',
+  `("type" = 'reversal' AND "reversesTransactionId" IS NOT NULL) OR ("type" <> 'reversal' AND "reversesTransactionId" IS NULL)`,
+)
+@Index(
+  'UQ_inventory_transactions_household_idempotency',
+  ['householdId', 'idempotencyKey'],
+  { unique: true },
+)
+@Index('IDX_inventory_transactions_household_created', [
+  'householdId',
+  'createdAt',
+])
+@Index('IDX_inventory_transactions_item_created', [
+  'inventoryItemId',
+  'createdAt',
+])
+@Index('IDX_inventory_transactions_operation', ['householdId', 'operationId'])
+@Index('IDX_inventory_transactions_source', [
+  'householdId',
+  'sourceType',
+  'sourceId',
+])
+@Index(
+  'UQ_inventory_transactions_reversal',
+  ['reversesTransactionId'],
+  { unique: true, where: '"reversesTransactionId" IS NOT NULL' },
+)
+export class InventoryTransaction {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_inventory_transactions_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => InventoryItem, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'inventoryItemId',
+    foreignKeyConstraintName: 'FK_inventory_transactions_item',
+  })
+  inventoryItem: InventoryItem;
+
+  @Column('uuid')
+  inventoryItemId: string;
+
+  @Column('uuid')
+  operationId: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  type: InventoryTransactionType;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantityBefore: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  delta: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantityAfter: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  unit: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_inventory_transactions_actor',
+  })
+  actor: Member;
+
+  @Column('uuid')
+  actorId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  actorName: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: InventoryTransactionSourceType;
+
+  @Column('uuid')
+  sourceId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @ManyToOne(() => InventoryTransaction, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'reversesTransactionId',
+    foreignKeyConstraintName: 'FK_inventory_transactions_reverses',
+  })
+  reversesTransaction: InventoryTransaction | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reversesTransactionId: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  createdAt: Date;
+}
+
 export const ALL_ENTITIES = [
   Account,
   Household,
@@ -3146,4 +3276,5 @@ export const ALL_ENTITIES = [
   ReminderRecipient,
   ShoppingItem,
   InventoryItem,
+  InventoryTransaction,
 ];

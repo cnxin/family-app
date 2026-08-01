@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -10,22 +12,32 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { Type } from 'class-transformer';
 import {
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { Ingredient, InventoryCategory, InventoryItem } from '../entities';
+import {
+  Ingredient,
+  InventoryCategory,
+  InventoryItem,
+  InventoryTransaction,
+} from '../entities';
+import { InventoryTransactionsService } from './inventory-transactions.service';
 
 function isUniqueViolation(error: unknown) {
   const candidate = error as {
@@ -110,6 +122,36 @@ class UpdateInventoryItemDto {
   @IsNumber()
   @Min(0.01)
   restockQuantity?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  idempotencyKey?: string;
+}
+
+class InventoryTransactionsQueryDto {
+  @IsOptional()
+  @IsUUID()
+  inventoryItemId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+class ShoppingInventoryPreviewDto {
+  @IsOptional()
+  @IsUUID()
+  inventoryItemId?: string;
+}
+
+class ConfirmShoppingReceiptDto {
+  @IsOptional()
+  @IsUUID()
+  inventoryItemId?: string;
 }
 
 @Injectable()
@@ -117,8 +159,10 @@ export class InventoryService {
   constructor(
     @InjectRepository(InventoryItem)
     private readonly items: Repository<InventoryItem>,
-    @InjectRepository(Ingredient)
-    private readonly ingredients: Repository<Ingredient>,
+    @InjectRepository(InventoryTransaction)
+    private readonly transactions: Repository<InventoryTransaction>,
+    private readonly dataSource: DataSource,
+    private readonly ledger: InventoryTransactionsService,
   ) {}
 
   list(householdId: string) {
@@ -128,119 +172,197 @@ export class InventoryService {
     });
   }
 
-  async create(dto: CreateInventoryItemDto, householdId: string) {
+  async create(dto: CreateInventoryItemDto, user: JwtUser) {
     const name = dto.name.trim();
     const unit = dto.unit.trim();
-    if (await this.items.findOneBy({ householdId, name })) {
-      throw new ConflictException(`库存中已经有「${name}」`);
-    }
-    if (dto.ingredientId) {
-      await this.assertIngredient(dto.ingredientId, householdId);
-      await this.assertUniqueIngredientUnit(
-        dto.ingredientId,
-        unit,
-        householdId,
-      );
-    }
-    return this.saveAndReload(
-      this.items.create({
-        ...dto,
-        householdId,
-        ingredientId: dto.ingredientId ?? null,
-        name,
-        unit,
-        quantity: String(dto.quantity),
-        lowStockThreshold: String(dto.lowStockThreshold),
-        restockQuantity: String(dto.restockQuantity),
-      }),
-      householdId,
-    );
-  }
-
-  async update(id: string, dto: UpdateInventoryItemDto, householdId: string) {
-    const item = await this.items.findOneBy({ id, householdId });
-    if (!item) throw new NotFoundException('库存项不存在');
-
-    if (dto.name != null) {
-      const name = dto.name.trim();
-      const duplicate = await this.items.findOneBy({ householdId, name });
-      if (duplicate && duplicate.id !== id) {
-        throw new ConflictException(`库存中已经有「${name}」`);
-      }
-      item.name = name;
-    }
-    const nextIngredientId =
-      dto.ingredientId === undefined ? item.ingredientId : dto.ingredientId;
-    const nextUnit = dto.unit == null ? item.unit : dto.unit.trim();
-    let nextIngredient: Ingredient | null = null;
-    if (nextIngredientId) {
-      nextIngredient = await this.assertIngredient(
-        nextIngredientId,
-        householdId,
-      );
-      await this.assertUniqueIngredientUnit(
-        nextIngredientId,
-        nextUnit,
-        householdId,
-        id,
-      );
-    }
-    if (dto.ingredientId !== undefined) {
-      item.ingredientId = dto.ingredientId;
-      item.ingredient = nextIngredient;
-    }
-    if (dto.category != null) item.category = dto.category;
-    if (dto.quantity != null) item.quantity = String(dto.quantity);
-    if (dto.unit != null) item.unit = dto.unit.trim();
-    if (dto.lowStockThreshold != null) {
-      item.lowStockThreshold = String(dto.lowStockThreshold);
-    }
-    if (dto.restockQuantity != null) {
-      item.restockQuantity = String(dto.restockQuantity);
-    }
-    return this.saveAndReload(item, householdId);
-  }
-
-  private async saveAndReload(item: InventoryItem, householdId: string) {
     try {
-      await this.items.save(item);
+      const id = await this.dataSource.transaction(async (manager) => {
+        const items = manager.getRepository(InventoryItem);
+        if (await items.findOneBy({ householdId: user.householdId, name })) {
+          throw new ConflictException(`库存中已经有「${name}」`);
+        }
+        if (dto.ingredientId) {
+          const ingredient = await manager.getRepository(Ingredient).findOneBy({
+            id: dto.ingredientId,
+            householdId: user.householdId,
+          });
+          if (!ingredient) throw new NotFoundException('关联食材不存在');
+          const duplicate = await items.findOneBy({
+            householdId: user.householdId,
+            ingredientId: dto.ingredientId,
+            unit,
+          });
+          if (duplicate) {
+            throw new ConflictException('这个食材和单位已经关联了库存');
+          }
+        }
+        const item = await items.save(
+          items.create({
+            householdId: user.householdId,
+            ingredientId: dto.ingredientId ?? null,
+            name,
+            category: dto.category,
+            unit,
+            quantity: String(dto.quantity),
+            lowStockThreshold: String(dto.lowStockThreshold),
+            restockQuantity: String(dto.restockQuantity),
+          }),
+        );
+        if (dto.quantity > 0) {
+          await manager.getRepository(InventoryTransaction).save(
+            this.ledger.createTransaction(manager, {
+              householdId: user.householdId,
+              inventoryItemId: item.id,
+              operationId: randomUUID(),
+              type: 'adjustment',
+              quantityBefore: 0,
+              delta: dto.quantity,
+              quantityAfter: dto.quantity,
+              unit,
+              actor: user,
+              sourceType: 'inventory_item',
+              sourceId: item.id,
+              idempotencyKey: `inventory-item:${item.id}:initial`,
+            }),
+          );
+        }
+        return item.id;
+      });
+      return this.reload(id, user.householdId);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException('同名库存或食材单位关联已经存在');
       }
       throw error;
     }
-    const saved = await this.items.findOneBy({ id: item.id, householdId });
+  }
+
+  async update(id: string, dto: UpdateInventoryItemDto, user: JwtUser) {
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const items = manager.getRepository(InventoryItem);
+        const item = await items
+          .createQueryBuilder('item')
+          .where('item.id = :id', { id })
+          .andWhere('item.householdId = :householdId', {
+            householdId: user.householdId,
+          })
+          .setLock('pessimistic_write')
+          .getOne();
+        if (!item) throw new NotFoundException('库存项不存在');
+
+        const quantityBefore = Number(item.quantity);
+        const quantityAfter = dto.quantity ?? quantityBefore;
+        const quantityChanged = quantityAfter !== quantityBefore;
+        const adjustmentKey = dto.idempotencyKey?.trim();
+        if (adjustmentKey) {
+          const existingAdjustment = await manager
+            .getRepository(InventoryTransaction)
+            .findOneBy({
+              householdId: user.householdId,
+              idempotencyKey: `manual-adjustment:${adjustmentKey}`,
+            });
+          if (existingAdjustment) {
+            if (
+              existingAdjustment.sourceId === item.id &&
+              Number(existingAdjustment.quantityAfter) === quantityAfter
+            ) {
+              return;
+            }
+            throw new ConflictException('这个幂等键已经用于其他库存变化');
+          }
+        }
+        const nextUnit = dto.unit == null ? item.unit : dto.unit.trim();
+        if (nextUnit !== item.unit && quantityChanged) {
+          throw new ConflictException('不能同时修改库存单位和数量');
+        }
+        if (nextUnit !== item.unit && quantityBefore !== 0) {
+          throw new ConflictException('库存归零后才能修改单位');
+        }
+        if (quantityChanged && !adjustmentKey) {
+          throw new BadRequestException('修改库存数量需要幂等键');
+        }
+
+        if (dto.name != null) {
+          const name = dto.name.trim();
+          const duplicate = await items.findOneBy({
+            householdId: user.householdId,
+            name,
+          });
+          if (duplicate && duplicate.id !== id) {
+            throw new ConflictException(`库存中已经有「${name}」`);
+          }
+          item.name = name;
+        }
+        const nextIngredientId =
+          dto.ingredientId === undefined ? item.ingredientId : dto.ingredientId;
+        if (nextIngredientId) {
+          const ingredient = await manager.getRepository(Ingredient).findOneBy({
+            id: nextIngredientId,
+            householdId: user.householdId,
+          });
+          if (!ingredient) throw new NotFoundException('关联食材不存在');
+          const duplicate = await items.findOneBy({
+            householdId: user.householdId,
+            ingredientId: nextIngredientId,
+            unit: nextUnit,
+          });
+          if (duplicate && duplicate.id !== id) {
+            throw new ConflictException('这个食材和单位已经关联了库存');
+          }
+        }
+        if (dto.ingredientId !== undefined) {
+          item.ingredientId = dto.ingredientId;
+        }
+        if (dto.category != null) item.category = dto.category;
+        if (dto.unit != null) item.unit = nextUnit;
+        if (dto.lowStockThreshold != null) {
+          item.lowStockThreshold = String(dto.lowStockThreshold);
+        }
+        if (dto.restockQuantity != null) {
+          item.restockQuantity = String(dto.restockQuantity);
+        }
+        if (quantityChanged) item.quantity = String(quantityAfter);
+        await items.save(item);
+
+        if (quantityChanged) {
+          await manager.getRepository(InventoryTransaction).save(
+            this.ledger.createTransaction(manager, {
+              householdId: user.householdId,
+              inventoryItemId: item.id,
+              operationId: randomUUID(),
+              type: 'adjustment',
+              quantityBefore,
+              delta: quantityAfter - quantityBefore,
+              quantityAfter,
+              unit: item.unit,
+              actor: user,
+              sourceType: 'manual_adjustment',
+              sourceId: item.id,
+              idempotencyKey: `manual-adjustment:${adjustmentKey!}`,
+            }),
+          );
+        }
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('同名库存或食材单位关联已经存在');
+      }
+      throw error;
+    }
+    return this.reload(id, user.householdId);
+  }
+
+  private async reload(id: string, householdId: string) {
+    const saved = await this.items.findOneBy({ id, householdId });
     if (!saved) throw new NotFoundException('库存项不存在');
     return saved;
   }
 
-  private async assertIngredient(ingredientId: string, householdId: string) {
-    const ingredient = await this.ingredients.findOneBy({
-      id: ingredientId,
-      householdId,
-    });
-    if (!ingredient) throw new NotFoundException('关联食材不存在');
-    return ingredient;
-  }
-
-  private async assertUniqueIngredientUnit(
-    ingredientId: string,
-    unit: string,
-    householdId: string,
-    currentId?: string,
-  ) {
-    const duplicate = await this.items.findOneBy({
-      householdId,
-      ingredientId,
-      unit,
-    });
-    if (duplicate && duplicate.id !== currentId) {
-      throw new ConflictException('这个食材和单位已经关联了库存');
-    }
-  }
-
   async remove(id: string, householdId: string) {
+    if (await this.transactions.existsBy({ inventoryItemId: id, householdId })) {
+      throw new ConflictException('已有库存流水的库存项不能删除');
+    }
     const result = await this.items.delete({ id, householdId });
     if (!result.affected) throw new NotFoundException('库存项不存在');
     return { id, removed: true };
@@ -249,7 +371,10 @@ export class InventoryService {
 
 @Controller()
 export class InventoryController {
-  constructor(private readonly service: InventoryService) {}
+  constructor(
+    private readonly service: InventoryService,
+    private readonly ledger: InventoryTransactionsService,
+  ) {}
 
   @Get('inventory')
   list(@CurrentUser() user: JwtUser) {
@@ -259,7 +384,7 @@ export class InventoryController {
   @Post('inventory-items')
   @RequireCapabilities('manage_inventory')
   create(@Body() dto: CreateInventoryItemDto, @CurrentUser() user: JwtUser) {
-    return this.service.create(dto, user.householdId);
+    return this.service.create(dto, user);
   }
 
   @Patch('inventory-items/:id')
@@ -269,7 +394,7 @@ export class InventoryController {
     @Body() dto: UpdateInventoryItemDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.update(id, dto, user.householdId);
+    return this.service.update(id, dto, user);
   }
 
   @Delete('inventory-items/:id')
@@ -277,11 +402,72 @@ export class InventoryController {
   remove(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.service.remove(id, user.householdId);
   }
+
+  @Get('inventory-transactions')
+  transactions(
+    @Query() query: InventoryTransactionsQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.ledger.list(
+      user.householdId,
+      query.inventoryItemId,
+      query.limit,
+    );
+  }
+
+  @Get('shopping-items/:id/inventory-preview')
+  shoppingPreview(
+    @Param('id') id: string,
+    @Query() query: ShoppingInventoryPreviewDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.ledger.shoppingPreview(
+      id,
+      user.householdId,
+      query.inventoryItemId,
+    );
+  }
+
+  @Post('shopping-items/:id/confirm-stock')
+  @RequireCapabilities('manage_inventory')
+  confirmShoppingReceipt(
+    @Param('id') id: string,
+    @Body() dto: ConfirmShoppingReceiptDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.ledger.confirmShoppingReceipt(id, dto.inventoryItemId, user);
+  }
+
+  @Get('menus/:id/inventory-preview')
+  menuPreview(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.ledger.menuPreview(id, user.householdId);
+  }
+
+  @Post('menus/:id/confirm-consumption')
+  @RequireCapabilities('manage_inventory')
+  confirmMenuConsumption(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.ledger.confirmMenuConsumption(id, user);
+  }
+
+  @Post('inventory-transactions/:id/reverse')
+  @RequireCapabilities('manage_inventory')
+  reverse(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.ledger.reverse(id, user);
+  }
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InventoryItem, Ingredient])],
+  imports: [
+    TypeOrmModule.forFeature([
+      InventoryItem,
+      Ingredient,
+      InventoryTransaction,
+    ]),
+  ],
   controllers: [InventoryController],
-  providers: [InventoryService],
+  providers: [InventoryService, InventoryTransactionsService],
 })
 export class InventoryModule {}

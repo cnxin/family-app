@@ -233,7 +233,6 @@ try {
   await runScript('scripts/observability.mjs');
   await runScript('scripts/smoke.mjs');
   await runScript('scripts/recipes.mjs');
-  await runScript('scripts/shopping-inventory.mjs');
   await runScript('scripts/calendar.mjs');
   await runScript('scripts/guests.mjs');
   await runScript('scripts/tasks.mjs');
@@ -248,6 +247,7 @@ try {
   await runScript('scripts/playback-webhook.mjs');
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');
+  await runScript('scripts/shopping-inventory.mjs');
   await wait(50);
   assertApiLogs(activeApiOutput);
 

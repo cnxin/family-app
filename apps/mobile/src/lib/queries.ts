@@ -41,7 +41,9 @@ import type {
   MediaSearchResponse,
   MediaSourceConfig,
   InventoryCategory,
+  InventoryActionResult,
   InventoryItem,
+  InventoryTransaction,
   Member,
   ManagedMember,
   MealType,
@@ -51,6 +53,7 @@ import type {
   MenuEvent,
   MenuItem,
   MenuItemStatus,
+  MenuInventoryPreview,
   MemberDishSkill,
   PollCategory,
   PollVoteMode,
@@ -59,6 +62,7 @@ import type {
   ReminderSourceModule,
   ReminderStatus,
   ShoppingItem,
+  ShoppingInventoryPreview,
   TaskInstanceStatus,
   TaskOccurrence,
   TaskRecurrence,
@@ -1329,6 +1333,30 @@ export function useCompleteMenu() {
   });
 }
 
+export function useMenuInventoryPreview(menuId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['menu-inventory-preview', menuId],
+    queryFn: () =>
+      api<MenuInventoryPreview>(`/menus/${menuId}/inventory-preview`),
+    enabled,
+  });
+}
+
+export function useConfirmMenuConsumption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (menuId: string) =>
+      api<InventoryActionResult>(`/menus/${menuId}/confirm-consumption`, {
+        method: 'POST',
+      }),
+    onSuccess: (_, menuId) => {
+      void qc.invalidateQueries({ queryKey: ['menu-inventory-preview', menuId] });
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+    },
+  });
+}
+
 export function useMenuEvents(menuId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['menu-events', menuId],
@@ -1472,6 +1500,46 @@ export function useDeleteShoppingItem() {
   });
 }
 
+export function useShoppingInventoryPreview(
+  shoppingItemId: string | null,
+  inventoryItemId: string | null,
+  enabled: boolean,
+) {
+  const query = inventoryItemId
+    ? `?inventoryItemId=${encodeURIComponent(inventoryItemId)}`
+    : '';
+  return useQuery({
+    queryKey: ['shopping-inventory-preview', shoppingItemId, inventoryItemId],
+    queryFn: () =>
+      api<ShoppingInventoryPreview>(
+        `/shopping-items/${shoppingItemId}/inventory-preview${query}`,
+      ),
+    enabled: enabled && Boolean(shoppingItemId),
+  });
+}
+
+export function useConfirmShoppingReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { shoppingItemId: string; inventoryItemId?: string }) =>
+      api<InventoryActionResult>(
+        `/shopping-items/${input.shoppingItemId}/confirm-stock`,
+        {
+          method: 'POST',
+          body: { inventoryItemId: input.inventoryItemId },
+        },
+      ),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['shopping'] });
+      void qc.invalidateQueries({
+        queryKey: ['shopping-inventory-preview', input.shoppingItemId],
+      });
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+    },
+  });
+}
+
 export interface InventoryUpsertInput {
   id?: string;
   ingredientId?: string | null;
@@ -1481,6 +1549,7 @@ export interface InventoryUpsertInput {
   unit: string;
   lowStockThreshold: number;
   restockQuantity: number;
+  idempotencyKey?: string;
 }
 
 export function useInventory() {
@@ -1493,11 +1562,22 @@ export function useInventory() {
 export function useUpsertInventoryItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: InventoryUpsertInput) =>
+    mutationFn: ({ id, idempotencyKey, ...body }: InventoryUpsertInput) =>
       id
-        ? api<InventoryItem>(`/inventory-items/${id}`, { method: 'PATCH', body })
+        ? api<InventoryItem>(`/inventory-items/${id}`, {
+            method: 'PATCH',
+            body: {
+              ...body,
+              idempotencyKey:
+                idempotencyKey ??
+                `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            },
+          })
         : api<InventoryItem>('/inventory-items', { method: 'POST', body }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['inventory'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+    },
   });
 }
 
@@ -1509,6 +1589,30 @@ export function useDeleteInventoryItem() {
         method: 'DELETE',
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['inventory'] }),
+  });
+}
+
+export function useInventoryTransactions(limit = 40) {
+  return useQuery({
+    queryKey: ['inventory-transactions', limit],
+    queryFn: () =>
+      api<InventoryTransaction[]>(`/inventory-transactions?limit=${limit}`),
+  });
+}
+
+export function useReverseInventoryTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<InventoryActionResult>(`/inventory-transactions/${id}/reverse`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void qc.invalidateQueries({ queryKey: ['shopping'] });
+      void qc.invalidateQueries({ queryKey: ['menu-inventory-preview'] });
+    },
   });
 }
 

@@ -28,6 +28,7 @@ import { AddGuestMealRequests1785229000000 } from './1785229000000-add-guest-mea
 import { LinkGuestMealRequestsToMenu1785229100000 } from './1785229100000-link-guest-meal-requests-to-menu';
 import { AddGuestAnonymization1785229200000 } from './1785229200000-add-guest-anonymization';
 import { LinkInventoryToIngredients1785229300000 } from './1785229300000-link-inventory-to-ingredients';
+import { AddInventoryTransactions1785229400000 } from './1785229400000-add-inventory-transactions';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -60,4 +61,5 @@ export const ALL_MIGRATIONS = [
   LinkGuestMealRequestsToMenu1785229100000,
   AddGuestAnonymization1785229200000,
   LinkInventoryToIngredients1785229300000,
+  AddInventoryTransactions1785229400000,
 ];

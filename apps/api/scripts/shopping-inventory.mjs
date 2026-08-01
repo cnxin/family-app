@@ -37,6 +37,7 @@ const ids = {
   dish: randomUUID(),
   menu: randomUUID(),
   malformedOtherInventory: randomUUID(),
+  otherShoppingItem: randomUUID(),
 };
 
 const db = new Client({
@@ -151,7 +152,7 @@ try {
     quantity: 100,
     unit: '箱',
   });
-  await createInventory({
+  const pantryInventory = await createInventory({
     ...common,
     category: '调料',
     ingredientId: ids.ingredients.pantryLinked,
@@ -205,6 +206,12 @@ try {
        (id, "householdId", "ingredientId", name, category, quantity, unit)
      VALUES ($1, $2, $3, '其他家庭异常关联库存', '其他', 90, '份')`,
     [ids.malformedOtherInventory, ids.otherHousehold, ids.ingredients.deduct],
+  );
+  await db.query(
+    `INSERT INTO shopping_items
+       (id, "householdId", date, "customName", "totalQty", unit, checked, source)
+     VALUES ($1, $2, $3, '其他家庭购物项', 1, '份', true, 'manual')`,
+    [ids.otherShoppingItem, ids.otherHousehold, TEST_DATE],
   );
 
   const inventory = await request('/inventory', token);
@@ -276,12 +283,115 @@ try {
     '重新计算采购差额时保留同食材和单位的勾选状态',
   );
 
-  const enoughAfterUpdate = await request(
-    `/inventory-items/${deductedInventory.id}`,
+  const receiptPreview = await request(
+    `/shopping-items/${deducted.id}/inventory-preview`,
     token,
-    'PATCH',
-    { quantity: 5 },
   );
+  assert(
+    receiptPreview.status === 200 &&
+      receiptPreview.body.data.canConfirm === true &&
+      receiptPreview.body.data.quantityBefore === 2 &&
+      receiptPreview.body.data.quantityAfter === 5,
+    '购物入库预览显示库存从 2 变为 5',
+  );
+  const concurrentReceipts = await Promise.all([
+    request(`/shopping-items/${deducted.id}/confirm-stock`, token, 'POST', {}),
+    request(`/shopping-items/${deducted.id}/confirm-stock`, token, 'POST', {}),
+  ]);
+  const receiptTransactions = concurrentReceipts.flatMap(
+    (response) => response.body.data.transactions,
+  );
+  const receiptTransaction = receiptTransactions[0];
+  const afterReceiptInventory = await request('/inventory', token);
+  assert(
+    concurrentReceipts.every((response) => response.status === 201) &&
+      new Set(receiptTransactions.map((transaction) => transaction.id)).size === 1 &&
+      Number(
+        afterReceiptInventory.body.data.find(
+          (item) => item.id === deductedInventory.id,
+        )?.quantity,
+      ) === 5,
+    '并发确认和接口重试只执行一次购物入库',
+  );
+
+  await db.query(
+    `UPDATE dish_ingredients
+     SET quantity = 7
+     WHERE "dishId" = $1 AND "ingredientId" = $2`,
+    [ids.dish, ids.ingredients.deduct],
+  );
+  const generatedAfterNewDemand = await request(
+    '/shopping-list/generate',
+    token,
+    'POST',
+    { date: TEST_DATE },
+  );
+  const sameIngredientAfterNewDemand = generatedAfterNewDemand.body.data.filter(
+    (item) => item.ingredient?.id === ids.ingredients.deduct,
+  );
+  assert(
+    sameIngredientAfterNewDemand.some(
+      (item) =>
+        item.id === deducted.id &&
+        item.inventoryConfirmation?.transactionId === receiptTransaction.id &&
+        Number(item.totalQty) === 3,
+    ) &&
+      sameIngredientAfterNewDemand.some(
+        (item) =>
+          item.id !== deducted.id &&
+          item.inventoryConfirmation == null &&
+          Number(item.totalQty) === 2,
+      ),
+    '新增采购差额不会覆盖已经确认入库的来源项',
+  );
+  await db.query(
+    `UPDATE dish_ingredients
+     SET quantity = 5
+     WHERE "dishId" = $1 AND "ingredientId" = $2`,
+    [ids.dish, ids.ingredients.deduct],
+  );
+
+  const crossHouseholdReceipt = await request(
+    `/shopping-items/${ids.otherShoppingItem}/confirm-stock`,
+    token,
+    'POST',
+    { inventoryItemId: deductedInventory.id },
+  );
+  const manualItem = await request('/shopping-items', token, 'POST', {
+    date: TEST_DATE,
+    customName: '采购测试自由名称',
+    totalQty: 2,
+    unit: '箱',
+  });
+  await request(`/shopping-items/${manualItem.body.data.id}`, token, 'PATCH', {
+    checked: true,
+  });
+  const manualWithoutTarget = await request(
+    `/shopping-items/${manualItem.body.data.id}/confirm-stock`,
+    token,
+    'POST',
+    {},
+  );
+  const manualWrongUnit = await request(
+    `/shopping-items/${manualItem.body.data.id}/confirm-stock`,
+    token,
+    'POST',
+    { inventoryItemId: deductedInventory.id },
+  );
+  const manualForeignTarget = await request(
+    `/shopping-items/${manualItem.body.data.id}/confirm-stock`,
+    token,
+    'POST',
+    { inventoryItemId: ids.malformedOtherInventory },
+  );
+  assert(
+    crossHouseholdReceipt.status === 404 &&
+      manualWithoutTarget.status === 400 &&
+      manualWrongUnit.status === 409 &&
+      manualForeignTarget.status === 404,
+    '自由名称必须选库存项，并拒绝单位不匹配和跨家庭目标',
+  );
+
   const afterEnough = await request(
     '/shopping-list/generate',
     token,
@@ -289,32 +399,194 @@ try {
     { date: TEST_DATE },
   );
   assert(
-    enoughAfterUpdate.status === 200 &&
-      !afterEnough.body.data.some(
-        (item) => item.ingredient?.id === ids.ingredients.deduct,
-      ),
-    '库存变化后重建清单会使用最新数量',
+    afterEnough.status === 201 &&
+      afterEnough.body.data.find((item) => item.id === deducted.id)
+        ?.inventoryConfirmation?.transactionId === receiptTransaction.id,
+    '重建清单会保留已确认入库项及其幂等来源状态',
   );
 
-  console.log('\n库存与采购差额测试全部通过');
-} finally {
-  if (householdId) {
+  await request(`/menu-items/${(
+    await db.query('SELECT id FROM menu_items WHERE "menuId" = $1', [ids.menu])
+  ).rows[0].id}`, token, 'PATCH', { status: 'cooking' });
+  await request(`/menu-items/${(
+    await db.query('SELECT id FROM menu_items WHERE "menuId" = $1', [ids.menu])
+  ).rows[0].id}`, token, 'PATCH', { status: 'done' });
+  const completedMenu = await request(`/menus/${ids.menu}/complete`, token, 'POST');
+  const blockedMenuPreview = await request(
+    `/menus/${ids.menu}/inventory-preview`,
+    token,
+  );
+  const blockedMenuConfirm = await request(
+    `/menus/${ids.menu}/confirm-consumption`,
+    token,
+    'POST',
+  );
+  assert(
+    completedMenu.status === 201 &&
+      blockedMenuPreview.body.data.rows.some(
+        (row) => row.status === 'unit_mismatch',
+      ) &&
+      blockedMenuPreview.body.data.rows.some(
+        (row) => row.status === 'insufficient',
+      ) &&
+      blockedMenuConfirm.status === 409,
+    '菜单扣库在单位不匹配或库存不足时展示原因并拒绝执行',
+  );
+
+  const unlinkedMismatch = await request(
+    `/inventory-items/${mismatchInventory.id}`,
+    token,
+    'PATCH',
+    { ingredientId: null },
+  );
+  const replenishedPantry = await request(
+    `/inventory-items/${pantryInventory.id}`,
+    token,
+    'PATCH',
+    { quantity: 2, idempotencyKey: randomUUID() },
+  );
+  const readyMenuPreview = await request(
+    `/menus/${ids.menu}/inventory-preview`,
+    token,
+  );
+  assert(
+    unlinkedMismatch.status === 200 &&
+      replenishedPantry.status === 200 &&
+      readyMenuPreview.body.data.canConfirm === true &&
+      readyMenuPreview.body.data.rows.filter((row) => row.status === 'ready')
+        .length === 3,
+    '修正库存后菜单预览给出三项明确扣减前后数量',
+  );
+
+  const concurrentConsumptions = await Promise.all([
+    request(`/menus/${ids.menu}/confirm-consumption`, token, 'POST'),
+    request(`/menus/${ids.menu}/confirm-consumption`, token, 'POST'),
+  ]);
+  const consumptionTransactions = concurrentConsumptions.flatMap(
+    (response) => response.body.data.transactions,
+  );
+  const consumptionIds = new Set(
+    consumptionTransactions.map((transaction) => transaction.id),
+  );
+  const afterConsumptionInventory = await request('/inventory', token);
+  assert(
+    concurrentConsumptions.every((response) => response.status === 201) &&
+      consumptionIds.size === 3 &&
+      Number(
+        afterConsumptionInventory.body.data.find(
+          (item) => item.id === deductedInventory.id,
+        )?.quantity,
+      ) === 0,
+    '并发菜单确认只扣库一次，并以同一操作组保存三条流水',
+  );
+
+  const reverseOldReceipt = await request(
+    `/inventory-transactions/${receiptTransaction.id}/reverse`,
+    token,
+    'POST',
+  );
+  assert(
+    reverseOldReceipt.status === 409,
+    '后续已有扣库时不能撤销较早的入库流水',
+  );
+
+  const consumptionTransaction = concurrentConsumptions[0].body.data.transactions[0];
+  const concurrentReversals = await Promise.all([
+    request(
+      `/inventory-transactions/${consumptionTransaction.id}/reverse`,
+      token,
+      'POST',
+    ),
+    request(
+      `/inventory-transactions/${consumptionTransaction.id}/reverse`,
+      token,
+      'POST',
+    ),
+  ]);
+  const afterReversalInventory = await request('/inventory', token);
+  assert(
+    concurrentReversals.every((response) => response.status === 201) &&
+      concurrentReversals.some(
+        (response) => response.body.data.alreadyReversed === true,
+      ) &&
+      Number(
+        afterReversalInventory.body.data.find(
+          (item) => item.id === deductedInventory.id,
+        )?.quantity,
+      ) === 5,
+    '并发撤销只追加一组反向流水并恢复整餐库存',
+  );
+
+  const duplicateMenuConfirmation = await request(
+    `/menus/${ids.menu}/confirm-consumption`,
+    token,
+    'POST',
+  );
+  assert(
+    duplicateMenuConfirmation.status === 201 &&
+      duplicateMenuConfirmation.body.data.alreadyConfirmed === true,
+    '扣库撤销后重复确认仍不会再次修改库存',
+  );
+
+  const adjustmentKey = randomUUID();
+  const concurrentAdjustments = await Promise.all([
+    request(`/inventory-items/${deductedInventory.id}`, token, 'PATCH', {
+      quantity: 4,
+      idempotencyKey: adjustmentKey,
+    }),
+    request(`/inventory-items/${deductedInventory.id}`, token, 'PATCH', {
+      quantity: 4,
+      idempotencyKey: adjustmentKey,
+    }),
+  ]);
+  const adjustmentCount = await db.query(
+    `SELECT COUNT(*)::int AS count FROM inventory_transactions
+     WHERE "householdId" = $1 AND "idempotencyKey" = $2`,
+    [householdId, `manual-adjustment:${adjustmentKey}`],
+  );
+  assert(
+    concurrentAdjustments.every((response) => response.status === 200) &&
+      adjustmentCount.rows[0].count === 1,
+    '并发数量调整通过幂等键只写入一条调整流水',
+  );
+
+  const ledger = await request('/inventory-transactions?limit=100', token);
+  assert(
+    ledger.status === 200 &&
+      ledger.body.data.some((transaction) => transaction.type === 'receipt') &&
+      ledger.body.data.some((transaction) => transaction.type === 'consumption') &&
+      ledger.body.data.some((transaction) => transaction.type === 'adjustment') &&
+      ledger.body.data.some((transaction) => transaction.type === 'reversal'),
+    '库存流水返回入库、消耗、调整和撤销及操作者信息',
+  );
+
+  let updateRejected = false;
+  let deleteRejected = false;
+  try {
     await db.query(
-      'DELETE FROM shopping_items WHERE "householdId" = $1 AND date = $2',
-      [householdId, TEST_DATE],
+      'UPDATE inventory_transactions SET "actorName" = $1 WHERE id = $2',
+      ['不应修改', receiptTransaction.id],
     );
-    await db.query('DELETE FROM inventory_items WHERE id = ANY($1::uuid[])', [
-      inventoryIds,
-    ]);
-    await db.query('DELETE FROM menus WHERE id = $1', [ids.menu]);
-    await db.query('DELETE FROM dishes WHERE id = $1', [ids.dish]);
-    await db.query(
-      'DELETE FROM ingredients WHERE id = ANY($1::uuid[])',
-      [Object.values(ids.ingredients)],
-    );
+  } catch (error) {
+    updateRejected = error.code === '55000';
   }
+  try {
+    await db.query('DELETE FROM inventory_transactions WHERE id = $1', [
+      receiptTransaction.id,
+    ]);
+  } catch (error) {
+    deleteRejected = error.code === '55000';
+  }
+  assert(updateRejected && deleteRejected, '数据库拒绝更新或删除不可变库存流水');
+
+  console.log('\n库存、采购差额与不可变流水测试全部通过');
+} finally {
+  // 流水不可删除；完整 API 回归会在用例结束后直接销毁临时数据库。
   await db.query('DELETE FROM inventory_items WHERE id = $1', [
     ids.malformedOtherInventory,
+  ]);
+  await db.query('DELETE FROM shopping_items WHERE id = $1', [
+    ids.otherShoppingItem,
   ]);
   await db.query('DELETE FROM ingredients WHERE id = $1', [ids.otherIngredient]);
   await db.query('DELETE FROM households WHERE id = $1', [ids.otherHousehold]);

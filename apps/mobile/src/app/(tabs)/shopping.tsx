@@ -1,8 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { Minus, Plus, Trash2 } from 'lucide-react-native';
+import { Minus, PackageCheck, Plus, Trash2, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,7 +28,10 @@ import {
   useAddManualShoppingItem,
   useCheckShoppingItem,
   useDeleteShoppingItem,
+  useConfirmShoppingReceipt,
+  useInventory,
   useShoppingList,
+  useShoppingInventoryPreview,
 } from '../../lib/queries';
 import { radius, type as t, useTheme } from '../../lib/theme';
 import type { ShoppingItem } from '../../lib/types';
@@ -35,7 +40,15 @@ function quantityLabel(value: string | null) {
   return value == null ? '0' : String(Number(value));
 }
 
-function ItemRow({ item, onDelete }: { item: ShoppingItem; onDelete: () => void }) {
+function ItemRow({
+  item,
+  onConfirmStock,
+  onDelete,
+}: {
+  item: ShoppingItem;
+  onConfirmStock: () => void;
+  onDelete: () => void;
+}) {
   const c = useTheme();
   const check = useCheckShoppingItem();
   const name = item.ingredient?.name ?? item.customName ?? '未知';
@@ -106,6 +119,44 @@ function ItemRow({ item, onDelete }: { item: ShoppingItem; onDelete: () => void 
           </Text>
         ) : null}
       </PressableScale>
+      {item.inventoryConfirmation ? (
+        <View
+          style={[
+            styles.stockStatus,
+            {
+              backgroundColor: item.inventoryConfirmation.reversedAt
+                ? c.fill
+                : c.greenSoft,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              t.caption,
+              {
+                color: item.inventoryConfirmation.reversedAt
+                  ? c.secondaryLabel
+                  : c.green,
+                fontWeight: '700',
+              },
+            ]}
+          >
+            {item.inventoryConfirmation.reversedAt
+              ? '入库已撤销'
+              : `已入库 +${Number(item.inventoryConfirmation.delta)}`}
+          </Text>
+        </View>
+      ) : item.checked ? (
+        <PressableScale
+          accessibilityLabel={`确认${name}入库`}
+          haptic={false}
+          onPress={onConfirmStock}
+          style={[styles.stockButton, { backgroundColor: c.greenSoft }]}
+        >
+          <PackageCheck color={c.green} size={16} />
+          <Text style={[t.caption, { color: c.green, fontWeight: '700' }]}>入库</Text>
+        </PressableScale>
+      ) : null}
       <PressableScale
         accessibilityLabel={`删除${name}`}
         haptic={false}
@@ -118,6 +169,186 @@ function ItemRow({ item, onDelete }: { item: ShoppingItem; onDelete: () => void 
   );
 }
 
+function StockConfirmDialog({
+  item,
+  onClose,
+  onSuccess,
+}: {
+  item: ShoppingItem;
+  onClose: () => void;
+  onSuccess: (message: string) => void;
+}) {
+  const c = useTheme();
+  const { data: inventory } = useInventory();
+  const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const automaticInventoryId = inventory?.find(
+    (candidate) =>
+      candidate.ingredientId === item.ingredient?.id &&
+      candidate.unit === item.unit,
+  )?.id;
+  const effectiveInventoryId = selectedInventoryId ?? automaticInventoryId ?? null;
+  const preview = useShoppingInventoryPreview(
+    item.id,
+    effectiveInventoryId,
+    true,
+  );
+  const confirm = useConfirmShoppingReceipt();
+
+  const data = preview.data;
+  const name = item.ingredient?.name ?? item.customName ?? '这件物品';
+  const selected = data?.selectedInventoryItem;
+  const submit = async () => {
+    if (!data?.canConfirm || !selected) return;
+    setError(null);
+    try {
+      const result = await confirm.mutateAsync({
+        shoppingItemId: item.id,
+        inventoryItemId: selected.id,
+      });
+      const transaction = result.transactions[0];
+      onSuccess(
+        result.alreadyConfirmed
+          ? `「${name}」已经确认入库，没有重复增加库存`
+          : `已入库 ${Number(transaction.delta)} ${transaction.unit}，当前 ${Number(transaction.quantityAfter)} ${transaction.unit}`,
+      );
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : '入库失败');
+    }
+  };
+
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible>
+      <View style={styles.stockOverlay}>
+        <Pressable
+          accessibilityLabel="关闭入库确认"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          accessibilityViewIsModal
+          style={[
+            styles.stockDialog,
+            { backgroundColor: c.card, borderColor: c.separator },
+          ]}
+        >
+          <View style={styles.stockDialogHeader}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[t.title2, { color: c.label }]}>确认「{name}」入库</Text>
+              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+                采购数量 {quantityLabel(item.totalQty)} {item.unit ?? ''}
+              </Text>
+            </View>
+            <PressableScale
+              accessibilityLabel="关闭"
+              haptic={false}
+              onPress={onClose}
+              style={styles.stockClose}
+            >
+              <X color={c.secondaryLabel} size={20} />
+            </PressableScale>
+          </View>
+
+          {preview.isLoading ? <ActivityIndicator style={{ marginVertical: 28 }} /> : null}
+
+          {!preview.isLoading && data ? (
+            <ScrollView
+              contentContainerStyle={styles.stockDialogContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>库存项</Text>
+              {data.candidates.length ? (
+                <View style={styles.stockCandidates}>
+                  {data.candidates.map((candidate) => {
+                    const active = selected?.id === candidate.id;
+                    return (
+                      <Pressable
+                        accessibilityLabel={`选择库存${candidate.name}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        key={candidate.id}
+                        onPress={() => setSelectedInventoryId(candidate.id)}
+                        style={[
+                          styles.stockCandidate,
+                          {
+                            backgroundColor: active ? c.tintSoft : c.fill,
+                            borderColor: active ? c.tint : c.separator,
+                          },
+                        ]}
+                      >
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                            {candidate.name}
+                          </Text>
+                          <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                            当前 {Number(candidate.quantity)} {candidate.unit}
+                          </Text>
+                        </View>
+                        {active ? <PackageCheck color={c.tint} size={18} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={[styles.stockNotice, { backgroundColor: c.orangeSoft }]}>
+                  <Text style={[t.footnote, { color: c.orange }]}>
+                    没有相同单位的对应库存项，本项将暂不入库。
+                  </Text>
+                </View>
+              )}
+
+              {selected && data.quantityBefore != null && data.quantityAfter != null ? (
+                <View style={[styles.stockForecast, { backgroundColor: c.greenSoft }]}>
+                  <Text style={[t.footnote, { color: c.green, fontWeight: '700' }]}>预计变化</Text>
+                  <Text style={[t.headline, { color: c.label, marginTop: 5 }]}>
+                    {selected.name}：{data.quantityBefore} → {data.quantityAfter} {selected.unit}
+                  </Text>
+                </View>
+              ) : null}
+
+              {error ?? (preview.error instanceof Error ? preview.error.message : null) ? (
+                <Text style={[t.footnote, { color: c.red }]}>
+                  {error ?? (preview.error instanceof Error ? preview.error.message : '预览失败')}
+                </Text>
+              ) : null}
+            </ScrollView>
+          ) : null}
+
+          <View style={styles.stockActions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={confirm.isPending}
+              onPress={onClose}
+              style={[styles.stockAction, { backgroundColor: c.fill }]}
+            >
+              <Text style={[t.headline, { color: c.label }]}>暂不入库</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!data?.canConfirm || confirm.isPending}
+              onPress={() => void submit()}
+              style={[
+                styles.stockAction,
+                { backgroundColor: data?.canConfirm ? c.green : c.fillStrong },
+              ]}
+            >
+              {confirm.isPending ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={[t.headline, { color: '#FFFFFF' }]}>确认入库</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function ShoppingScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
@@ -127,6 +358,7 @@ export default function ShoppingScreen() {
   const addManual = useAddManualShoppingItem();
   const removeItem = useDeleteShoppingItem();
   const [pendingDelete, setPendingDelete] = useState<ShoppingItem | null>(null);
+  const [stockingItem, setStockingItem] = useState<ShoppingItem | null>(null);
   const [manualName, setManualName] = useState('');
   const [manualQty, setManualQty] = useState('1');
   const [manualUnit, setManualUnit] = useState('份');
@@ -134,6 +366,7 @@ export default function ShoppingScreen() {
     text: string;
     error: boolean;
   } | null>(null);
+  const [stockMessage, setStockMessage] = useState<string | null>(null);
 
   const groups = useMemo(() => {
     const map = new Map<string, ShoppingItem[]>();
@@ -238,12 +471,22 @@ export default function ShoppingScreen() {
                 <ItemRow
                   item={item}
                   key={item.id}
+                  onConfirmStock={() => {
+                    setStockMessage(null);
+                    setStockingItem(item);
+                  }}
                   onDelete={() => setPendingDelete(item)}
                 />
               ))}
             </Card>
           </View>
         ))}
+
+        {stockMessage ? (
+          <View style={[styles.manualMessage, { backgroundColor: c.greenSoft }]}>
+            <Text style={[t.footnote, { color: c.green }]}>{stockMessage}</Text>
+          </View>
+        ) : null}
 
         <SectionHeader title="手动添加" />
         <Card style={[styles.manualForm, desktop && styles.manualFormDesktop]}>
@@ -356,11 +599,29 @@ export default function ShoppingScreen() {
           if (!pendingDelete) return;
           removeItem.mutate(pendingDelete.id, {
             onSuccess: () => setPendingDelete(null),
+            onError: (error) => {
+              setPendingDelete(null);
+              setManualMessage({
+                text: error instanceof Error ? error.message : '删除失败',
+                error: true,
+              });
+            },
           });
         }}
         title={pendingDelete ? `删除「${pendingDelete.ingredient?.name ?? pendingDelete.customName}」？` : '删除购物项？'}
         visible={Boolean(pendingDelete)}
       />
+      {stockingItem ? (
+        <StockConfirmDialog
+          item={stockingItem}
+          key={stockingItem.id}
+          onClose={() => setStockingItem(null)}
+          onSuccess={(message) => {
+            setStockingItem(null);
+            setStockMessage(message);
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -394,11 +655,75 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stockButton: {
+    minHeight: 34,
+    borderRadius: radius.sm,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  stockStatus: {
+    minHeight: 30,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stockOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 25, 20, 0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  stockDialog: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '88%',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  stockDialogHeader: {
+    minHeight: 72,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stockClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  stockDialogContent: { paddingHorizontal: 18, paddingBottom: 16, gap: 12 },
+  stockCandidates: { gap: 8 },
+  stockCandidate: {
+    minHeight: 58,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stockNotice: { borderRadius: radius.sm, padding: 12 },
+  stockForecast: { borderRadius: radius.sm, padding: 13 },
+  stockActions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  stockAction: {
+    flex: 1,
+    height: 44,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -263,6 +263,18 @@ export interface ShoppingItem {
   unit: string | null;
   checked: boolean;
   source: 'auto' | 'manual';
+  inventoryConfirmation: {
+    transactionId: string;
+    inventoryItemId: string;
+    inventoryItemName: string;
+    quantityBefore: string;
+    delta: string;
+    quantityAfter: string;
+    unit: string;
+    actorName: string;
+    createdAt: string;
+    reversedAt: string | null;
+  } | null;
 }
 
 export interface InventoryItem {
@@ -276,6 +288,99 @@ export interface InventoryItem {
   lowStockThreshold: string;
   restockQuantity: string;
   updatedAt: string;
+}
+
+export type InventoryTransactionType =
+  | 'receipt'
+  | 'consumption'
+  | 'adjustment'
+  | 'reversal';
+
+export interface InventoryTransaction {
+  id: string;
+  operationId: string;
+  type: InventoryTransactionType;
+  inventoryItemId: string;
+  inventoryItem: InventoryItem;
+  quantityBefore: string;
+  delta: string;
+  quantityAfter: string;
+  unit: string;
+  actorName: string;
+  sourceType:
+    | 'shopping_item'
+    | 'menu'
+    | 'inventory_item'
+    | 'manual_adjustment'
+    | 'inventory_transaction';
+  sourceId: string;
+  reversesTransactionId: string | null;
+  createdAt: string;
+  reversedAt: string | null;
+  reversalTransactionId: string | null;
+  canReverse: boolean;
+}
+
+export interface InventoryActionResult {
+  alreadyConfirmed?: boolean;
+  alreadyReversed?: boolean;
+  transactions: InventoryTransaction[];
+}
+
+export interface ShoppingInventoryPreview {
+  shoppingItem: {
+    id: string;
+    name: string;
+    ingredientId: string | null;
+    quantity: string | null;
+    unit: string | null;
+    checked: boolean;
+  };
+  candidates: {
+    id: string;
+    name: string;
+    ingredientId: string | null;
+    quantity: string;
+    unit: string;
+  }[];
+  selectedInventoryItem: {
+    id: string;
+    name: string;
+    ingredientId: string | null;
+    quantity: string;
+    unit: string;
+  } | null;
+  quantityBefore: number | null;
+  quantityAfter: number | null;
+  canConfirm: boolean;
+  confirmation: {
+    id: string;
+    reversedAt: string | null;
+  } | null;
+}
+
+export interface MenuInventoryPreview {
+  menuId: string;
+  menuStatus: 'open' | 'done';
+  confirmed: boolean;
+  reversed: boolean;
+  canConfirm: boolean;
+  rows: {
+    ingredientId: string;
+    ingredientName: string;
+    unit: string;
+    quantity: number;
+    status: 'ready' | 'missing_inventory' | 'unit_mismatch' | 'insufficient';
+    inventoryItemId: string | null;
+    inventoryItemName: string | null;
+    quantityBefore: number | null;
+    quantityAfter: number | null;
+    availableUnits: string[];
+  }[];
+  transactions: {
+    id: string;
+    reversedAt: string | null;
+  }[];
 }
 
 export interface MenuDateCount {

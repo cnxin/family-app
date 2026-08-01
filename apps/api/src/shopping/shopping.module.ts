@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -23,7 +24,12 @@ import {
 import { DataSource, In, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { InventoryItem, Menu, ShoppingItem } from '../entities';
+import {
+  InventoryItem,
+  InventoryTransaction,
+  Menu,
+  ShoppingItem,
+} from '../entities';
 
 class GenerateDto {
   @IsISO8601()
@@ -62,20 +68,69 @@ export class ShoppingService {
   constructor(
     @InjectRepository(ShoppingItem)
     private readonly items: Repository<ShoppingItem>,
+    @InjectRepository(InventoryTransaction)
+    private readonly transactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
   ) {}
 
   async list(householdId: string, date: string) {
     const list = await this.items.find({ where: { householdId, date } });
+    const receipts = list.length
+      ? await this.transactions.find({
+          where: {
+            householdId,
+            sourceType: 'shopping_item',
+            sourceId: In(list.map((item) => item.id)),
+            type: 'receipt',
+          },
+          order: { createdAt: 'ASC' },
+        })
+      : [];
+    const reversals = receipts.length
+      ? await this.transactions.find({
+          where: {
+            householdId,
+            reversesTransactionId: In(receipts.map((row) => row.id)),
+          },
+        })
+      : [];
+    const reversalByOriginal = new Map(
+      reversals.map((row) => [row.reversesTransactionId, row]),
+    );
+    const receiptBySource = new Map(
+      receipts.map((row) => [row.sourceId, row]),
+    );
     // 按食材分类分组排序，手动项排最后
-    return list.sort((a, b) => {
-      const ka = a.ingredient ? a.ingredient.category : '手动添加';
-      const kb = b.ingredient ? b.ingredient.category : '手动添加';
-      if (ka !== kb) return ka.localeCompare(kb, 'zh');
-      const na = a.ingredient?.name ?? a.customName ?? '';
-      const nb = b.ingredient?.name ?? b.customName ?? '';
-      return na.localeCompare(nb, 'zh');
-    });
+    return list
+      .map((item) => {
+        const receipt = receiptBySource.get(item.id);
+        const reversal = receipt ? reversalByOriginal.get(receipt.id) : null;
+        return {
+          ...item,
+          inventoryConfirmation: receipt
+            ? {
+                transactionId: receipt.id,
+                inventoryItemId: receipt.inventoryItemId,
+                inventoryItemName: receipt.inventoryItem.name,
+                quantityBefore: receipt.quantityBefore,
+                delta: receipt.delta,
+                quantityAfter: receipt.quantityAfter,
+                unit: receipt.unit,
+                actorName: receipt.actorName,
+                createdAt: receipt.createdAt,
+                reversedAt: reversal?.createdAt ?? null,
+              }
+            : null,
+        };
+      })
+      .sort((a, b) => {
+        const ka = a.ingredient ? a.ingredient.category : '手动添加';
+        const kb = b.ingredient ? b.ingredient.category : '手动添加';
+        if (ka !== kb) return ka.localeCompare(kb, 'zh');
+        const na = a.ingredient?.name ?? a.customName ?? '';
+        const nb = b.ingredient?.name ?? b.customName ?? '';
+        return na.localeCompare(nb, 'zh');
+      });
   }
 
   async generate(householdId: string, date: string) {
@@ -158,15 +213,40 @@ export class ShoppingService {
       const oldAuto = await items.find({
         where: { householdId, date, source: 'auto' },
       });
-      const checkedKeys = new Set(
+      const receipts = oldAuto.length
+        ? await manager.getRepository(InventoryTransaction).find({
+            where: {
+              householdId,
+              sourceType: 'shopping_item',
+              sourceId: In(oldAuto.map((item) => item.id)),
+              type: 'receipt',
+            },
+          })
+        : [];
+      const confirmedSourceIds = new Set(receipts.map((row) => row.sourceId));
+      const reusableByKey = new Map(
         oldAuto
-          .filter((item) => item.checked)
-          .map((item) => `${item.ingredientId}|${item.unit}`),
+          .filter((item) => !confirmedSourceIds.has(item.id))
+          .map((item) => [`${item.ingredientId}|${item.unit}`, item]),
       );
-      await items.delete({ householdId, date, source: 'auto' });
+      const suggestedKeys = new Set(
+        suggested.map((entry) => `${entry.ingredientId}|${entry.unit}`),
+      );
+      const staleIds = oldAuto
+        .filter(
+          (item) =>
+            !suggestedKeys.has(`${item.ingredientId}|${item.unit}`) &&
+            !confirmedSourceIds.has(item.id),
+        )
+        .map((item) => item.id);
+      if (staleIds.length) await items.delete({ id: In(staleIds) });
       await items.save(
-        suggested.map((entry) =>
-          items.create({
+        suggested.map((entry) => {
+          const previous = reusableByKey.get(
+            `${entry.ingredientId}|${entry.unit}`,
+          );
+          return items.create({
+            ...(previous ?? {}),
             householdId,
             date,
             ingredientId: entry.ingredientId,
@@ -174,10 +254,10 @@ export class ShoppingService {
             availableQty: String(entry.availableQty),
             totalQty: String(entry.totalQty),
             unit: entry.unit,
-            checked: checkedKeys.has(`${entry.ingredientId}|${entry.unit}`),
+            checked: previous?.checked ?? false,
             source: 'auto',
-          }),
-        ),
+          });
+        }),
       );
     });
     return this.list(householdId, date);
@@ -204,6 +284,16 @@ export class ShoppingService {
   }
 
   async remove(id: string, householdId: string) {
+    if (
+      await this.transactions.existsBy({
+        householdId,
+        sourceType: 'shopping_item',
+        sourceId: id,
+        type: 'receipt',
+      })
+    ) {
+      throw new ConflictException('已经确认入库的购物项不能删除');
+    }
     const result = await this.items.delete({ id, householdId });
     if (!result.affected) throw new NotFoundException('清单项不存在');
     return { id, removed: true };
@@ -249,7 +339,7 @@ export class ShoppingController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ShoppingItem])],
+  imports: [TypeOrmModule.forFeature([ShoppingItem, InventoryTransaction])],
   controllers: [ShoppingController],
   providers: [ShoppingService],
 })

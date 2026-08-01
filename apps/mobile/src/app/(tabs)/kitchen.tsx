@@ -10,6 +10,7 @@ import {
   ChevronUp,
   History,
   LockKeyhole,
+  PackageMinus,
   UtensilsCrossed,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -42,6 +43,7 @@ import {
 import { mealLabel, todayStr } from '../../lib/date';
 import {
   useAssignMenuChef,
+  useConfirmMenuConsumption,
   useCompleteMenu,
   useGenerateShoppingList,
   useMarkNotificationRead,
@@ -49,6 +51,7 @@ import {
   useNotifications,
   useRecipe,
   useMenuEvents,
+  useMenuInventoryPreview,
   useMenusOfDate,
   useUpdateMenuItem,
 } from '../../lib/queries';
@@ -511,8 +514,11 @@ function MealMenuSection({
   const c = useTheme();
   const assignChef = useAssignMenuChef();
   const complete = useCompleteMenu();
+  const confirmConsumption = useConfirmMenuConsumption();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmingComplete, setConfirmingComplete] = useState(false);
+  const [confirmingConsumption, setConfirmingConsumption] = useState(false);
+  const inventoryPreview = useMenuInventoryPreview(menu.id, menu.status === 'done');
   const { data: events, isLoading: eventsLoading } = useMenuEvents(
     menu.id,
     historyOpen,
@@ -521,6 +527,20 @@ function MealMenuSection({
   const remaining = activeItems.filter((item) => item.status !== 'done').length;
   const locked = menu.status === 'done';
   const canComplete = activeItems.length > 0 && remaining === 0;
+  const consumptionMessage = inventoryPreview.data?.rows
+    .map((row) => {
+      if (row.status === 'ready') {
+        return `${row.inventoryItemName}：${row.quantityBefore} → ${row.quantityAfter} ${row.unit}（-${row.quantity}）`;
+      }
+      if (row.status === 'missing_inventory') {
+        return `${row.ingredientName}：未建立库存，本次跳过`;
+      }
+      if (row.status === 'unit_mismatch') {
+        return `${row.ingredientName}：需要 ${row.unit}，现有单位 ${row.availableUnits.join('、')}`;
+      }
+      return `${row.inventoryItemName}：库存 ${row.quantityBefore} ${row.unit}，需要 ${row.quantity} ${row.unit}`;
+    })
+    .join('\n');
 
   const chooseChef = (chefId: string | null) => {
     assignChef.mutate(
@@ -665,9 +685,58 @@ function MealMenuSection({
             </PressableScale>
 
             {locked ? (
-              <Text style={[t.footnote, { color: c.secondaryLabel }]}>
-                {menu.completedBy ? `${menu.completedBy.name} 已锁定` : '已锁定'}
-              </Text>
+              <View style={styles.lockedActions}>
+                <Text style={[t.footnote, { color: c.secondaryLabel }]}>
+                  {menu.completedBy ? `${menu.completedBy.name} 已锁定` : '已锁定'}
+                </Text>
+                {inventoryPreview.isLoading ? (
+                  <ActivityIndicator size="small" />
+                ) : inventoryPreview.data?.confirmed ? (
+                  <View
+                    style={[
+                      styles.inventoryState,
+                      {
+                        backgroundColor: inventoryPreview.data.reversed
+                          ? c.fill
+                          : c.greenSoft,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        t.caption,
+                        {
+                          color: inventoryPreview.data.reversed
+                            ? c.secondaryLabel
+                            : c.green,
+                          fontWeight: '700',
+                        },
+                      ]}
+                    >
+                      {inventoryPreview.data.reversed ? '扣库已撤销' : '已确认扣库'}
+                    </Text>
+                  </View>
+                ) : (
+                  <PressableScale
+                    accessibilityLabel={`确认${mealLabel(menu.mealType)}扣库`}
+                    haptic={false}
+                    onPress={() => {
+                      if (inventoryPreview.data?.canConfirm) {
+                        setConfirmingConsumption(true);
+                      } else {
+                        Alert.alert(
+                          '暂时不能扣库',
+                          consumptionMessage || '本餐没有可匹配扣减的库存项。',
+                        );
+                      }
+                    }}
+                    style={[styles.consumeButton, { backgroundColor: c.orangeSoft }]}
+                  >
+                    <PackageMinus color={c.orange} size={15} />
+                    <Text style={[t.caption, { color: c.orange, fontWeight: '700' }]}>确认扣库</Text>
+                  </PressableScale>
+                )}
+              </View>
             ) : canComplete ? (
               <PressableScale
                 onPress={() => setConfirmingComplete(true)}
@@ -741,6 +810,41 @@ function MealMenuSection({
         }}
         title={`结束${mealLabel(menu.mealType)}？`}
         visible={confirmingComplete}
+      />
+      <ConfirmDialog
+        confirmLabel="确认扣减"
+        destructive={false}
+        loading={confirmConsumption.isPending}
+        message={
+          consumptionMessage ||
+          (inventoryPreview.isLoading
+            ? '正在计算库存变化。'
+            : '本餐没有可匹配扣减的库存项。')
+        }
+        onCancel={() => {
+          if (!confirmConsumption.isPending) setConfirmingConsumption(false);
+        }}
+        onConfirm={() => {
+          confirmConsumption.mutate(menu.id, {
+            onSuccess: (result) => {
+              setConfirmingConsumption(false);
+              void Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
+              if (result.alreadyConfirmed) {
+                Alert.alert('已经确认', '本餐没有重复扣减库存。');
+              }
+            },
+            onError: (error) => {
+              Alert.alert(
+                '扣库失败',
+                error instanceof Error ? error.message : '请稍后再试',
+              );
+            },
+          });
+        }}
+        title={`确认${mealLabel(menu.mealType)}扣库？`}
+        visible={confirmingConsumption}
       />
     </>
   );
@@ -1048,6 +1152,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+  },
+  lockedActions: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 7,
+  },
+  consumeButton: {
+    minHeight: 32,
+    borderRadius: radius.sm,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  inventoryState: {
+    minHeight: 30,
+    borderRadius: radius.sm,
+    paddingHorizontal: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   historyPanel: {
     borderTopWidth: StyleSheet.hairlineWidth,

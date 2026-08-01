@@ -1,11 +1,13 @@
 import {
   AlertTriangle,
+  History,
   Link2,
   Minus,
   Package,
   Plus,
   ShoppingCart,
   Trash2,
+  RotateCcw,
   X,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
@@ -27,10 +29,17 @@ import {
   useDeleteInventoryItem,
   useIngredients,
   useInventory,
+  useInventoryTransactions,
+  useReverseInventoryTransaction,
   useShoppingList,
   useUpsertInventoryItem,
 } from '../lib/queries';
-import type { Ingredient, InventoryCategory, InventoryItem } from '../lib/types';
+import type {
+  Ingredient,
+  InventoryCategory,
+  InventoryItem,
+  InventoryTransaction,
+} from '../lib/types';
 import { radius, type as t, useTheme } from '../lib/theme';
 import {
   Card,
@@ -385,11 +394,15 @@ export function InventoryPanel() {
   const { data: items, isLoading } = useInventory();
   const { data: shoppingItems } = useShoppingList(todayStr());
   const upsert = useUpsertInventoryItem();
+  const { data: transactions } = useInventoryTransactions();
+  const reverse = useReverseInventoryTransaction();
   const remove = useDeleteInventoryItem();
   const addShoppingItem = useAddManualShoppingItem();
   const [filter, setFilter] = useState<'全部' | InventoryCategory>('全部');
   const [editor, setEditor] = useState<InventoryItem | 'new' | null>(null);
   const [pendingDelete, setPendingDelete] = useState<InventoryItem | null>(null);
+  const [pendingReverse, setPendingReverse] =
+    useState<InventoryTransaction | null>(null);
   const [restocking, setRestocking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -419,8 +432,42 @@ export function InventoryPanel() {
 
   const adjust = (item: InventoryItem, offset: number) => {
     const next = Math.max(0, Math.round((Number(item.quantity) + offset) * 100) / 100);
-    upsert.mutate(inventoryInput(item, next));
+    setMessage(null);
+    upsert.mutate(inventoryInput(item, next), {
+      onSuccess: () =>
+        setMessage(
+          `${item.name} 已调整：${Number(item.quantity)} → ${next} ${item.unit}`,
+        ),
+      onError: (error) =>
+        setMessage(error instanceof Error ? error.message : '库存调整失败'),
+    });
   };
+
+  const transactionLabel = (transaction: InventoryTransaction) => {
+    if (transaction.type === 'receipt') return '入库';
+    if (transaction.type === 'consumption') return '扣库';
+    if (transaction.type === 'adjustment') return '调整';
+    return '撤销';
+  };
+
+  const pendingReverseRows = pendingReverse
+    ? (transactions ?? []).filter(
+        (transaction) =>
+          transaction.operationId === pendingReverse.operationId &&
+          transaction.type === pendingReverse.type,
+      )
+    : [];
+  const pendingReverseMessage = pendingReverse
+    ? [
+        pendingReverse.sourceType === 'menu'
+          ? '同一餐的关联库存会整组恢复，并追加反向流水；历史流水不会删除。'
+          : '将追加反向流水恢复这次库存变化；历史流水不会删除。',
+        ...(pendingReverseRows.length ? pendingReverseRows : [pendingReverse]).map(
+          (transaction) =>
+            `${transaction.inventoryItem.name}：${Number(transaction.quantityAfter)} → ${Number(transaction.quantityBefore)} ${transaction.unit}`,
+        ),
+      ].join('\n')
+    : '';
 
   const addRestockItems = async (targets: InventoryItem[]) => {
     if (!targets.length) return;
@@ -626,6 +673,68 @@ export function InventoryPanel() {
             </Card>
           </View>
         ))}
+
+        {(transactions?.length ?? 0) > 0 ? (
+          <View>
+            <SectionHeader title="库存流水" />
+            <Card>
+              {transactions?.slice(0, 30).map((transaction) => {
+                const positive = Number(transaction.delta) > 0;
+                return (
+                  <View
+                    key={transaction.id}
+                    style={[
+                      styles.transactionRow,
+                      { borderBottomColor: c.separator },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.transactionIcon,
+                        { backgroundColor: positive ? c.greenSoft : c.orangeSoft },
+                      ]}
+                    >
+                      {transaction.type === 'reversal' ? (
+                        <RotateCcw color={positive ? c.green : c.orange} size={16} />
+                      ) : (
+                        <History color={positive ? c.green : c.orange} size={16} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                        {transaction.inventoryItem.name} · {transactionLabel(transaction)}
+                      </Text>
+                      <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                        {Number(transaction.quantityBefore)} → {Number(transaction.quantityAfter)} {transaction.unit}
+                        {' · '}{transaction.actorName}{' · '}
+                        {new Intl.DateTimeFormat('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }).format(new Date(transaction.createdAt))}
+                      </Text>
+                      {transaction.reversedAt ? (
+                        <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>已撤销</Text>
+                      ) : null}
+                    </View>
+                    {transaction.canReverse ? (
+                      <PressableScale
+                        accessibilityLabel={`撤销${transaction.inventoryItem.name}${transactionLabel(transaction)}`}
+                        haptic={false}
+                        onPress={() => setPendingReverse(transaction)}
+                        style={[styles.reverseButton, { backgroundColor: c.fill }]}
+                      >
+                        <RotateCcw color={c.tint} size={16} />
+                        <Text style={[t.caption, { color: c.tint, fontWeight: '700' }]}>撤销</Text>
+                      </PressableScale>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </Card>
+          </View>
+        ) : null}
       </ScrollView>
 
       {editor ? (
@@ -649,10 +758,40 @@ export function InventoryPanel() {
           if (!pendingDelete) return;
           remove.mutate(pendingDelete.id, {
             onSuccess: () => setPendingDelete(null),
+            onError: (error) => {
+              setPendingDelete(null);
+              setMessage(error instanceof Error ? error.message : '删除库存失败');
+            },
           });
         }}
         title={pendingDelete ? `删除「${pendingDelete.name}」？` : '删除库存？'}
         visible={Boolean(pendingDelete)}
+      />
+      <ConfirmDialog
+        confirmLabel="确认撤销"
+        destructive={false}
+        loading={reverse.isPending}
+        message={pendingReverseMessage}
+        onCancel={() => setPendingReverse(null)}
+        onConfirm={() => {
+          if (!pendingReverse) return;
+          reverse.mutate(pendingReverse.id, {
+            onSuccess: (result) => {
+              setPendingReverse(null);
+              setMessage(
+                result.alreadyReversed
+                  ? '这次库存操作已经撤销，没有重复变化'
+                  : '库存操作已通过反向流水撤销',
+              );
+            },
+            onError: (error) => {
+              setPendingReverse(null);
+              setMessage(error instanceof Error ? error.message : '撤销失败');
+            },
+          });
+        }}
+        title={pendingReverse ? `撤销这次${transactionLabel(pendingReverse)}？` : '撤销库存操作？'}
+        visible={Boolean(pendingReverse)}
       />
     </>
   );
@@ -733,6 +872,30 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  transactionRow: {
+    minHeight: 68,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  transactionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reverseButton: {
+    minHeight: 34,
+    borderRadius: radius.sm,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   editorOverlay: {
     flex: 1,
