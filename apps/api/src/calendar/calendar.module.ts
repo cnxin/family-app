@@ -22,7 +22,14 @@ import {
 } from 'class-validator';
 import { Between, Repository } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { CalendarEvent, HouseholdMedia, MealType, Menu, Visit } from '../entities';
+import {
+  CalendarEvent,
+  HouseholdMedia,
+  MaintenancePlan,
+  MealType,
+  Menu,
+  Visit,
+} from '../entities';
 import { TasksModule, TasksService } from '../tasks/tasks.module';
 
 class CalendarRangeDto {
@@ -157,6 +164,8 @@ export class CalendarService {
     @InjectRepository(HouseholdMedia)
     private readonly householdMedia: Repository<HouseholdMedia>,
     @InjectRepository(Visit) private readonly visits: Repository<Visit>,
+    @InjectRepository(MaintenancePlan)
+    private readonly maintenancePlans: Repository<MaintenancePlan>,
     private readonly tasks: TasksService,
   ) {}
 
@@ -170,11 +179,12 @@ export class CalendarService {
       throw new BadRequestException('单次最多查询 371 天');
     }
 
-    const [events, menuRows, taskRows, mediaRows, visits] = await Promise.all([
-      this.events.find({
-        where: { householdId: user.householdId, date: Between(start, end) },
-        order: { date: 'ASC', startsAt: 'ASC', createdAt: 'ASC' },
-      }),
+    const [events, menuRows, taskRows, mediaRows, visits, maintenancePlans] =
+      await Promise.all([
+        this.events.find({
+          where: { householdId: user.householdId, date: Between(start, end) },
+          order: { date: 'ASC', startsAt: 'ASC', createdAt: 'ASC' },
+        }),
       this.menus
         .createQueryBuilder('menu')
         .innerJoin('menu.items', 'item', 'item.status != :rejected', {
@@ -218,6 +228,15 @@ export class CalendarService {
         },
         relations: { hostMember: true, guests: { guest: true } },
         order: { startsAt: 'ASC' },
+      }),
+      this.maintenancePlans.find({
+        where: {
+          householdId: user.householdId,
+          isEnabled: true,
+          nextDueDate: Between(start, end),
+        },
+        relations: { asset: true },
+        order: { nextDueDate: 'ASC', createdAt: 'ASC' },
       }),
     ]);
 
@@ -320,13 +339,39 @@ export class CalendarService {
           guestCount: visit.guests.length,
         },
       })),
+      ...maintenancePlans
+        .filter((plan) => plan.asset.status === 'active')
+        .map((plan) => ({
+          id: `maintenance:${plan.id}`,
+          sourceId: plan.id,
+          module: 'maintenance' as const,
+          date: plan.nextDueDate,
+          startsAt: null,
+          endsAt: null,
+          title: `${plan.asset.name} · ${plan.title}`,
+          summary: plan.note,
+          status: 'scheduled' as const,
+          targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+          metadata: {
+            assetId: plan.assetId,
+            assetName: plan.asset.name,
+            frequencyDays: plan.frequencyDays,
+          },
+        })),
     ];
 
     return rows.sort((left, right) => {
       const dateOrder = left.date.localeCompare(right.date);
       if (dateOrder) return dateOrder;
       if (left.module !== right.module) {
-        const moduleOrder = { calendar: 0, guest: 1, task: 2, media: 3, menu: 4 };
+        const moduleOrder = {
+          calendar: 0,
+          guest: 1,
+          maintenance: 2,
+          task: 3,
+          media: 4,
+          menu: 5,
+        };
         return moduleOrder[left.module] - moduleOrder[right.module];
       }
       if (left.module === 'menu' && right.module === 'menu') {
@@ -409,7 +454,13 @@ export class CalendarController {
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CalendarEvent, Menu, HouseholdMedia, Visit]),
+    TypeOrmModule.forFeature([
+      CalendarEvent,
+      Menu,
+      HouseholdMedia,
+      Visit,
+      MaintenancePlan,
+    ]),
     TasksModule,
   ],
   controllers: [CalendarController],

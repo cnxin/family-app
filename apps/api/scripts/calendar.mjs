@@ -70,6 +70,24 @@ try {
   const momEventId = createdByMom.body.data.id;
   createdIds.push(momEventId);
 
+  const asset = await request('/assets', momToken, 'POST', {
+    name: '日历回归净化器',
+    category: 'appliance',
+  });
+  assert(asset.status === 201, '日历回归可以创建测试资产');
+  const maintenancePlan = await request(
+    `/assets/${asset.body.data.id}/maintenance-plans`,
+    momToken,
+    'POST',
+    {
+      title: '清洁滤网',
+      frequencyDays: 30,
+      nextDueDate: TEST_DATE,
+      note: '统一日历维护测试',
+    },
+  );
+  assert(maintenancePlan.status === 201, '日历回归可以创建维护计划');
+
   const calendar = await request(
     `/calendar?start=${TEST_DATE}&end=${TEST_DATE}`,
     momToken,
@@ -80,12 +98,38 @@ try {
     (entry) =>
       entry.module === 'menu' && entry.metadata?.mealType === 'dinner',
   );
+  const maintenanceEntry = entries.find(
+    (entry) =>
+      entry.module === 'maintenance' &&
+      entry.sourceId === maintenancePlan.body.data.id,
+  );
   assert(
     calendar.status === 200 &&
       manualEntry?.module === 'calendar' &&
       manualEntry.metadata?.canManage === true &&
-      menuEntry?.metadata?.itemCount >= 1,
-    '统一日历同时聚合家庭事件和已有菜单餐次',
+      menuEntry?.metadata?.itemCount >= 1 &&
+      maintenanceEntry?.metadata?.assetId === asset.body.data.id &&
+      maintenanceEntry.targetPath.includes(
+        `/assets?assetId=${asset.body.data.id}`,
+      ),
+    '统一日历同时聚合家庭事件、菜单餐次和资产维护计划',
+  );
+
+  await request(
+    `/maintenance-plans/${maintenancePlan.body.data.id}`,
+    momToken,
+    'PATCH',
+    { isEnabled: false },
+  );
+  const afterDisable = await request(
+    `/calendar?start=${TEST_DATE}&end=${TEST_DATE}`,
+    momToken,
+  );
+  assert(
+    !afterDisable.body.data.some(
+      (entry) => entry.sourceId === maintenancePlan.body.data.id,
+    ),
+    '停用维护计划后会立即退出统一日历',
   );
 
   const adminUpdate = await request(

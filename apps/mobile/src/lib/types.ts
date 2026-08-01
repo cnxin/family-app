@@ -784,7 +784,13 @@ export interface CalendarEvent {
 export interface CalendarEntry {
   id: string;
   sourceId: string;
-  module: 'menu' | 'calendar' | 'task' | 'media' | 'guest';
+  module:
+    | 'menu'
+    | 'calendar'
+    | 'task'
+    | 'media'
+    | 'guest'
+    | 'maintenance';
   date: string;
   startsAt: string | null;
   endsAt: string | null;
@@ -815,6 +821,9 @@ export interface CalendarEntry {
     hostMemberId?: string;
     hostMemberName?: string;
     guestCount?: number;
+    assetId?: string;
+    assetName?: string;
+    frequencyDays?: number;
   };
 }
 

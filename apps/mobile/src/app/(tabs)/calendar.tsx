@@ -12,6 +12,7 @@ import {
   Trash2,
   UserRound,
   UsersRound,
+  Wrench,
   X,
 } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -335,6 +336,7 @@ function ScheduleRow({
   onOpenMedia,
   onOpenTask,
   onOpenGuest,
+  onOpenMaintenance,
   onRemind,
 }: {
   entry: CalendarEntry;
@@ -344,6 +346,7 @@ function ScheduleRow({
   onOpenMedia: () => void;
   onOpenTask: () => void;
   onOpenGuest: () => void;
+  onOpenMaintenance: () => void;
   onRemind: () => void;
 }) {
   const c = useTheme();
@@ -352,11 +355,13 @@ function ScheduleRow({
   const isCalendar = entry.module === 'calendar';
   const isMedia = entry.module === 'media';
   const isGuest = entry.module === 'guest';
+  const isMaintenance = entry.module === 'maintenance';
   const canManage = isCalendar && Boolean(entry.metadata.canManage);
-  const interactive = isMenu || isTask || isMedia || isGuest;
+  const interactive = isMenu || isTask || isMedia || isGuest || isMaintenance;
   const canRemind =
     entry.date >= todayStr() &&
     (isCalendar ||
+      isMaintenance ||
       (isMenu && entry.status === 'open') ||
       (isTask && entry.status === 'pending'));
 
@@ -374,7 +379,9 @@ function ScheduleRow({
                 ? onOpenMedia
                 : isGuest
                   ? onOpenGuest
-                  : undefined
+                  : isMaintenance
+                    ? onOpenMaintenance
+                    : undefined
         }
         style={({ pressed }) => [
           styles.scheduleMain,
@@ -393,7 +400,9 @@ function ScheduleRow({
                     ? c.accentSoft
                     : isGuest
                       ? c.blueSoft
-                    : c.tintSoft,
+                      : isMaintenance
+                        ? c.greenSoft
+                        : c.tintSoft,
             },
           ]}
         >
@@ -405,6 +414,8 @@ function ScheduleRow({
             <Film color={c.accent} size={19} />
           ) : isGuest ? (
             <UsersRound color={c.blue} size={19} />
+          ) : isMaintenance ? (
+            <Wrench color={c.green} size={19} />
           ) : (
             <CalendarDays color={c.tint} size={19} />
           )}
@@ -434,7 +445,9 @@ function ScheduleRow({
                         : '观影安排'
                   : isGuest
                     ? `${entry.metadata.guestCount ?? 0} 位访客`
-                  : eventTime(entry)}
+                    : isMaintenance
+                      ? `每 ${entry.metadata.frequencyDays ?? '-'} 天`
+                      : eventTime(entry)}
             </Text>
           </View>
           {!isMenu && entry.summary ? (
@@ -642,6 +655,15 @@ export default function CalendarScreen() {
                       onOpenMedia={() => openMedia(entry)}
                       onOpenTask={() => openTask(entry)}
                       onOpenGuest={() => router.push('/guests')}
+                      onOpenMaintenance={() =>
+                        router.push({
+                          pathname: '/assets',
+                          params: {
+                            assetId: entry.metadata.assetId,
+                            planId: entry.sourceId,
+                          },
+                        })
+                      }
                       onRemind={() =>
                         router.push({
                           pathname: '/reminders',

@@ -71,6 +71,7 @@ export function CalendarMonth({
         eventCount: number;
         mediaCount: number;
         menuCount: number;
+        maintenanceCount: number;
         taskCount: number;
       }
     >();
@@ -79,6 +80,7 @@ export function CalendarMonth({
         eventCount: 0,
         mediaCount: 0,
         menuCount: 0,
+        maintenanceCount: 0,
         taskCount: 0,
       };
       if (entry.module === 'menu') {
@@ -87,6 +89,8 @@ export function CalendarMonth({
         current.taskCount += 1;
       } else if (entry.module === 'media') {
         current.mediaCount += 1;
+      } else if (entry.module === 'maintenance') {
+        current.maintenanceCount += 1;
       } else {
         current.eventCount += 1;
       }
@@ -176,6 +180,9 @@ export function CalendarMonth({
             marker?.eventCount ? `有${marker.eventCount}个家庭事件` : '',
             marker?.taskCount ? `有${marker.taskCount}个家庭任务` : '',
             marker?.mediaCount ? `有${marker.mediaCount}个观影安排` : '',
+            marker?.maintenanceCount
+              ? `有${marker.maintenanceCount}个维护计划`
+              : '',
           ]
             .filter(Boolean)
             .join('，');
@@ -259,6 +266,14 @@ export function CalendarMonth({
                     ]}
                   />
                 ) : null}
+                {marker?.maintenanceCount ? (
+                  <View
+                    style={[
+                      styles.maintenanceDot,
+                      { backgroundColor: selected ? '#FFFFFF' : c.green },
+                    ]}
+                  />
+                ) : null}
               </Pressable>
             </View>
           );
@@ -335,6 +350,14 @@ const styles = StyleSheet.create({
     right: 5,
     width: 5,
     height: 5,
+    borderRadius: 3,
+  },
+  maintenanceDot: {
+    position: 'absolute',
+    left: 4,
+    top: 4,
+    width: 6,
+    height: 6,
     borderRadius: 3,
   },
 });
