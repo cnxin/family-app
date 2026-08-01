@@ -3,7 +3,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { api } from './api';
+import { api, uploadAssetDocument } from './api';
 import type {
   AccountProfile,
   AppNotification,
@@ -1163,16 +1163,35 @@ export function useAddAssetDocument() {
       assetId: string;
       type: AssetDocumentType;
       title: string;
-      url: string;
+      url?: string;
+      localUri?: string;
     }) =>
-      api<AssetDocument>(`/assets/${input.assetId}/documents`, {
-        method: 'POST',
-        body: { type: input.type, title: input.title, url: input.url },
-      }),
+      input.localUri
+        ? uploadAssetDocument(
+            input.assetId,
+            input.type,
+            input.title,
+            input.localUri,
+          )
+        : api<AssetDocument>(`/assets/${input.assetId}/documents`, {
+            method: 'POST',
+            body: { type: input.type, title: input.title, url: input.url },
+          }),
     onSuccess: (_, input) => {
       void qc.invalidateQueries({ queryKey: ['assets'] });
       void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
     },
+  });
+}
+
+export function useAssetDocumentAccess() {
+  return useMutation({
+    mutationFn: (documentId: string) =>
+      api<{
+        url: string;
+        external: boolean;
+        expiresAt: string | null;
+      }>(`/asset-documents/${documentId}/access`),
   });
 }
 

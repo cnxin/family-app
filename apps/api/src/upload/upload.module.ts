@@ -12,6 +12,7 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 
 export const UPLOAD_DIR = join(process.cwd(), 'uploads');
+export const PRIVATE_ASSET_UPLOAD_DIR = join(UPLOAD_DIR, '.private', 'assets');
 
 @Controller()
 export class UploadController {

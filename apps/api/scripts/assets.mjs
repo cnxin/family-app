@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import pg from 'pg';
 
 const { Client } = pg;
@@ -24,6 +26,26 @@ async function request(path, token, method = 'GET', body) {
   return { status: response.status, data: json?.data, error: json?.error };
 }
 
+async function rawRequest(path, token) {
+  return fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}
+
+async function uploadDocument(path, token, fields, body, mimeType) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  form.append('file', new Blob([body], { type: mimeType }), 'document.png');
+  const response = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : null;
+  return { status: response.status, data: json?.data, error: json?.error };
+}
+
 function dateOnly(value) {
   return value.toISOString().slice(0, 10);
 }
@@ -41,6 +63,7 @@ const db = new Client({
   password: process.env.DB_PASSWORD || 'family123',
   database: process.env.DB_NAME || 'family_app',
 });
+const cleanupFiles = [];
 
 await db.connect();
 
@@ -88,21 +111,134 @@ try {
     'POST',
     { type: 'manual', title: '不安全链接', url: 'javascript:alert(1)' },
   );
+  const legacyLocalDocument = await request(
+    `/assets/${asset.data.id}/documents`,
+    token,
+    'POST',
+    { type: 'receipt', title: '旧公开路径', url: '/uploads/receipt.jpg' },
+  );
   const document = await request(
     `/assets/${asset.data.id}/documents`,
     token,
     'POST',
-    { type: 'receipt', title: '购买凭证', url: '/uploads/assets/receipt.jpg' },
+    {
+      type: 'manual',
+      title: '厂商说明书',
+      url: 'https://example.com/manual.pdf',
+    },
   );
   assert(
     unsafeDocument.status === 400 &&
+      legacyLocalDocument.status === 400 &&
       document.status === 201 &&
-      document.data.type === 'receipt',
-    '资产资料只接受上传文件或 HTTP(S) 链接',
+      document.data.type === 'manual',
+    '资产资料链接只接受 HTTP(S)，本地路径必须走安全上传',
+  );
+
+  const privateBody = 'private-asset-document-regression';
+  const uploadedDocument = await uploadDocument(
+    `/assets/${asset.data.id}/documents/upload`,
+    token,
+    { type: 'receipt', title: '安全上传凭证' },
+    privateBody,
+    'image/png',
+  );
+  const unauthenticatedAccess = await request(
+    `/asset-documents/${uploadedDocument.data.id}/access`,
+    null,
+  );
+  const uploadedAccess = await request(
+    `/asset-documents/${uploadedDocument.data.id}/access`,
+    token,
+  );
+  const externalAccess = await request(
+    `/asset-documents/${document.data.id}/access`,
+    token,
+  );
+  const signedContent = await rawRequest(uploadedAccess.data.url, null);
+  const signedBody = await signedContent.text();
+  const tamperedUrl = new URL(uploadedAccess.data.url, BASE);
+  const signature = tamperedUrl.searchParams.get('signature');
+  tamperedUrl.searchParams.set(
+    'signature',
+    `${signature?.slice(0, -1)}${signature?.endsWith('A') ? 'B' : 'A'}`,
+  );
+  const tamperedContent = await fetch(tamperedUrl);
+  const storedUpload = await db.query(
+    `SELECT url FROM asset_documents WHERE id = $1`,
+    [uploadedDocument.data.id],
+  );
+  const storedKey = storedUpload.rows[0].url;
+  const privateFileName = storedKey.replace('asset-file://', '');
+  const directPrivateAccess = await rawRequest(
+    `/uploads/.private/assets/${member.householdId}/${privateFileName}`,
+    null,
+  );
+  assert(
+    uploadedDocument.status === 201 &&
+      uploadedDocument.data.url === null &&
+      storedKey.startsWith('asset-file://') &&
+      unauthenticatedAccess.status === 401 &&
+      uploadedAccess.status === 200 &&
+      uploadedAccess.data.external === false &&
+      signedContent.status === 200 &&
+      signedContent.headers.get('content-type') === 'image/png' &&
+      signedBody === privateBody &&
+      tamperedContent.status === 403 &&
+      directPrivateAccess.status !== 200 &&
+      externalAccess.data.url === 'https://example.com/manual.pdf' &&
+      externalAccess.data.external === true,
+    '上传资料使用私有存储和短时签名，外链保持直接访问',
+  );
+
+  const legacyDocumentId = randomUUID();
+  const legacyFileName = `legacy-asset-${randomUUID()}.png`;
+  const legacyPath = resolve(process.cwd(), 'uploads', legacyFileName);
+  await mkdir(resolve(process.cwd(), 'uploads'), { recursive: true });
+  await writeFile(legacyPath, 'legacy-private-asset-document');
+  cleanupFiles.push(legacyPath);
+  await db.query(
+    `INSERT INTO asset_documents
+       (id, "householdId", "assetId", type, title, url, "createdById")
+     VALUES ($1, $2, $3, 'warranty', '旧版保修资料', $4, $5)`,
+    [
+      legacyDocumentId,
+      member.householdId,
+      asset.data.id,
+      `/uploads/${legacyFileName}`,
+      member.id,
+    ],
+  );
+  const directLegacyAccess = await rawRequest(
+    `/uploads/${legacyFileName}`,
+    null,
+  );
+  const legacyAccess = await request(
+    `/asset-documents/${legacyDocumentId}/access`,
+    token,
+  );
+  const legacySignedContent = await rawRequest(legacyAccess.data.url, null);
+  const legacyBody = await legacySignedContent.text();
+  const detailWithProtectedDocuments = await request(
+    `/assets/${asset.data.id}`,
+    token,
+  );
+  assert(
+    directLegacyAccess.status === 404 &&
+      legacyAccess.status === 200 &&
+      legacySignedContent.status === 200 &&
+      legacyBody === 'legacy-private-asset-document' &&
+      detailWithProtectedDocuments.data.documents
+        .filter((item) =>
+          [uploadedDocument.data.id, legacyDocumentId].includes(item.id),
+        )
+        .every((item) => item.url === null),
+    '旧版本地资产资料也会退出静态服务并隐藏底层路径',
   );
 
   const foreignHouseholdId = randomUUID();
   const foreignAssetId = randomUUID();
+  const foreignDocumentId = randomUUID();
   await db.query(
     `INSERT INTO households (id, name, slug) VALUES ($1, '资产隔离测试家庭', $2)`,
     [foreignHouseholdId, `asset-isolation-${foreignHouseholdId}`],
@@ -113,6 +249,12 @@ try {
      VALUES ($1, $2, '其他家庭资产', 'other', 'active', $3)`,
     [foreignAssetId, foreignHouseholdId, member.id],
   );
+  await db.query(
+    `INSERT INTO asset_documents
+       (id, "householdId", "assetId", type, title, url, "createdById")
+     VALUES ($1, $2, $3, 'other', '其他家庭资料', 'https://example.com/foreign', $4)`,
+    [foreignDocumentId, foreignHouseholdId, foreignAssetId, member.id],
+  );
   const activeAssets = await request('/assets?status=active', token);
   const foreignGet = await request(`/assets/${foreignAssetId}`, token);
   const foreignPlan = await request(
@@ -121,13 +263,18 @@ try {
     'POST',
     { title: '不应创建', frequencyDays: 30, nextDueDate: dateOnly(new Date()) },
   );
+  const foreignDocumentAccess = await request(
+    `/asset-documents/${foreignDocumentId}/access`,
+    token,
+  );
   assert(
     activeAssets.status === 200 &&
       activeAssets.data.some((item) => item.id === asset.data.id) &&
       !activeAssets.data.some((item) => item.id === foreignAssetId) &&
       foreignGet.status === 404 &&
-      foreignPlan.status === 404,
-    '资产列表、详情和维护写入均隔离其他家庭',
+      foreignPlan.status === 404 &&
+      foreignDocumentAccess.status === 404,
+    '资产列表、详情、维护写入和资料访问均隔离其他家庭',
   );
 
   console.log('2. 维护计划、提醒与并发幂等');
@@ -285,6 +432,24 @@ try {
     '资产资料可明确删除且重复删除返回不存在',
   );
 
+  const removedUpload = await request(
+    `/asset-documents/${uploadedDocument.data.id}`,
+    token,
+    'DELETE',
+  );
+  const contentAfterRemoval = await rawRequest(uploadedAccess.data.url, null);
+  const removedLegacyDocument = await request(
+    `/asset-documents/${legacyDocumentId}`,
+    token,
+    'DELETE',
+  );
+  assert(
+    removedUpload.status === 200 &&
+      removedLegacyDocument.status === 200 &&
+      contentAfterRemoval.status === 404,
+    '删除私有资料后旧签名立即失效且文件不再可读',
+  );
+
   const detail = await request(`/assets/${asset.data.id}`, token);
   assert(
     detail.status === 200 &&
@@ -318,5 +483,6 @@ try {
 
   console.log('\n家庭资产与维护回归测试全部通过');
 } finally {
+  await Promise.all(cleanupFiles.map((path) => unlink(path).catch(() => undefined)));
   await db.end();
 }

@@ -342,7 +342,7 @@ export interface AssetDocument {
   assetId: string;
   type: AssetDocumentType;
   title: string;
-  url: string;
+  url: string | null;
   createdById: string;
   createdBy: Member;
   createdAt: string;

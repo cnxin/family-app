@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  ExternalLink,
   FileText,
   Pencil,
   Plus,
@@ -39,12 +40,13 @@ import {
   PrimaryButton,
   Segmented,
 } from '../../components/ui';
-import { photoUri, uploadPhoto } from '../../lib/api';
+import { photoUri } from '../../lib/api';
 import { formatPlanDate, parseDate, todayStr } from '../../lib/date';
 import {
   useAddAssetDocument,
   useAddMaintenancePlan,
   useAsset,
+  useAssetDocumentAccess,
   useAssets,
   useCompleteMaintenancePlan,
   useRemoveAssetDocument,
@@ -465,8 +467,12 @@ function DocumentForm({
     setMessage(null);
     setUploading(true);
     try {
-      const savedUrl = localPhoto ? await uploadPhoto(localPhoto) : url.trim();
-      await add.mutateAsync({ assetId: asset.id, type, title: title.trim(), url: savedUrl });
+      await add.mutateAsync({
+        assetId: asset.id,
+        type,
+        title: title.trim(),
+        ...(localPhoto ? { localUri: localPhoto } : { url: url.trim() }),
+      });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSaved();
     } catch (error) {
@@ -751,10 +757,12 @@ function AssetDetail({
   const upsert = useUpsertAsset();
   const updatePlan = useUpdateMaintenancePlan();
   const removeDocument = useRemoveAssetDocument();
+  const accessDocument = useAssetDocumentAccess();
   const [documentOpen, setDocumentOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [completingPlan, setCompletingPlan] = useState<MaintenancePlan | null>(null);
   const [pendingDocument, setPendingDocument] = useState<AssetDocument | null>(null);
+  const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [statusConfirm, setStatusConfirm] = useState(false);
   const [message, setMessage] = useState<{
     text: string;
@@ -785,6 +793,22 @@ function AssetDetail({
         text: error instanceof Error ? error.message : '更新状态失败',
         type: 'error',
       });
+    }
+  };
+
+  const openDocument = async (document: AssetDocument) => {
+    setOpeningDocumentId(document.id);
+    try {
+      const access = await accessDocument.mutateAsync(document.id);
+      await Linking.openURL(photoUri(access.url) ?? access.url);
+      setMessage({ text: `已打开资料「${document.title}」`, type: 'success' });
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : '打开资料失败',
+        type: 'error',
+      });
+    } finally {
+      setOpeningDocumentId(null);
     }
   };
 
@@ -995,12 +1019,18 @@ function AssetDetail({
                   </View>
                   <Pressable
                     accessibilityRole="link"
-                    onPress={() => void Linking.openURL(photoUri(document.url) ?? document.url)}
+                    disabled={Boolean(openingDocumentId)}
+                    onPress={() => void openDocument(document)}
                     style={{ flex: 1, minWidth: 0 }}
                   >
                     <Text numberOfLines={1} style={[t.subhead, { color: c.label, fontWeight: '700' }]}>{document.title}</Text>
                     <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>{DOCUMENT_META[document.type]} · {document.createdBy.name}</Text>
                   </Pressable>
+                  {openingDocumentId === document.id ? (
+                    <ActivityIndicator color={c.tint} size="small" />
+                  ) : (
+                    <ExternalLink color={c.tertiaryLabel} size={16} />
+                  )}
                   <Pressable
                     accessibilityLabel={`删除资料${document.title}`}
                     accessibilityRole="button"

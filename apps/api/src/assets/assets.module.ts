@@ -4,6 +4,7 @@ import {
   ConflictException,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Injectable,
   Module,
@@ -12,8 +13,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { Response } from 'express';
 import {
   IsBoolean,
   IsIn,
@@ -26,10 +32,15 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { basename, extname, resolve, sep } from 'node:path';
+import { memoryStorage } from 'multer';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
-import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
+import { jwtSecret } from '../common/config';
 import {
   AssetCategory,
   AssetDocument,
@@ -40,6 +51,7 @@ import {
   MaintenanceRecord,
   Reminder,
 } from '../entities';
+import { PRIVATE_ASSET_UPLOAD_DIR, UPLOAD_DIR } from '../upload/upload.module';
 
 const ASSET_CATEGORIES: AssetCategory[] = [
   'appliance',
@@ -54,6 +66,15 @@ const DOCUMENT_TYPES: AssetDocumentType[] = [
   'warranty',
   'other',
 ];
+const ASSET_DOCUMENT_ACCESS_TTL_SECONDS = 60;
+const ASSET_FILE_PREFIX = 'asset-file://';
+const ASSET_DOCUMENT_MIME_TYPES = new Set([
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]);
 
 class AssetListQueryDto {
   @IsOptional()
@@ -188,6 +209,16 @@ class CreateAssetDocumentDto {
   url: string;
 }
 
+class UploadAssetDocumentDto {
+  @IsIn(DOCUMENT_TYPES)
+  type: AssetDocumentType;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  title: string;
+}
+
 class CreateMaintenancePlanDto {
   @IsString()
   @MinLength(1)
@@ -286,14 +317,59 @@ function addDays(value: string, days: number) {
 
 function assertDocumentUrl(value: string) {
   const url = value.trim();
-  if (url.startsWith('/uploads/')) return url;
   try {
     const parsed = new URL(url);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return url;
   } catch {
     // Fall through to the user-facing validation error.
   }
-  throw new BadRequestException('资料地址必须是上传文件或 HTTP(S) 链接');
+  throw new BadRequestException('资料地址必须使用 HTTP(S)，本地文件请通过上传');
+}
+
+function isExternalDocumentUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+function uploadedAssetExtension(mimeType: string) {
+  const extensions: Record<string, string> = {
+    'image/gif': '.gif',
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'application/pdf': '.pdf',
+  };
+  return extensions[mimeType] ?? '.bin';
+}
+
+function assetDocumentContentType(path: string) {
+  const contentTypes: Record<string, string> = {
+    '.gif': 'image/gif',
+    '.jpeg': 'image/jpeg',
+    '.jpg': 'image/jpeg',
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+  };
+  return contentTypes[extname(path).toLowerCase()] ?? 'application/octet-stream';
+}
+
+function privateAssetFilePath(householdId: string, url: string) {
+  if (!url.startsWith(ASSET_FILE_PREFIX)) return null;
+  const fileName = basename(url.slice(ASSET_FILE_PREFIX.length));
+  if (!fileName || `${ASSET_FILE_PREFIX}${fileName}` !== url) {
+    throw new ForbiddenException('资产资料存储路径无效');
+  }
+  return resolve(PRIVATE_ASSET_UPLOAD_DIR, householdId, fileName);
+}
+
+function legacyAssetFilePath(url: string) {
+  if (!url.startsWith('/uploads/')) return null;
+  const uploadRoot = resolve(UPLOAD_DIR);
+  const path = resolve(uploadRoot, url.slice('/uploads/'.length));
+  if (path === uploadRoot || !path.startsWith(`${uploadRoot}${sep}`)) {
+    throw new ForbiddenException('资产资料存储路径无效');
+  }
+  return path;
 }
 
 function isUniqueViolation(error: unknown) {
@@ -302,6 +378,8 @@ function isUniqueViolation(error: unknown) {
 
 @Injectable()
 export class AssetsService {
+  private readonly documentSigningSecret = jwtSecret();
+
   constructor(
     @InjectRepository(HomeAsset)
     private readonly assets: Repository<HomeAsset>,
@@ -458,6 +536,8 @@ export class AssetsService {
     dto: CreateAssetDocumentDto,
     user: JwtUser,
   ) {
+    const title = dto.title.trim();
+    if (!title) throw new BadRequestException('资料名称不能为空');
     const asset = await this.requireAsset(assetId, user.householdId, false);
     return this.dataSource.transaction(async (manager) => {
       const documents = manager.getRepository(AssetDocument);
@@ -466,7 +546,7 @@ export class AssetsService {
           householdId: user.householdId,
           assetId,
           type: dto.type,
-          title: dto.title.trim(),
+          title,
           url: assertDocumentUrl(dto.url),
           createdById: user.memberId,
         }),
@@ -482,12 +562,108 @@ export class AssetsService {
           documentType: document.type,
         },
       });
-      return document;
+      return this.presentDocument(document);
     });
   }
 
+  async createUploadedDocument(
+    assetId: string,
+    dto: UploadAssetDocumentDto,
+    file: Express.Multer.File | undefined,
+    user: JwtUser,
+  ) {
+    if (!file) throw new BadRequestException('没有收到资产资料文件');
+    const title = dto.title.trim();
+    if (!title) throw new BadRequestException('资料名称不能为空');
+    const asset = await this.requireAsset(assetId, user.householdId, false);
+    const fileName = `${randomUUID()}${uploadedAssetExtension(file.mimetype)}`;
+    const directory = resolve(PRIVATE_ASSET_UPLOAD_DIR, user.householdId);
+    const path = resolve(directory, fileName);
+    await mkdir(directory, { recursive: true });
+    await writeFile(path, file.buffer, { flag: 'wx' });
+
+    try {
+      const document = await this.dataSource.transaction(async (manager) => {
+        const documents = manager.getRepository(AssetDocument);
+        const saved = await documents.save(
+          documents.create({
+            householdId: user.householdId,
+            assetId,
+            type: dto.type,
+            title,
+            url: `${ASSET_FILE_PREFIX}${fileName}`,
+            createdById: user.memberId,
+          }),
+        );
+        await recordActivity(manager, user, {
+          module: 'asset',
+          action: 'asset_document_added',
+          summary: `${user.name} 为「${asset.name}」上传了资料「${saved.title}」`,
+          targetPath: `/assets?assetId=${asset.id}`,
+          metadata: {
+            assetId: asset.id,
+            documentId: saved.id,
+            documentType: saved.type,
+            storage: 'private',
+          },
+        });
+        return saved;
+      });
+      return this.presentDocument(document);
+    } catch (error) {
+      await unlink(path).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async documentAccess(id: string, user: JwtUser) {
+    const document = await this.documents.findOneBy({
+      id,
+      householdId: user.householdId,
+    });
+    if (!document) throw new NotFoundException('资产资料不存在');
+    if (isExternalDocumentUrl(document.url)) {
+      return { url: document.url, external: true, expiresAt: null };
+    }
+    const expires =
+      Math.floor(Date.now() / 1000) + ASSET_DOCUMENT_ACCESS_TTL_SECONDS;
+    const signature = this.signDocumentAccess(document.id, expires);
+    return {
+      url: `/asset-documents/${document.id}/content?expires=${expires}&signature=${signature}`,
+      external: false,
+      expiresAt: new Date(expires * 1000).toISOString(),
+    };
+  }
+
+  async documentContent(id: string, expiresValue: string, signature: string) {
+    const expires = Number(expiresValue);
+    this.verifyDocumentAccess(id, expires, signature);
+    const document = await this.documents.findOneBy({ id });
+    if (!document || isExternalDocumentUrl(document.url)) {
+      throw new NotFoundException('资产资料文件不存在');
+    }
+    const path =
+      privateAssetFilePath(document.householdId, document.url) ??
+      legacyAssetFilePath(document.url);
+    if (!path) throw new NotFoundException('资产资料文件不存在');
+    let body: Buffer;
+    try {
+      body = await readFile(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new NotFoundException('资产资料文件不存在');
+      }
+      throw error;
+    }
+    return {
+      body,
+      contentType: assetDocumentContentType(path),
+      fileName: `${document.title}${extname(path).toLowerCase()}`,
+    };
+  }
+
   async removeDocument(id: string, user: JwtUser) {
-    return this.dataSource.transaction(async (manager) => {
+    const removed = await this.dataSource.transaction(async (manager) => {
       const documents = manager.getRepository(AssetDocument);
       const document = await documents.findOne({
         where: { id, householdId: user.householdId },
@@ -506,8 +682,15 @@ export class AssetsService {
           documentType: document.type,
         },
       });
-      return { id, removed: true };
+      return {
+        result: { id, removed: true as const },
+        privatePath: privateAssetFilePath(document.householdId, document.url),
+      };
     });
+    if (removed.privatePath) {
+      await unlink(removed.privatePath).catch(() => undefined);
+    }
+    return removed.result;
   }
 
   async createPlan(
@@ -710,6 +893,38 @@ export class AssetsService {
     return { alreadyCompleted: result.alreadyCompleted, record, plan };
   }
 
+  private signDocumentAccess(id: string, expires: number) {
+    return createHmac('sha256', this.documentSigningSecret)
+      .update(`asset-document:${id}:${expires}`)
+      .digest('base64url');
+  }
+
+  private verifyDocumentAccess(
+    id: string,
+    expires: number,
+    signature: string,
+  ) {
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !Number.isSafeInteger(expires) ||
+      expires < now ||
+      expires > now + ASSET_DOCUMENT_ACCESS_TTL_SECONDS + 5
+    ) {
+      throw new ForbiddenException('资产资料链接已过期');
+    }
+    const expected = Buffer.from(
+      this.signDocumentAccess(id, expires),
+      'utf8',
+    );
+    const received = Buffer.from(signature || '', 'utf8');
+    if (
+      expected.length !== received.length ||
+      !timingSafeEqual(expected, received)
+    ) {
+      throw new ForbiddenException('资产资料链接无效');
+    }
+  }
+
   private async requireAsset(
     id: string,
     householdId: string,
@@ -813,10 +1028,12 @@ export class AssetsService {
   private present(asset: HomeAsset) {
     return {
       ...asset,
-      documents: [...(asset.documents ?? [])].sort(
-        (left, right) =>
-          right.createdAt.getTime() - left.createdAt.getTime(),
-      ),
+      documents: [...(asset.documents ?? [])]
+        .sort(
+          (left, right) =>
+            right.createdAt.getTime() - left.createdAt.getTime(),
+        )
+        .map((document) => this.presentDocument(document)),
       maintenancePlans: [...(asset.maintenancePlans ?? [])].sort(
         (left, right) =>
           Number(right.isEnabled) - Number(left.isEnabled) ||
@@ -827,6 +1044,13 @@ export class AssetsService {
         (left, right) =>
           right.performedAt.getTime() - left.performedAt.getTime(),
       ),
+    };
+  }
+
+  private presentDocument(document: AssetDocument) {
+    return {
+      ...document,
+      url: isExternalDocumentUrl(document.url) ? document.url : null,
     };
   }
 }
@@ -869,6 +1093,60 @@ export class AssetsController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.createDocument(id, dto, user);
+  }
+
+  @Post('assets/:id/documents/upload')
+  @RequireCapabilities('manage_assets')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      fileFilter: (_request, file, callback) =>
+        ASSET_DOCUMENT_MIME_TYPES.has(file.mimetype)
+          ? callback(null, true)
+          : callback(
+              new BadRequestException('资产资料只支持图片或 PDF 文件'),
+              false,
+            ),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadDocument(
+    @Param('id') id: string,
+    @Body() dto: UploadAssetDocumentDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.createUploadedDocument(id, dto, file, user);
+  }
+
+  @Get('asset-documents/:id/access')
+  documentAccess(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.documentAccess(id, user);
+  }
+
+  @Public()
+  @Get('asset-documents/:id/content')
+  async documentContent(
+    @Param('id') id: string,
+    @Query('expires') expires: string,
+    @Query('signature') signature: string,
+    @Res() response: Response,
+  ) {
+    const content = await this.service.documentContent(
+      id,
+      expires,
+      signature,
+    );
+    const extension = extname(content.fileName).toLowerCase();
+    response.setHeader('Content-Type', content.contentType);
+    response.setHeader('Content-Length', String(content.body.length));
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader(
+      'Content-Disposition',
+      `inline; filename="asset-document${extension}"; filename*=UTF-8''${encodeURIComponent(content.fileName)}`,
+    );
+    response.status(200).end(content.body);
   }
 
   @Delete('asset-documents/:id')

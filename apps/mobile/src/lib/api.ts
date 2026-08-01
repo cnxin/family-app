@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import type { AssetDocument, AssetDocumentType } from './types';
 
 // Expo Go 开发期：API 跑在起 dev server 的同一台电脑上，从 hostUri 取局域网 IP
 function resolveBaseUrl(): string {
@@ -148,6 +149,36 @@ export async function uploadPhoto(uri: string): Promise<string> {
   }
   const json = await response.json();
   return json.data.url as string;
+}
+
+export async function uploadAssetDocument(
+  assetId: string,
+  type: AssetDocumentType,
+  title: string,
+  uri: string,
+): Promise<AssetDocument> {
+  const form = new FormData();
+  form.append('type', type);
+  form.append('title', title);
+  form.append('file', {
+    uri,
+    name: 'asset-document.jpg',
+    type: 'image/jpeg',
+  } as unknown as Blob);
+  const response = await fetchWithSession(
+    `${BASE_URL}/assets/${encodeURIComponent(assetId)}/documents/upload`,
+    { method: 'POST', body: form },
+    true,
+  );
+  const json = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      json?.error?.code ?? 'UPLOAD_FAILED',
+      json?.error?.message ?? '资产资料上传失败',
+      response.status,
+    );
+  }
+  return json.data as AssetDocument;
 }
 
 export function photoUri(url: string | null): string | null {
