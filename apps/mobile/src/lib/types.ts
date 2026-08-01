@@ -53,6 +53,7 @@ export type ActivityModule =
   | 'recipe'
   | 'media'
   | 'guest'
+  | 'asset'
   | 'system';
 
 export interface HouseholdActivity {

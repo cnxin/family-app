@@ -106,6 +106,7 @@ export type ActivityModule =
   | 'recipe'
   | 'media'
   | 'guest'
+  | 'asset'
   | 'system';
 export type NotificationModule =
   | 'menu'
@@ -246,7 +247,7 @@ export class Member {
 @Entity('household_activity_logs')
 @Check(
   'CHK_household_activity_logs_module',
-  `"module" IN ('member', 'invitation', 'menu', 'calendar', 'task', 'poll', 'reminder', 'shopping', 'inventory', 'recipe', 'media', 'system')`,
+  `"module" IN ('member', 'invitation', 'menu', 'calendar', 'task', 'poll', 'reminder', 'shopping', 'inventory', 'recipe', 'media', 'guest', 'asset', 'system')`,
 )
 @Index('IDX_household_activity_logs_household_created', [
   'householdId',

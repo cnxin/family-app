@@ -9,6 +9,7 @@ import {
   Settings2,
   UserRoundCog,
   UtensilsCrossed,
+  Wrench,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -48,7 +49,7 @@ export default function ActivityScreen() {
           ) : null}
           <View style={{ flex: 1 }}>
             <Text style={[desktop ? t.largeTitle : t.title1, { color: c.label }]}>家庭活动</Text>
-            <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 3 }]}>成员管理与菜单动态</Text>
+            <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 3 }]}>家庭协作与管理动态</Text>
           </View>
           <View style={[styles.headerIcon, { backgroundColor: c.blueSoft }]}>
             <History color={c.blue} size={21} />
@@ -173,6 +174,9 @@ function activityVisual(module: ActivityModule, c: ReturnType<typeof useTheme>) 
   }
   if (module === 'media') {
     return { icon: Film, color: c.accent, backgroundColor: c.accentSoft };
+  }
+  if (module === 'asset') {
+    return { icon: Wrench, color: c.green, backgroundColor: c.greenSoft };
   }
   if (module === 'system') {
     return { icon: Settings2, color: c.secondaryLabel, backgroundColor: c.fill };

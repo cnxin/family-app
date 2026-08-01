@@ -294,6 +294,28 @@ try {
     '资产详情持续返回操作者、执行时间与周期前后快照',
   );
 
+  const activities = await request('/activities?limit=100', token);
+  const assetActivities = activities.data.filter(
+    (item) => item.module === 'asset' && item.metadata.assetId === asset.data.id,
+  );
+  const actions = assetActivities.map((item) => item.action);
+  assert(
+    activities.status === 200 &&
+      actions.includes('asset_created') &&
+      actions.includes('asset_document_added') &&
+      actions.includes('asset_document_removed') &&
+      actions.includes('maintenance_plan_created') &&
+      actions.includes('maintenance_plan_disabled') &&
+      actions.includes('asset_retired') &&
+      actions.filter((action) => action === 'maintenance_completed').length ===
+        1 &&
+      assetActivities.every(
+        (item) =>
+          item.actor.id === member.id && item.targetPath?.startsWith('/assets'),
+      ),
+    '资产、资料与维护操作写入可追溯活动且幂等完成只记录一次',
+  );
+
   console.log('\n家庭资产与维护回归测试全部通过');
 } finally {
   await db.end();

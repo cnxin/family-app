@@ -27,6 +27,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
@@ -341,25 +342,36 @@ export class AssetsService {
     const purchaseDate = dateOnly(dto.purchaseDate, '购买日期');
     const warrantyExpiresOn = dateOnly(dto.warrantyExpiresOn, '保修到期日');
     this.assertWarrantyDates(purchaseDate, warrantyExpiresOn);
-    const asset = await this.assets.save(
-      this.assets.create({
-        householdId: user.householdId,
-        name: dto.name.trim(),
-        category: dto.category,
-        location: nullableText(dto.location),
-        brand: nullableText(dto.brand),
-        model: nullableText(dto.model),
-        serialNumber: nullableText(dto.serialNumber),
-        purchaseDate,
-        purchasePrice:
-          dto.purchasePrice == null ? null : String(dto.purchasePrice),
-        warrantyExpiresOn,
-        status: 'active',
-        note: nullableText(dto.note),
-        createdById: user.memberId,
-      }),
-    );
-    return this.get(asset.id, user.householdId);
+    const assetId = await this.dataSource.transaction(async (manager) => {
+      const assets = manager.getRepository(HomeAsset);
+      const asset = await assets.save(
+        assets.create({
+          householdId: user.householdId,
+          name: dto.name.trim(),
+          category: dto.category,
+          location: nullableText(dto.location),
+          brand: nullableText(dto.brand),
+          model: nullableText(dto.model),
+          serialNumber: nullableText(dto.serialNumber),
+          purchaseDate,
+          purchasePrice:
+            dto.purchasePrice == null ? null : String(dto.purchasePrice),
+          warrantyExpiresOn,
+          status: 'active',
+          note: nullableText(dto.note),
+          createdById: user.memberId,
+        }),
+      );
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: 'asset_created',
+        summary: `${user.name} 新增了家庭资产「${asset.name}」`,
+        targetPath: `/assets?assetId=${asset.id}`,
+        metadata: { assetId: asset.id, category: asset.category },
+      });
+      return asset.id;
+    });
+    return this.get(assetId, user.householdId);
   }
 
   async update(id: string, dto: UpdateAssetDto, user: JwtUser) {
@@ -368,6 +380,7 @@ export class AssetsService {
     }
     await this.dataSource.transaction(async (manager) => {
       const asset = await this.lockAsset(id, user.householdId, manager);
+      const wasRetired = asset.status === 'retired';
       const nextPurchaseDate = Object.prototype.hasOwnProperty.call(
         dto,
         'purchaseDate',
@@ -411,7 +424,8 @@ export class AssetsService {
       }
       if (dto.status != null) asset.status = dto.status;
       await manager.getRepository(HomeAsset).save(asset);
-      if (asset.status === 'retired') {
+      const retiredNow = !wasRetired && asset.status === 'retired';
+      if (retiredNow) {
         await this.cancelScheduledReminders(
           manager,
           user.householdId,
@@ -420,6 +434,21 @@ export class AssetsService {
           'asset_retired',
         );
       }
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: retiredNow ? 'asset_retired' : 'asset_updated',
+        summary:
+          retiredNow
+            ? `${user.name} 归档了家庭资产「${asset.name}」`
+            : `${user.name} 更新了家庭资产「${asset.name}」`,
+        detail: `修改字段：${Object.keys(dto).join('、')}`,
+        targetPath: `/assets?assetId=${asset.id}`,
+        metadata: {
+          assetId: asset.id,
+          changedFields: Object.keys(dto),
+          status: asset.status,
+        },
+      });
     });
     return this.get(id, user.householdId);
   }
@@ -429,27 +458,56 @@ export class AssetsService {
     dto: CreateAssetDocumentDto,
     user: JwtUser,
   ) {
-    await this.requireAsset(assetId, user.householdId, false);
-    const document = await this.documents.save(
-      this.documents.create({
-        householdId: user.householdId,
-        assetId,
-        type: dto.type,
-        title: dto.title.trim(),
-        url: assertDocumentUrl(dto.url),
-        createdById: user.memberId,
-      }),
-    );
-    return this.documents.findOneByOrFail({
-      id: document.id,
-      householdId: user.householdId,
+    const asset = await this.requireAsset(assetId, user.householdId, false);
+    return this.dataSource.transaction(async (manager) => {
+      const documents = manager.getRepository(AssetDocument);
+      const document = await documents.save(
+        documents.create({
+          householdId: user.householdId,
+          assetId,
+          type: dto.type,
+          title: dto.title.trim(),
+          url: assertDocumentUrl(dto.url),
+          createdById: user.memberId,
+        }),
+      );
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: 'asset_document_added',
+        summary: `${user.name} 为「${asset.name}」添加了资料「${document.title}」`,
+        targetPath: `/assets?assetId=${asset.id}`,
+        metadata: {
+          assetId: asset.id,
+          documentId: document.id,
+          documentType: document.type,
+        },
+      });
+      return document;
     });
   }
 
-  async removeDocument(id: string, householdId: string) {
-    const result = await this.documents.delete({ id, householdId });
-    if (!result.affected) throw new NotFoundException('资产资料不存在');
-    return { id, removed: true };
+  async removeDocument(id: string, user: JwtUser) {
+    return this.dataSource.transaction(async (manager) => {
+      const documents = manager.getRepository(AssetDocument);
+      const document = await documents.findOne({
+        where: { id, householdId: user.householdId },
+        relations: { asset: true },
+      });
+      if (!document) throw new NotFoundException('资产资料不存在');
+      await documents.delete({ id, householdId: user.householdId });
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: 'asset_document_removed',
+        summary: `${user.name} 移除了「${document.asset.name}」的资料「${document.title}」`,
+        targetPath: `/assets?assetId=${document.assetId}`,
+        metadata: {
+          assetId: document.assetId,
+          documentId: document.id,
+          documentType: document.type,
+        },
+      });
+      return { id, removed: true };
+    });
   }
 
   async createPlan(
@@ -457,25 +515,41 @@ export class AssetsService {
     dto: CreateMaintenancePlanDto,
     user: JwtUser,
   ) {
-    const asset = await this.requireAsset(assetId, user.householdId, false);
-    if (asset.status !== 'active') {
-      throw new ConflictException('停用资产不能新增维护计划');
-    }
     try {
-      const plan = await this.plans.save(
-        this.plans.create({
-          householdId: user.householdId,
-          assetId,
-          title: dto.title.trim(),
-          frequencyDays: dto.frequencyDays,
-          nextDueDate: dateOnly(dto.nextDueDate, '下次维护日期')!,
-          isEnabled: true,
-          note: nullableText(dto.note),
-          createdById: user.memberId,
-        }),
-      );
+      const planId = await this.dataSource.transaction(async (manager) => {
+        const asset = await this.lockAsset(assetId, user.householdId, manager);
+        if (asset.status !== 'active') {
+          throw new ConflictException('停用资产不能新增维护计划');
+        }
+        const plans = manager.getRepository(MaintenancePlan);
+        const plan = await plans.save(
+          plans.create({
+            householdId: user.householdId,
+            assetId,
+            title: dto.title.trim(),
+            frequencyDays: dto.frequencyDays,
+            nextDueDate: dateOnly(dto.nextDueDate, '下次维护日期')!,
+            isEnabled: true,
+            note: nullableText(dto.note),
+            createdById: user.memberId,
+          }),
+        );
+        await recordActivity(manager, user, {
+          module: 'asset',
+          action: 'maintenance_plan_created',
+          summary: `${user.name} 为「${asset.name}」创建了维护计划「${plan.title}」`,
+          targetPath: `/assets?assetId=${asset.id}&planId=${plan.id}`,
+          metadata: {
+            assetId: asset.id,
+            planId: plan.id,
+            frequencyDays: plan.frequencyDays,
+            nextDueDate: plan.nextDueDate,
+          },
+        });
+        return plan.id;
+      });
       return this.plans.findOneByOrFail({
-        id: plan.id,
+        id: planId,
         householdId: user.householdId,
       });
     } catch (error) {
@@ -521,6 +595,23 @@ export class AssetsService {
             'maintenance_disabled',
           );
         }
+        await recordActivity(manager, user, {
+          module: 'asset',
+          action: plan.isEnabled
+            ? 'maintenance_plan_updated'
+            : 'maintenance_plan_disabled',
+          summary: plan.isEnabled
+            ? `${user.name} 更新了「${plan.asset.name}」的维护计划「${plan.title}」`
+            : `${user.name} 停用了「${plan.asset.name}」的维护计划「${plan.title}」`,
+          detail: `修改字段：${Object.keys(dto).join('、')}`,
+          targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+          metadata: {
+            assetId: plan.assetId,
+            planId: plan.id,
+            changedFields: Object.keys(dto),
+            isEnabled: plan.isEnabled,
+          },
+        });
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -590,6 +681,22 @@ export class AssetsService {
         plan.id,
         'source_rescheduled',
       );
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: 'maintenance_completed',
+        summary: `${user.name} 完成了「${plan.asset.name}」的维护「${plan.title}」`,
+        detail: record.note,
+        targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        metadata: {
+          assetId: plan.assetId,
+          planId: plan.id,
+          recordId: record.id,
+          performedAt: record.performedAt.toISOString(),
+          nextDueDateBefore: record.nextDueDateBefore,
+          nextDueDateAfter: record.nextDueDateAfter,
+          cost: record.cost,
+        },
+      });
       return { alreadyCompleted: false, recordId: record.id };
     });
 
@@ -767,7 +874,7 @@ export class AssetsController {
   @Delete('asset-documents/:id')
   @RequireCapabilities('manage_assets')
   removeDocument(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.service.removeDocument(id, user.householdId);
+    return this.service.removeDocument(id, user);
   }
 
   @Post('assets/:id/maintenance-plans')

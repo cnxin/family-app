@@ -30,6 +30,7 @@ import { AddGuestAnonymization1785229200000 } from './1785229200000-add-guest-an
 import { LinkInventoryToIngredients1785229300000 } from './1785229300000-link-inventory-to-ingredients';
 import { AddInventoryTransactions1785229400000 } from './1785229400000-add-inventory-transactions';
 import { AddHomeAssets1785229500000 } from './1785229500000-add-home-assets';
+import { AddAssetActivityModule1785229600000 } from './1785229600000-add-asset-activity-module';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -64,4 +65,5 @@ export const ALL_MIGRATIONS = [
   LinkInventoryToIngredients1785229300000,
   AddInventoryTransactions1785229400000,
   AddHomeAssets1785229500000,
+  AddAssetActivityModule1785229600000,
 ];
