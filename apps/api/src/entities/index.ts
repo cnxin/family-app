@@ -75,8 +75,21 @@ export type MediaRequestStatus =
   | 'failed'
   | 'cancelled';
 export type MediaLibraryProviderKind = 'plex' | 'emby';
-export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
+export type ReminderSourceModule =
+  | 'menu'
+  | 'task'
+  | 'calendar'
+  | 'poll'
+  | 'maintenance';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
+export type AssetCategory =
+  | 'appliance'
+  | 'furniture'
+  | 'electronics'
+  | 'tool'
+  | 'other';
+export type AssetStatus = 'active' | 'retired';
+export type AssetDocumentType = 'receipt' | 'manual' | 'warranty' | 'other';
 export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
 export type GuestWifiSecurity = 'WPA' | 'nopass';
 export type GuestMealRequestStatus = 'pending' | 'accepted' | 'rejected';
@@ -2875,7 +2888,7 @@ export class MediaRequest {
 @Entity('reminders')
 @Check(
   'CHK_reminders_source_module',
-  `"sourceModule" IN ('menu', 'task', 'calendar', 'poll')`,
+  `"sourceModule" IN ('menu', 'task', 'calendar', 'poll', 'maintenance')`,
 )
 @Check(
   'CHK_reminders_status',
@@ -2998,6 +3011,304 @@ export class ReminderRecipient {
   deliveredAt: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('home_assets')
+@Check(
+  'CHK_home_assets_category',
+  `"category" IN ('appliance', 'furniture', 'electronics', 'tool', 'other')`,
+)
+@Check('CHK_home_assets_status', `"status" IN ('active', 'retired')`)
+@Check(
+  'CHK_home_assets_purchase_price',
+  `"purchasePrice" IS NULL OR "purchasePrice" >= 0`,
+)
+@Check(
+  'CHK_home_assets_warranty_dates',
+  `"purchaseDate" IS NULL OR "warrantyExpiresOn" IS NULL OR "warrantyExpiresOn" >= "purchaseDate"`,
+)
+@Index('IDX_home_assets_household_status', ['householdId', 'status'])
+@Index('IDX_home_assets_household_category', ['householdId', 'category'])
+export class HomeAsset {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_home_assets_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  name: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  category: AssetCategory;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  location: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  brand: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  model: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  serialNumber: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  purchaseDate: string | null;
+
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  purchasePrice: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  warrantyExpiresOn: string | null;
+
+  @Column({ type: 'varchar', length: 16, default: 'active' })
+  status: AssetStatus;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  note: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_home_assets_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @OneToMany(() => AssetDocument, (document) => document.asset)
+  documents: AssetDocument[];
+
+  @OneToMany(() => MaintenancePlan, (plan) => plan.asset)
+  maintenancePlans: MaintenancePlan[];
+
+  @OneToMany(() => MaintenanceRecord, (record) => record.asset)
+  maintenanceRecords: MaintenanceRecord[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('asset_documents')
+@Check(
+  'CHK_asset_documents_type',
+  `"type" IN ('receipt', 'manual', 'warranty', 'other')`,
+)
+@Index('IDX_asset_documents_asset_created', ['assetId', 'createdAt'])
+export class AssetDocument {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_asset_documents_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => HomeAsset, (asset) => asset.documents, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'assetId',
+    foreignKeyConstraintName: 'FK_asset_documents_asset',
+  })
+  asset: HomeAsset;
+
+  @Column('uuid')
+  assetId: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  type: AssetDocumentType;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 2000 })
+  url: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_asset_documents_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('maintenance_plans')
+@Check(
+  'CHK_maintenance_plans_frequency',
+  `"frequencyDays" >= 1 AND "frequencyDays" <= 3650`,
+)
+@Unique('UQ_maintenance_plans_asset_title', ['assetId', 'title'])
+@Index('IDX_maintenance_plans_household_due', [
+  'householdId',
+  'isEnabled',
+  'nextDueDate',
+])
+export class MaintenancePlan {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_maintenance_plans_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => HomeAsset, (asset) => asset.maintenancePlans, {
+    eager: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'assetId',
+    foreignKeyConstraintName: 'FK_maintenance_plans_asset',
+  })
+  asset: HomeAsset;
+
+  @Column('uuid')
+  assetId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'integer' })
+  frequencyDays: number;
+
+  @Column({ type: 'date' })
+  nextDueDate: string;
+
+  @Column({ default: true })
+  isEnabled: boolean;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  note: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_maintenance_plans_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @OneToMany(() => MaintenanceRecord, (record) => record.plan)
+  records: MaintenanceRecord[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('maintenance_records')
+@Check(
+  'CHK_maintenance_records_cost',
+  `"cost" IS NULL OR "cost" >= 0`,
+)
+@Unique('UQ_maintenance_records_household_idempotency', [
+  'householdId',
+  'idempotencyKey',
+])
+@Index('IDX_maintenance_records_asset_performed', ['assetId', 'performedAt'])
+@Index('IDX_maintenance_records_plan_performed', ['planId', 'performedAt'])
+export class MaintenanceRecord {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_maintenance_records_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => HomeAsset, (asset) => asset.maintenanceRecords, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'assetId',
+    foreignKeyConstraintName: 'FK_maintenance_records_asset',
+  })
+  asset: HomeAsset;
+
+  @Column('uuid')
+  assetId: string;
+
+  @ManyToOne(() => MaintenancePlan, (plan) => plan.records, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'planId',
+    foreignKeyConstraintName: 'FK_maintenance_records_plan',
+  })
+  plan: MaintenancePlan;
+
+  @Column('uuid')
+  planId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'performedById',
+    foreignKeyConstraintName: 'FK_maintenance_records_performed_by',
+  })
+  performedBy: Member;
+
+  @Column('uuid')
+  performedById: string;
+
+  @Column({ type: 'timestamptz' })
+  performedAt: Date;
+
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  cost: string | null;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'varchar', length: 160 })
+  idempotencyKey: string;
+
+  @Column({ type: 'date' })
+  nextDueDateBefore: string;
+
+  @Column({ type: 'date' })
+  nextDueDateAfter: string;
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
   createdAt: Date;
 }
 
@@ -3274,6 +3585,10 @@ export const ALL_ENTITIES = [
   MediaRequest,
   Reminder,
   ReminderRecipient,
+  HomeAsset,
+  AssetDocument,
+  MaintenancePlan,
+  MaintenanceRecord,
   ShoppingItem,
   InventoryItem,
   InventoryTransaction,

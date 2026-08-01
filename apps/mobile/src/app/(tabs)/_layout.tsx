@@ -159,6 +159,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="assets"
+        options={{
+          title: '资产',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="canteen"
         options={{
           title: '食堂',

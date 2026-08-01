@@ -13,6 +13,7 @@ import {
   UserRound,
   UsersRound,
   Vote,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react-native';
 import { usePathname, useRouter, type Href } from 'expo-router';
@@ -126,6 +127,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },
   { label: '采购与库存', href: '/shopping', icon: ShoppingCart, matches: (pathname) => pathname === '/shopping' },
+  { label: '家庭资产', href: '/assets', icon: Wrench, matches: (pathname) => pathname === '/assets' },
   { label: '家庭任务', href: '/tasks', icon: ListTodo, matches: (pathname) => pathname === '/tasks' },
   { label: '访客来访', href: '/guests', icon: UsersRound, matches: (pathname) => pathname === '/guests' },
   { label: '家庭日历', href: '/calendar', icon: CalendarDays, matches: (pathname) => pathname === '/calendar' },

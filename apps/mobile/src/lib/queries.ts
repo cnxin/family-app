@@ -7,6 +7,9 @@ import { api } from './api';
 import type {
   AccountProfile,
   AppNotification,
+  AssetCategory,
+  AssetDocument,
+  AssetDocumentType,
   CalendarEntry,
   CalendarEvent,
   CreatedGuestInvitation,
@@ -20,6 +23,7 @@ import type {
   GuestWifiProfile,
   HouseholdPoll,
   HouseholdReminder,
+  HomeAsset,
   DishRecipeVariant,
   DishRecipeStep,
   DishReferenceLink,
@@ -54,6 +58,8 @@ import type {
   MenuItem,
   MenuItemStatus,
   MenuInventoryPreview,
+  MaintenanceCompletionResult,
+  MaintenancePlan,
   MemberDishSkill,
   PollCategory,
   PollVoteMode,
@@ -1102,6 +1108,177 @@ export function useMarkAllNotificationsRead() {
       api<{ updated: number }>('/notifications/read-all', { method: 'PATCH' }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}
+
+export function useAssets(status: 'active' | 'retired' | 'all' = 'all') {
+  return useQuery({
+    queryKey: ['assets', status],
+    queryFn: () => api<HomeAsset[]>(`/assets?status=${status}`),
+  });
+}
+
+export function useAsset(id: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['asset', id],
+    queryFn: () => api<HomeAsset>(`/assets/${id}`),
+    enabled: enabled && Boolean(id),
+  });
+}
+
+export interface AssetUpsertInput {
+  id?: string;
+  name: string;
+  category: AssetCategory;
+  location?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  purchaseDate?: string | null;
+  purchasePrice?: number | null;
+  warrantyExpiresOn?: string | null;
+  status?: 'active' | 'retired';
+  note?: string | null;
+}
+
+export function useUpsertAsset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: AssetUpsertInput) =>
+      id
+        ? api<HomeAsset>(`/assets/${id}`, { method: 'PATCH', body })
+        : api<HomeAsset>('/assets', { method: 'POST', body }),
+    onSuccess: (asset) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', asset.id] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+    },
+  });
+}
+
+export function useAddAssetDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      assetId: string;
+      type: AssetDocumentType;
+      title: string;
+      url: string;
+    }) =>
+      api<AssetDocument>(`/assets/${input.assetId}/documents`, {
+        method: 'POST',
+        body: { type: input.type, title: input.title, url: input.url },
+      }),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+    },
+  });
+}
+
+export function useRemoveAssetDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { assetId: string; documentId: string }) =>
+      api<{ id: string; removed: true }>(
+        `/asset-documents/${input.documentId}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+    },
+  });
+}
+
+export function useAddMaintenancePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      assetId: string;
+      title: string;
+      frequencyDays: number;
+      nextDueDate: string;
+      note?: string | null;
+    }) =>
+      api<MaintenancePlan>(`/assets/${input.assetId}/maintenance-plans`, {
+        method: 'POST',
+        body: {
+          title: input.title,
+          frequencyDays: input.frequencyDays,
+          nextDueDate: input.nextDueDate,
+          note: input.note,
+        },
+      }),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+    },
+  });
+}
+
+export function useUpdateMaintenancePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      planId,
+      title,
+      frequencyDays,
+      nextDueDate,
+      isEnabled,
+      note,
+    }: {
+      assetId: string;
+      planId: string;
+      title?: string;
+      frequencyDays?: number;
+      nextDueDate?: string;
+      isEnabled?: boolean;
+      note?: string | null;
+    }) =>
+      api<MaintenancePlan>(`/maintenance-plans/${planId}`, {
+        method: 'PATCH',
+        body: { title, frequencyDays, nextDueDate, isEnabled, note },
+      }),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
+    },
+  });
+}
+
+export function useCompleteMaintenancePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      assetId: string;
+      planId: string;
+      performedAt?: string;
+      cost?: number | null;
+      note?: string | null;
+      idempotencyKey: string;
+    }) =>
+      api<MaintenanceCompletionResult>(
+        `/maintenance-plans/${input.planId}/complete`,
+        {
+          method: 'POST',
+          body: {
+            performedAt: input.performedAt,
+            cost: input.cost,
+            note: input.note,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      ),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+      void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
+    },
   });
 }
 

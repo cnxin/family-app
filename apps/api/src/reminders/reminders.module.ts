@@ -30,6 +30,7 @@ import {
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import {
   DataSource,
+  Between,
   EntityManager,
   In,
   IsNull,
@@ -44,6 +45,7 @@ import {
   MealType,
   Member,
   Menu,
+  MaintenancePlan,
   Notification,
   Poll,
   Reminder,
@@ -68,7 +70,7 @@ class ReminderQueryDto {
 }
 
 class CreateReminderDto {
-  @IsIn(['menu', 'task', 'calendar', 'poll'])
+  @IsIn(['menu', 'task', 'calendar', 'poll', 'maintenance'])
   sourceModule: ReminderSourceModule;
 
   @IsUUID()
@@ -183,7 +185,7 @@ export class RemindersService
   }
 
   async listSources(query: ReminderSourceRangeDto, user: JwtUser) {
-    const [calendarEntries, polls] = await Promise.all([
+    const [calendarEntries, polls, maintenancePlans] = await Promise.all([
       this.calendar.list(query.start, query.end, user),
       this.polls.find({
         where: {
@@ -193,6 +195,15 @@ export class RemindersService
         },
         order: { createdAt: 'DESC' },
         take: 50,
+      }),
+      this.dataSource.getRepository(MaintenancePlan).find({
+        where: {
+          householdId: user.householdId,
+          isEnabled: true,
+          nextDueDate: Between(query.start, query.end),
+        },
+        order: { nextDueDate: 'ASC', createdAt: 'ASC' },
+        take: 100,
       }),
     ]);
     const now = Date.now();
@@ -234,7 +245,21 @@ export class RemindersService
         status: entry.status,
       }));
 
-    return [...calendarSources, ...pollSources].sort((left, right) => {
+    const maintenanceSources = maintenancePlans
+      .filter((plan) => plan.asset.status === 'active')
+      .map<ReminderSource>((plan) => ({
+        module: 'maintenance',
+        sourceId: plan.id,
+        occurrenceDate: null,
+        title: `${plan.asset.name} · ${plan.title}`,
+        summary: plan.note,
+        date: plan.nextDueDate,
+        startsAt: null,
+        targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        status: 'scheduled',
+      }));
+
+    return [...calendarSources, ...pollSources, ...maintenanceSources].sort((left, right) => {
       const leftTime = left.startsAt ?? left.date ?? '9999-12-31';
       const rightTime = right.startsAt ?? right.date ?? '9999-12-31';
       return leftTime.localeCompare(rightTime) || left.title.localeCompare(right.title, 'zh-CN');
@@ -481,6 +506,27 @@ export class RemindersService
       };
     }
 
+    if (reminder.sourceModule === 'maintenance') {
+      const plan = await manager.getRepository(MaintenancePlan).findOneBy({
+        id: reminder.sourceId,
+        householdId: reminder.householdId,
+      });
+      if (!plan) return null;
+      const active = plan.isEnabled && plan.asset.status === 'active';
+      if (actionableOnly && !active) return null;
+      return {
+        module: 'maintenance',
+        sourceId: plan.id,
+        occurrenceDate: null,
+        title: `${plan.asset.name} · ${plan.title}`,
+        summary: plan.note,
+        date: plan.nextDueDate,
+        startsAt: null,
+        targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        status: active ? 'scheduled' : 'cancelled',
+      };
+    }
+
     const poll = await manager.getRepository(Poll).findOneBy({
       id: reminder.sourceId,
       householdId: reminder.householdId,
@@ -667,6 +713,7 @@ export class RemindersController {
       HouseholdTask,
       HouseholdTaskInstance,
       Poll,
+      MaintenancePlan,
     ]),
   ],
   controllers: [RemindersController],

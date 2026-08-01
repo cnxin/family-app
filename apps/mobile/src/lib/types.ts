@@ -327,6 +327,83 @@ export interface InventoryActionResult {
   transactions: InventoryTransaction[];
 }
 
+export type AssetCategory =
+  | 'appliance'
+  | 'furniture'
+  | 'electronics'
+  | 'tool'
+  | 'other';
+export type AssetStatus = 'active' | 'retired';
+export type AssetDocumentType = 'receipt' | 'manual' | 'warranty' | 'other';
+
+export interface AssetDocument {
+  id: string;
+  assetId: string;
+  type: AssetDocumentType;
+  title: string;
+  url: string;
+  createdById: string;
+  createdBy: Member;
+  createdAt: string;
+}
+
+export interface MaintenancePlan {
+  id: string;
+  assetId: string;
+  title: string;
+  frequencyDays: number;
+  nextDueDate: string;
+  isEnabled: boolean;
+  note: string | null;
+  createdById: string;
+  createdBy: Member;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  assetId: string;
+  planId: string;
+  performedById: string;
+  performedBy: Member;
+  performedAt: string;
+  cost: string | null;
+  note: string | null;
+  idempotencyKey: string;
+  nextDueDateBefore: string;
+  nextDueDateAfter: string;
+  createdAt: string;
+}
+
+export interface HomeAsset {
+  id: string;
+  name: string;
+  category: AssetCategory;
+  location: string | null;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  purchaseDate: string | null;
+  purchasePrice: string | null;
+  warrantyExpiresOn: string | null;
+  status: AssetStatus;
+  note: string | null;
+  createdById: string;
+  createdBy: Member;
+  documents: AssetDocument[];
+  maintenancePlans: MaintenancePlan[];
+  maintenanceRecords: MaintenanceRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaintenanceCompletionResult {
+  alreadyCompleted: boolean;
+  record: MaintenanceRecord;
+  plan: MaintenancePlan;
+}
+
 export interface ShoppingInventoryPreview {
   shoppingItem: {
     id: string;
@@ -969,7 +1046,12 @@ export interface HouseholdPoll {
   options: PollOptionResult[];
 }
 
-export type ReminderSourceModule = 'menu' | 'task' | 'calendar' | 'poll';
+export type ReminderSourceModule =
+  | 'menu'
+  | 'task'
+  | 'calendar'
+  | 'poll'
+  | 'maintenance';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
 
 export interface ReminderSource {

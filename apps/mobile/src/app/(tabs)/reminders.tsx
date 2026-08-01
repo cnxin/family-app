@@ -13,6 +13,7 @@ import {
   Plus,
   Trash2,
   Vote,
+  Wrench,
   X,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -67,6 +68,7 @@ const SOURCE_META: Record<
   task: { label: '任务', icon: ListTodo },
   calendar: { label: '日程', icon: CalendarDays },
   poll: { label: '投票', icon: Vote },
+  maintenance: { label: '维护', icon: Wrench },
 };
 
 function firstParam(value: string | string[] | undefined) {

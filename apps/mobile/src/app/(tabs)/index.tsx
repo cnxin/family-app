@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   UsersRound,
   Vote,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useRouter, type Href } from 'expo-router';
@@ -26,6 +27,7 @@ import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import { Card } from '../../components/ui';
 import { todayStr } from '../../lib/date';
 import {
+  useAssets,
   useMedia,
   useMenusOfDate,
   useNotifications,
@@ -165,6 +167,7 @@ export default function HomeScreen() {
   const { data: media } = useMedia('all');
   const { data: reminders, isLoading: remindersLoading } = useReminders('scheduled');
   const { data: visits } = useVisits('scheduled');
+  const { data: assets } = useAssets('active');
 
   const menuItems =
     menus?.reduce(
@@ -179,6 +182,15 @@ export default function HomeScreen() {
     media?.filter((entry) => entry.status !== 'completed' && entry.status !== 'dropped').length ?? 0;
   const upcomingReminder = reminders?.[0];
   const upcomingVisits = visits?.filter((visit) => new Date(visit.startsAt) >= new Date()).length ?? 0;
+  const dueMaintenance =
+    assets?.reduce(
+      (sum, asset) =>
+        sum +
+        asset.maintenancePlans.filter(
+          (plan) => plan.isEnabled && plan.nextDueDate <= todayStr(30),
+        ).length,
+      0,
+    ) ?? 0;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -267,6 +279,15 @@ export default function HomeScreen() {
               icon={UsersRound}
               label="访客来访"
               status={`${upcomingVisits} 次待安排`}
+            />
+            <ModuleCard
+              background={c.orangeSoft}
+              color={c.orange}
+              desktop={desktop}
+              href="/assets"
+              icon={Wrench}
+              label="家庭资产"
+              status={dueMaintenance ? `${dueMaintenance} 项维护将到期` : `${assets?.length ?? 0} 件在用`}
             />
           </View>
 
