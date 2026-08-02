@@ -25,6 +25,21 @@ Docker 命名卷用于持久化，不等于备份。本项目的完整开发备�
 
 至少保留一份不在当前电脑上的副本。备份目录可能包含家庭隐私数据，不应提交 Git 或上传公共网盘。
 
+## 计划备份与运行状态
+
+家庭管理员可从“系统备份”配置每天或每周完整备份、保留天数与份数、容量告警阈值，以及每月隔离恢复演练。API 只保存策略和任务状态；独立 `backup-worker` 容器连接数据库、只读访问上传卷并写入专用备份目录，不挂载 Docker socket。
+
+开发环境启动 worker 时不要重新运行 seed：
+
+```bash
+/Applications/Docker.app/Contents/Resources/bin/docker compose \
+  -f docker-compose.dev.yml up -d --no-deps backup-worker
+```
+
+开发环境的受管备份默认写入 `backups-managed/`。生产环境由 `FAMILY_APP_BACKUP_ROOT` 指定宿主机目录，默认是 `backups-production-managed/`。保留策略只清理受管目录中由同一家庭策略创建且通过 UUID 路径验证的旧备份，运行历史不会删除。容量进入警告或严重状态时，家庭管理员会收到系统通知。
+
+自动恢复演练依次验证 SHA-256、恢复到随机临时数据库、执行待运行迁移、核对家庭和迁移数量、解压附件到临时目录，并在成功或失败后清理临时数据库和文件。活动数据库与上传卷始终保持不变。
+
 ## 恢复演练
 
 恢复脚本只允许恢复到一个不存在的新数据库，拒绝覆盖当前使用的 `family_app`。上传文件会解压到预览目录，不会覆盖当前上传卷。
@@ -44,6 +59,21 @@ DB_NAME=family_app_restore_test npx pnpm --filter api test:schema
 ```
 
 验证完成后，可显式删除这次演练创建的数据库和预览目录；不要把删除命令指向当前使用的数据库或其他备份目录。
+
+## 生产恢复演练
+
+生产恢复脚本只允许恢复到不存在的新数据库，拒绝活动生产数据库，并将附件解压到独立预览目录。它不会切换生产连接或覆盖上传卷：
+
+```bash
+FAMILY_APP_PROD_ENV=deploy/.env.production \
+  ./scripts/restore-prod.sh \
+  backups-production-managed/<家庭 UUID>/<运行 UUID> \
+  family_app_restore_202608
+```
+
+生产切换仍是明确的停机运维操作：应先核对恢复库和附件，另做一次最新备份，再通过受控部署修改数据库与上传卷指向。不要在脚本外直接向活动库执行 `pg_restore`。
+
+数据库备份包含加密后的集成凭据，但不包含 `JWT_SECRET`、`INTEGRATION_SECRET_KEY`、数据库密码或其他 secret 文件。灾难恢复前必须从独立受保护位置取得相同的加密主密钥；不要把这些密钥放入备份目录、Git、日志或验收文档。
 
 ## 迁移命令
 

@@ -10,7 +10,10 @@ uploads
 **/uploads
 backups
 backups-production
+backups-managed
+backups-production-managed
 restore-preview
+restore-preview-managed
 deploy/.env.production
 deploy/secrets
 apps/mobile/e2e/.auth

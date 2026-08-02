@@ -10,6 +10,75 @@ export type MenuEventType =
   | 'menu_completed';
 export type DishCategory = '荤菜' | '素菜' | '汤' | '主食' | '甜品';
 export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
+export type BackupScheduleFrequency = 'daily' | 'weekly';
+export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
+export type BackupRunKind = 'backup' | 'restore_drill' | 'capacity_check';
+export type BackupRunStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+export interface BackupPolicy {
+  id: string;
+  scheduleEnabled: boolean;
+  frequency: BackupScheduleFrequency;
+  weeklyDay: number | null;
+  scheduledHour: number;
+  scheduledMinute: number;
+  retentionDays: number;
+  retentionCount: number;
+  capacityWarningPercent: number;
+  capacityCriticalPercent: number;
+  restoreDrillEnabled: boolean;
+  restoreDrillDay: number;
+  restoreDrillHour: number;
+  nextBackupAt: string | null;
+  nextRestoreDrillAt: string | null;
+  lastStorageCheckedAt: string | null;
+  storageTotalBytes: string | null;
+  storageAvailableBytes: string | null;
+  storageUsedBytes: string | null;
+  capacityStatus: BackupCapacityStatus;
+  capacityAlertedAt: string | null;
+  workerLastSeenAt: string | null;
+  updatedAt: string;
+}
+
+export interface BackupRun {
+  id: string;
+  kind: BackupRunKind;
+  status: BackupRunStatus;
+  trigger: 'manual' | 'scheduled';
+  sourceBackupRunId: string | null;
+  requestedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  heartbeatAt: string | null;
+  databaseBytes: string | null;
+  uploadsBytes: string | null;
+  totalBytes: string | null;
+  checksumVerified: boolean | null;
+  restoredMigrationCount: number | null;
+  retentionDeletedCount: number;
+  retained: boolean;
+  purgedAt: string | null;
+  artifactAvailable: boolean;
+  errorCode: string | null;
+  errorMessage: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackupDashboard {
+  policy: BackupPolicy;
+  workerOnline: boolean;
+  activeRun: BackupRun | null;
+  runs: BackupRun[];
+}
 
 export interface DishRecipeStep {
   text: string;

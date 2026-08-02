@@ -92,6 +92,8 @@ services:
       BANGUMI_ACCESS_TOKEN: ${BANGUMI_ACCESS_TOKEN:-}
       BANGUMI_ACCESS_TOKEN_FILE: ${BANGUMI_ACCESS_TOKEN_FILE:-}
       BANGUMI_USER_AGENT: ${BANGUMI_USER_AGENT:-family-app/0.1 (self-hosted household media search)}
+      BACKUP_SCHEDULER_POLL_INTERVAL_MS: ${BACKUP_SCHEDULER_POLL_INTERVAL_MS:-30000}
+      BACKUP_RUN_STALE_MS: ${BACKUP_RUN_STALE_MS:-7200000}
     secrets:
       - db_password
       - jwt_secret
@@ -166,6 +168,44 @@ services:
         limits:
           cpus: "${WEB_CPU_LIMIT:-0.50}"
           memory: ${WEB_MEMORY_LIMIT:-256M}
+
+  backup-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    image: family-app-backup-worker:${APP_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-family}
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      DB_NAME: ${POSTGRES_DB:-family_app}
+      BACKUP_ROOT: /backups
+      UPLOADS_DIR: /source/uploads
+      RESTORE_WORK_ROOT: /restore-work
+      BACKUP_WORKER_POLL_SECONDS: ${BACKUP_WORKER_POLL_SECONDS:-15}
+      APP_GIT_COMMIT: ${APP_VERSION:-latest}
+    secrets:
+      - db_password
+    volumes:
+      - family_app_uploads_prod:/source/uploads:ro
+      - ${FAMILY_APP_BACKUP_ROOT:-./backups-production-managed}:/backups
+    tmpfs:
+      - /restore-work:size=${BACKUP_RESTORE_WORK_SIZE:-2g},nosuid
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *container-logging
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "${BACKUP_CPU_LIMIT:-1.00}"
+          memory: ${BACKUP_MEMORY_LIMIT:-1G}
 
 secrets:
   db_password:

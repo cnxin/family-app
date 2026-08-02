@@ -4,6 +4,7 @@ import {
   BellRing,
   CalendarDays,
   CookingPot,
+  DatabaseBackup,
   Film,
   Gift,
   House,
@@ -135,6 +136,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: '家庭日历', href: '/calendar', icon: CalendarDays, matches: (pathname) => pathname === '/calendar' },
   { label: '提醒中心', href: '/reminders', icon: BellRing, matches: (pathname) => pathname === '/reminders' },
   { label: '家庭活动', href: '/activity', icon: History, matches: (pathname) => pathname === '/activity' },
+  {
+    label: '系统备份',
+    href: '/system-backups',
+    icon: DatabaseBackup,
+    matches: (pathname) => pathname === '/system-backups',
+    requiresMemberManagement: true,
+  },
   {
     label: '成员管理',
     href: '/members',

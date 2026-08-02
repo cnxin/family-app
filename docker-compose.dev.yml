@@ -52,6 +52,8 @@ x-api-common: &api-common
     BANGUMI_USER_AGENT: ${BANGUMI_USER_AGENT:-family-app/0.1 (self-hosted household media search)}
     INTEGRATION_SECRET_KEY: ${INTEGRATION_SECRET_KEY:-}
     INTEGRATION_SECRET_KEY_FILE: ${INTEGRATION_SECRET_KEY_FILE:-}
+    BACKUP_SCHEDULER_POLL_INTERVAL_MS: ${BACKUP_SCHEDULER_POLL_INTERVAL_MS:-30000}
+    BACKUP_RUN_STALE_MS: ${BACKUP_RUN_STALE_MS:-7200000}
 
 services:
   db:
@@ -96,6 +98,34 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  backup-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    image: family-app-backup-worker:dev
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: family
+      DB_PASSWORD: family123
+      DB_NAME: family_app
+      BACKUP_ROOT: /backups
+      UPLOADS_DIR: /source/uploads
+      RESTORE_WORK_ROOT: /restore-work
+      BACKUP_WORKER_POLL_SECONDS: ${BACKUP_WORKER_POLL_SECONDS:-15}
+      APP_GIT_COMMIT: ${APP_VERSION:-development}
+    volumes:
+      - family_app_uploads:/source/uploads:ro
+      - ./backups-managed:/backups
+    tmpfs:
+      - /restore-work:size=2g,nosuid
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   family_app_pgdata_dev:

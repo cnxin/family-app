@@ -195,6 +195,13 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="system-backups"
+        options={{
+          title: '备份',
+          href: null,
+        }}
+      />
     </Tabs>
   );
 

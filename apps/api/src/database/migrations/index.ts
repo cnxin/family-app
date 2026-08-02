@@ -35,6 +35,8 @@ import { AddPointsAndRewards1785229700000 } from './1785229700000-add-points-and
 import { NormalizePointsUniqueIndexes1785229800000 } from './1785229800000-normalize-points-unique-indexes';
 import { AddMaintenanceConsumables1785229900000 } from './1785229900000-add-maintenance-consumables';
 import { AddExternalNotificationDelivery1785230000000 } from './1785230000000-add-external-notification-delivery';
+import { AddBackupOperations1785230100000 } from './1785230100000-add-backup-operations';
+import { AddBackupRunNotificationState1785230200000 } from './1785230200000-add-backup-run-notification-state';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -74,4 +76,6 @@ export const ALL_MIGRATIONS = [
   NormalizePointsUniqueIndexes1785229800000,
   AddMaintenanceConsumables1785229900000,
   AddExternalNotificationDelivery1785230000000,
+  AddBackupOperations1785230100000,
+  AddBackupRunNotificationState1785230200000,
 ];

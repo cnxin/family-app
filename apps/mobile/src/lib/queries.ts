@@ -10,6 +10,10 @@ import type {
   AssetCategory,
   AssetDocument,
   AssetDocumentType,
+  BackupDashboard,
+  BackupPolicy,
+  BackupRun,
+  BackupScheduleFrequency,
   CalendarEntry,
   CalendarEvent,
   CreatedGuestInvitation,
@@ -90,6 +94,79 @@ import type {
   Visit,
   VisitStatus,
 } from './types';
+
+export interface BackupPolicyInput {
+  scheduleEnabled: boolean;
+  frequency: BackupScheduleFrequency;
+  weeklyDay: number | null;
+  scheduledHour: number;
+  scheduledMinute: number;
+  retentionDays: number;
+  retentionCount: number;
+  capacityWarningPercent: number;
+  capacityCriticalPercent: number;
+  restoreDrillEnabled: boolean;
+  restoreDrillDay: number;
+  restoreDrillHour: number;
+}
+
+export function useBackupDashboard(enabled = true) {
+  return useQuery({
+    queryKey: ['system-backups'],
+    queryFn: () => api<BackupDashboard>('/system/backups'),
+    enabled,
+    refetchInterval: enabled ? 10_000 : false,
+  });
+}
+
+export function useUpdateBackupPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BackupPolicyInput) =>
+      api<BackupPolicy>('/system/backups/policy', { method: 'PUT', body }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['system-backups'] }),
+  });
+}
+
+export function useQueueBackupRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: 'backup' | 'capacity_check') =>
+      api<BackupRun>(
+        kind === 'backup'
+          ? '/system/backups/runs'
+          : '/system/backups/capacity-checks',
+        {
+          method: 'POST',
+          body: { idempotencyKey: `${kind}:${Date.now()}:${Math.random().toString(36).slice(2)}` },
+        },
+      ),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['system-backups'] }),
+  });
+}
+
+export function useQueueRestoreDrill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sourceBackupRunId: string) =>
+      api<BackupRun>(`/system/backups/runs/${sourceBackupRunId}/restore-drills`, {
+        method: 'POST',
+        body: {
+          idempotencyKey: `restore:${sourceBackupRunId}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+        },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['system-backups'] }),
+  });
+}
+
+export function useCancelBackupRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<BackupRun>(`/system/backups/runs/${id}/cancel`, { method: 'PATCH' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['system-backups'] }),
+  });
+}
 
 export function useMembers(enabled = true) {
   return useQuery({
