@@ -4,6 +4,7 @@ import {
   CalendarClock,
   ChevronRight,
   Film,
+  Gift,
   History,
   MailPlus,
   Settings2,
@@ -177,6 +178,9 @@ function activityVisual(module: ActivityModule, c: ReturnType<typeof useTheme>) 
   }
   if (module === 'asset') {
     return { icon: Wrench, color: c.green, backgroundColor: c.greenSoft };
+  }
+  if (module === 'points') {
+    return { icon: Gift, color: c.orange, backgroundColor: c.orangeSoft };
   }
   if (module === 'system') {
     return { icon: Settings2, color: c.secondaryLabel, backgroundColor: c.fill };

@@ -166,6 +166,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="points"
+        options={{
+          title: '积分',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="canteen"
         options={{
           title: '食堂',

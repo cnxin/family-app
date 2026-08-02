@@ -5,6 +5,7 @@ import {
   CalendarCheck2,
   Check,
   Circle,
+  CircleDollarSign,
   Pencil,
   Plus,
   Repeat2,
@@ -87,6 +88,7 @@ function recurrenceLabel(task: TaskOccurrence['task']) {
 }
 
 function TaskForm({
+  canManagePoints,
   entry,
   initialDate,
   members,
@@ -94,6 +96,7 @@ function TaskForm({
   onSaved,
   visible,
 }: {
+  canManagePoints: boolean;
   entry: TaskOccurrence | null;
   initialDate: string;
   members: Member[];
@@ -111,6 +114,7 @@ function TaskForm({
   const [hasEnd, setHasEnd] = useState(false);
   const [endsOn, setEndsOn] = useState(addDays(initialDate, 30));
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [rewardPoints, setRewardPoints] = useState('0');
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -125,18 +129,27 @@ function TaskForm({
     setHasEnd(Boolean(task?.endsOn));
     setEndsOn(task?.endsOn ?? addDays(date, 30));
     setAssigneeId(task?.defaultAssigneeId ?? null);
+    setRewardPoints(String(task?.rewardPoints ?? 0));
     setMessage(null);
   }, [entry, initialDate, visible]);
 
   const submit = async () => {
     const normalizedTitle = title.trim();
     const interval = Number(repeatInterval);
+    const points = Number(rewardPoints);
     if (!normalizedTitle) {
       setMessage('请填写任务名称');
       return;
     }
     if (!Number.isInteger(interval) || interval < 1 || interval > 365) {
       setMessage('重复间隔需要是 1 到 365 的整数');
+      return;
+    }
+    if (
+      canManagePoints &&
+      (!Number.isInteger(points) || points < 0 || points > 10000)
+    ) {
+      setMessage('任务积分需要是 0 到 10000 的整数');
       return;
     }
     if (recurrence !== 'once' && hasEnd && endsOn < startsOn) {
@@ -154,6 +167,7 @@ function TaskForm({
         repeatInterval: interval,
         endsOn: recurrence !== 'once' && hasEnd ? endsOn : null,
         defaultAssigneeId: assigneeId,
+        ...(canManagePoints ? { rewardPoints: points } : {}),
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSaved(startsOn);
@@ -303,6 +317,23 @@ function TaskForm({
               </View>
             </View>
 
+            {canManagePoints ? (
+              <View style={styles.field}>
+                <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>完成积分</Text>
+                <TextInput
+                  accessibilityLabel="任务完成积分"
+                  inputMode="numeric"
+                  maxLength={5}
+                  onChangeText={setRewardPoints}
+                  placeholder="0"
+                  placeholderTextColor={c.tertiaryLabel}
+                  style={[t.body, styles.input, { backgroundColor: c.fill, color: c.label }]}
+                  value={rewardPoints}
+                />
+                <Text style={[t.caption, { color: c.secondaryLabel }]}>设为 0 时不发放积分；恢复已完成任务会冲销本次积分。</Text>
+              </View>
+            ) : null}
+
             <View style={styles.field}>
               <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>备注</Text>
               <TextInput
@@ -448,6 +479,15 @@ function TaskRow({
           <Text style={[t.caption, { color: c.secondaryLabel }]}>
             {entry.assignee?.name ?? '全家可做'}
           </Text>
+          {entry.task.rewardPoints > 0 ? (
+            <>
+              <Text style={[t.caption, { color: c.tertiaryLabel }]}>·</Text>
+              <CircleDollarSign color={entry.pointsAwarded ? c.green : c.orange} size={13} />
+              <Text style={[t.caption, { color: entry.pointsAwarded ? c.green : c.orange }]}>
+                {entry.pointsAwarded ? '已发' : '完成'} +{entry.task.rewardPoints}
+              </Text>
+            </>
+          ) : null}
         </View>
         {entry.task.note ? (
           <Text numberOfLines={2} style={[t.footnote, { color: c.secondaryLabel, marginTop: 5 }]}>
@@ -695,6 +735,7 @@ export default function TasksScreen() {
       </PageContainer>
 
       <TaskForm
+        canManagePoints={member?.role === 'owner' || member?.role === 'admin'}
         entry={editingEntry}
         initialDate={selectedDate}
         members={members ?? []}

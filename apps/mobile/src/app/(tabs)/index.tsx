@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CookingPot,
   Film,
+  Gift,
   ListTodo,
   ShoppingCart,
   UsersRound,
@@ -32,6 +33,7 @@ import {
   useMenusOfDate,
   useNotifications,
   usePolls,
+  usePointsAccounts,
   useReminders,
   useShoppingList,
   useTasks,
@@ -168,6 +170,7 @@ export default function HomeScreen() {
   const { data: reminders, isLoading: remindersLoading } = useReminders('scheduled');
   const { data: visits } = useVisits('scheduled');
   const { data: assets } = useAssets('active');
+  const { data: pointsAccounts } = usePointsAccounts();
 
   const menuItems =
     menus?.reduce(
@@ -191,6 +194,7 @@ export default function HomeScreen() {
         ).length,
       0,
     ) ?? 0;
+  const ownPoints = pointsAccounts?.find((account) => account.memberId === member?.id)?.balance ?? 0;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -288,6 +292,15 @@ export default function HomeScreen() {
               icon={Wrench}
               label="家庭资产"
               status={dueMaintenance ? `${dueMaintenance} 项维护将到期` : `${assets?.length ?? 0} 件在用`}
+            />
+            <ModuleCard
+              background={c.accentSoft}
+              color={c.accent}
+              desktop={desktop}
+              href="/points"
+              icon={Gift}
+              label="积分奖励"
+              status={`我的积分 ${ownPoints}`}
             />
           </View>
 

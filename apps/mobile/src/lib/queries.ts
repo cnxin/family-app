@@ -63,7 +63,12 @@ import type {
   MemberDishSkill,
   PollCategory,
   PollVoteMode,
+  PointsAccount,
+  PointsLedger,
   RecipeDish,
+  Reward,
+  RewardRedemption,
+  RewardRedemptionStatus,
   ReminderSource,
   ReminderSourceModule,
   ReminderStatus,
@@ -1018,6 +1023,7 @@ export interface TaskInput {
   repeatInterval: number;
   endsOn?: string | null;
   defaultAssigneeId?: string | null;
+  rewardPoints?: number;
 }
 
 export function useUpsertTask() {
@@ -1033,6 +1039,8 @@ export function useUpsertTask() {
       void qc.invalidateQueries({ queryKey: ['notifications'] });
       void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
       void qc.invalidateQueries({ queryKey: ['reminders'] });
+      void qc.invalidateQueries({ queryKey: ['points-accounts'] });
+      void qc.invalidateQueries({ queryKey: ['points-ledger'] });
     },
   });
 }
@@ -1075,7 +1083,167 @@ export function useUpdateTaskOccurrence() {
       void qc.invalidateQueries({ queryKey: ['notifications'] });
       void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
       void qc.invalidateQueries({ queryKey: ['reminders'] });
+      void qc.invalidateQueries({ queryKey: ['points-accounts'] });
+      void qc.invalidateQueries({ queryKey: ['points-ledger'] });
     },
+  });
+}
+
+function invalidatePoints(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['points-accounts'] });
+  void qc.invalidateQueries({ queryKey: ['points-ledger'] });
+  void qc.invalidateQueries({ queryKey: ['rewards'] });
+  void qc.invalidateQueries({ queryKey: ['reward-redemptions'] });
+  void qc.invalidateQueries({ queryKey: ['activities'] });
+  void qc.invalidateQueries({ queryKey: ['notifications'] });
+}
+
+export function usePointsAccounts(enabled = true) {
+  return useQuery({
+    queryKey: ['points-accounts'],
+    queryFn: () => api<PointsAccount[]>('/points/accounts'),
+    enabled,
+  });
+}
+
+export function usePointsLedger(memberId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['points-ledger', memberId ?? 'all'],
+    queryFn: () =>
+      api<PointsLedger[]>(
+        `/points/ledger?limit=100${memberId ? `&memberId=${memberId}` : ''}`,
+      ),
+    enabled,
+  });
+}
+
+export function useAdjustPoints() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      memberId: string;
+      delta: number;
+      note?: string | null;
+      idempotencyKey: string;
+    }) => api<PointsLedger>('/points/adjustments', { method: 'POST', body }),
+    onSuccess: () => invalidatePoints(qc),
+  });
+}
+
+export function useReversePointsLedger() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      note?: string | null;
+      idempotencyKey: string;
+    }) => api<PointsLedger>(`/points/ledger/${id}/reverse`, { method: 'POST', body }),
+    onSuccess: () => invalidatePoints(qc),
+  });
+}
+
+export function useRewards(includeInactive = false, enabled = true) {
+  return useQuery({
+    queryKey: ['rewards', includeInactive],
+    queryFn: () =>
+      api<Reward[]>(`/rewards${includeInactive ? '?includeInactive=true' : ''}`),
+    enabled,
+  });
+}
+
+export function useUpsertReward() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id?: string;
+      name?: string;
+      description?: string | null;
+      cost?: number;
+      isActive?: boolean;
+    }) =>
+      id
+        ? api<Reward>(`/rewards/${id}`, { method: 'PATCH', body })
+        : api<Reward>('/rewards', { method: 'POST', body }),
+    onSuccess: () => invalidatePoints(qc),
+  });
+}
+
+export function useRedeemReward() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ rewardId, ...body }: {
+      rewardId: string;
+      note?: string | null;
+      idempotencyKey: string;
+    }) =>
+      api<RewardRedemption>(`/rewards/${rewardId}/redemptions`, {
+        method: 'POST',
+        body,
+      }),
+    onSuccess: () => invalidatePoints(qc),
+  });
+}
+
+export function useRewardRedemptions(
+  status?: RewardRedemptionStatus,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['reward-redemptions', status ?? 'all'],
+    queryFn: () =>
+      api<RewardRedemption[]>(
+        `/reward-redemptions${status ? `?status=${status}` : ''}`,
+      ),
+    enabled,
+  });
+}
+
+export function useDecideRedemption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      decision: 'approve' | 'reject';
+      note?: string | null;
+      idempotencyKey: string;
+    }) =>
+      api<RewardRedemption>(`/reward-redemptions/${id}/decision`, {
+        method: 'POST',
+        body,
+      }),
+    onSuccess: () => invalidatePoints(qc),
+  });
+}
+
+export function useCancelRedemption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      note?: string | null;
+      idempotencyKey: string;
+    }) =>
+      api<RewardRedemption>(`/reward-redemptions/${id}/cancel`, {
+        method: 'POST',
+        body,
+      }),
+    onSuccess: () => invalidatePoints(qc),
+  });
+}
+
+export function useReverseRedemption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      note?: string | null;
+      idempotencyKey: string;
+    }) =>
+      api<RewardRedemption>(`/reward-redemptions/${id}/reverse`, {
+        method: 'POST',
+        body,
+      }),
+    onSuccess: () => invalidatePoints(qc),
   });
 }
 

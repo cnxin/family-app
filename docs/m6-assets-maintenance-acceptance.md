@@ -33,7 +33,7 @@ POST   /maintenance-plans/:id/complete
 - `asset_documents` 保存资料类型、标题、外链或私有存储键、创建者与时间。JSON 接口只接受 HTTP(S)；本地图片或 PDF 必须走专用上传接口，列表不暴露存储键。
 - `maintenance_plans` 保存周期和下次到期日；同一资产不能建立同名计划。
 - `maintenance_records` 保存每次实际执行记录和 `nextDueDateBefore/nextDueDateAfter` 快照。家庭和幂等键组合唯一，数据库触发器拒绝任何 `UPDATE` 或 `DELETE`。
-- 资产表由 `1785229500000-add-home-assets` 建立，活动模块约束由 `1785229600000-add-asset-activity-module` 扩展；当前共 33 个有序迁移，`synchronize` 继续保持 `false`。
+- 资产表由 `1785229500000-add-home-assets` 建立，活动模块约束由 `1785229600000-add-asset-activity-module` 扩展；当前仓库共 35 个有序迁移，`synchronize` 继续保持 `false`。
 
 ## 业务边界
 

@@ -36,6 +36,7 @@ import {
   Repository,
 } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { PointsModule, PointsService } from '../points/points.module';
 import {
   HouseholdTask,
   HouseholdTaskInstance,
@@ -83,6 +84,12 @@ class CreateTaskDto {
   @IsOptional()
   @IsUUID()
   defaultAssigneeId?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  rewardPoints?: number;
 }
 
 class UpdateTaskDto {
@@ -117,6 +124,12 @@ class UpdateTaskDto {
   @IsOptional()
   @IsUUID()
   defaultAssigneeId?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  rewardPoints?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -237,6 +250,7 @@ export class TasksService {
     @InjectRepository(HouseholdTaskInstance)
     private readonly instances: Repository<HouseholdTaskInstance>,
     private readonly dataSource: DataSource,
+    private readonly pointsService: PointsService,
   ) {}
 
   async list(start: string, end: string, user: JwtUser) {
@@ -305,6 +319,9 @@ export class TasksService {
   }
 
   async create(dto: CreateTaskDto, user: JwtUser) {
+    if ((dto.rewardPoints ?? 0) > 0 && !isAdmin(user)) {
+      throw new ForbiddenException('只有家庭管理员可以设置任务积分');
+    }
     const input = normalizeTaskInput(dto);
     const taskId = await this.dataSource.transaction(async (manager) => {
       const tasks = manager.getRepository(HouseholdTask);
@@ -318,6 +335,7 @@ export class TasksService {
           householdId: user.householdId,
           createdById: user.memberId,
           defaultAssigneeId: assignee?.id ?? null,
+          rewardPoints: dto.rewardPoints ?? 0,
         }),
       );
       if (assignee && assignee.id !== user.memberId) {
@@ -357,6 +375,9 @@ export class TasksService {
         .getOne();
       if (!task) throw new NotFoundException('家庭任务不存在');
       this.assertTaskManageable(task, user);
+      if (dto.rewardPoints !== undefined && !isAdmin(user)) {
+        throw new ForbiddenException('只有家庭管理员可以修改任务积分');
+      }
 
       const input = normalizeTaskInput(dto, task);
       const assignmentProvided = Object.prototype.hasOwnProperty.call(
@@ -375,6 +396,7 @@ export class TasksService {
 
       Object.assign(task, input);
       if (assignmentProvided) task.defaultAssigneeId = assignee?.id ?? null;
+      if (dto.rewardPoints !== undefined) task.rewardPoints = dto.rewardPoints;
       if (dto.isArchived !== undefined) task.isArchived = dto.isArchived;
       await tasks.save(task);
 
@@ -514,6 +536,22 @@ export class TasksService {
       instance = await instances.save(instance);
       savedId = instance.id;
 
+      if (dto.status === 'done' && previousStatus !== 'done') {
+        await this.pointsService.awardTaskCompletion(
+          manager,
+          task,
+          instance,
+          instance.assigneeId ?? user.memberId,
+          user,
+        );
+      } else if (
+        dto.status !== undefined &&
+        dto.status !== 'done' &&
+        previousStatus === 'done'
+      ) {
+        await this.pointsService.reverseTaskAward(manager, task, instance, user);
+      }
+
       if (
         assignmentProvided &&
         assignee &&
@@ -584,6 +622,7 @@ export class TasksService {
       canManageTask,
       canUpdate:
         canManageTask || assigneeId == null || assigneeId === user.memberId,
+      pointsAwarded: Boolean(instance?.pointsLedgerId),
       task: {
         id: task.id,
         title: task.title,
@@ -596,6 +635,7 @@ export class TasksService {
         createdBy: task.createdBy,
         defaultAssigneeId: task.defaultAssigneeId,
         defaultAssignee: task.defaultAssignee,
+        rewardPoints: task.rewardPoints,
         isArchived: task.isArchived,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
@@ -670,6 +710,7 @@ export class TasksController {
 
 @Module({
   imports: [
+    PointsModule,
     TypeOrmModule.forFeature([
       HouseholdTask,
       HouseholdTaskInstance,

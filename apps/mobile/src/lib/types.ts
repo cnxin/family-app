@@ -54,6 +54,7 @@ export type ActivityModule =
   | 'media'
   | 'guest'
   | 'asset'
+  | 'points'
   | 'system';
 
 export interface HouseholdActivity {
@@ -962,6 +963,7 @@ export interface HouseholdTask {
   createdBy: Member;
   defaultAssigneeId: string | null;
   defaultAssignee: Member | null;
+  rewardPoints: number;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -979,6 +981,7 @@ export interface TaskOccurrence {
   resolvedAt: string | null;
   canManageTask: boolean;
   canUpdate: boolean;
+  pointsAwarded: boolean;
   task: HouseholdTask;
 }
 
@@ -990,7 +993,89 @@ export type NotificationModule =
   | 'reminder'
   | 'media'
   | 'guest'
+  | 'points'
   | 'system';
+
+export type PointsLedgerType =
+  | 'award'
+  | 'adjustment'
+  | 'redemption'
+  | 'reversal';
+
+export interface PointsAccount {
+  id: string;
+  householdId: string;
+  memberId: string;
+  member: Member;
+  balance: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PointsLedger {
+  id: string;
+  householdId: string;
+  accountId: string;
+  memberId: string;
+  member: Member;
+  type: PointsLedgerType;
+  pointsBefore: number;
+  delta: number;
+  pointsAfter: number;
+  actorId: string;
+  actor: Member;
+  actorName: string;
+  sourceType: 'manual' | 'task' | 'reward_redemption' | 'points_ledger';
+  sourceId: string;
+  note: string | null;
+  reversesLedgerId: string | null;
+  createdAt: string;
+}
+
+export interface Reward {
+  id: string;
+  householdId: string;
+  name: string;
+  description: string | null;
+  cost: number;
+  isActive: boolean;
+  createdById: string;
+  createdBy: Member;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RewardRedemptionStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled'
+  | 'reversed';
+
+export interface RewardRedemption {
+  id: string;
+  householdId: string;
+  rewardId: string;
+  reward: Reward;
+  memberId: string;
+  member: Member;
+  rewardName: string;
+  cost: number;
+  status: RewardRedemptionStatus;
+  requestNote: string | null;
+  debitLedgerId: string;
+  handledById: string | null;
+  handledBy: Member | null;
+  handledAt: string | null;
+  decisionNote: string | null;
+  restoreLedgerId: string | null;
+  reversedById: string | null;
+  reversedBy: Member | null;
+  reversedAt: string | null;
+  reversalNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface AppNotification {
   id: string;

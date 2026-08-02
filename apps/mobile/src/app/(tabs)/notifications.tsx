@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clapperboard,
   CookingPot,
+  Gift,
   ListTodo,
   UsersRound,
   Vote,
@@ -43,6 +44,7 @@ const MODULE_LABELS: Record<NotificationModule, string> = {
   reminder: '提醒',
   media: '观影',
   guest: '访客',
+  points: '积分',
   system: '系统',
 };
 
@@ -65,6 +67,7 @@ function NotificationIcon({ module }: { module: NotificationModule }) {
   if (module === 'reminder') return <BellRing {...props} />;
   if (module === 'media') return <Clapperboard {...props} color={c.green} />;
   if (module === 'guest') return <UsersRound {...props} color={c.blue} />;
+  if (module === 'points') return <Gift {...props} color={c.orange} />;
   return <Bell {...props} />;
 }
 
@@ -90,6 +93,8 @@ function NotificationRow({
             ? c.greenSoft
             : notification.module === 'guest'
               ? c.blueSoft
+              : notification.module === 'points'
+                ? c.orangeSoft
         : c.tintSoft;
   return (
     <View
