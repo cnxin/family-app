@@ -52,6 +52,9 @@ import type {
   InventoryActionResult,
   InventoryItem,
   InventoryTransaction,
+  KnowledgeArticle,
+  KnowledgeArticleCategory,
+  KnowledgeArticleRevision,
   Member,
   ManagedMember,
   MealType,
@@ -94,6 +97,147 @@ import type {
   Visit,
   VisitStatus,
 } from './types';
+
+export interface KnowledgeArticleInput {
+  title: string;
+  category: KnowledgeArticleCategory;
+  summary?: string | null;
+  content: string;
+  referenceUrl?: string | null;
+  tags?: string[];
+  isPinned?: boolean;
+}
+
+function operationKey(prefix: string) {
+  return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+export function useKnowledgeArticles(
+  status: 'active' | 'archived' | 'all' = 'active',
+  category: KnowledgeArticleCategory | 'all' = 'all',
+  q = '',
+) {
+  const query = [
+    `status=${status}`,
+    ...(category === 'all' ? [] : [`category=${category}`]),
+    ...(q.trim() ? [`q=${encodeURIComponent(q.trim())}`] : []),
+  ].join('&');
+  return useQuery({
+    queryKey: ['knowledge-articles', status, category, q.trim()],
+    queryFn: () => api<KnowledgeArticle[]>(`/knowledge-articles?${query}`),
+  });
+}
+
+export function useKnowledgeRevisions(articleId: string | null) {
+  return useQuery({
+    queryKey: ['knowledge-article-revisions', articleId],
+    queryFn: () =>
+      api<KnowledgeArticleRevision[]>(
+        `/knowledge-articles/${articleId}/revisions`,
+      ),
+    enabled: Boolean(articleId),
+  });
+}
+
+export function useCreateKnowledgeArticle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: KnowledgeArticleInput) =>
+      api<KnowledgeArticle>('/knowledge-articles', {
+        method: 'POST',
+        body: { ...input, idempotencyKey: operationKey('knowledge:create') },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['knowledge-articles'] }),
+  });
+}
+
+export function useUpdateKnowledgeArticle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      expectedVersion,
+      ...input
+    }: KnowledgeArticleInput & { id: string; expectedVersion: number }) =>
+      api<KnowledgeArticle>(`/knowledge-articles/${id}`, {
+        method: 'PATCH',
+        body: {
+          ...input,
+          expectedVersion,
+          idempotencyKey: operationKey(`knowledge:update:${id}`),
+        },
+      }),
+    onSuccess: (article) => {
+      void qc.invalidateQueries({ queryKey: ['knowledge-articles'] });
+      void qc.invalidateQueries({
+        queryKey: ['knowledge-article-revisions', article.id],
+      });
+    },
+  });
+}
+
+function useKnowledgeVersionMutation(
+  operation: 'archive' | 'restore',
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<KnowledgeArticle>(
+        `/knowledge-articles/${input.id}/${operation}`,
+        {
+          method: 'POST',
+          body: {
+            expectedVersion: input.expectedVersion,
+            idempotencyKey: operationKey(`knowledge:${operation}:${input.id}`),
+          },
+        },
+      ),
+    onSuccess: (article) => {
+      void qc.invalidateQueries({ queryKey: ['knowledge-articles'] });
+      void qc.invalidateQueries({
+        queryKey: ['knowledge-article-revisions', article.id],
+      });
+    },
+  });
+}
+
+export function useArchiveKnowledgeArticle() {
+  return useKnowledgeVersionMutation('archive');
+}
+
+export function useRestoreKnowledgeArticle() {
+  return useKnowledgeVersionMutation('restore');
+}
+
+export function useRestoreKnowledgeRevision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      version: number;
+      expectedVersion: number;
+    }) =>
+      api<KnowledgeArticle>(
+        `/knowledge-articles/${input.id}/revisions/${input.version}/restore`,
+        {
+          method: 'POST',
+          body: {
+            expectedVersion: input.expectedVersion,
+            idempotencyKey: operationKey(
+              `knowledge:restore-revision:${input.id}:${input.version}`,
+            ),
+          },
+        },
+      ),
+    onSuccess: (article) => {
+      void qc.invalidateQueries({ queryKey: ['knowledge-articles'] });
+      void qc.invalidateQueries({
+        queryKey: ['knowledge-article-revisions', article.id],
+      });
+    },
+  });
+}
 
 export interface BackupPolicyInput {
   scheduleEnabled: boolean;

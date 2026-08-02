@@ -2,6 +2,7 @@ import {
   ArrowRight,
   Bell,
   BellRing,
+  BookOpenText,
   CalendarDays,
   CookingPot,
   Film,
@@ -29,6 +30,7 @@ import { Card } from '../../components/ui';
 import { todayStr } from '../../lib/date';
 import {
   useAssets,
+  useKnowledgeArticles,
   useMedia,
   useMenusOfDate,
   useNotifications,
@@ -171,6 +173,7 @@ export default function HomeScreen() {
   const { data: visits } = useVisits('scheduled');
   const { data: assets } = useAssets('active');
   const { data: pointsAccounts } = usePointsAccounts();
+  const { data: knowledgeArticles } = useKnowledgeArticles('active');
 
   const menuItems =
     menus?.reduce(
@@ -301,6 +304,15 @@ export default function HomeScreen() {
               icon={Gift}
               label="积分奖励"
               status={`我的积分 ${ownPoints}`}
+            />
+            <ModuleCard
+              background={c.tintSoft}
+              color={c.tint}
+              desktop={desktop}
+              href="/knowledge"
+              icon={BookOpenText}
+              label="家庭知识库"
+              status={`${knowledgeArticles?.length ?? 0} 篇文章`}
             />
           </View>
 

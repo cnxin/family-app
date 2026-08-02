@@ -19,6 +19,53 @@ export type BackupRunStatus =
   | 'succeeded'
   | 'failed'
   | 'cancelled';
+export type KnowledgeArticleCategory =
+  | 'procedure'
+  | 'appliance'
+  | 'contact'
+  | 'home'
+  | 'other';
+export type KnowledgeRevisionChangeType =
+  | 'create'
+  | 'update'
+  | 'archive'
+  | 'restore'
+  | 'restore_revision';
+
+export interface KnowledgeArticle {
+  id: string;
+  title: string;
+  category: KnowledgeArticleCategory;
+  summary: string | null;
+  content: string;
+  referenceUrl: string | null;
+  tags: string[];
+  isPinned: boolean;
+  version: number;
+  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  updatedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
+  canPin: boolean;
+}
+
+export interface KnowledgeArticleRevision {
+  id: string;
+  version: number;
+  changeType: KnowledgeRevisionChangeType;
+  title: string;
+  category: KnowledgeArticleCategory;
+  summary: string | null;
+  content: string;
+  referenceUrl: string | null;
+  tags: string[];
+  isPinned: boolean;
+  archivedAt: string | null;
+  changedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  createdAt: string;
+}
 
 export interface BackupPolicy {
   id: string;
@@ -124,6 +171,7 @@ export type ActivityModule =
   | 'guest'
   | 'asset'
   | 'points'
+  | 'knowledge'
   | 'system';
 
 export interface HouseholdActivity {

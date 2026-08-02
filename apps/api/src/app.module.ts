@@ -8,6 +8,7 @@ import { databaseOptions } from './database/database.options';
 import { DishesModule } from './dishes/dishes.module';
 import { GuestsModule } from './guests/guests.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MenusModule } from './menus/menus.module';
 import { MediaModule } from './media/media.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -30,6 +31,7 @@ import { UploadModule } from './upload/upload.module';
     DishesModule,
     GuestsModule,
     InventoryModule,
+    KnowledgeModule,
     MenusModule,
     MediaModule,
     NotificationsModule,

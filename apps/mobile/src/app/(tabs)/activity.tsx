@@ -1,6 +1,7 @@
 import { type Href, useRouter } from 'expo-router';
 import {
   ArrowLeft,
+  BookOpenText,
   CalendarClock,
   ChevronRight,
   Film,
@@ -181,6 +182,9 @@ function activityVisual(module: ActivityModule, c: ReturnType<typeof useTheme>) 
   }
   if (module === 'points') {
     return { icon: Gift, color: c.orange, backgroundColor: c.orangeSoft };
+  }
+  if (module === 'knowledge') {
+    return { icon: BookOpenText, color: c.tint, backgroundColor: c.tintSoft };
   }
   if (module === 'system') {
     return { icon: Settings2, color: c.secondaryLabel, backgroundColor: c.fill };

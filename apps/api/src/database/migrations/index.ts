@@ -37,6 +37,8 @@ import { AddMaintenanceConsumables1785229900000 } from './1785229900000-add-main
 import { AddExternalNotificationDelivery1785230000000 } from './1785230000000-add-external-notification-delivery';
 import { AddBackupOperations1785230100000 } from './1785230100000-add-backup-operations';
 import { AddBackupRunNotificationState1785230200000 } from './1785230200000-add-backup-run-notification-state';
+import { AddHouseholdKnowledge1785230300000 } from './1785230300000-add-household-knowledge';
+import { ConvergeHouseholdKnowledge1785230400000 } from './1785230400000-converge-household-knowledge';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -78,4 +80,6 @@ export const ALL_MIGRATIONS = [
   AddExternalNotificationDelivery1785230000000,
   AddBackupOperations1785230100000,
   AddBackupRunNotificationState1785230200000,
+  AddHouseholdKnowledge1785230300000,
+  ConvergeHouseholdKnowledge1785230400000,
 ];

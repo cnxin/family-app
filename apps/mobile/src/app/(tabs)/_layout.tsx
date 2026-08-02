@@ -180,6 +180,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="knowledge"
+        options={{
+          title: '知识库',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="canteen"
         options={{
           title: '食堂',
