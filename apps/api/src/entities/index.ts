@@ -66,6 +66,15 @@ export type KnowledgeRevisionChangeType =
   | 'archive'
   | 'restore'
   | 'restore_revision';
+export type TravelPlanStatus = 'planned' | 'completed' | 'cancelled';
+export type TravelChecklistStatus = 'pending' | 'completed' | 'skipped';
+export type TravelChecklistCategory =
+  | 'documents'
+  | 'clothing'
+  | 'toiletries'
+  | 'electronics'
+  | 'supplies'
+  | 'other';
 export type DishSkillLevel = 'learning' | 'can_cook' | 'signature';
 export type TaskRecurrence = 'once' | 'daily' | 'weekly' | 'monthly';
 export type TaskInstanceStatus = 'pending' | 'done' | 'skipped';
@@ -109,7 +118,8 @@ export type ReminderSourceModule =
   | 'task'
   | 'calendar'
   | 'poll'
-  | 'maintenance';
+  | 'maintenance'
+  | 'travel';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
 export type AssetCategory =
   | 'appliance'
@@ -138,6 +148,7 @@ export type ActivityModule =
   | 'asset'
   | 'points'
   | 'knowledge'
+  | 'travel'
   | 'system';
 export type NotificationModule =
   | 'menu'
@@ -309,7 +320,7 @@ export class Member {
 @Entity('household_activity_logs')
 @Check(
   'CHK_household_activity_logs_module',
-  `"module" IN ('member', 'invitation', 'menu', 'calendar', 'task', 'poll', 'reminder', 'shopping', 'inventory', 'recipe', 'media', 'guest', 'asset', 'points', 'system')`,
+  `"module" IN ('member', 'invitation', 'menu', 'calendar', 'task', 'poll', 'reminder', 'shopping', 'inventory', 'recipe', 'media', 'guest', 'asset', 'points', 'knowledge', 'travel', 'system')`,
 )
 @Index('IDX_household_activity_logs_household_created', [
   'householdId',
@@ -3281,7 +3292,7 @@ export class MediaRequest {
 @Entity('reminders')
 @Check(
   'CHK_reminders_source_module',
-  `"sourceModule" IN ('menu', 'task', 'calendar', 'poll', 'maintenance')`,
+  `"sourceModule" IN ('menu', 'task', 'calendar', 'poll', 'maintenance', 'travel')`,
 )
 @Check(
   'CHK_reminders_status',
@@ -4360,6 +4371,497 @@ export class RewardRedemption {
   updatedAt: Date;
 }
 
+@Entity('travel_plans')
+@Check('CHK_travel_plans_dates', `"endDate" >= "startDate"`)
+@Check(
+  'CHK_travel_plans_status',
+  `"status" IN ('planned', 'completed', 'cancelled')`,
+)
+@Check('CHK_travel_plans_version', `"version" >= 1`)
+@Check(
+  'CHK_travel_plans_completion',
+  `("status" = 'completed' AND "completedAt" IS NOT NULL AND "completedById" IS NOT NULL) OR ("status" <> 'completed' AND "completedAt" IS NULL AND "completedById" IS NULL)`,
+)
+@Index('IDX_travel_plans_household_dates', [
+  'householdId',
+  'startDate',
+  'endDate',
+])
+@Index('IDX_travel_plans_household_status', [
+  'householdId',
+  'archivedAt',
+  'status',
+  'startDate',
+])
+export class TravelPlan {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_travel_plans_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  destination: string | null;
+
+  @Column({ type: 'date' })
+  startDate: string;
+
+  @Column({ type: 'date' })
+  endDate: string;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'varchar', length: 16, default: 'planned' })
+  status: TravelPlanStatus;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_travel_plans_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedById',
+    foreignKeyConstraintName: 'FK_travel_plans_updated_by',
+  })
+  updatedBy: Member;
+
+  @Column('uuid')
+  updatedById: string;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'completedById',
+    foreignKeyConstraintName: 'FK_travel_plans_completed_by',
+  })
+  completedBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  completedById: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  completedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  archivedAt: Date | null;
+
+  @OneToMany(() => TravelChecklistItem, (item) => item.plan)
+  items: TravelChecklistItem[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('travel_packing_templates')
+@Check('CHK_travel_packing_templates_version', `"version" >= 1`)
+@Index('IDX_travel_templates_household_active', [
+  'householdId',
+  'archivedAt',
+  'updatedAt',
+])
+export class TravelPackingTemplate {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_travel_packing_templates_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  description: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_travel_packing_templates_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedById',
+    foreignKeyConstraintName: 'FK_travel_packing_templates_updated_by',
+  })
+  updatedBy: Member;
+
+  @Column('uuid')
+  updatedById: string;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  archivedAt: Date | null;
+
+  @OneToMany(() => TravelPackingTemplateItem, (item) => item.template)
+  items: TravelPackingTemplateItem[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('travel_packing_template_items')
+@Check(
+  'CHK_travel_template_items_category',
+  `"category" IN ('documents', 'clothing', 'toiletries', 'electronics', 'supplies', 'other')`,
+)
+@Check('CHK_travel_template_items_quantity', `"quantity" BETWEEN 1 AND 99`)
+@Check('CHK_travel_template_items_sort_order', `"sortOrder" >= 0`)
+@Index('IDX_travel_template_items_template_order', [
+  'templateId',
+  'sortOrder',
+  'createdAt',
+])
+export class TravelPackingTemplateItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_travel_template_items_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => TravelPackingTemplate, (template) => template.items, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'templateId',
+    foreignKeyConstraintName: 'FK_travel_template_items_template',
+  })
+  template: TravelPackingTemplate;
+
+  @Column('uuid')
+  templateId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  category: TravelChecklistCategory;
+
+  @Column({ type: 'int', default: 1 })
+  quantity: number;
+
+  @Column({ type: 'int', default: 0 })
+  sortOrder: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('travel_template_applications')
+@Unique('UQ_travel_template_applications_plan_template', [
+  'planId',
+  'templateId',
+])
+@Check('CHK_travel_template_applications_version', `"templateVersion" >= 1`)
+export class TravelTemplateApplication {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_travel_template_applications_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => TravelPlan, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'planId',
+    foreignKeyConstraintName: 'FK_travel_template_applications_plan',
+  })
+  plan: TravelPlan;
+
+  @Column('uuid')
+  planId: string;
+
+  @ManyToOne(() => TravelPackingTemplate, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'templateId',
+    foreignKeyConstraintName: 'FK_travel_template_applications_template',
+  })
+  template: TravelPackingTemplate;
+
+  @Column('uuid')
+  templateId: string;
+
+  @Column({ type: 'int' })
+  templateVersion: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'appliedById',
+    foreignKeyConstraintName: 'FK_travel_template_applications_applied_by',
+  })
+  appliedBy: Member;
+
+  @Column('uuid')
+  appliedById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('travel_checklist_items')
+@Check(
+  'CHK_travel_checklist_items_category',
+  `"category" IN ('documents', 'clothing', 'toiletries', 'electronics', 'supplies', 'other')`,
+)
+@Check('CHK_travel_checklist_items_quantity', `"quantity" BETWEEN 1 AND 99`)
+@Check('CHK_travel_checklist_items_sort_order', `"sortOrder" >= 0`)
+@Check(
+  'CHK_travel_checklist_items_status',
+  `"status" IN ('pending', 'completed', 'skipped')`,
+)
+@Check('CHK_travel_checklist_items_version', `"version" >= 1`)
+@Check(
+  'CHK_travel_checklist_items_completion',
+  `("status" = 'completed' AND "completedAt" IS NOT NULL AND "completedById" IS NOT NULL) OR ("status" <> 'completed' AND "completedAt" IS NULL AND "completedById" IS NULL)`,
+)
+@Index('IDX_travel_checklist_items_plan_status', [
+  'planId',
+  'archivedAt',
+  'status',
+  'sortOrder',
+])
+@Index('IDX_travel_checklist_items_assignee', [
+  'householdId',
+  'assignedMemberId',
+  'status',
+])
+export class TravelChecklistItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => TravelPlan, (plan) => plan.items, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'planId',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_plan',
+  })
+  plan: TravelPlan;
+
+  @Column('uuid')
+  planId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  category: TravelChecklistCategory;
+
+  @Column({ type: 'int', default: 1 })
+  quantity: number;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  sortOrder: number;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: TravelChecklistStatus;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'assignedMemberId',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_assigned',
+  })
+  assignedMember: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  assignedMemberId: string | null;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'completedById',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_completed_by',
+  })
+  completedBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  completedById: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  completedAt: Date | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedById',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_updated_by',
+  })
+  updatedBy: Member;
+
+  @Column('uuid')
+  updatedById: string;
+
+  @ManyToOne(() => TravelTemplateApplication, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({
+    name: 'templateApplicationId',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_application',
+  })
+  templateApplication: TravelTemplateApplication | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  templateApplicationId: string | null;
+
+  @ManyToOne(() => TravelPackingTemplateItem, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({
+    name: 'sourceTemplateItemId',
+    foreignKeyConstraintName: 'FK_travel_checklist_items_source_template_item',
+  })
+  sourceTemplateItem: TravelPackingTemplateItem | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  sourceTemplateItemId: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  archivedAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('travel_operations')
+@Unique('UQ_travel_operations_household_idempotency', [
+  'householdId',
+  'idempotencyKey',
+])
+@Check(
+  'CHK_travel_operations_target_type',
+  `"targetType" IN ('plan', 'item', 'template', 'application')`,
+)
+@Check('CHK_travel_operations_metadata', `jsonb_typeof("metadata") = 'object'`)
+@Index('IDX_travel_operations_plan_created', ['planId', 'createdAt'])
+export class TravelOperation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_travel_operations_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 40 })
+  operation: string;
+
+  @Column({ type: 'varchar', length: 20 })
+  targetType: 'plan' | 'item' | 'template' | 'application';
+
+  @Column('uuid')
+  targetId: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  planId: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_travel_operations_actor',
+  })
+  actor: Member;
+
+  @Column('uuid')
+  actorId: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  actorName: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  requestFingerprint: string;
+
+  @Column({ type: 'jsonb', default: {} })
+  metadata: Record<string, unknown>;
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  createdAt: Date;
+}
+
 @Entity('knowledge_articles')
 @Check(
   'CHK_knowledge_articles_category',
@@ -4853,6 +5355,12 @@ export const ALL_ENTITIES = [
   PointsLedger,
   Reward,
   RewardRedemption,
+  TravelPlan,
+  TravelChecklistItem,
+  TravelPackingTemplate,
+  TravelPackingTemplateItem,
+  TravelTemplateApplication,
+  TravelOperation,
   KnowledgeArticle,
   KnowledgeArticleRevision,
   BackupPolicy,

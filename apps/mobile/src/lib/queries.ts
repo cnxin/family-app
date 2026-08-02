@@ -92,6 +92,10 @@ import type {
   TaskInstanceStatus,
   TaskOccurrence,
   TaskRecurrence,
+  TravelChecklistCategory,
+  TravelChecklistItem,
+  TravelPackingTemplate,
+  TravelPlan,
   ViewingProgress,
   ViewingSession,
   Visit,
@@ -236,6 +240,277 @@ export function useRestoreKnowledgeRevision() {
         queryKey: ['knowledge-article-revisions', article.id],
       });
     },
+  });
+}
+
+export interface TravelPlanInput {
+  title: string;
+  destination?: string | null;
+  startDate: string;
+  endDate: string;
+  note?: string | null;
+}
+
+export interface TravelItemInput {
+  title: string;
+  category: TravelChecklistCategory;
+  quantity?: number;
+  note?: string | null;
+  sortOrder?: number;
+  assignedMemberId?: string | null;
+}
+
+export interface TravelTemplateInput {
+  title: string;
+  description?: string | null;
+  items: {
+    title: string;
+    category: TravelChecklistCategory;
+    quantity?: number;
+  }[];
+}
+
+function invalidateTravel(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['travel-plans'] });
+  void qc.invalidateQueries({ queryKey: ['travel-plan'] });
+  void qc.invalidateQueries({ queryKey: ['calendar'] });
+  void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+  void qc.invalidateQueries({ queryKey: ['reminders'] });
+  void qc.invalidateQueries({ queryKey: ['activities'] });
+}
+
+export function useTravelPlans(
+  status: 'active' | 'completed' | 'cancelled' | 'archived' | 'all' = 'active',
+) {
+  return useQuery({
+    queryKey: ['travel-plans', status],
+    queryFn: () => api<TravelPlan[]>(`/travel-plans?status=${status}`),
+  });
+}
+
+export function useTravelPlan(id: string | null) {
+  return useQuery({
+    queryKey: ['travel-plan', id],
+    queryFn: () => api<TravelPlan>(`/travel-plans/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useCreateTravelPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TravelPlanInput) =>
+      api<TravelPlan>('/travel-plans', {
+        method: 'POST',
+        body: { ...input, idempotencyKey: operationKey('travel:plan:create') },
+      }),
+    onSuccess: () => invalidateTravel(qc),
+  });
+}
+
+export function useUpdateTravelPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedVersion, ...input }: TravelPlanInput & {
+      id: string;
+      expectedVersion: number;
+    }) =>
+      api<TravelPlan>(`/travel-plans/${id}`, {
+        method: 'PATCH',
+        body: {
+          ...input,
+          expectedVersion,
+          idempotencyKey: operationKey(`travel:plan:update:${id}`),
+        },
+      }),
+    onSuccess: () => invalidateTravel(qc),
+  });
+}
+
+export function useTravelPlanAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      expectedVersion,
+    }: {
+      id: string;
+      action: 'complete' | 'reopen' | 'cancel' | 'archive' | 'restore';
+      expectedVersion: number;
+    }) =>
+      api<TravelPlan>(`/travel-plans/${id}/${action}`, {
+        method: 'POST',
+        body: {
+          expectedVersion,
+          idempotencyKey: operationKey(`travel:plan:${action}:${id}`),
+        },
+      }),
+    onSuccess: () => invalidateTravel(qc),
+  });
+}
+
+export function useCreateTravelItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ planId, ...input }: TravelItemInput & { planId: string }) =>
+      api<TravelPlan>(`/travel-plans/${planId}/items`, {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey: operationKey(`travel:item:create:${planId}`),
+        },
+      }),
+    onSuccess: () => invalidateTravel(qc),
+  });
+}
+
+export function useUpdateTravelItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      planId,
+      itemId,
+      expectedVersion,
+      ...input
+    }: TravelItemInput & {
+      planId: string;
+      itemId: string;
+      expectedVersion: number;
+    }) =>
+      api<TravelPlan>(`/travel-plans/${planId}/items/${itemId}`, {
+        method: 'PATCH',
+        body: {
+          ...input,
+          expectedVersion,
+          idempotencyKey: operationKey(`travel:item:update:${itemId}`),
+        },
+      }),
+    onSuccess: () => invalidateTravel(qc),
+  });
+}
+
+export function useTravelItemAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      planId,
+      item,
+      action,
+    }: {
+      planId: string;
+      item: Pick<TravelChecklistItem, 'id' | 'version'>;
+      action: 'complete' | 'restore' | 'skip' | 'archive';
+    }) =>
+      api<TravelPlan>(`/travel-plans/${planId}/items/${item.id}/${action}`, {
+        method: 'POST',
+        body: {
+          expectedVersion: item.version,
+          idempotencyKey: operationKey(`travel:item:${action}:${item.id}`),
+        },
+      }),
+    onSuccess: () => invalidateTravel(qc),
+  });
+}
+
+export function useTravelTemplates(
+  status: 'active' | 'archived' | 'all' = 'active',
+) {
+  return useQuery({
+    queryKey: ['travel-templates', status],
+    queryFn: () =>
+      api<TravelPackingTemplate[]>(`/travel-templates?status=${status}`),
+  });
+}
+
+export function useCreateTravelTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TravelTemplateInput) =>
+      api<TravelPackingTemplate>('/travel-templates', {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey: operationKey('travel:template:create'),
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['travel-templates'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useUpdateTravelTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      expectedVersion,
+      ...input
+    }: TravelTemplateInput & { id: string; expectedVersion: number }) =>
+      api<TravelPackingTemplate>(`/travel-templates/${id}`, {
+        method: 'PATCH',
+        body: {
+          ...input,
+          expectedVersion,
+          idempotencyKey: operationKey(`travel:template:update:${id}`),
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['travel-templates'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useTravelTemplateAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      expectedVersion,
+    }: {
+      id: string;
+      action: 'archive' | 'restore';
+      expectedVersion: number;
+    }) =>
+      api<TravelPackingTemplate>(`/travel-templates/${id}/${action}`, {
+        method: 'POST',
+        body: {
+          expectedVersion,
+          idempotencyKey: operationKey(`travel:template:${action}:${id}`),
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['travel-templates'] });
+      void qc.invalidateQueries({ queryKey: ['activities'] });
+    },
+  });
+}
+
+export function useApplyTravelTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      plan,
+      template,
+    }: {
+      plan: Pick<TravelPlan, 'id' | 'version'>;
+      template: Pick<TravelPackingTemplate, 'id' | 'version'>;
+    }) =>
+      api<TravelPlan>(`/travel-plans/${plan.id}/templates/${template.id}/apply`, {
+        method: 'POST',
+        body: {
+          expectedPlanVersion: plan.version,
+          expectedTemplateVersion: template.version,
+          idempotencyKey: operationKey(
+            `travel:template:apply:${plan.id}:${template.id}`,
+          ),
+        },
+      }),
+    onSuccess: () => invalidateTravel(qc),
   });
 }
 

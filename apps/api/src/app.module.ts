@@ -19,6 +19,7 @@ import { RemindersModule } from './reminders/reminders.module';
 import { ShoppingModule } from './shopping/shopping.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
+import { TravelModule } from './travel/travel.module';
 import { UploadModule } from './upload/upload.module';
 
 @Module({
@@ -42,6 +43,7 @@ import { UploadModule } from './upload/upload.module';
     ShoppingModule,
     SystemModule,
     TasksModule,
+    TravelModule,
     UploadModule,
   ],
 })

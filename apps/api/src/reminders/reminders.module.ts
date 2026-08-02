@@ -52,6 +52,7 @@ import {
   ReminderRecipient,
   ReminderSourceModule,
   ReminderStatus,
+  TravelPlan,
 } from '../entities';
 import { taskOccursOn, TasksModule } from '../tasks/tasks.module';
 
@@ -70,7 +71,7 @@ class ReminderQueryDto {
 }
 
 class CreateReminderDto {
-  @IsIn(['menu', 'task', 'calendar', 'poll', 'maintenance'])
+  @IsIn(['menu', 'task', 'calendar', 'poll', 'maintenance', 'travel'])
   sourceModule: ReminderSourceModule;
 
   @IsUUID()
@@ -231,6 +232,7 @@ export class RemindersService
       .filter((entry) => {
         if (entry.module === 'menu') return entry.status === 'open';
         if (entry.module === 'task') return entry.status === 'pending';
+        if (entry.module === 'travel') return entry.status === 'planned';
         return true;
       })
       .map<ReminderSource>((entry) => ({
@@ -527,6 +529,36 @@ export class RemindersService
       };
     }
 
+    if (reminder.sourceModule === 'travel') {
+      const plan = await manager.getRepository(TravelPlan).findOne({
+        where: { id: reminder.sourceId, householdId: reminder.householdId },
+        relations: { items: true },
+      });
+      if (!plan || plan.archivedAt) return null;
+      const activeItems = plan.items.filter((item) => !item.archivedAt);
+      const completed = activeItems.filter(
+        (item) => item.status === 'completed',
+      ).length;
+      const active = plan.status === 'planned';
+      if (actionableOnly && !active) return null;
+      return {
+        module: 'travel',
+        sourceId: plan.id,
+        occurrenceDate: null,
+        title: plan.title,
+        summary: [
+          plan.destination,
+          `${completed}/${activeItems.length} 项完成`,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        date: plan.startDate,
+        startsAt: null,
+        targetPath: `/travel?planId=${plan.id}`,
+        status: plan.status,
+      };
+    }
+
     const poll = await manager.getRepository(Poll).findOneBy({
       id: reminder.sourceId,
       householdId: reminder.householdId,
@@ -714,6 +746,7 @@ export class RemindersController {
       HouseholdTaskInstance,
       Poll,
       MaintenancePlan,
+      TravelPlan,
     ]),
   ],
   controllers: [RemindersController],

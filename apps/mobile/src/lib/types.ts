@@ -67,6 +67,82 @@ export interface KnowledgeArticleRevision {
   createdAt: string;
 }
 
+export type TravelPlanStatus = 'planned' | 'completed' | 'cancelled';
+export type TravelChecklistStatus = 'pending' | 'completed' | 'skipped';
+export type TravelChecklistCategory =
+  | 'documents'
+  | 'clothing'
+  | 'toiletries'
+  | 'electronics'
+  | 'supplies'
+  | 'other';
+
+export interface TravelChecklistItem {
+  id: string;
+  title: string;
+  category: TravelChecklistCategory;
+  quantity: number;
+  note: string | null;
+  sortOrder: number;
+  status: TravelChecklistStatus;
+  version: number;
+  assignedMember: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
+  completedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
+  completedAt: string | null;
+  fromTemplate: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TravelPlan {
+  id: string;
+  title: string;
+  destination: string | null;
+  startDate: string;
+  endDate: string;
+  note: string | null;
+  status: TravelPlanStatus;
+  version: number;
+  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  updatedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  completedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
+  completedAt: string | null;
+  archivedAt: string | null;
+  items: TravelChecklistItem[];
+  counts: {
+    total: number;
+    pending: number;
+    completed: number;
+    skipped: number;
+  };
+  appliedTemplateIds: string[];
+  canManage: boolean;
+  canEditChecklist: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TravelTemplateItem {
+  id: string;
+  title: string;
+  category: TravelChecklistCategory;
+  quantity: number;
+  sortOrder: number;
+}
+
+export interface TravelPackingTemplate {
+  id: string;
+  title: string;
+  description: string | null;
+  version: number;
+  items: TravelTemplateItem[];
+  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  archivedAt: string | null;
+  canManage: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BackupPolicy {
   id: string;
   scheduleEnabled: boolean;
@@ -172,6 +248,7 @@ export type ActivityModule =
   | 'asset'
   | 'points'
   | 'knowledge'
+  | 'travel'
   | 'system';
 
 export interface HouseholdActivity {
@@ -984,7 +1061,8 @@ export interface CalendarEntry {
     | 'task'
     | 'media'
     | 'guest'
-    | 'maintenance';
+    | 'maintenance'
+    | 'travel';
   date: string;
   startsAt: string | null;
   endsAt: string | null;
@@ -998,6 +1076,7 @@ export interface CalendarEntry {
     | 'skipped'
     | 'cancelled'
     | 'completed'
+    | 'planned'
     | HouseholdMediaStatus;
   targetPath: string;
   metadata: {
@@ -1018,6 +1097,10 @@ export interface CalendarEntry {
     assetId?: string;
     assetName?: string;
     frequencyDays?: number;
+    endDate?: string;
+    destination?: string | null;
+    completedItems?: number;
+    totalItems?: number;
   };
 }
 
@@ -1408,7 +1491,8 @@ export type ReminderSourceModule =
   | 'task'
   | 'calendar'
   | 'poll'
-  | 'maintenance';
+  | 'maintenance'
+  | 'travel';
 export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
 
 export interface ReminderSource {

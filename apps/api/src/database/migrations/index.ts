@@ -39,6 +39,7 @@ import { AddBackupOperations1785230100000 } from './1785230100000-add-backup-ope
 import { AddBackupRunNotificationState1785230200000 } from './1785230200000-add-backup-run-notification-state';
 import { AddHouseholdKnowledge1785230300000 } from './1785230300000-add-household-knowledge';
 import { ConvergeHouseholdKnowledge1785230400000 } from './1785230400000-converge-household-knowledge';
+import { AddHouseholdTravel1785230500000 } from './1785230500000-add-household-travel';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -82,4 +83,5 @@ export const ALL_MIGRATIONS = [
   AddBackupRunNotificationState1785230200000,
   AddHouseholdKnowledge1785230300000,
   ConvergeHouseholdKnowledge1785230400000,
+  AddHouseholdTravel1785230500000,
 ];

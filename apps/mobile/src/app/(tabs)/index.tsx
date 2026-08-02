@@ -8,6 +8,7 @@ import {
   Film,
   Gift,
   ListTodo,
+  Plane,
   ShoppingCart,
   UsersRound,
   Vote,
@@ -39,6 +40,7 @@ import {
   useReminders,
   useShoppingList,
   useTasks,
+  useTravelPlans,
   useVisits,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -174,6 +176,7 @@ export default function HomeScreen() {
   const { data: assets } = useAssets('active');
   const { data: pointsAccounts } = usePointsAccounts();
   const { data: knowledgeArticles } = useKnowledgeArticles('active');
+  const { data: travelPlans } = useTravelPlans('active');
 
   const menuItems =
     menus?.reduce(
@@ -313,6 +316,15 @@ export default function HomeScreen() {
               icon={BookOpenText}
               label="家庭知识库"
               status={`${knowledgeArticles?.length ?? 0} 篇文章`}
+            />
+            <ModuleCard
+              background={c.blueSoft}
+              color={c.blue}
+              desktop={desktop}
+              href="/travel"
+              icon={Plane}
+              label="家庭出行"
+              status={`${travelPlans?.length ?? 0} 个计划中行程`}
             />
           </View>
 

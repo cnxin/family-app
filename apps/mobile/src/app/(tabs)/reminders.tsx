@@ -10,6 +10,7 @@ import {
   CookingPot,
   ListTodo,
   Pencil,
+  Plane,
   Plus,
   Trash2,
   Vote,
@@ -69,6 +70,7 @@ const SOURCE_META: Record<
   calendar: { label: '日程', icon: CalendarDays },
   poll: { label: '投票', icon: Vote },
   maintenance: { label: '维护', icon: Wrench },
+  travel: { label: '出行', icon: Plane },
 };
 
 function firstParam(value: string | string[] | undefined) {
@@ -720,7 +722,7 @@ export default function RemindersScreen() {
               <EmptyState
                 emoji="🔔"
                 title={filter === 'scheduled' ? '没有待发送提醒' : '没有匹配的提醒'}
-                hint="可以为菜单、任务、日程和投票设置提醒"
+                hint="可以为菜单、任务、日程、维护和出行设置提醒"
               />
             </Card>
           ) : null}

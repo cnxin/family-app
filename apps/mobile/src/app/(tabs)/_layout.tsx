@@ -187,6 +187,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="travel"
+        options={{
+          title: '出行',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="canteen"
         options={{
           title: '食堂',

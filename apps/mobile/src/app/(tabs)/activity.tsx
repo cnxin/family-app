@@ -8,6 +8,7 @@ import {
   Gift,
   History,
   MailPlus,
+  Plane,
   Settings2,
   UserRoundCog,
   UtensilsCrossed,
@@ -185,6 +186,9 @@ function activityVisual(module: ActivityModule, c: ReturnType<typeof useTheme>) 
   }
   if (module === 'knowledge') {
     return { icon: BookOpenText, color: c.tint, backgroundColor: c.tintSoft };
+  }
+  if (module === 'travel') {
+    return { icon: Plane, color: c.blue, backgroundColor: c.blueSoft };
   }
   if (module === 'system') {
     return { icon: Settings2, color: c.secondaryLabel, backgroundColor: c.fill };

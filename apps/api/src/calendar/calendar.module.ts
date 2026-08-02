@@ -28,6 +28,7 @@ import {
   MaintenancePlan,
   MealType,
   Menu,
+  TravelPlan,
   Visit,
 } from '../entities';
 import { TasksModule, TasksService } from '../tasks/tasks.module';
@@ -166,6 +167,8 @@ export class CalendarService {
     @InjectRepository(Visit) private readonly visits: Repository<Visit>,
     @InjectRepository(MaintenancePlan)
     private readonly maintenancePlans: Repository<MaintenancePlan>,
+    @InjectRepository(TravelPlan)
+    private readonly travelPlans: Repository<TravelPlan>,
     private readonly tasks: TasksService,
   ) {}
 
@@ -179,7 +182,15 @@ export class CalendarService {
       throw new BadRequestException('单次最多查询 371 天');
     }
 
-    const [events, menuRows, taskRows, mediaRows, visits, maintenancePlans] =
+    const [
+      events,
+      menuRows,
+      taskRows,
+      mediaRows,
+      visits,
+      maintenancePlans,
+      travelPlans,
+    ] =
       await Promise.all([
         this.events.find({
           where: { householdId: user.householdId, date: Between(start, end) },
@@ -237,6 +248,14 @@ export class CalendarService {
         },
         relations: { asset: true },
         order: { nextDueDate: 'ASC', createdAt: 'ASC' },
+      }),
+      this.travelPlans.find({
+        where: {
+          householdId: user.householdId,
+          startDate: Between(start, end),
+        },
+        relations: { items: true },
+        order: { startDate: 'ASC', createdAt: 'ASC' },
       }),
     ]);
 
@@ -358,6 +377,40 @@ export class CalendarService {
             frequencyDays: plan.frequencyDays,
           },
         })),
+      ...travelPlans
+        .filter((plan) => !plan.archivedAt)
+        .map((plan) => {
+          const activeItems = plan.items.filter((item) => !item.archivedAt);
+          const completed = activeItems.filter(
+            (item) => item.status === 'completed',
+          ).length;
+          return {
+            id: `travel:${plan.id}`,
+            sourceId: plan.id,
+            module: 'travel' as const,
+            date: plan.startDate,
+            startsAt: null,
+            endsAt: null,
+            title: plan.title,
+            summary: [
+              plan.destination,
+              plan.endDate === plan.startDate
+                ? null
+                : `${plan.startDate} 至 ${plan.endDate}`,
+              `${completed}/${activeItems.length} 项完成`,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            status: plan.status,
+            targetPath: `/travel?planId=${plan.id}`,
+            metadata: {
+              endDate: plan.endDate,
+              destination: plan.destination,
+              completedItems: completed,
+              totalItems: activeItems.length,
+            },
+          };
+        }),
     ];
 
     return rows.sort((left, right) => {
@@ -367,10 +420,11 @@ export class CalendarService {
         const moduleOrder = {
           calendar: 0,
           guest: 1,
-          maintenance: 2,
-          task: 3,
-          media: 4,
-          menu: 5,
+          travel: 2,
+          maintenance: 3,
+          task: 4,
+          media: 5,
+          menu: 6,
         };
         return moduleOrder[left.module] - moduleOrder[right.module];
       }
@@ -460,6 +514,7 @@ export class CalendarController {
       HouseholdMedia,
       Visit,
       MaintenancePlan,
+      TravelPlan,
     ]),
     TasksModule,
   ],

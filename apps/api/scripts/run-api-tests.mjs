@@ -246,6 +246,7 @@ try {
   await runScript('scripts/external-notifications.mjs');
   await runScript('scripts/backups.mjs');
   await runScript('scripts/knowledge.mjs');
+  await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');
   await runScript('scripts/media-source-settings.mjs');
