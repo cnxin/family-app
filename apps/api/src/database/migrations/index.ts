@@ -33,6 +33,7 @@ import { AddHomeAssets1785229500000 } from './1785229500000-add-home-assets';
 import { AddAssetActivityModule1785229600000 } from './1785229600000-add-asset-activity-module';
 import { AddPointsAndRewards1785229700000 } from './1785229700000-add-points-and-rewards';
 import { NormalizePointsUniqueIndexes1785229800000 } from './1785229800000-normalize-points-unique-indexes';
+import { AddMaintenanceConsumables1785229900000 } from './1785229900000-add-maintenance-consumables';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -70,4 +71,5 @@ export const ALL_MIGRATIONS = [
   AddAssetActivityModule1785229600000,
   AddPointsAndRewards1785229700000,
   NormalizePointsUniqueIndexes1785229800000,
+  AddMaintenanceConsumables1785229900000,
 ];

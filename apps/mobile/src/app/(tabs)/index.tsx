@@ -288,7 +288,7 @@ export default function HomeScreen() {
               background={c.orangeSoft}
               color={c.orange}
               desktop={desktop}
-              href="/assets"
+              href="/home-assets"
               icon={Wrench}
               label="家庭资产"
               status={dueMaintenance ? `${dueMaintenance} 项维护将到期` : `${assets?.length ?? 0} 件在用`}

@@ -24,9 +24,11 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsISO8601,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -36,7 +38,7 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve, sep } from 'node:path';
 import { memoryStorage } from 'multer';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
@@ -47,10 +49,17 @@ import {
   AssetDocumentType,
   AssetStatus,
   HomeAsset,
+  InventoryItem,
+  InventoryTransaction,
+  MaintenanceConsumable,
+  MaintenanceConsumableSnapshot,
   MaintenancePlan,
   MaintenanceRecord,
   Reminder,
+  ShoppingItem,
 } from '../entities';
+import { InventoryModule } from '../inventory/inventory.module';
+import { InventoryTransactionsService } from '../inventory/inventory-transactions.service';
 import { PRIVATE_ASSET_UPLOAD_DIR, UPLOAD_DIR } from '../upload/upload.module';
 
 const ASSET_CATEGORIES: AssetCategory[] = [
@@ -284,10 +293,56 @@ class CompleteMaintenanceDto {
   @MaxLength(1000)
   note?: string | null;
 
+  @IsOptional()
+  @IsBoolean()
+  consumeInventory?: boolean;
+
   @IsString()
   @MinLength(1)
   @MaxLength(120)
   idempotencyKey: string;
+}
+
+class CreateMaintenanceConsumableDto {
+  @IsUUID()
+  inventoryItemId: string;
+
+  @IsNumber()
+  @Min(0.01)
+  @Max(99_999_999.99)
+  quantity: number;
+}
+
+class UpdateMaintenanceConsumableDto {
+  @IsOptional()
+  @IsUUID()
+  inventoryItemId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  @Max(99_999_999.99)
+  quantity?: number;
+}
+
+class AddMaintenanceShoppingDto {
+  @IsISO8601({ strict: true })
+  date: string;
+}
+
+interface MaintenanceInventoryConfirmation {
+  operationId: string | null;
+  reversed: boolean;
+  transactions: {
+    id: string;
+    inventoryItemId: string;
+    inventoryItemName: string;
+    quantityBefore: string;
+    delta: string;
+    quantityAfter: string;
+    unit: string;
+    reversedAt: Date | null;
+  }[];
 }
 
 function nullableText(value: string | null | undefined) {
@@ -313,6 +368,10 @@ function addDays(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function roundQuantity(value: number) {
+  return Math.round(value * 100) / 100;
 }
 
 function assertDocumentUrl(value: string) {
@@ -389,7 +448,12 @@ export class AssetsService {
     private readonly plans: Repository<MaintenancePlan>,
     @InjectRepository(MaintenanceRecord)
     private readonly records: Repository<MaintenanceRecord>,
+    @InjectRepository(MaintenanceConsumable)
+    private readonly consumables: Repository<MaintenanceConsumable>,
+    @InjectRepository(InventoryTransaction)
+    private readonly inventoryTransactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
+    private readonly inventoryLedger: InventoryTransactionsService,
   ) {}
 
   async list(query: AssetListQueryDto, householdId: string) {
@@ -403,17 +467,26 @@ export class AssetsService {
       },
       relations: {
         documents: true,
-        maintenancePlans: true,
+        maintenancePlans: { consumables: { inventoryItem: true } },
         maintenanceRecords: true,
       },
       order: { status: 'ASC', updatedAt: 'DESC', name: 'ASC' },
       take: 200,
     });
-    return rows.map((asset) => this.present(asset));
+    const confirmations = await this.loadMaintenanceInventoryConfirmations(
+      rows.flatMap((asset) => asset.maintenanceRecords ?? []),
+      householdId,
+    );
+    return rows.map((asset) => this.present(asset, confirmations));
   }
 
   async get(id: string, householdId: string) {
-    return this.present(await this.requireAsset(id, householdId));
+    const asset = await this.requireAsset(id, householdId);
+    const confirmations = await this.loadMaintenanceInventoryConfirmations(
+      asset.maintenanceRecords ?? [],
+      householdId,
+    );
+    return this.present(asset, confirmations);
   }
 
   async create(dto: CreateAssetDto, user: JwtUser) {
@@ -444,7 +517,7 @@ export class AssetsService {
         module: 'asset',
         action: 'asset_created',
         summary: `${user.name} 新增了家庭资产「${asset.name}」`,
-        targetPath: `/assets?assetId=${asset.id}`,
+        targetPath: `/home-assets?assetId=${asset.id}`,
         metadata: { assetId: asset.id, category: asset.category },
       });
       return asset.id;
@@ -520,7 +593,7 @@ export class AssetsService {
             ? `${user.name} 归档了家庭资产「${asset.name}」`
             : `${user.name} 更新了家庭资产「${asset.name}」`,
         detail: `修改字段：${Object.keys(dto).join('、')}`,
-        targetPath: `/assets?assetId=${asset.id}`,
+        targetPath: `/home-assets?assetId=${asset.id}`,
         metadata: {
           assetId: asset.id,
           changedFields: Object.keys(dto),
@@ -555,7 +628,7 @@ export class AssetsService {
         module: 'asset',
         action: 'asset_document_added',
         summary: `${user.name} 为「${asset.name}」添加了资料「${document.title}」`,
-        targetPath: `/assets?assetId=${asset.id}`,
+        targetPath: `/home-assets?assetId=${asset.id}`,
         metadata: {
           assetId: asset.id,
           documentId: document.id,
@@ -599,7 +672,7 @@ export class AssetsService {
           module: 'asset',
           action: 'asset_document_added',
           summary: `${user.name} 为「${asset.name}」上传了资料「${saved.title}」`,
-          targetPath: `/assets?assetId=${asset.id}`,
+          targetPath: `/home-assets?assetId=${asset.id}`,
           metadata: {
             assetId: asset.id,
             documentId: saved.id,
@@ -675,7 +748,7 @@ export class AssetsService {
         module: 'asset',
         action: 'asset_document_removed',
         summary: `${user.name} 移除了「${document.asset.name}」的资料「${document.title}」`,
-        targetPath: `/assets?assetId=${document.assetId}`,
+        targetPath: `/home-assets?assetId=${document.assetId}`,
         metadata: {
           assetId: document.assetId,
           documentId: document.id,
@@ -721,7 +794,7 @@ export class AssetsService {
           module: 'asset',
           action: 'maintenance_plan_created',
           summary: `${user.name} 为「${asset.name}」创建了维护计划「${plan.title}」`,
-          targetPath: `/assets?assetId=${asset.id}&planId=${plan.id}`,
+          targetPath: `/home-assets?assetId=${asset.id}&planId=${plan.id}`,
           metadata: {
             assetId: asset.id,
             planId: plan.id,
@@ -787,7 +860,7 @@ export class AssetsService {
             ? `${user.name} 更新了「${plan.asset.name}」的维护计划「${plan.title}」`
             : `${user.name} 停用了「${plan.asset.name}」的维护计划「${plan.title}」`,
           detail: `修改字段：${Object.keys(dto).join('、')}`,
-          targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+          targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
           metadata: {
             assetId: plan.assetId,
             planId: plan.id,
@@ -803,6 +876,276 @@ export class AssetsService {
       throw error;
     }
     return this.plans.findOneByOrFail({ id, householdId: user.householdId });
+  }
+
+  async createConsumable(
+    planId: string,
+    dto: CreateMaintenanceConsumableDto,
+    user: JwtUser,
+  ) {
+    try {
+      const id = await this.dataSource.transaction(async (manager) => {
+        const plan = await this.lockPlan(planId, user.householdId, manager);
+        if (plan.asset.status !== 'active') {
+          throw new ConflictException('停用资产不能新增维护耗材');
+        }
+        const inventoryItem = await manager
+          .getRepository(InventoryItem)
+          .findOneBy({ id: dto.inventoryItemId, householdId: user.householdId });
+        if (!inventoryItem) throw new NotFoundException('库存项不存在');
+        const consumable = await manager.getRepository(MaintenanceConsumable).save(
+          manager.getRepository(MaintenanceConsumable).create({
+            householdId: user.householdId,
+            planId: plan.id,
+            inventoryItemId: inventoryItem.id,
+            quantity: String(roundQuantity(dto.quantity)),
+            unit: inventoryItem.unit,
+            createdById: user.memberId,
+          }),
+        );
+        await recordActivity(manager, user, {
+          module: 'asset',
+          action: 'maintenance_consumable_added',
+          summary: `${user.name} 为「${plan.asset.name}」的维护「${plan.title}」关联了耗材「${inventoryItem.name}」`,
+          detail: `${roundQuantity(dto.quantity)} ${inventoryItem.unit}`,
+          targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
+          metadata: {
+            assetId: plan.assetId,
+            planId: plan.id,
+            consumableId: consumable.id,
+            inventoryItemId: inventoryItem.id,
+          },
+        });
+        return consumable.id;
+      });
+      return this.consumables.findOneOrFail({
+        where: { id, householdId: user.householdId },
+        relations: { inventoryItem: true },
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('这个维护计划已经关联了该库存项');
+      }
+      throw error;
+    }
+  }
+
+  async updateConsumable(
+    id: string,
+    dto: UpdateMaintenanceConsumableDto,
+    user: JwtUser,
+  ) {
+    if (!Object.keys(dto).length) {
+      throw new BadRequestException('至少需要修改一个字段');
+    }
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const existing = await manager.getRepository(MaintenanceConsumable).findOneBy({
+          id,
+          householdId: user.householdId,
+        });
+        if (!existing) throw new NotFoundException('维护耗材不存在');
+        const plan = await this.lockPlan(
+          existing.planId,
+          user.householdId,
+          manager,
+        );
+        const consumable = await manager
+          .getRepository(MaintenanceConsumable)
+          .createQueryBuilder('consumable')
+          .where('consumable.id = :id', { id })
+          .andWhere('consumable.householdId = :householdId', {
+            householdId: user.householdId,
+          })
+          .setLock('pessimistic_write')
+          .getOneOrFail();
+        const inventoryItemId = dto.inventoryItemId ?? consumable.inventoryItemId;
+        const inventoryItem = await manager
+          .getRepository(InventoryItem)
+          .findOneBy({ id: inventoryItemId, householdId: user.householdId });
+        if (!inventoryItem) throw new NotFoundException('库存项不存在');
+        consumable.inventoryItemId = inventoryItem.id;
+        consumable.unit = inventoryItem.unit;
+        if (dto.quantity !== undefined) {
+          consumable.quantity = String(roundQuantity(dto.quantity));
+        }
+        await manager.getRepository(MaintenanceConsumable).save(consumable);
+        await recordActivity(manager, user, {
+          module: 'asset',
+          action: 'maintenance_consumable_updated',
+          summary: `${user.name} 更新了「${plan.asset.name}」的维护耗材「${inventoryItem.name}」`,
+          detail: `${Number(consumable.quantity)} ${consumable.unit}`,
+          targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
+          metadata: {
+            assetId: plan.assetId,
+            planId: plan.id,
+            consumableId: consumable.id,
+            inventoryItemId: inventoryItem.id,
+          },
+        });
+      });
+      return this.consumables.findOneOrFail({
+        where: { id, householdId: user.householdId },
+        relations: { inventoryItem: true },
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('这个维护计划已经关联了该库存项');
+      }
+      throw error;
+    }
+  }
+
+  async removeConsumable(id: string, user: JwtUser) {
+    return this.dataSource.transaction(async (manager) => {
+      const existing = await manager.getRepository(MaintenanceConsumable).findOne({
+        where: { id, householdId: user.householdId },
+        relations: { inventoryItem: true },
+      });
+      if (!existing) throw new NotFoundException('维护耗材不存在');
+      const plan = await this.lockPlan(
+        existing.planId,
+        user.householdId,
+        manager,
+      );
+      const result = await manager
+        .getRepository(MaintenanceConsumable)
+        .delete({ id, householdId: user.householdId });
+      if (!result.affected) throw new NotFoundException('维护耗材不存在');
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: 'maintenance_consumable_removed',
+        summary: `${user.name} 移除了「${plan.asset.name}」的维护耗材「${existing.inventoryItem.name}」`,
+        targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        metadata: {
+          assetId: plan.assetId,
+          planId: plan.id,
+          consumableId: existing.id,
+          inventoryItemId: existing.inventoryItemId,
+        },
+      });
+      return { id, removed: true as const };
+    });
+  }
+
+  async consumablesPreview(planId: string, householdId: string) {
+    const plan = await this.plans.findOne({
+      where: { id: planId, householdId },
+      relations: { asset: true, consumables: { inventoryItem: true } },
+    });
+    if (!plan) throw new NotFoundException('维护计划不存在');
+    const rows = this.consumablePreviewRows(plan.consumables ?? [], householdId);
+    return {
+      planId: plan.id,
+      assetId: plan.assetId,
+      assetName: plan.asset.name,
+      planTitle: plan.title,
+      rows,
+      canConsume: rows.length > 0 && rows.every((row) => row.status === 'ready'),
+      hasShortage: rows.some((row) => row.status === 'insufficient'),
+    };
+  }
+
+  async addConsumablesToShopping(
+    planId: string,
+    dto: AddMaintenanceShoppingDto,
+    user: JwtUser,
+  ) {
+    const date = dateOnly(dto.date.slice(0, 10), '采购日期')!;
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `maintenance-shopping:${user.householdId}:${planId}:${date}`,
+      ]);
+      const plan = await this.lockPlan(planId, user.householdId, manager);
+      const links = await manager.getRepository(MaintenanceConsumable).find({
+        where: { householdId: user.householdId, planId: plan.id },
+        relations: { inventoryItem: true },
+        order: { createdAt: 'ASC' },
+      });
+      if (!links.length) throw new ConflictException('请先为维护计划关联耗材');
+      const rows = this.consumablePreviewRows(links, user.householdId);
+      const mismatch = rows.find((row) => row.status === 'unit_mismatch');
+      if (mismatch) {
+        throw new ConflictException(
+          `「${mismatch.inventoryItemName}」单位已变化，请先更新耗材关联`,
+        );
+      }
+      const shortages = rows.filter((row) => row.shortage > 0);
+      const items = manager.getRepository(ShoppingItem);
+      const saved: ShoppingItem[] = [];
+      let createdCount = 0;
+      let existingCount = 0;
+      for (const row of shortages) {
+        const existing = await items.findOneBy({
+          householdId: user.householdId,
+          date,
+          maintenanceConsumableId: row.consumableId,
+        });
+        if (existing) {
+          const confirmed = await manager.getRepository(InventoryTransaction).existsBy({
+            householdId: user.householdId,
+            sourceType: 'shopping_item',
+            sourceId: existing.id,
+            type: 'receipt',
+          });
+          if (!confirmed) {
+            existing.customName = row.inventoryItemName;
+            existing.requiredQty = String(row.quantity);
+            existing.availableQty = String(row.quantityBefore);
+            existing.totalQty = String(row.shortage);
+            existing.unit = row.unit;
+            existing.inventoryItemId = row.inventoryItemId;
+            existing.source = 'maintenance';
+            saved.push(await items.save(existing));
+          } else {
+            saved.push(existing);
+          }
+          existingCount += 1;
+          continue;
+        }
+        saved.push(
+          await items.save(
+            items.create({
+              householdId: user.householdId,
+              date,
+              ingredientId: null,
+              customName: row.inventoryItemName,
+              totalQty: String(row.shortage),
+              requiredQty: String(row.quantity),
+              availableQty: String(row.quantityBefore),
+              unit: row.unit,
+              checked: false,
+              source: 'maintenance',
+              inventoryItemId: row.inventoryItemId,
+              maintenanceConsumableId: row.consumableId,
+            }),
+          ),
+        );
+        createdCount += 1;
+      }
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: 'maintenance_consumables_shopping_added',
+        summary: shortages.length
+          ? `${user.name} 将「${plan.asset.name}」维护缺少的耗材加入了购物清单`
+          : `${user.name} 检查了「${plan.asset.name}」的维护耗材，当前库存充足`,
+        detail: shortages.length ? `${date} · ${shortages.length} 项` : null,
+        targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        metadata: {
+          assetId: plan.assetId,
+          planId: plan.id,
+          date,
+          shoppingItemIds: saved.map((item) => item.id),
+        },
+      });
+      return {
+        date,
+        createdCount,
+        existingCount,
+        satisfiedCount: rows.length - shortages.length,
+        items: saved,
+      };
+    });
   }
 
   async completePlan(
@@ -841,8 +1184,111 @@ export class AssetsService {
       }
       const performedDate = performedAt.toISOString().slice(0, 10);
       const nextDueDateAfter = addDays(performedDate, plan.frequencyDays);
+      const consumables = await manager.getRepository(MaintenanceConsumable).find({
+        where: { householdId: user.householdId, planId: plan.id },
+        relations: { inventoryItem: true },
+        order: { inventoryItemId: 'ASC' },
+      });
+      if (dto.consumeInventory && !consumables.length) {
+        throw new ConflictException('维护计划没有可扣减的耗材');
+      }
+      const lockedItems = dto.consumeInventory
+        ? await manager
+            .getRepository(InventoryItem)
+            .createQueryBuilder('item')
+            .where('item.householdId = :householdId', {
+              householdId: user.householdId,
+            })
+            .andWhere('item.id IN (:...inventoryItemIds)', {
+              inventoryItemIds: consumables.map((item) => item.inventoryItemId),
+            })
+            .orderBy('item.id', 'ASC')
+            .setLock('pessimistic_write')
+            .getMany()
+        : [];
+      if (dto.consumeInventory && lockedItems.length !== consumables.length) {
+        throw new NotFoundException('相关库存项不存在');
+      }
+      const rows = this.consumablePreviewRows(
+        consumables.map((consumable) => ({
+          ...consumable,
+          inventoryItem:
+            lockedItems.find((item) => item.id === consumable.inventoryItemId) ??
+            consumable.inventoryItem,
+        })) as MaintenanceConsumable[],
+        user.householdId,
+      );
+      if (dto.consumeInventory) {
+        const mismatch = rows.find((row) => row.status === 'unit_mismatch');
+        if (mismatch) {
+          throw new ConflictException(
+            `「${mismatch.inventoryItemName}」单位已变化，请先更新耗材关联`,
+          );
+        }
+        const insufficient = rows.find((row) => row.status === 'insufficient');
+        if (insufficient) {
+          throw new ConflictException(
+            `「${insufficient.inventoryItemName}」库存不足，需要 ${insufficient.quantity} ${insufficient.unit}`,
+          );
+        }
+      }
+      const recordId = randomUUID();
+      const operationId = dto.consumeInventory ? randomUUID() : null;
+      const pendingTransactions: {
+        item: InventoryItem;
+        transaction: InventoryTransaction;
+      }[] = [];
+      const consumablesSnapshot: MaintenanceConsumableSnapshot[] = rows.map(
+        (row) => {
+          if (!dto.consumeInventory || row.quantityAfter == null || !operationId) {
+            return {
+              consumableId: row.consumableId,
+              inventoryItemId: row.inventoryItemId,
+              inventoryItemName: row.inventoryItemName,
+              quantity: row.quantity,
+              unit: row.unit,
+              consumed: false,
+              quantityBefore: null,
+              quantityAfter: null,
+              transactionId: null,
+            };
+          }
+          const item = lockedItems.find(
+            (candidate) => candidate.id === row.inventoryItemId,
+          );
+          if (!item) throw new NotFoundException('相关库存项不存在');
+          const transaction = this.inventoryLedger.createTransaction(manager, {
+            householdId: user.householdId,
+            inventoryItemId: item.id,
+            operationId,
+            type: 'consumption',
+            quantityBefore: row.quantityBefore,
+            delta: -row.quantity,
+            quantityAfter: row.quantityAfter,
+            unit: row.unit,
+            actor: user,
+            sourceType: 'maintenance_record',
+            sourceId: recordId,
+            idempotencyKey: `maintenance-record:${recordId}:consumption:${item.id}`,
+          });
+          transaction.id = randomUUID();
+          pendingTransactions.push({ item, transaction });
+          return {
+            consumableId: row.consumableId,
+            inventoryItemId: row.inventoryItemId,
+            inventoryItemName: row.inventoryItemName,
+            quantity: row.quantity,
+            unit: row.unit,
+            consumed: true,
+            quantityBefore: row.quantityBefore,
+            quantityAfter: row.quantityAfter,
+            transactionId: transaction.id,
+          };
+        },
+      );
       const record = await manager.getRepository(MaintenanceRecord).save(
         manager.getRepository(MaintenanceRecord).create({
+          id: recordId,
           householdId: user.householdId,
           assetId: plan.assetId,
           planId: plan.id,
@@ -853,8 +1299,17 @@ export class AssetsService {
           idempotencyKey,
           nextDueDateBefore: plan.nextDueDate,
           nextDueDateAfter,
+          consumablesSnapshot,
+          inventoryOperationId: operationId,
         }),
       );
+      for (const pending of pendingTransactions) {
+        pending.item.quantity = pending.transaction.quantityAfter;
+        await manager.getRepository(InventoryItem).save(pending.item);
+        await manager
+          .getRepository(InventoryTransaction)
+          .save(pending.transaction);
+      }
       plan.nextDueDate = nextDueDateAfter;
       await manager.getRepository(MaintenancePlan).save(plan);
       await this.cancelScheduledReminders(
@@ -869,7 +1324,7 @@ export class AssetsService {
         action: 'maintenance_completed',
         summary: `${user.name} 完成了「${plan.asset.name}」的维护「${plan.title}」`,
         detail: record.note,
-        targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
         metadata: {
           assetId: plan.assetId,
           planId: plan.id,
@@ -878,19 +1333,76 @@ export class AssetsService {
           nextDueDateBefore: record.nextDueDateBefore,
           nextDueDateAfter: record.nextDueDateAfter,
           cost: record.cost,
+          inventoryOperationId: record.inventoryOperationId,
+          consumableCount: consumablesSnapshot.length,
+          consumedInventory: Boolean(record.inventoryOperationId),
         },
       });
       return { alreadyCompleted: false, recordId: record.id };
     });
 
-    const [record, plan] = await Promise.all([
+    const [record, plan, transactions] = await Promise.all([
       this.records.findOneByOrFail({
         id: result.recordId,
         householdId: user.householdId,
       }),
       this.plans.findOneByOrFail({ id, householdId: user.householdId }),
+      this.inventoryTransactions.find({
+        where: {
+          householdId: user.householdId,
+          sourceType: 'maintenance_record',
+          sourceId: result.recordId,
+          type: 'consumption',
+        },
+        order: { createdAt: 'ASC', id: 'ASC' },
+      }),
     ]);
-    return { alreadyCompleted: result.alreadyCompleted, record, plan };
+    return {
+      alreadyCompleted: result.alreadyCompleted,
+      record,
+      plan,
+      transactions,
+    };
+  }
+
+  private consumablePreviewRows(
+    consumables: MaintenanceConsumable[],
+    householdId: string,
+  ) {
+    return consumables.map((consumable) => {
+      const item = consumable.inventoryItem;
+      if (!item || item.householdId !== householdId) {
+        throw new ConflictException('维护耗材关联的库存项无效');
+      }
+      const quantity = roundQuantity(Number(consumable.quantity));
+      const quantityBefore = roundQuantity(Number(item.quantity));
+      if (!Number.isFinite(quantity) || !Number.isFinite(quantityBefore)) {
+        throw new ConflictException('维护耗材或库存数量无效');
+      }
+      const unitMatches = item.unit === consumable.unit;
+      const quantityAfter = unitMatches
+        ? roundQuantity(quantityBefore - quantity)
+        : null;
+      const status: 'ready' | 'unit_mismatch' | 'insufficient' = !unitMatches
+        ? 'unit_mismatch'
+        : quantityAfter != null && quantityAfter < 0
+          ? 'insufficient'
+          : 'ready';
+      return {
+        consumableId: consumable.id,
+        inventoryItemId: item.id,
+        inventoryItemName: item.name,
+        quantity,
+        unit: consumable.unit,
+        currentUnit: item.unit,
+        quantityBefore,
+        quantityAfter,
+        shortage: unitMatches
+          ? roundQuantity(Math.max(quantity - quantityBefore, 0))
+          : quantity,
+        status,
+      };
+    });
   }
 
   private signDocumentAccess(id: string, expires: number) {
@@ -935,7 +1447,7 @@ export class AssetsService {
       relations: withRelations
         ? {
             documents: true,
-            maintenancePlans: true,
+            maintenancePlans: { consumables: { inventoryItem: true } },
             maintenanceRecords: true,
           }
         : {},
@@ -1025,7 +1537,68 @@ export class AssetsService {
       .execute();
   }
 
-  private present(asset: HomeAsset) {
+  private async loadMaintenanceInventoryConfirmations(
+    records: MaintenanceRecord[],
+    householdId: string,
+  ) {
+    const recordIds = records.map((record) => record.id);
+    const consumptions = recordIds.length
+      ? await this.inventoryTransactions.find({
+          where: {
+            householdId,
+            sourceType: 'maintenance_record',
+            sourceId: In(recordIds),
+            type: 'consumption',
+          },
+          order: { createdAt: 'ASC', id: 'ASC' },
+        })
+      : [];
+    const reversals = consumptions.length
+      ? await this.inventoryTransactions.find({
+          where: {
+            householdId,
+            reversesTransactionId: In(consumptions.map((row) => row.id)),
+          },
+        })
+      : [];
+    const reversalByOriginal = new Map(
+      reversals.map((row) => [row.reversesTransactionId, row]),
+    );
+    const transactionsByRecord = new Map<string, InventoryTransaction[]>();
+    for (const transaction of consumptions) {
+      transactionsByRecord.set(transaction.sourceId, [
+        ...(transactionsByRecord.get(transaction.sourceId) ?? []),
+        transaction,
+      ]);
+    }
+    const recordById = new Map(records.map((record) => [record.id, record]));
+    const confirmations = new Map<string, MaintenanceInventoryConfirmation>();
+    for (const [recordId, transactions] of transactionsByRecord) {
+      const record = recordById.get(recordId);
+      confirmations.set(recordId, {
+        operationId: record?.inventoryOperationId ?? null,
+        reversed: transactions.every((transaction) =>
+          reversalByOriginal.has(transaction.id),
+        ),
+        transactions: transactions.map((transaction) => ({
+          id: transaction.id,
+          inventoryItemId: transaction.inventoryItemId,
+          inventoryItemName: transaction.inventoryItem.name,
+          quantityBefore: transaction.quantityBefore,
+          delta: transaction.delta,
+          quantityAfter: transaction.quantityAfter,
+          unit: transaction.unit,
+          reversedAt: reversalByOriginal.get(transaction.id)?.createdAt ?? null,
+        })),
+      });
+    }
+    return confirmations;
+  }
+
+  private present(
+    asset: HomeAsset,
+    inventoryConfirmations: Map<string, MaintenanceInventoryConfirmation>,
+  ) {
     return {
       ...asset,
       documents: [...(asset.documents ?? [])]
@@ -1034,16 +1607,31 @@ export class AssetsService {
             right.createdAt.getTime() - left.createdAt.getTime(),
         )
         .map((document) => this.presentDocument(document)),
-      maintenancePlans: [...(asset.maintenancePlans ?? [])].sort(
-        (left, right) =>
-          Number(right.isEnabled) - Number(left.isEnabled) ||
-          left.nextDueDate.localeCompare(right.nextDueDate) ||
-          left.title.localeCompare(right.title, 'zh-CN'),
-      ),
-      maintenanceRecords: [...(asset.maintenanceRecords ?? [])].sort(
-        (left, right) =>
-          right.performedAt.getTime() - left.performedAt.getTime(),
-      ),
+      maintenancePlans: [...(asset.maintenancePlans ?? [])]
+        .map((plan) => ({
+          ...plan,
+          consumables: [...(plan.consumables ?? [])].sort((left, right) =>
+            left.inventoryItem.name.localeCompare(
+              right.inventoryItem.name,
+              'zh-CN',
+            ),
+          ),
+        }))
+        .sort(
+          (left, right) =>
+            Number(right.isEnabled) - Number(left.isEnabled) ||
+            left.nextDueDate.localeCompare(right.nextDueDate) ||
+            left.title.localeCompare(right.title, 'zh-CN'),
+        ),
+      maintenanceRecords: [...(asset.maintenanceRecords ?? [])]
+        .map((record) => ({
+          ...record,
+          inventoryConfirmation: inventoryConfirmations.get(record.id) ?? null,
+        }))
+        .sort(
+          (left, right) =>
+            right.performedAt.getTime() - left.performedAt.getTime(),
+        ),
     };
   }
 
@@ -1175,6 +1763,47 @@ export class AssetsController {
     return this.service.updatePlan(id, dto, user);
   }
 
+  @Post('maintenance-plans/:id/consumables')
+  @RequireCapabilities('manage_assets', 'manage_inventory')
+  createConsumable(
+    @Param('id') id: string,
+    @Body() dto: CreateMaintenanceConsumableDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.createConsumable(id, dto, user);
+  }
+
+  @Patch('maintenance-consumables/:id')
+  @RequireCapabilities('manage_assets', 'manage_inventory')
+  updateConsumable(
+    @Param('id') id: string,
+    @Body() dto: UpdateMaintenanceConsumableDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.updateConsumable(id, dto, user);
+  }
+
+  @Delete('maintenance-consumables/:id')
+  @RequireCapabilities('manage_assets', 'manage_inventory')
+  removeConsumable(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.removeConsumable(id, user);
+  }
+
+  @Get('maintenance-plans/:id/consumables-preview')
+  consumablesPreview(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.service.consumablesPreview(id, user.householdId);
+  }
+
+  @Post('maintenance-plans/:id/shopping-items')
+  @RequireCapabilities('manage_assets', 'manage_shopping')
+  addConsumablesToShopping(
+    @Param('id') id: string,
+    @Body() dto: AddMaintenanceShoppingDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.addConsumablesToShopping(id, dto, user);
+  }
+
   @Post('maintenance-plans/:id/complete')
   @RequireCapabilities('manage_assets')
   completePlan(
@@ -1188,11 +1817,16 @@ export class AssetsController {
 
 @Module({
   imports: [
+    InventoryModule,
     TypeOrmModule.forFeature([
       HomeAsset,
       AssetDocument,
       MaintenancePlan,
       MaintenanceRecord,
+      MaintenanceConsumable,
+      InventoryItem,
+      InventoryTransaction,
+      ShoppingItem,
       Reminder,
     ]),
   ],

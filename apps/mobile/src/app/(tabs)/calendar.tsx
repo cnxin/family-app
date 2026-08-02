@@ -657,7 +657,7 @@ export default function CalendarScreen() {
                       onOpenGuest={() => router.push('/guests')}
                       onOpenMaintenance={() =>
                         router.push({
-                          pathname: '/assets',
+                          pathname: '/home-assets',
                           params: {
                             assetId: entry.metadata.assetId,
                             planId: entry.sourceId,

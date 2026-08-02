@@ -59,7 +59,10 @@ import type {
   MenuItemStatus,
   MenuInventoryPreview,
   MaintenanceCompletionResult,
+  MaintenanceConsumable,
+  MaintenanceConsumablesPreview,
   MaintenancePlan,
+  MaintenanceShoppingResult,
   MemberDishSkill,
   PollCategory,
   PollVoteMode,
@@ -1437,6 +1440,119 @@ export function useUpdateMaintenancePlan() {
   });
 }
 
+export function useMaintenanceConsumablesPreview(
+  planId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['maintenance-consumables-preview', planId],
+    queryFn: () =>
+      api<MaintenanceConsumablesPreview>(
+        `/maintenance-plans/${planId}/consumables-preview`,
+      ),
+    enabled: enabled && Boolean(planId),
+  });
+}
+
+export function useAddMaintenanceConsumable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      assetId: string;
+      planId: string;
+      inventoryItemId: string;
+      quantity: number;
+    }) =>
+      api<MaintenanceConsumable>(
+        `/maintenance-plans/${input.planId}/consumables`,
+        {
+          method: 'POST',
+          body: {
+            inventoryItemId: input.inventoryItemId,
+            quantity: input.quantity,
+          },
+        },
+      ),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+      void qc.invalidateQueries({
+        queryKey: ['maintenance-consumables-preview', input.planId],
+      });
+    },
+  });
+}
+
+export function useUpdateMaintenanceConsumable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      assetId: string;
+      planId: string;
+      consumableId: string;
+      inventoryItemId?: string;
+      quantity?: number;
+    }) =>
+      api<MaintenanceConsumable>(
+        `/maintenance-consumables/${input.consumableId}`,
+        {
+          method: 'PATCH',
+          body: {
+            inventoryItemId: input.inventoryItemId,
+            quantity: input.quantity,
+          },
+        },
+      ),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+      void qc.invalidateQueries({
+        queryKey: ['maintenance-consumables-preview', input.planId],
+      });
+    },
+  });
+}
+
+export function useRemoveMaintenanceConsumable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      assetId: string;
+      planId: string;
+      consumableId: string;
+    }) =>
+      api<{ id: string; removed: true }>(
+        `/maintenance-consumables/${input.consumableId}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+      void qc.invalidateQueries({
+        queryKey: ['maintenance-consumables-preview', input.planId],
+      });
+    },
+  });
+}
+
+export function useAddMaintenanceConsumablesToShopping() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { assetId: string; planId: string; date: string }) =>
+      api<MaintenanceShoppingResult>(
+        `/maintenance-plans/${input.planId}/shopping-items`,
+        { method: 'POST', body: { date: input.date } },
+      ),
+    onSuccess: (_, input) => {
+      void qc.invalidateQueries({ queryKey: ['shopping', input.date] });
+      void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
+      void qc.invalidateQueries({
+        queryKey: ['maintenance-consumables-preview', input.planId],
+      });
+    },
+  });
+}
+
 export function useCompleteMaintenancePlan() {
   const qc = useQueryClient();
   return useMutation({
@@ -1446,6 +1562,7 @@ export function useCompleteMaintenancePlan() {
       performedAt?: string;
       cost?: number | null;
       note?: string | null;
+      consumeInventory?: boolean;
       idempotencyKey: string;
     }) =>
       api<MaintenanceCompletionResult>(
@@ -1456,6 +1573,7 @@ export function useCompleteMaintenancePlan() {
             performedAt: input.performedAt,
             cost: input.cost,
             note: input.note,
+            consumeInventory: input.consumeInventory,
             idempotencyKey: input.idempotencyKey,
           },
         },
@@ -1465,6 +1583,11 @@ export function useCompleteMaintenancePlan() {
       void qc.invalidateQueries({ queryKey: ['asset', input.assetId] });
       void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
       void qc.invalidateQueries({ queryKey: ['reminders'] });
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void qc.invalidateQueries({
+        queryKey: ['maintenance-consumables-preview', input.planId],
+      });
     },
   });
 }

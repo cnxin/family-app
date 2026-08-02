@@ -255,7 +255,7 @@ export class RemindersService
         summary: plan.note,
         date: plan.nextDueDate,
         startsAt: null,
-        targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
         status: 'scheduled',
       }));
 
@@ -522,7 +522,7 @@ export class RemindersService
         summary: plan.note,
         date: plan.nextDueDate,
         startsAt: null,
-        targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+        targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
         status: active ? 'scheduled' : 'cancelled',
       };
     }

@@ -110,7 +110,7 @@ try {
       menuEntry?.metadata?.itemCount >= 1 &&
       maintenanceEntry?.metadata?.assetId === asset.body.data.id &&
       maintenanceEntry.targetPath.includes(
-        `/assets?assetId=${asset.body.data.id}`,
+        `/home-assets?assetId=${asset.body.data.id}`,
       ),
     '统一日历同时聚合家庭事件、菜单餐次和资产维护计划',
   );

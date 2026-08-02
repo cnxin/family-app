@@ -71,6 +71,7 @@ export class InventoryTransactionsService {
       sourceType:
         | 'shopping_item'
         | 'menu'
+        | 'maintenance_record'
         | 'inventory_item'
         | 'manual_adjustment'
         | 'inventory_transaction';
@@ -220,9 +221,11 @@ export class InventoryTransactionsService {
         : null;
     const candidates = inventory
       .filter((item) =>
-        shoppingItem.ingredientId
-          ? item.ingredientId === shoppingItem.ingredientId
-          : item.unit === shoppingItem.unit,
+        shoppingItem.inventoryItemId
+          ? item.id === shoppingItem.inventoryItemId
+          : shoppingItem.ingredientId
+            ? item.ingredientId === shoppingItem.ingredientId
+            : item.unit === shoppingItem.unit,
       )
       .map((item) => ({
         id: item.id,
@@ -650,7 +653,19 @@ export class InventoryTransactionsService {
     strict: boolean,
   ) {
     let target: InventoryItem | undefined;
-    if (inventoryItemId) {
+    if (shoppingItem.inventoryItemId) {
+      if (
+        inventoryItemId &&
+        inventoryItemId !== shoppingItem.inventoryItemId &&
+        strict
+      ) {
+        throw new ConflictException('这个维护购物项已经关联了指定库存项');
+      }
+      target = inventory.find(
+        (item) => item.id === shoppingItem.inventoryItemId,
+      );
+      if (!target && strict) throw new NotFoundException('关联库存项不存在');
+    } else if (inventoryItemId) {
       target = inventory.find((item) => item.id === inventoryItemId);
       if (!target && strict) throw new NotFoundException('所选库存项不存在');
     } else if (shoppingItem.ingredientId && shoppingItem.unit) {

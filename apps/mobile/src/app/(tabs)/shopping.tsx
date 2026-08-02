@@ -53,12 +53,12 @@ function ItemRow({
   const check = useCheckShoppingItem();
   const name = item.ingredient?.name ?? item.customName ?? '未知';
   const hasInventoryBreakdown =
-    item.source === 'auto' &&
+    (item.source === 'auto' || item.source === 'maintenance') &&
     item.requiredQty != null &&
     item.availableQty != null;
   const unit = item.unit ? ` ${item.unit}` : '';
   const inventoryBreakdown = hasInventoryBreakdown
-    ? `需要 ${quantityLabel(item.requiredQty)}${unit} · 库存 ${quantityLabel(item.availableQty)}${unit} · 建议买 ${quantityLabel(item.totalQty)}${unit}`
+    ? `${item.source === 'maintenance' ? '资产维护 · ' : ''}需要 ${quantityLabel(item.requiredQty)}${unit} · 库存 ${quantityLabel(item.availableQty)}${unit} · 建议买 ${quantityLabel(item.totalQty)}${unit}`
     : null;
 
   return (
@@ -184,11 +184,13 @@ function StockConfirmDialog({
     null,
   );
   const [error, setError] = useState<string | null>(null);
-  const automaticInventoryId = inventory?.find(
-    (candidate) =>
-      candidate.ingredientId === item.ingredient?.id &&
-      candidate.unit === item.unit,
-  )?.id;
+  const automaticInventoryId =
+    item.inventoryItemId ??
+    inventory?.find(
+      (candidate) =>
+        candidate.ingredientId === item.ingredient?.id &&
+        candidate.unit === item.unit,
+    )?.id;
   const effectiveInventoryId = selectedInventoryId ?? automaticInventoryId ?? null;
   const preview = useShoppingInventoryPreview(
     item.id,
@@ -371,7 +373,10 @@ export default function ShoppingScreen() {
   const groups = useMemo(() => {
     const map = new Map<string, ShoppingItem[]>();
     for (const item of items ?? []) {
-      const key = item.ingredient?.category ?? '手动添加';
+      const key =
+        item.source === 'maintenance'
+          ? '维护耗材'
+          : (item.ingredient?.category ?? '手动添加');
       map.set(key, [...(map.get(key) ?? []), item]);
     }
     return [...map.entries()];

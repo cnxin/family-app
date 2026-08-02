@@ -32,7 +32,7 @@ POST  /reward-redemptions/:id/reverse
 - `points_ledger` 保存变动前、变化量、变动后、成员、操作者、来源、幂等键、反向流水引用和时间。数据库触发器拒绝任何 `UPDATE` 或 `DELETE`。
 - `rewards` 保存家庭奖励主档；家庭内名称唯一，兑换积分必须为正整数。
 - `reward_redemptions` 保存奖励名称和积分快照、申请人、扣分流水、处理人、退分流水及 `pending/approved/rejected/cancelled/reversed` 状态。
-- 迁移 `1785229700000-add-points-and-rewards` 建立四张表，增加任务积分字段，并扩充活动和通知模块；`1785229800000-normalize-points-unique-indexes` 兼容规范化曾由热重载实例执行的首稿约束，不改变业务数据。当前共 35 个有序迁移，`synchronize` 保持 `false`。
+- 迁移 `1785229700000-add-points-and-rewards` 建立四张表，增加任务积分字段，并扩充活动和通知模块；`1785229800000-normalize-points-unique-indexes` 兼容规范化曾由热重载实例执行的首稿约束，不改变业务数据。当前仓库共 36 个有序迁移，`synchronize` 保持 `false`。
 
 ## 事务、幂等与并发
 

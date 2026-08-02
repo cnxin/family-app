@@ -36,6 +36,8 @@ import {
   InventoryCategory,
   InventoryItem,
   InventoryTransaction,
+  MaintenanceConsumable,
+  ShoppingItem,
 } from '../entities';
 import { InventoryTransactionsService } from './inventory-transactions.service';
 
@@ -360,6 +362,20 @@ export class InventoryService {
   }
 
   async remove(id: string, householdId: string) {
+    if (
+      await this.dataSource
+        .getRepository(MaintenanceConsumable)
+        .existsBy({ inventoryItemId: id, householdId })
+    ) {
+      throw new ConflictException('这个库存项仍被资产维护耗材引用');
+    }
+    if (
+      await this.dataSource
+        .getRepository(ShoppingItem)
+        .existsBy({ inventoryItemId: id, householdId })
+    ) {
+      throw new ConflictException('这个库存项仍被购物清单引用');
+    }
     if (await this.transactions.existsBy({ inventoryItemId: id, householdId })) {
       throw new ConflictException('已有库存流水的库存项不能删除');
     }
@@ -465,9 +481,12 @@ export class InventoryController {
       InventoryItem,
       Ingredient,
       InventoryTransaction,
+      MaintenanceConsumable,
+      ShoppingItem,
     ]),
   ],
   controllers: [InventoryController],
   providers: [InventoryService, InventoryTransactionsService],
+  exports: [InventoryTransactionsService],
 })
 export class InventoryModule {}

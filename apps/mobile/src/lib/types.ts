@@ -257,6 +257,7 @@ export interface MenuEvent {
 export interface ShoppingItem {
   id: string;
   date: string;
+  ingredientId: string | null;
   ingredient: Ingredient | null;
   customName: string | null;
   totalQty: string | null;
@@ -264,7 +265,10 @@ export interface ShoppingItem {
   availableQty: string | null;
   unit: string | null;
   checked: boolean;
-  source: 'auto' | 'manual';
+  source: 'auto' | 'manual' | 'maintenance';
+  inventoryItemId: string | null;
+  inventoryItem: InventoryItem | null;
+  maintenanceConsumableId: string | null;
   inventoryConfirmation: {
     transactionId: string;
     inventoryItemId: string;
@@ -312,6 +316,7 @@ export interface InventoryTransaction {
   sourceType:
     | 'shopping_item'
     | 'menu'
+    | 'maintenance_record'
     | 'inventory_item'
     | 'manual_adjustment'
     | 'inventory_transaction';
@@ -357,10 +362,34 @@ export interface MaintenancePlan {
   nextDueDate: string;
   isEnabled: boolean;
   note: string | null;
+  consumables: MaintenanceConsumable[];
   createdById: string;
   createdBy: Member;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MaintenanceConsumable {
+  id: string;
+  planId: string;
+  inventoryItemId: string;
+  inventoryItem: InventoryItem;
+  quantity: string;
+  unit: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaintenanceConsumableSnapshot {
+  consumableId: string;
+  inventoryItemId: string;
+  inventoryItemName: string;
+  quantity: number;
+  unit: string;
+  consumed: boolean;
+  quantityBefore: number | null;
+  quantityAfter: number | null;
+  transactionId: string | null;
 }
 
 export interface MaintenanceRecord {
@@ -375,6 +404,22 @@ export interface MaintenanceRecord {
   idempotencyKey: string;
   nextDueDateBefore: string;
   nextDueDateAfter: string;
+  consumablesSnapshot: MaintenanceConsumableSnapshot[];
+  inventoryOperationId: string | null;
+  inventoryConfirmation: {
+    operationId: string | null;
+    reversed: boolean;
+    transactions: {
+      id: string;
+      inventoryItemId: string;
+      inventoryItemName: string;
+      quantityBefore: string;
+      delta: string;
+      quantityAfter: string;
+      unit: string;
+      reversedAt: string | null;
+    }[];
+  } | null;
   createdAt: string;
 }
 
@@ -404,6 +449,36 @@ export interface MaintenanceCompletionResult {
   alreadyCompleted: boolean;
   record: MaintenanceRecord;
   plan: MaintenancePlan;
+  transactions: InventoryTransaction[];
+}
+
+export interface MaintenanceConsumablesPreview {
+  planId: string;
+  assetId: string;
+  assetName: string;
+  planTitle: string;
+  canConsume: boolean;
+  hasShortage: boolean;
+  rows: {
+    consumableId: string;
+    inventoryItemId: string;
+    inventoryItemName: string;
+    quantity: number;
+    unit: string;
+    currentUnit: string;
+    quantityBefore: number;
+    quantityAfter: number | null;
+    shortage: number;
+    status: 'ready' | 'unit_mismatch' | 'insufficient';
+  }[];
+}
+
+export interface MaintenanceShoppingResult {
+  date: string;
+  createdCount: number;
+  existingCount: number;
+  satisfiedCount: number;
+  items: ShoppingItem[];
 }
 
 export interface ShoppingInventoryPreview {

@@ -351,7 +351,7 @@ export class CalendarService {
           title: `${plan.asset.name} · ${plan.title}`,
           summary: plan.note,
           status: 'scheduled' as const,
-          targetPath: `/assets?assetId=${plan.assetId}&planId=${plan.id}`,
+          targetPath: `/home-assets?assetId=${plan.assetId}&planId=${plan.id}`,
           metadata: {
             assetId: plan.assetId,
             assetName: plan.asset.name,

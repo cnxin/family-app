@@ -9,10 +9,12 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Package,
   Pencil,
   Plus,
   ReceiptText,
   RotateCcw,
+  ShoppingCart,
   Trash2,
   Upload,
   Wrench,
@@ -44,12 +46,18 @@ import { photoUri } from '../../lib/api';
 import { formatPlanDate, parseDate, todayStr } from '../../lib/date';
 import {
   useAddAssetDocument,
+  useAddMaintenanceConsumable,
+  useAddMaintenanceConsumablesToShopping,
   useAddMaintenancePlan,
   useAsset,
   useAssetDocumentAccess,
   useAssets,
   useCompleteMaintenancePlan,
+  useInventory,
+  useMaintenanceConsumablesPreview,
   useRemoveAssetDocument,
+  useRemoveMaintenanceConsumable,
+  useUpdateMaintenanceConsumable,
   useUpdateMaintenancePlan,
   useUpsertAsset,
 } from '../../lib/queries';
@@ -59,6 +67,7 @@ import type {
   AssetDocument,
   AssetDocumentType,
   HomeAsset,
+  MaintenanceConsumable,
   MaintenancePlan,
 } from '../../lib/types';
 
@@ -650,6 +659,142 @@ function PlanForm({
   );
 }
 
+function ConsumableForm({
+  asset,
+  consumable,
+  onClose,
+  onSaved,
+  plan,
+}: {
+  asset: HomeAsset;
+  consumable: MaintenanceConsumable | null;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+  plan: MaintenancePlan;
+}) {
+  const c = useTheme();
+  const { data: inventory, isLoading } = useInventory();
+  const add = useAddMaintenanceConsumable();
+  const update = useUpdateMaintenanceConsumable();
+  const [inventoryItemId, setInventoryItemId] = useState(
+    consumable?.inventoryItemId ?? '',
+  );
+  const [quantity, setQuantity] = useState(
+    consumable ? String(Number(consumable.quantity)) : '1',
+  );
+  const [message, setMessage] = useState<string | null>(null);
+  const parsedQuantity = Number(quantity);
+  const candidates = (inventory ?? []).filter(
+    (item) =>
+      item.id === consumable?.inventoryItemId ||
+      !plan.consumables.some((entry) => entry.inventoryItemId === item.id),
+  );
+  const selected = candidates.find((item) => item.id === inventoryItemId);
+  const valid =
+    Boolean(selected) &&
+    Number.isFinite(parsedQuantity) &&
+    parsedQuantity >= 0.01 &&
+    parsedQuantity <= 99_999_999.99;
+
+  const submit = async () => {
+    if (!valid || !selected) return;
+    setMessage(null);
+    try {
+      if (consumable) {
+        await update.mutateAsync({
+          assetId: asset.id,
+          planId: plan.id,
+          consumableId: consumable.id,
+          inventoryItemId: selected.id,
+          quantity: parsedQuantity,
+        });
+      } else {
+        await add.mutateAsync({
+          assetId: asset.id,
+          planId: plan.id,
+          inventoryItemId: selected.id,
+          quantity: parsedQuantity,
+        });
+      }
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onSaved(consumable ? '维护耗材已更新' : '维护耗材已关联');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '保存维护耗材失败');
+    }
+  };
+
+  return (
+    <Sheet
+      onClose={onClose}
+      subtitle={`${asset.name} · ${plan.title}`}
+      title={consumable ? '编辑维护耗材' : '关联维护耗材'}
+    >
+      <ScrollView contentContainerStyle={styles.formContent} showsVerticalScrollIndicator={false}>
+        <Field label="库存项">
+          {isLoading ? <ActivityIndicator color={c.tint} /> : null}
+          {!isLoading && candidates.length ? (
+            <View style={styles.stockChoices}>
+              {candidates.map((item) => {
+                const active = item.id === inventoryItemId;
+                return (
+                  <Pressable
+                    accessibilityLabel={`选择库存${item.name}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    key={item.id}
+                    onPress={() => setInventoryItemId(item.id)}
+                    style={[
+                      styles.stockChoice,
+                      {
+                        backgroundColor: active ? c.tintSoft : c.fill,
+                        borderColor: active ? c.tint : c.separator,
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                        {item.name}
+                      </Text>
+                      <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                        当前 {Number(item.quantity)} {item.unit}
+                      </Text>
+                    </View>
+                    {active ? <CheckCircle2 color={c.tint} size={18} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+          {!isLoading && !candidates.length ? (
+            <View style={[styles.inlineEmpty, { backgroundColor: c.fill }]}>
+              <Package color={c.tertiaryLabel} size={20} />
+              <Text style={[t.footnote, { color: c.secondaryLabel }]}>没有可关联的库存项</Text>
+            </View>
+          ) : null}
+        </Field>
+        <Field label={`每次用量${selected ? `（${selected.unit}）` : ''}`}>
+          <TextInput
+            accessibilityLabel="维护耗材每次用量"
+            inputMode="decimal"
+            onChangeText={setQuantity}
+            placeholder="1"
+            placeholderTextColor={c.tertiaryLabel}
+            style={[styles.input, t.body, { backgroundColor: c.fill, color: c.label }]}
+            value={quantity}
+          />
+        </Field>
+        {message ? <Text style={[t.footnote, { color: c.red }]}>{message}</Text> : null}
+        <PrimaryButton
+          disabled={!valid}
+          loading={add.isPending || update.isPending}
+          onPress={() => void submit()}
+          title={consumable ? '保存耗材' : '确认关联'}
+        />
+      </ScrollView>
+    </Sheet>
+  );
+}
+
 function CompletionForm({
   asset,
   onClose,
@@ -663,13 +808,23 @@ function CompletionForm({
 }) {
   const c = useTheme();
   const complete = useCompleteMaintenancePlan();
+  const preview = useMaintenanceConsumablesPreview(plan.id);
+  const addToShopping = useAddMaintenanceConsumablesToShopping();
   const [performedOn, setPerformedOn] = useState(todayStr());
+  const [shoppingDate, setShoppingDate] = useState(todayStr());
   const [cost, setCost] = useState('');
   const [note, setNote] = useState('');
+  const [inventoryMode, setInventoryMode] = useState<'skip' | 'consume'>('skip');
   const [key] = useState(idempotencyKey);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{
+    text: string;
+    error: boolean;
+  } | null>(null);
   const parsedCost = cost.trim() ? Number(cost) : null;
-  const valid = parsedCost == null || (Number.isFinite(parsedCost) && parsedCost >= 0);
+  const valid =
+    (parsedCost == null || (Number.isFinite(parsedCost) && parsedCost >= 0)) &&
+    preview.isSuccess &&
+    (inventoryMode === 'skip' || Boolean(preview.data?.canConsume));
   const nextDue = addDays(performedOn, plan.frequencyDays);
 
   const submit = async () => {
@@ -683,6 +838,7 @@ function CompletionForm({
         performedAt,
         cost: parsedCost,
         note: note.trim() || null,
+        consumeInventory: inventoryMode === 'consume',
         idempotencyKey: key,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -692,7 +848,33 @@ function CompletionForm({
           : `已完成维护，下次安排在 ${dateLabel(result.plan.nextDueDate)}`,
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '记录维护失败');
+      setMessage({
+        text: error instanceof Error ? error.message : '记录维护失败',
+        error: true,
+      });
+    }
+  };
+
+  const addShortages = async () => {
+    setMessage(null);
+    try {
+      const result = await addToShopping.mutateAsync({
+        assetId: asset.id,
+        planId: plan.id,
+        date: shoppingDate,
+      });
+      setMessage({
+        text: result.items.length
+          ? `购物清单已同步：新增 ${result.createdCount} 项，已有 ${result.existingCount} 项`
+          : '当前库存足够完成这次维护',
+        error: false,
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : '加入购物清单失败',
+        error: true,
+      });
     }
   };
 
@@ -707,6 +889,93 @@ function CompletionForm({
           <Text style={[t.headline, { color: c.label, marginTop: 5 }]}>下一次：{dateLabel(nextDue)}</Text>
           <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>按 {plan.frequencyDays} 天周期从完成日重新计算</Text>
         </View>
+        <Field label="耗材库存">
+          {preview.isLoading ? <ActivityIndicator color={c.tint} /> : null}
+          {preview.data?.rows.length ? (
+            <View style={styles.consumablePreviewList}>
+              {preview.data.rows.map((row) => (
+                <View
+                  key={row.consumableId}
+                  style={[
+                    styles.consumablePreviewRow,
+                    { backgroundColor: c.fill },
+                  ]}
+                >
+                  <Package
+                    color={row.status === 'ready' ? c.green : c.orange}
+                    size={17}
+                  />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                      {row.inventoryItemName} · {row.quantity} {row.unit}
+                    </Text>
+                    <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                      {row.status === 'unit_mismatch'
+                        ? `关联单位 ${row.unit}，库存单位已变为 ${row.currentUnit}`
+                        : `库存 ${row.quantityBefore} → ${row.quantityAfter} ${row.unit}`}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      t.caption,
+                      {
+                        color: row.status === 'ready' ? c.green : c.orange,
+                        fontWeight: '700',
+                      },
+                    ]}
+                  >
+                    {row.status === 'ready'
+                      ? '可扣库'
+                      : row.status === 'insufficient'
+                        ? `缺 ${row.shortage}`
+                        : '单位变化'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {!preview.isLoading && !preview.data?.rows.length ? (
+            <View style={[styles.inlineEmpty, { backgroundColor: c.fill }]}>
+              <Package color={c.tertiaryLabel} size={20} />
+              <Text style={[t.footnote, { color: c.secondaryLabel }]}>本计划没有关联耗材</Text>
+            </View>
+          ) : null}
+          <Segmented
+            onChange={(value) => {
+              if (value === 'consume' && !preview.data?.canConsume) {
+                setMessage({ text: '库存不足或单位变化，暂不能确认扣库', error: true });
+                return;
+              }
+              setInventoryMode(value);
+              setMessage(null);
+            }}
+            options={[
+              { label: '完成但不扣库', value: 'skip' as const },
+              { label: '同时确认扣库', value: 'consume' as const },
+            ]}
+            value={inventoryMode}
+          />
+        </Field>
+        {preview.data?.hasShortage ? (
+          <Field label="缺少耗材">
+            <DateSelector allowPast onChange={setShoppingDate} value={shoppingDate} />
+            <Pressable
+              accessibilityRole="button"
+              disabled={addToShopping.isPending}
+              onPress={() => void addShortages()}
+              style={[styles.shoppingButton, { backgroundColor: c.orangeSoft }]}
+            >
+              {addToShopping.isPending ? (
+                <ActivityIndicator color={c.orange} />
+              ) : (
+                <ShoppingCart color={c.orange} size={17} />
+              )}
+              <Text style={[t.footnote, { color: c.orange, fontWeight: '700' }]}>
+                加入该日购物清单
+              </Text>
+            </Pressable>
+          </Field>
+        ) : null}
         <Field label="本次费用">
           <TextInput
             accessibilityLabel="本次维护费用"
@@ -729,13 +998,21 @@ function CompletionForm({
             value={note}
           />
         </Field>
-        {message ? <Text style={[t.footnote, { color: c.red }]}>{message}</Text> : null}
+        {message ? (
+          <Text style={[t.footnote, { color: message.error ? c.red : c.green }]}>
+            {message.text}
+          </Text>
+        ) : null}
         <PrimaryButton
           disabled={!valid}
           icon={<CheckCircle2 color="#FFFFFF" size={18} />}
           loading={complete.isPending}
           onPress={() => void submit()}
-          title="确认完成并推进日期"
+          title={
+            inventoryMode === 'consume'
+              ? '确认完成、扣库并推进日期'
+              : '确认完成并推进日期'
+          }
         />
       </ScrollView>
     </Sheet>
@@ -757,10 +1034,19 @@ function AssetDetail({
   const upsert = useUpsertAsset();
   const updatePlan = useUpdateMaintenancePlan();
   const removeDocument = useRemoveAssetDocument();
+  const removeConsumable = useRemoveMaintenanceConsumable();
   const accessDocument = useAssetDocumentAccess();
   const [documentOpen, setDocumentOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [completingPlan, setCompletingPlan] = useState<MaintenancePlan | null>(null);
+  const [consumableEditor, setConsumableEditor] = useState<{
+    plan: MaintenancePlan;
+    consumable: MaintenanceConsumable | null;
+  } | null>(null);
+  const [pendingConsumable, setPendingConsumable] = useState<{
+    plan: MaintenancePlan;
+    consumable: MaintenanceConsumable;
+  } | null>(null);
   const [pendingDocument, setPendingDocument] = useState<AssetDocument | null>(null);
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [statusConfirm, setStatusConfirm] = useState(false);
@@ -925,6 +1211,73 @@ function AssetDetail({
                       </View>
                     </View>
                     {plan.note ? <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 9 }]}>{plan.note}</Text> : null}
+                    <View style={[styles.consumablesBlock, { borderTopColor: c.separator }]}>
+                      <View style={styles.consumablesHeader}>
+                        <Text style={[t.caption, { color: c.secondaryLabel, fontWeight: '700' }]}>维护耗材</Text>
+                        <Pressable
+                          accessibilityLabel={`为${plan.title}关联耗材`}
+                          accessibilityRole="button"
+                          disabled={asset.status !== 'active'}
+                          onPress={() =>
+                            setConsumableEditor({ plan, consumable: null })
+                          }
+                          style={{ opacity: asset.status === 'active' ? 1 : 0.4 }}
+                        >
+                          <Plus color={c.tint} size={17} />
+                        </Pressable>
+                      </View>
+                      {plan.consumables.length ? (
+                        <View style={styles.consumableRows}>
+                          {plan.consumables.map((consumable) => {
+                            const unitMatches =
+                              consumable.unit === consumable.inventoryItem.unit;
+                            return (
+                              <View key={consumable.id} style={styles.consumableRow}>
+                                <Package
+                                  color={unitMatches ? c.green : c.orange}
+                                  size={16}
+                                />
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text
+                                    numberOfLines={1}
+                                    style={[t.footnote, { color: c.label, fontWeight: '700' }]}
+                                  >
+                                    {consumable.inventoryItem.name} · {Number(consumable.quantity)} {consumable.unit}
+                                  </Text>
+                                  <Text style={[t.caption, { color: unitMatches ? c.secondaryLabel : c.orange, marginTop: 2 }]}>
+                                    {unitMatches
+                                      ? `当前库存 ${Number(consumable.inventoryItem.quantity)} ${consumable.unit}`
+                                      : `库存单位已变为 ${consumable.inventoryItem.unit}`}
+                                  </Text>
+                                </View>
+                                <Pressable
+                                  accessibilityLabel={`编辑耗材${consumable.inventoryItem.name}`}
+                                  accessibilityRole="button"
+                                  onPress={() =>
+                                    setConsumableEditor({ plan, consumable })
+                                  }
+                                  style={styles.miniIconButton}
+                                >
+                                  <Pencil color={c.tint} size={15} />
+                                </Pressable>
+                                <Pressable
+                                  accessibilityLabel={`移除耗材${consumable.inventoryItem.name}`}
+                                  accessibilityRole="button"
+                                  onPress={() =>
+                                    setPendingConsumable({ plan, consumable })
+                                  }
+                                  style={styles.miniIconButton}
+                                >
+                                  <Trash2 color={c.red} size={15} />
+                                </Pressable>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      ) : (
+                        <Text style={[t.caption, { color: c.tertiaryLabel }]}>未关联耗材</Text>
+                      )}
+                    </View>
                     <View style={[styles.planActions, { borderTopColor: c.separator }]}>
                       <Pressable
                         accessibilityRole="button"
@@ -1067,6 +1420,27 @@ function AssetDetail({
                         <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>{plan?.title ?? '维护完成'}</Text>
                         <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>{new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(new Date(record.performedAt))} · {record.performedBy.name}{record.cost ? ` · ¥${Number(record.cost)}` : ''}</Text>
                         <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>下次日期推进到 {dateLabel(record.nextDueDateAfter)}</Text>
+                        {record.consumablesSnapshot.length ? (
+                          <Text
+                            style={[
+                              t.caption,
+                              {
+                                color: record.inventoryConfirmation?.reversed
+                                  ? c.orange
+                                  : record.inventoryConfirmation
+                                    ? c.green
+                                    : c.secondaryLabel,
+                                marginTop: 3,
+                              },
+                            ]}
+                          >
+                            {record.inventoryConfirmation?.reversed
+                              ? '耗材扣库已撤销'
+                              : record.inventoryConfirmation
+                                ? `已扣减 ${record.consumablesSnapshot.length} 项耗材`
+                                : `记录了 ${record.consumablesSnapshot.length} 项耗材，本次未扣库`}
+                          </Text>
+                        ) : null}
                         {record.note ? <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 5 }]}>{record.note}</Text> : null}
                       </View>
                     </View>
@@ -1080,7 +1454,54 @@ function AssetDetail({
 
       {asset && documentOpen ? <DocumentForm asset={asset} onClose={() => setDocumentOpen(false)} onSaved={() => { setDocumentOpen(false); setMessage({ text: '资产资料已保存', type: 'success' }); }} /> : null}
       {asset && planOpen ? <PlanForm asset={asset} onClose={() => setPlanOpen(false)} onSaved={() => { setPlanOpen(false); setMessage({ text: '维护计划已创建', type: 'success' }); }} /> : null}
+      {asset && consumableEditor ? (
+        <ConsumableForm
+          asset={asset}
+          consumable={consumableEditor.consumable}
+          onClose={() => setConsumableEditor(null)}
+          onSaved={(value) => {
+            setConsumableEditor(null);
+            setMessage({ text: value, type: 'success' });
+          }}
+          plan={consumableEditor.plan}
+        />
+      ) : null}
       {asset && completingPlan ? <CompletionForm asset={asset} plan={completingPlan} onClose={() => setCompletingPlan(null)} onSaved={(value) => { setCompletingPlan(null); setMessage({ text: value, type: 'success' }); }} /> : null}
+      <ConfirmDialog
+        destructive
+        loading={removeConsumable.isPending}
+        message="只移除维护计划与库存项的关联，既有维护记录和购物项快照会保留。"
+        onCancel={() => setPendingConsumable(null)}
+        onConfirm={() => {
+          if (!pendingConsumable || !asset) return;
+          removeConsumable.mutate(
+            {
+              assetId: asset.id,
+              planId: pendingConsumable.plan.id,
+              consumableId: pendingConsumable.consumable.id,
+            },
+            {
+              onSuccess: () => {
+                setPendingConsumable(null);
+                setMessage({ text: '维护耗材关联已移除', type: 'success' });
+              },
+              onError: (error) => {
+                setPendingConsumable(null);
+                setMessage({
+                  text: error instanceof Error ? error.message : '移除耗材失败',
+                  type: 'error',
+                });
+              },
+            },
+          );
+        }}
+        title={
+          pendingConsumable
+            ? `移除「${pendingConsumable.consumable.inventoryItem.name}」？`
+            : '移除维护耗材？'
+        }
+        visible={Boolean(pendingConsumable)}
+      />
       <ConfirmDialog
         loading={removeDocument.isPending}
         message="只删除这条资料记录，不会修改资产和维护历史。"
@@ -1331,6 +1752,11 @@ const styles = StyleSheet.create({
   twoColumns: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   input: { minHeight: 46, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 10 },
   multiline: { minHeight: 88, textAlignVertical: 'top' },
+  stockChoices: { gap: 7 },
+  stockChoice: { minHeight: 58, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  consumablePreviewList: { gap: 7 },
+  consumablePreviewRow: { minHeight: 58, borderRadius: radius.sm, paddingHorizontal: 11, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  shoppingButton: { minHeight: 42, borderRadius: radius.sm, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minHeight: 36, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
   checkboxRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 9 },
@@ -1350,6 +1776,11 @@ const styles = StyleSheet.create({
   planTop: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   rowIcon: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   dueBadge: { minHeight: 28, borderRadius: radius.sm, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  consumablesBlock: { marginTop: 11, paddingTop: 9, borderTopWidth: StyleSheet.hairlineWidth },
+  consumablesHeader: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  consumableRows: { gap: 5 },
+  consumableRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  miniIconButton: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   planActions: { marginTop: 11, paddingTop: 9, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   planAction: { minHeight: 34, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
   inlineEmpty: { minHeight: 62, borderRadius: radius.sm, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

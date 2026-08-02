@@ -239,6 +239,7 @@ try {
   const foreignHouseholdId = randomUUID();
   const foreignAssetId = randomUUID();
   const foreignDocumentId = randomUUID();
+  const foreignInventoryId = randomUUID();
   await db.query(
     `INSERT INTO households (id, name, slug) VALUES ($1, '资产隔离测试家庭', $2)`,
     [foreignHouseholdId, `asset-isolation-${foreignHouseholdId}`],
@@ -254,6 +255,12 @@ try {
        (id, "householdId", "assetId", type, title, url, "createdById")
      VALUES ($1, $2, $3, 'other', '其他家庭资料', 'https://example.com/foreign', $4)`,
     [foreignDocumentId, foreignHouseholdId, foreignAssetId, member.id],
+  );
+  await db.query(
+    `INSERT INTO inventory_items
+       (id, "householdId", name, category, quantity, unit, "lowStockThreshold", "restockQuantity")
+     VALUES ($1, $2, '其他家庭滤芯', '日用品', 10, '个', 1, 1)`,
+    [foreignInventoryId, foreignHouseholdId],
   );
   const activeAssets = await request('/assets?status=active', token);
   const foreignGet = await request(`/assets/${foreignAssetId}`, token);
@@ -303,6 +310,120 @@ try {
     '维护计划创建成功且同一资产拒绝同名计划',
   );
 
+  console.log('2.1 维护耗材、缺口采购与明确扣库');
+  const filterInventory = await request('/inventory-items', token, 'POST', {
+    name: '资产回归滤芯',
+    category: '日用品',
+    quantity: 1,
+    unit: '个',
+    lowStockThreshold: 1,
+    restockQuantity: 2,
+  });
+  assert(filterInventory.status === 201, '可以建立资产耗材对应库存项');
+  const consumable = await request(
+    `/maintenance-plans/${plan.data.id}/consumables`,
+    token,
+    'POST',
+    { inventoryItemId: filterInventory.data.id, quantity: 2 },
+  );
+  const duplicateConsumable = await request(
+    `/maintenance-plans/${plan.data.id}/consumables`,
+    token,
+    'POST',
+    { inventoryItemId: filterInventory.data.id, quantity: 1 },
+  );
+  const crossHouseholdConsumable = await request(
+    `/maintenance-plans/${plan.data.id}/consumables`,
+    token,
+    'POST',
+    { inventoryItemId: foreignInventoryId, quantity: 1 },
+  );
+  const linkedInventoryDelete = await request(
+    `/inventory-items/${filterInventory.data.id}`,
+    token,
+    'DELETE',
+  );
+  assert(
+    consumable.status === 201 &&
+      Number(consumable.data.quantity) === 2 &&
+      duplicateConsumable.status === 409 &&
+      crossHouseholdConsumable.status === 404 &&
+      linkedInventoryDelete.status === 409,
+    '耗材按库存 ID 显式关联并拒绝重复、跨家庭和删除被引用库存',
+  );
+
+  const shortagePreview = await request(
+    `/maintenance-plans/${plan.data.id}/consumables-preview`,
+    token,
+  );
+  assert(
+    shortagePreview.status === 200 &&
+      shortagePreview.data.canConsume === false &&
+      shortagePreview.data.hasShortage === true &&
+      shortagePreview.data.rows[0].status === 'insufficient' &&
+      shortagePreview.data.rows[0].shortage === 1,
+    '耗材预览显示当前库存、预计扣减和准确缺口',
+  );
+
+  const shoppingDate = '2199-12-26';
+  const shoppingAdded = await request(
+    `/maintenance-plans/${plan.data.id}/shopping-items`,
+    token,
+    'POST',
+    { date: shoppingDate },
+  );
+  const shoppingRepeated = await request(
+    `/maintenance-plans/${plan.data.id}/shopping-items`,
+    token,
+    'POST',
+    { date: shoppingDate },
+  );
+  const shoppingList = await request(
+    `/shopping-list?date=${shoppingDate}`,
+    token,
+  );
+  const maintenanceShoppingItem = shoppingList.data.find(
+    (item) => item.maintenanceConsumableId === consumable.data.id,
+  );
+  assert(
+    shoppingAdded.status === 201 &&
+      shoppingAdded.data.createdCount === 1 &&
+      shoppingRepeated.data.existingCount === 1 &&
+      maintenanceShoppingItem?.source === 'maintenance' &&
+      maintenanceShoppingItem.inventoryItemId === filterInventory.data.id &&
+      Number(maintenanceShoppingItem.totalQty) === 1,
+    '库存缺口幂等加入购物清单并保留耗材和库存显式引用',
+  );
+  await request(
+    `/shopping-items/${maintenanceShoppingItem.id}`,
+    token,
+    'PATCH',
+    { checked: true },
+  );
+  const receiptPreview = await request(
+    `/shopping-items/${maintenanceShoppingItem.id}/inventory-preview`,
+    token,
+  );
+  const receipt = await request(
+    `/shopping-items/${maintenanceShoppingItem.id}/confirm-stock`,
+    token,
+    'POST',
+    { inventoryItemId: filterInventory.data.id },
+  );
+  const readyPreview = await request(
+    `/maintenance-plans/${plan.data.id}/consumables-preview`,
+    token,
+  );
+  assert(
+    receiptPreview.data.candidates.length === 1 &&
+      receiptPreview.data.selectedInventoryItem.id === filterInventory.data.id &&
+      receipt.status === 201 &&
+      Number(receipt.data.transactions[0].quantityAfter) === 2 &&
+      readyPreview.data.canConsume === true &&
+      readyPreview.data.rows[0].quantityAfter === 0,
+    '维护购物项直接进入指定库存且入库后扣库预览自动更新',
+  );
+
   const sources = await request(
     `/reminder-sources?start=${dueDate}&end=${dueDate}`,
     token,
@@ -312,7 +433,7 @@ try {
   );
   assert(
     sources.status === 200 &&
-      maintenanceSource?.targetPath === `/assets?assetId=${asset.data.id}&planId=${plan.data.id}`,
+      maintenanceSource?.targetPath === `/home-assets?assetId=${asset.data.id}&planId=${plan.data.id}`,
     '启用中的维护计划进入统一提醒来源并指向资产详情',
   );
 
@@ -330,12 +451,14 @@ try {
       performedAt: performedAt.toISOString(),
       cost: 88.5,
       note: '已更换滤芯',
+      consumeInventory: true,
       idempotencyKey: key,
     }),
     request(`/maintenance-plans/${plan.data.id}/complete`, token, 'POST', {
       performedAt: performedAt.toISOString(),
       cost: 88.5,
       note: '已更换滤芯',
+      consumeInventory: true,
       idempotencyKey: key,
     }),
   ]);
@@ -344,8 +467,21 @@ try {
     completions.every((response) => response.status === 201) &&
       new Set(recordIds).size === 1 &&
       completions.filter((response) => response.data.alreadyCompleted).length === 1 &&
-      completions[0].data.plan.nextDueDate === addUtcDays(performedDate, 30),
-    '并发完成维护只追加一条记录并从实际执行日推进周期',
+      completions[0].data.plan.nextDueDate === addUtcDays(performedDate, 30) &&
+      completions.every((response) => response.data.transactions.length === 1) &&
+      Number(completions[0].data.transactions[0].quantityAfter) === 0,
+    '并发完成维护只追加一条记录、整组扣库一次并推进周期',
+  );
+
+  const reversedConsumption = await request(
+    `/inventory-transactions/${completions[0].data.transactions[0].id}/reverse`,
+    token,
+    'POST',
+  );
+  assert(
+    reversedConsumption.status === 201 &&
+      Number(reversedConsumption.data.transactions[0].quantityAfter) === 2,
+    '维护扣库沿用最近库存流水的整组反向撤销',
   );
 
   const reminderAfterCompletion = await request('/reminders?status=all', token);
@@ -371,6 +507,76 @@ try {
     { performedAt: performedAt.toISOString(), idempotencyKey: key },
   );
   assert(reusedKey.status === 409, '同一家庭的幂等键不能用于不同维护计划');
+
+  const mismatchInventory = await request('/inventory-items', token, 'POST', {
+    name: '资产回归清洁布',
+    category: '日用品',
+    quantity: 0,
+    unit: '片',
+    lowStockThreshold: 1,
+    restockQuantity: 2,
+  });
+  const mismatchConsumable = await request(
+    `/maintenance-plans/${secondPlan.data.id}/consumables`,
+    token,
+    'POST',
+    { inventoryItemId: mismatchInventory.data.id, quantity: 1 },
+  );
+  const changedUnit = await request(
+    `/inventory-items/${mismatchInventory.data.id}`,
+    token,
+    'PATCH',
+    { unit: '盒' },
+  );
+  const mismatchPreview = await request(
+    `/maintenance-plans/${secondPlan.data.id}/consumables-preview`,
+    token,
+  );
+  const mismatchShopping = await request(
+    `/maintenance-plans/${secondPlan.data.id}/shopping-items`,
+    token,
+    'POST',
+    { date: shoppingDate },
+  );
+  assert(
+    mismatchConsumable.status === 201 &&
+      changedUnit.status === 200 &&
+      mismatchPreview.data.rows[0].status === 'unit_mismatch' &&
+      mismatchShopping.status === 409,
+    '库存单位变化会阻止扣库和采购，必须先明确更新耗材关联',
+  );
+
+  const skippedCompletion = await request(
+    `/maintenance-plans/${secondPlan.data.id}/complete`,
+    token,
+    'POST',
+    {
+      performedAt: performedAt.toISOString(),
+      consumeInventory: false,
+      idempotencyKey: `maintenance-skip-${randomUUID()}`,
+    },
+  );
+  assert(
+    skippedCompletion.status === 201 &&
+      skippedCompletion.data.transactions.length === 0 &&
+      skippedCompletion.data.record.consumablesSnapshot.length === 1 &&
+      skippedCompletion.data.record.consumablesSnapshot[0].consumed === false,
+    '用户可明确完成维护但跳过扣库，记录保留耗材快照',
+  );
+  const removedConsumable = await request(
+    `/maintenance-consumables/${mismatchConsumable.data.id}`,
+    token,
+    'DELETE',
+  );
+  const removedUnreferencedInventory = await request(
+    `/inventory-items/${mismatchInventory.data.id}`,
+    token,
+    'DELETE',
+  );
+  assert(
+    removedConsumable.status === 200 && removedUnreferencedInventory.status === 200,
+    '耗材关联可移除，历史快照保留且未产生流水的库存项随后可删除',
+  );
 
   console.log('3. 历史不可变、停用与资料清理');
   let updateRejected = false;
@@ -451,12 +657,21 @@ try {
   );
 
   const detail = await request(`/assets/${asset.data.id}`, token);
+  const consumedRecord = detail.data.maintenanceRecords.find(
+    (item) => item.planId === plan.data.id,
+  );
+  const skippedRecord = detail.data.maintenanceRecords.find(
+    (item) => item.planId === secondPlan.data.id,
+  );
   assert(
     detail.status === 200 &&
-      detail.data.maintenanceRecords.length === 1 &&
-      detail.data.maintenanceRecords[0].performedById === member.id &&
-      detail.data.maintenanceRecords[0].nextDueDateBefore === dueDate,
-    '资产详情持续返回操作者、执行时间与周期前后快照',
+      detail.data.maintenanceRecords.length === 2 &&
+      consumedRecord?.performedById === member.id &&
+      consumedRecord.nextDueDateBefore === dueDate &&
+      consumedRecord.consumablesSnapshot[0].consumed === true &&
+      consumedRecord.inventoryConfirmation.reversed === true &&
+      skippedRecord?.inventoryConfirmation == null,
+    '资产详情返回周期、耗材扣库和反向撤销的完整历史快照',
   );
 
   const activities = await request('/activities?limit=100', token);
@@ -470,15 +685,18 @@ try {
       actions.includes('asset_document_added') &&
       actions.includes('asset_document_removed') &&
       actions.includes('maintenance_plan_created') &&
+      actions.includes('maintenance_consumable_added') &&
+      actions.includes('maintenance_consumable_removed') &&
+      actions.includes('maintenance_consumables_shopping_added') &&
       actions.includes('maintenance_plan_disabled') &&
       actions.includes('asset_retired') &&
       actions.filter((action) => action === 'maintenance_completed').length ===
-        1 &&
+        2 &&
       assetActivities.every(
         (item) =>
-          item.actor.id === member.id && item.targetPath?.startsWith('/assets'),
+          item.actor.id === member.id && item.targetPath?.startsWith('/home-assets'),
       ),
-    '资产、资料与维护操作写入可追溯活动且幂等完成只记录一次',
+    '资产、资料、耗材与维护操作写入可追溯活动且幂等完成不重复记录',
   );
 
   console.log('\n家庭资产与维护回归测试全部通过');

@@ -166,6 +166,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="home-assets"
+        options={{
+          title: '资产',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="points"
         options={{
           title: '积分',
