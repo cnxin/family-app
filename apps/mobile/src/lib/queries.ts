@@ -58,6 +58,11 @@ import type {
   MenuItem,
   MenuItemStatus,
   MenuInventoryPreview,
+  NotificationChannel,
+  NotificationChannelKind,
+  NotificationDelivery,
+  NotificationDeliveryStatus,
+  NotificationModule,
   MaintenanceCompletionResult,
   MaintenanceConsumable,
   MaintenanceConsumablesPreview,
@@ -1279,6 +1284,105 @@ export function useMarkAllNotificationsRead() {
       api<{ updated: number }>('/notifications/read-all', { method: 'PATCH' }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}
+
+function invalidateExternalNotifications(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['notification-channels'] });
+  void qc.invalidateQueries({ queryKey: ['notification-deliveries'] });
+  void qc.invalidateQueries({ queryKey: ['activities'] });
+}
+
+export function useNotificationChannels(enabled = true) {
+  return useQuery({
+    queryKey: ['notification-channels'],
+    queryFn: () => api<NotificationChannel[]>('/notification-channels'),
+    enabled,
+  });
+}
+
+export function useCreateNotificationChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      kind: NotificationChannelKind;
+      endpoint: string;
+      credential?: string;
+      isEnabled?: boolean;
+    }) => api<NotificationChannel>('/notification-channels', { method: 'POST', body }),
+    onSuccess: () => invalidateExternalNotifications(qc),
+  });
+}
+
+export function useUpdateNotificationChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      name?: string;
+      kind?: NotificationChannelKind;
+      endpoint?: string;
+      credential?: string;
+      clearCredential?: boolean;
+      isEnabled?: boolean;
+    }) => api<NotificationChannel>(`/notification-channels/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => invalidateExternalNotifications(qc),
+  });
+}
+
+export function useDeleteNotificationChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; deleted: boolean }>(`/notification-channels/${id}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateExternalNotifications(qc),
+  });
+}
+
+export function useTestNotificationChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ success: true; testedAt: string }>(`/notification-channels/${id}/test`, { method: 'POST' }),
+    onSuccess: () => invalidateExternalNotifications(qc),
+  });
+}
+
+export function useUpdateNotificationPreference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelId, ...body }: {
+      channelId: string;
+      isEnabled: boolean;
+      modules: NotificationModule[];
+    }) => api<NotificationChannel['preference']>(`/notification-channels/${channelId}/preference`, {
+      method: 'PUT',
+      body,
+    }),
+    onSuccess: () => invalidateExternalNotifications(qc),
+  });
+}
+
+export function useNotificationDeliveries(
+  status: NotificationDeliveryStatus | 'all' = 'all',
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['notification-deliveries', status],
+    queryFn: () =>
+      api<NotificationDelivery[]>(`/notification-deliveries?status=${status}`),
+    enabled,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useRetryNotificationDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<NotificationDelivery>(`/notification-deliveries/${id}/retry`, { method: 'POST' }),
+    onSuccess: () => invalidateExternalNotifications(qc),
   });
 }
 

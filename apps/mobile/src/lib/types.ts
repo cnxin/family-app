@@ -1167,6 +1167,76 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export type NotificationChannelKind = 'webhook' | 'ntfy';
+export type NotificationDeliveryStatus =
+  | 'pending'
+  | 'processing'
+  | 'retry_scheduled'
+  | 'sent'
+  | 'failed';
+
+export interface NotificationChannelPreference {
+  id: string | null;
+  isEnabled: boolean;
+  modules: NotificationModule[];
+  updatedAt: string | null;
+}
+
+export interface NotificationChannel {
+  id: string;
+  householdId: string;
+  name: string;
+  kind: NotificationChannelKind;
+  endpointHint: string;
+  credentialConfigured: boolean;
+  credentialHint: string | null;
+  isEnabled: boolean;
+  createdBy: Member | null;
+  lastTestedAt: string | null;
+  lastTestStatus: 'success' | 'failed' | null;
+  lastTestError: string | null;
+  preference: NotificationChannelPreference;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationDeliveryAttempt {
+  id: string;
+  deliveryId: string;
+  attemptNumber: number;
+  status: 'sent' | 'failed';
+  httpStatus: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string;
+  createdAt: string;
+}
+
+export interface NotificationDelivery {
+  id: string;
+  householdId: string;
+  notificationId: string;
+  notification: AppNotification;
+  recipientId: string;
+  recipient: Member;
+  channelId: string | null;
+  channelName: string;
+  channelKind: NotificationChannelKind;
+  endpointHint: string;
+  status: NotificationDeliveryStatus;
+  attemptCount: number;
+  maxAttempts: number;
+  nextAttemptAt: string | null;
+  lastAttemptAt: string | null;
+  deliveredAt: string | null;
+  lastError: string | null;
+  attempts: NotificationDeliveryAttempt[];
+  canRetry: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PollCategory = 'general' | 'meal' | 'activity' | 'movie' | 'shopping';
 export type PollVoteMode = 'single' | 'multiple';
 export type PollStatus = 'open' | 'closed';

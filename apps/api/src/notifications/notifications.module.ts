@@ -14,9 +14,15 @@ import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   MenuEvent,
+  MemberNotificationPreference,
   Notification,
+  NotificationChannel,
+  NotificationDelivery,
+  NotificationDeliveryAttempt,
   NotificationModule as SourceModule,
 } from '../entities';
+import { ExternalNotificationsController } from './external-notifications.controller';
+import { ExternalNotificationsService } from './external-notifications.service';
 
 class NotificationQueryDto {
   @IsOptional()
@@ -24,7 +30,7 @@ class NotificationQueryDto {
   includeRead?: 'true' | 'false';
 
   @IsOptional()
-  @IsIn(['menu', 'task', 'poll', 'calendar', 'reminder', 'media', 'guest', 'system'])
+  @IsIn(['menu', 'task', 'poll', 'calendar', 'reminder', 'media', 'guest', 'points', 'system'])
   module?: SourceModule;
 }
 
@@ -138,9 +144,18 @@ export class NotificationsController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Notification, MenuEvent])],
-  controllers: [NotificationsController],
-  providers: [NotificationsService],
-  exports: [NotificationsService],
+  imports: [
+    TypeOrmModule.forFeature([
+      Notification,
+      MenuEvent,
+      NotificationChannel,
+      MemberNotificationPreference,
+      NotificationDelivery,
+      NotificationDeliveryAttempt,
+    ]),
+  ],
+  controllers: [NotificationsController, ExternalNotificationsController],
+  providers: [NotificationsService, ExternalNotificationsService],
+  exports: [NotificationsService, ExternalNotificationsService],
 })
 export class NotificationsModule {}

@@ -44,7 +44,7 @@ POST   /maintenance-plans/:id/complete
 - `maintenance_consumables` 保存家庭、维护计划、库存项、单次用量、单位和创建者；同一计划不能重复关联同一库存项。
 - `maintenance_records.consumablesSnapshot` 保存完成时的耗材名称、用量、库存前后值、是否扣库和流水 ID；`inventoryOperationId` 关联同一次整组库存操作。
 - 维护来源购物项增加 `inventoryItemId` 和 `maintenanceConsumableId`，同一日期同一耗材幂等收敛；删除耗材关联只清空购物项来源引用，不删除购物历史。
-- `1785229900000-add-maintenance-consumables` 新增耗材表、记录快照、购物引用和 `maintenance_record` 库存流水来源。当前仓库共 36 个有序迁移，`synchronize` 继续保持 `false`。
+- `1785229900000-add-maintenance-consumables` 新增耗材表、记录快照、购物引用和 `maintenance_record` 库存流水来源。当前仓库共 37 个有序迁移，`synchronize` 继续保持 `false`。
 
 ## 业务边界
 

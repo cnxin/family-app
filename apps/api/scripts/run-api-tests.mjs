@@ -17,6 +17,9 @@ const testEnvironment = {
   JWT_SECRET: 'family-app-api-test-secret',
   REFRESH_TOKEN_EXPIRES_SECONDS: '2592000',
   REMINDER_POLL_INTERVAL_MS: '200',
+  NOTIFICATION_DELIVERY_POLL_INTERVAL_MS: '100',
+  NOTIFICATION_DELIVERY_RETRY_BASE_MS: '100',
+  NOTIFICATION_DELIVERY_TIMEOUT_MS: '1000',
   LOGIN_RATE_LIMIT: '100',
   LOGIN_RATE_WINDOW_MS: '60000',
   NODE_ENV: 'test',
@@ -239,6 +242,7 @@ try {
   await runScript('scripts/points.mjs');
   await runScript('scripts/polls.mjs');
   await runScript('scripts/reminders.mjs');
+  await runScript('scripts/external-notifications.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');
   await runScript('scripts/media-source-settings.mjs');
