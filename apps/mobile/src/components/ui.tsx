@@ -25,6 +25,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
+import { useSession } from '../lib/session';
 import { radius, type as t, useTheme } from '../lib/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -34,6 +35,13 @@ const NATIVE_DIALOG_SHADOW: ViewStyle = {
   shadowOpacity: 0.22,
   shadowRadius: 30,
   elevation: 16,
+};
+const NATIVE_CONSUMER_CARD_SHADOW: ViewStyle = {
+  shadowColor: '#173224',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.07,
+  shadowRadius: 10,
+  elevation: 2,
 };
 
 export function PressableScale({
@@ -221,15 +229,21 @@ export function Card({
   style?: StyleProp<ViewStyle>;
 }) {
   const c = useTheme();
+  const { member } = useSession();
+  const consumer = member?.role === 'member';
+  const consumerShadow = Platform.OS === 'web'
+    ? ({ boxShadow: '0 4px 18px rgba(23, 50, 36, 0.07)' } as ViewStyle)
+    : NATIVE_CONSUMER_CARD_SHADOW;
   return (
     <View
       style={[
         {
           backgroundColor: c.card,
           borderRadius: radius.md,
-          borderWidth: 1,
+          borderWidth: consumer ? 0 : 1,
           borderColor: c.separator,
         },
+        consumer && consumerShadow,
         style,
       ]}
     >

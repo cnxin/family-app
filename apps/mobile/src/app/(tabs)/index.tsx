@@ -51,6 +51,15 @@ import {
 import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
 
+interface HomeModuleEntry {
+  background: string;
+  color: string;
+  href: Href;
+  icon: LucideIcon;
+  label: string;
+  status: string;
+}
+
 function greeting() {
   const hour = new Date().getHours();
   if (hour < 11) return '早上好';
@@ -156,6 +165,279 @@ function TodayRow({
   );
 }
 
+function ConsumerQuickCard({ entry }: { entry: HomeModuleEntry }) {
+  const c = useTheme();
+  const router = useRouter();
+  return (
+    <PressableScale
+      accessibilityLabel={`${entry.label}，${entry.status}`}
+      accessibilityRole="link"
+      onPress={() => router.push(entry.href)}
+      style={styles.consumerQuickCell}
+      testID={`consumer-quick-${String(entry.href).replaceAll('/', '')}`}
+    >
+      <Card style={styles.consumerQuickCard}>
+        <View style={[styles.consumerQuickIcon, { backgroundColor: entry.background }]}>
+          <entry.icon color={entry.color} size={22} strokeWidth={2} />
+        </View>
+        <Text style={[t.headline, styles.consumerQuickTitle, { color: c.label }]}>
+          {entry.label}
+        </Text>
+        <Text numberOfLines={1} style={[t.footnote, { color: c.secondaryLabel }]}>
+          {entry.status}
+        </Text>
+      </Card>
+    </PressableScale>
+  );
+}
+
+function ConsumerAgendaRow({
+  background,
+  color,
+  href,
+  icon: Icon,
+  label,
+  value,
+}: {
+  background: string;
+  color: string;
+  href: Href;
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}) {
+  const c = useTheme();
+  const router = useRouter();
+  return (
+    <PressableScale
+      accessibilityLabel={`${label}，${value}`}
+      accessibilityRole="link"
+      onPress={() => router.push(href)}
+    >
+      <Card style={styles.consumerAgendaRow}>
+        <View style={[styles.consumerAgendaIcon, { backgroundColor: background }]}>
+          <Icon color={color} size={18} strokeWidth={2} />
+        </View>
+        <View style={styles.consumerAgendaCopy}>
+          <Text style={[t.subhead, styles.consumerAgendaTitle, { color: c.label }]}>
+            {label}
+          </Text>
+          <Text numberOfLines={1} style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+            {value}
+          </Text>
+        </View>
+        <ArrowRight color={c.tertiaryLabel} size={16} />
+      </Card>
+    </PressableScale>
+  );
+}
+
+function ConsumerServiceLink({ entry }: { entry: HomeModuleEntry }) {
+  const c = useTheme();
+  const router = useRouter();
+  const Icon = entry.icon;
+  return (
+    <PressSurface
+      accessibilityLabel={`${entry.label}，${entry.status}`}
+      accessibilityRole="link"
+      onPress={() => router.push(entry.href)}
+      pressedColor={c.fillStrong}
+      style={[styles.consumerServiceLink, { backgroundColor: c.fill }]}
+    >
+      <View style={[styles.consumerServiceIcon, { backgroundColor: entry.background }]}>
+        <Icon color={entry.color} size={18} strokeWidth={2} />
+      </View>
+      <View style={styles.consumerServiceCopy}>
+        <Text style={[t.subhead, styles.consumerServiceTitle, { color: c.label }]}>
+          {entry.label}
+        </Text>
+        <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+          {entry.status}
+        </Text>
+      </View>
+    </PressSurface>
+  );
+}
+
+function ConsumerHome({
+  avatarEmoji,
+  memberName,
+  menuItems,
+  moduleEntries,
+  pendingTasks,
+  remindersLoading,
+  shoppingPending,
+  tasksLoading,
+  menusLoading,
+  unreadCount,
+  upcomingReminder,
+}: {
+  avatarEmoji: string;
+  memberName: string;
+  menuItems: number;
+  moduleEntries: HomeModuleEntry[];
+  pendingTasks: number;
+  remindersLoading: boolean;
+  shoppingPending: number;
+  tasksLoading: boolean;
+  menusLoading: boolean;
+  unreadCount: number;
+  upcomingReminder: ReturnType<typeof useReminders>['data'] extends infer T
+    ? T extends readonly (infer R)[]
+      ? R | undefined
+      : never
+    : never;
+}) {
+  const c = useTheme();
+  const router = useRouter();
+  const attentionCount = pendingTasks + shoppingPending + (upcomingReminder ? 1 : 0);
+  const quickEntries = moduleEntries.slice(0, 4);
+  const serviceEntries = moduleEntries.slice(4);
+  const loading = menusLoading || tasksLoading || remindersLoading;
+
+  return (
+    <SafeAreaView
+      style={[styles.screen, { backgroundColor: c.bg }]}
+      edges={['top']}
+      testID="consumer-home"
+    >
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <PageContainer maxWidth={720} style={styles.consumerContent}>
+          <View style={styles.consumerHeader}>
+            <View style={[styles.consumerAvatar, { backgroundColor: c.orangeSoft }]}>
+              <Text style={styles.consumerAvatarText}>{avatarEmoji}</Text>
+            </View>
+            <View style={styles.consumerHeaderCopy}>
+              <Text style={[t.headline, { color: c.label }]}>{greeting()}，{memberName}</Text>
+              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+                {fullDate()}
+              </Text>
+            </View>
+            <View>
+              <IconButton
+                accessibilityLabel={`打开消息${unreadCount ? `，${unreadCount}条未读` : ''}`}
+                backgroundColor="transparent"
+                color={unreadCount ? c.tint : c.secondaryLabel}
+                icon={Bell}
+                onPress={() => router.push('/notifications')}
+                testID="consumer-notification-button"
+              />
+              {unreadCount ? (
+                <View style={[styles.bellBadge, { backgroundColor: c.red }]}>
+                  <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={[styles.consumerHero, { backgroundColor: c.tintSoft }]}>
+            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>今天的家</Text>
+            <Text style={[t.title1, styles.consumerHeroTitle, { color: c.label }]}>
+              {attentionCount
+                ? `有 ${attentionCount} 件事等你一起看看`
+                : '今天家里节奏很轻松'}
+            </Text>
+            <Text style={[t.subhead, styles.consumerHeroSubtitle, { color: c.secondaryLabel }]}>
+              {menuItems ? `已经安排 ${menuItems} 道菜，` : '今天还没有安排菜单，'}
+              {shoppingPending ? `还有 ${shoppingPending} 样东西待买。` : '采购清单也已经清空。'}
+            </Text>
+            <View style={[styles.consumerMetrics, { borderTopColor: c.separator }]}>
+              <PressSurface
+                accessibilityLabel={`查看今日菜单，${menuItems}道菜`}
+                accessibilityRole="link"
+                onPress={() => router.push('/canteen')}
+                style={styles.consumerMetric}
+              >
+                <CookingPot color={c.orange} size={18} />
+                <Text style={[t.headline, { color: c.label, marginTop: 7 }]}>{menuItems}</Text>
+                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>今日菜品</Text>
+              </PressSurface>
+              <PressSurface
+                accessibilityLabel={`查看家庭任务，${pendingTasks}项待办`}
+                accessibilityRole="link"
+                onPress={() => router.push('/tasks')}
+                style={styles.consumerMetric}
+              >
+                <ListTodo color={c.tint} size={18} />
+                <Text style={[t.headline, { color: c.label, marginTop: 7 }]}>{pendingTasks}</Text>
+                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>今日待办</Text>
+              </PressSurface>
+              <PressSurface
+                accessibilityLabel={`查看采购清单，${shoppingPending}项待买`}
+                accessibilityRole="link"
+                onPress={() => router.push('/shopping')}
+                style={styles.consumerMetric}
+              >
+                <ShoppingCart color={c.green} size={18} />
+                <Text style={[t.headline, { color: c.label, marginTop: 7 }]}>{shoppingPending}</Text>
+                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>待买东西</Text>
+              </PressSurface>
+            </View>
+          </View>
+
+          <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>常用</Text>
+          </View>
+          <View style={styles.consumerQuickGrid}>
+            {quickEntries.map((entry) => <ConsumerQuickCard entry={entry} key={entry.label} />)}
+          </View>
+
+          <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>接下来</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/calendar')}
+              style={styles.textLink}
+            >
+              <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>看家庭日历</Text>
+              <ArrowRight color={c.tint} size={15} />
+            </Pressable>
+          </View>
+          {loading ? (
+            <Card><SkeletonRows /></Card>
+          ) : (
+            <View style={styles.consumerAgenda}>
+              <ConsumerAgendaRow
+                background={c.orangeSoft}
+                color={c.orange}
+                href="/canteen"
+                icon={CookingPot}
+                label="今天吃什么"
+                value={menuItems ? `${menuItems} 道菜已经安排好了` : '还没安排，去和家人一起选'}
+              />
+              <ConsumerAgendaRow
+                background={c.tintSoft}
+                color={c.tint}
+                href="/tasks"
+                icon={ListTodo}
+                label="一起完成"
+                value={pendingTasks ? `${pendingTasks} 项家庭任务待完成` : '今天没有待办'}
+              />
+              <ConsumerAgendaRow
+                background={c.blueSoft}
+                color={c.blue}
+                href="/reminders"
+                icon={BellRing}
+                label="别忘了"
+                value={upcomingReminder
+                  ? `${reminderTime(upcomingReminder.remindAt)} · ${upcomingReminder.source?.title ?? '家庭事项'}`
+                  : '暂时没有新的提醒'}
+              />
+            </View>
+          )}
+
+          <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>更多家里服务</Text>
+          </View>
+          <View style={styles.consumerServiceGrid}>
+            {serviceEntries.map((entry) => <ConsumerServiceLink entry={entry} key={entry.label} />)}
+          </View>
+        </PageContainer>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 export default function HomeScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
@@ -198,14 +480,7 @@ export default function HomeScreen() {
       0,
     ) ?? 0;
   const ownPoints = pointsAccounts?.find((account) => account.memberId === member?.id)?.balance ?? 0;
-  const moduleEntries: {
-    background: string;
-    color: string;
-    href: Href;
-    icon: LucideIcon;
-    label: string;
-    status: string;
-  }[] = [
+  const moduleEntries: HomeModuleEntry[] = [
     {
       background: c.orangeSoft,
       color: c.orange,
@@ -289,6 +564,24 @@ export default function HomeScreen() {
       status: `${travelPlans?.length ?? 0} 个计划中行程`,
     },
   ];
+
+  if (member?.role === 'member') {
+    return (
+      <ConsumerHome
+        avatarEmoji={member.avatarEmoji}
+        memberName={member.name}
+        menuItems={menuItems}
+        menusLoading={menusLoading}
+        moduleEntries={moduleEntries}
+        pendingTasks={pendingTasks.length}
+        remindersLoading={remindersLoading}
+        shoppingPending={shoppingPending}
+        tasksLoading={tasksLoading}
+        unreadCount={unreadCount}
+        upcomingReminder={upcomingReminder}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -390,6 +683,102 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  consumerContent: { paddingTop: 14, paddingBottom: 56 },
+  consumerHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 54,
+  },
+  consumerAvatar: {
+    alignItems: 'center',
+    borderRadius: 24,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  consumerAvatarText: { fontSize: 25 },
+  consumerHeaderCopy: { flex: 1, minWidth: 0 },
+  consumerHero: {
+    borderRadius: radius.md,
+    marginTop: 20,
+    overflow: 'hidden',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  consumerEyebrow: { fontWeight: '700' },
+  consumerHeroTitle: { lineHeight: 34, marginTop: 7 },
+  consumerHeroSubtitle: { lineHeight: 23, marginTop: 8 },
+  consumerMetrics: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    marginTop: 18,
+    paddingVertical: 10,
+  },
+  consumerMetric: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 78,
+  },
+  consumerSectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    marginBottom: 11,
+    marginTop: 28,
+    minHeight: 38,
+  },
+  consumerSectionTitle: { fontWeight: '600' },
+  consumerQuickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  consumerQuickCell: { flexGrow: 1, minWidth: 0, width: '47%' },
+  consumerQuickCard: { minHeight: 132, padding: 16 },
+  consumerQuickIcon: {
+    alignItems: 'center',
+    borderRadius: 21,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  consumerQuickTitle: { fontWeight: '600', marginTop: 13 },
+  consumerAgenda: { gap: 9 },
+  consumerAgendaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 11,
+    minHeight: 70,
+    paddingHorizontal: 14,
+  },
+  consumerAgendaIcon: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  consumerAgendaCopy: { flex: 1, minWidth: 0 },
+  consumerAgendaTitle: { fontWeight: '600' },
+  consumerServiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  consumerServiceLink: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    flexGrow: 1,
+    gap: 10,
+    minHeight: 68,
+    paddingHorizontal: 12,
+    width: '47%',
+  },
+  consumerServiceIcon: {
+    alignItems: 'center',
+    borderRadius: 17,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  consumerServiceCopy: { flex: 1, minWidth: 0 },
+  consumerServiceTitle: { fontWeight: '600' },
   content: { paddingTop: 18, paddingBottom: 40 },
   contentDesktop: { paddingTop: 32 },
   hero: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },

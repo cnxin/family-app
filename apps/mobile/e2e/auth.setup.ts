@@ -10,9 +10,10 @@ import { dirname, resolve } from 'node:path';
 const authFiles = {
   mobile: resolve(process.cwd(), 'e2e/.auth/mobile.json'),
   desktop: resolve(process.cwd(), 'e2e/.auth/desktop.json'),
+  memberMobile: resolve(process.cwd(), 'e2e/.auth/member-mobile.json'),
 };
 const apiURL = process.env.FAMILY_API_URL ?? 'http://127.0.0.1:3100';
-const e2eLoginName = process.env.E2E_LOGIN_NAME ?? '爸爸';
+const managerLoginName = process.env.E2E_LOGIN_NAME ?? '爸爸';
 const configuredPassword = process.env.E2E_ACCOUNT_PASSWORD;
 const passwordCandidates =
   configuredPassword === undefined
@@ -23,6 +24,8 @@ async function loginWithMouse(
   page: Page,
   request: APIRequestContext,
   authFile: string,
+  loginNameValue: string,
+  expectedHomeText: string,
 ) {
   const apiHealth = await request.get(`${apiURL}/health/ready`);
   expect(apiHealth.ok(), `API 未就绪：${apiURL}`).toBeTruthy();
@@ -32,7 +35,7 @@ async function loginWithMouse(
 
   const loginName = page.getByPlaceholder('输入账号');
   await expect(loginName).toBeVisible();
-  await loginName.fill(e2eLoginName);
+  await loginName.fill(loginNameValue);
 
   const password = page.getByPlaceholder('输入密码');
   await expect(password).toBeVisible();
@@ -63,7 +66,7 @@ async function loginWithMouse(
 
   await expect(page).not.toHaveURL(/\/login$/);
   await expect(
-    page.getByText('家庭工作台', { exact: true }),
+    page.getByText(expectedHomeText, { exact: true }),
   ).toBeVisible();
 
   mkdirSync(dirname(authFile), { recursive: true });
@@ -71,9 +74,31 @@ async function loginWithMouse(
 }
 
 setup('为移动视口使用鼠标登录', async ({ page, request }) => {
-  await loginWithMouse(page, request, authFiles.mobile);
+  await loginWithMouse(
+    page,
+    request,
+    authFiles.mobile,
+    managerLoginName,
+    '家庭工作台',
+  );
 });
 
 setup('为桌面视口使用鼠标登录', async ({ page, request }) => {
-  await loginWithMouse(page, request, authFiles.desktop);
+  await loginWithMouse(
+    page,
+    request,
+    authFiles.desktop,
+    managerLoginName,
+    '家庭工作台',
+  );
+});
+
+setup('为普通成员移动视口使用鼠标登录', async ({ page, request }) => {
+  await loginWithMouse(
+    page,
+    request,
+    authFiles.memberMobile,
+    '妈妈',
+    '今天的家',
+  );
 });

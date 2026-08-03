@@ -34,7 +34,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSession } from '../lib/session';
-import { memberSubtitle } from '../lib/member';
+import { isHouseholdManager, memberSubtitle } from '../lib/member';
 import { useNotifications } from '../lib/queries';
 import { radius, type as t, useTheme } from '../lib/theme';
 import { IconButton, PressSurface } from './ui';
@@ -235,7 +235,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { member } = useSession();
-  const { data: notifications } = useNotifications(false, desktop);
+  const adminDesktop = desktop && isHouseholdManager(member);
+  const { data: notifications } = useNotifications(false, adminDesktop);
   const activeModule = NAV_ITEMS.find((item) => item.matches(pathname));
   const activeGroupId = activeModule?.group;
   const [expandedGroups, setExpandedGroups] = React.useState<Record<NavGroupId, boolean>>(
@@ -264,7 +265,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ? ({ backdropFilter: 'blur(22px) saturate(155%)' } as ViewStyle)
     : undefined;
 
-  if (!desktop) return <>{children}</>;
+  if (!adminDesktop) return <>{children}</>;
 
   return (
     <View style={[styles.shell, { backgroundColor: c.bg }]}>
@@ -274,6 +275,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           { backgroundColor: c.chromeStrong, borderRightColor: c.separator },
           materialStyle,
         ]}
+        testID="admin-desktop-sidebar"
       >
         <View style={styles.brand}>
           <View style={[styles.brandMark, { backgroundColor: c.tint }]}>

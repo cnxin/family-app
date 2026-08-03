@@ -2,13 +2,16 @@ import { Redirect, Tabs } from 'expo-router';
 import {
   Bell,
   CalendarDays,
+  CookingPot,
+  House,
   LayoutDashboard,
   UserRound,
   type LucideIcon,
 } from 'lucide-react-native';
 import React from 'react';
-import { ColorValue, Platform, type ViewStyle } from 'react-native';
+import { ColorValue, Platform, View, type ViewStyle } from 'react-native';
 import { AppShell, useDesktopLayout } from '../../components/app-shell';
+import { isHouseholdManager } from '../../lib/member';
 import { useNotifications } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { useTheme } from '../../lib/theme';
@@ -16,18 +19,40 @@ import { useTheme } from '../../lib/theme';
 function TabIcon({
   icon: Icon,
   color,
+  backgroundColor,
+  focused,
 }: {
   icon: LucideIcon;
   color: ColorValue;
+  backgroundColor?: string;
+  focused?: boolean;
 }) {
-  return <Icon color={color} size={22} strokeWidth={2.1} />;
+  return (
+    <View
+      style={backgroundColor && focused ? {
+        alignItems: 'center',
+        backgroundColor,
+        borderRadius: 14,
+        height: 28,
+        justifyContent: 'center',
+        width: 38,
+      } : undefined}
+    >
+      <Icon color={color} size={22} strokeWidth={focused ? 2.3 : 2} />
+    </View>
+  );
 }
 
 export default function TabLayout() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const { member, ready } = useSession();
-  const { data: notifications } = useNotifications(false, ready && Boolean(member) && !desktop);
+  const consumer = member?.role === 'member';
+  const adminDesktop = desktop && isHouseholdManager(member);
+  const { data: notifications } = useNotifications(
+    false,
+    ready && Boolean(member) && !adminDesktop,
+  );
   const tabBarMaterial = Platform.OS === 'web'
     ? ({ backdropFilter: 'blur(22px) saturate(155%)' } as ViewStyle)
     : undefined;
@@ -41,9 +66,27 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: c.tint,
         tabBarInactiveTintColor: c.secondaryLabel,
-        tabBarStyle: desktop
+        tabBarStyle: adminDesktop
           ? { display: 'none' }
-          : {
+          : consumer
+            ? {
+              backgroundColor: c.chromeStrong,
+              borderTopWidth: 0,
+              height: 74,
+              paddingTop: 6,
+              paddingBottom: 9,
+              ...tabBarMaterial,
+              ...(Platform.OS === 'web'
+                ? { boxShadow: '0 -6px 22px rgba(23, 50, 36, 0.07)' }
+                : {
+                  elevation: 10,
+                  shadowColor: '#173224',
+                  shadowOffset: { width: 0, height: -4 },
+                  shadowOpacity: 0.07,
+                  shadowRadius: 12,
+                }),
+            }
+            : {
               backgroundColor: c.chrome,
               borderTopColor: c.separator,
               height: 68,
@@ -57,9 +100,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '首页',
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={LayoutDashboard} color={color} />
+          title: consumer ? '今天' : '首页',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              backgroundColor={consumer ? c.tintSoft : undefined}
+              color={color}
+              focused={focused}
+              icon={consumer ? House : LayoutDashboard}
+            />
           ),
         }}
       />
@@ -85,11 +133,31 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="canteen"
+        options={{
+          title: consumer ? '吃饭' : '食堂',
+          href: consumer ? '/canteen' : null,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              backgroundColor={consumer ? c.orangeSoft : undefined}
+              color={color}
+              focused={focused}
+              icon={CookingPot}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
-          title: '日历',
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={CalendarDays} color={color} />
+          title: consumer ? '安排' : '日历',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              backgroundColor={consumer ? c.tintSoft : undefined}
+              color={color}
+              focused={focused}
+              icon={CalendarDays}
+            />
           ),
         }}
       />
@@ -103,14 +171,21 @@ export default function TabLayout() {
       <Tabs.Screen
         name="notifications"
         options={{
-          title: '通知',
+          title: consumer ? '消息' : '通知',
           tabBarBadge: notifications?.length
             ? notifications.length > 99
               ? '99+'
               : notifications.length
             : undefined,
           tabBarBadgeStyle: { backgroundColor: c.red, color: '#FFFFFF', fontSize: 10 },
-          tabBarIcon: ({ color }) => <TabIcon icon={Bell} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              backgroundColor={consumer ? c.tintSoft : undefined}
+              color={color}
+              focused={focused}
+              icon={Bell}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -198,18 +273,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="canteen"
-        options={{
-          title: '食堂',
-          href: null,
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: '我的',
-          tabBarIcon: ({ color }) => (
-            <TabIcon icon={UserRound} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              backgroundColor={consumer ? c.tintSoft : undefined}
+              color={color}
+              focused={focused}
+              icon={UserRound}
+            />
           ),
         }}
       />
