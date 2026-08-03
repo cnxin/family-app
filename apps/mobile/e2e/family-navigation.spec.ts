@@ -1295,6 +1295,45 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
+  const memoryTitle = `浏览器家庭回忆-${testInfo.project.name}`;
+  await page.goto('/memories');
+  await expect(page.getByRole('heading', { name: '家庭回忆', exact: true })).toBeVisible();
+  const memoryCreate = page.getByRole('button', { name: '新建家庭回忆', exact: true });
+  const memoryCreateBox = await memoryCreate.boundingBox();
+  expect(memoryCreateBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await memoryCreate.click();
+  const memoryForm = page.getByTestId('memory-form-dialog');
+  await expect(memoryForm).toBeVisible();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect(memoryForm.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  }
+  await memoryForm.getByLabel('标题', { exact: true }).fill(memoryTitle);
+  await memoryForm.getByLabel('故事（选填）', { exact: true }).fill('一次隔离浏览器回归留下的非敏感家庭故事。');
+  await memoryForm.getByRole('button', { name: '出行', exact: true }).click();
+  await memoryForm.getByRole('button', { name: '保存回忆', exact: true }).click();
+  const memoryDetail = page.getByTestId('memory-detail-dialog');
+  await expect(memoryDetail.getByText(memoryTitle, { exact: true })).toBeVisible();
+  await expect(memoryDetail.getByText('一次隔离浏览器回归留下的非敏感家庭故事。', { exact: true })).toBeVisible();
+  const [memoryPhotoChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    memoryDetail.getByRole('button', { name: '选择回忆照片', exact: true }).click(),
+  ]);
+  await memoryPhotoChooser.setFiles({
+    name: 'family-memory-browser.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  });
+  await expect(memoryDetail.getByTestId('memory-photo-preview')).toBeVisible();
+  await memoryDetail.getByLabel('照片说明', { exact: true }).fill('浏览器回忆照片');
+  await memoryDetail.getByRole('button', { name: '添加照片', exact: true }).click();
+  await expect(memoryDetail.getByText('浏览器回忆照片', { exact: true })).toBeVisible();
+  await memoryDetail.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: `打开回忆${memoryTitle}`, exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
   const travelTitle = `浏览器出行-${testInfo.project.name}`;
   const checklistTitle = `证件袋-${testInfo.project.name}`;
   await page.goto('/travel');

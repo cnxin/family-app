@@ -3,7 +3,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { api, uploadAssetDocument } from './api';
+import { api, uploadAssetDocument, uploadMemoryPhoto } from './api';
 import type {
   AccountProfile,
   AppNotification,
@@ -52,6 +52,9 @@ import type {
   InventoryActionResult,
   InventoryItem,
   InventoryTransaction,
+  FamilyMemory,
+  FamilyMemoryCategory,
+  FamilyMemorySourceModule,
   KnowledgeArticle,
   KnowledgeArticleCategory,
   KnowledgeArticleRevision,
@@ -114,6 +117,110 @@ export interface KnowledgeArticleInput {
 
 function operationKey(prefix: string) {
   return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+export interface FamilyMemoryInput {
+  title: string;
+  happenedOn: string;
+  category: FamilyMemoryCategory;
+  story?: string | null;
+  tags?: string[];
+  sourceModule?: FamilyMemorySourceModule | null;
+  sourceId?: string | null;
+}
+
+export function useMemories(
+  status: 'active' | 'archived' | 'all' = 'active',
+  category: FamilyMemoryCategory | 'all' = 'all',
+  q = '',
+  limit = 100,
+) {
+  const query = [
+    `status=${status}`,
+    ...(category === 'all' ? [] : [`category=${category}`]),
+    ...(q.trim() ? [`q=${encodeURIComponent(q.trim())}`] : []),
+    `limit=${limit}`,
+  ].join('&');
+  return useQuery({
+    queryKey: ['memories', status, category, q.trim(), limit],
+    queryFn: () => api<FamilyMemory[]>(`/memories?${query}`),
+  });
+}
+
+function invalidateMemories(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['memories'] });
+  void qc.invalidateQueries({ queryKey: ['activities'] });
+}
+
+export function useCreateMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FamilyMemoryInput) =>
+      api<FamilyMemory>('/memories', {
+        method: 'POST',
+        body: { ...input, idempotencyKey: operationKey('memory:create') },
+      }),
+    onSuccess: () => invalidateMemories(qc),
+  });
+}
+
+export function useUpdateMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedVersion, ...input }: FamilyMemoryInput & {
+      id: string;
+      expectedVersion: number;
+    }) =>
+      api<FamilyMemory>(`/memories/${id}`, {
+        method: 'PATCH',
+        body: {
+          ...input,
+          expectedVersion,
+          idempotencyKey: operationKey(`memory:update:${id}`),
+        },
+      }),
+    onSuccess: () => invalidateMemories(qc),
+  });
+}
+
+function useMemoryVersionMutation(operation: 'archive' | 'restore') {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedVersion }: { id: string; expectedVersion: number }) =>
+      api<FamilyMemory>(`/memories/${id}/${operation}`, {
+        method: 'POST',
+        body: {
+          expectedVersion,
+          idempotencyKey: operationKey(`memory:${operation}:${id}`),
+        },
+      }),
+    onSuccess: () => invalidateMemories(qc),
+  });
+}
+
+export function useArchiveMemory() {
+  return useMemoryVersionMutation('archive');
+}
+
+export function useRestoreMemory() {
+  return useMemoryVersionMutation('restore');
+}
+
+export function useUploadMemoryPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      memoryId: string;
+      caption: string;
+      asset: {
+        uri: string;
+        file?: Blob | null;
+        fileName?: string | null;
+        mimeType?: string | null;
+      };
+    }) => uploadMemoryPhoto(input.memoryId, input.caption, input.asset),
+    onSuccess: () => invalidateMemories(qc),
+  });
 }
 
 export function useKnowledgeArticles(

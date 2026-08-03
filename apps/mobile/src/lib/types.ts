@@ -32,6 +32,54 @@ export type KnowledgeRevisionChangeType =
   | 'restore'
   | 'restore_revision';
 
+export type FamilyMemoryCategory =
+  | 'daily'
+  | 'celebration'
+  | 'travel'
+  | 'meal'
+  | 'visit'
+  | 'milestone'
+  | 'other';
+
+export type FamilyMemorySourceModule =
+  | 'calendar'
+  | 'travel'
+  | 'menu'
+  | 'media'
+  | 'visit';
+
+export interface FamilyMemoryPhoto {
+  id: string;
+  caption: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  contentUrl: string;
+  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
+  createdAt: string;
+}
+
+export interface FamilyMemory {
+  id: string;
+  title: string;
+  happenedOn: string;
+  category: FamilyMemoryCategory;
+  story: string | null;
+  tags: string[];
+  source: {
+    module: FamilyMemorySourceModule;
+    id: string;
+    targetPath: string;
+  } | null;
+  version: number;
+  photos: FamilyMemoryPhoto[];
+  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  updatedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
+}
+
 export interface KnowledgeArticle {
   id: string;
   title: string;
@@ -248,6 +296,7 @@ export type ActivityModule =
   | 'asset'
   | 'points'
   | 'knowledge'
+  | 'memory'
   | 'travel'
   | 'system';
 

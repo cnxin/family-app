@@ -1,12 +1,19 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import pg from 'pg';
 
 const { Client } = pg;
 const API_PORT = Number(process.env.TEST_API_PORT || 3199);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const TEST_DATABASE = `family_app_test_${randomUUID().replaceAll('-', '')}`;
+const TEST_UPLOAD_DIR = join(
+  tmpdir(),
+  `family-app-api-test-${randomUUID().replaceAll('-', '')}`,
+);
 const testEnvironment = {
   ...process.env,
   API_URL,
@@ -39,6 +46,7 @@ const testEnvironment = {
   BANGUMI_API_BASE_URL: 'http://127.0.0.1:1',
   BANGUMI_ACCESS_TOKEN: '',
   SMOKE_DATE: '2199-12-28',
+  UPLOAD_DIR: TEST_UPLOAD_DIR,
 };
 
 function wait(milliseconds) {
@@ -246,6 +254,7 @@ try {
   await runScript('scripts/external-notifications.mjs');
   await runScript('scripts/backups.mjs');
   await runScript('scripts/knowledge.mjs');
+  await runScript('scripts/memories.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');
@@ -277,4 +286,5 @@ try {
     console.log('临时测试数据库已删除');
   }
   await admin.end();
+  await rm(TEST_UPLOAD_DIR, { recursive: true, force: true });
 }

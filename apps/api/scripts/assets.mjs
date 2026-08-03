@@ -64,6 +64,9 @@ const db = new Client({
   database: process.env.DB_NAME || 'family_app',
 });
 const cleanupFiles = [];
+const uploadDir = process.env.UPLOAD_DIR
+  ? resolve(process.env.UPLOAD_DIR)
+  : resolve(process.cwd(), 'uploads');
 
 await db.connect();
 
@@ -193,8 +196,8 @@ try {
 
   const legacyDocumentId = randomUUID();
   const legacyFileName = `legacy-asset-${randomUUID()}.png`;
-  const legacyPath = resolve(process.cwd(), 'uploads', legacyFileName);
-  await mkdir(resolve(process.cwd(), 'uploads'), { recursive: true });
+  const legacyPath = resolve(uploadDir, legacyFileName);
+  await mkdir(uploadDir, { recursive: true });
   await writeFile(legacyPath, 'legacy-private-asset-document');
   cleanupFiles.push(legacyPath);
   await db.query(

@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import pg from 'pg';
 
 const { Client } = pg;
@@ -11,6 +13,10 @@ const WEB_PORT = Number(process.env.E2E_WEB_PORT || 8083);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const WEB_URL = `http://localhost:${WEB_PORT}`;
 const TEST_DATABASE = `family_app_web_test_${randomUUID().replaceAll('-', '')}`;
+const TEST_UPLOAD_DIR = join(
+  tmpdir(),
+  `family-app-web-test-${randomUUID().replaceAll('-', '')}`,
+);
 const TEST_PASSWORD = `web-${randomUUID()}`;
 const apiRoot = process.cwd();
 const repoRoot = resolve(apiRoot, '../..');
@@ -52,6 +58,7 @@ const testEnvironment = {
   MOVIEPILOT_RECONCILE_ENABLED: 'false',
   TMDB_API_TOKEN: '',
   TMDB_API_KEY: '',
+  UPLOAD_DIR: TEST_UPLOAD_DIR,
   DOUBAN_API_BASE_URL: '',
   DOUBAN_API_TOKEN: '',
   BANGUMI_API_BASE_URL: 'http://127.0.0.1:1',
@@ -173,4 +180,5 @@ try {
     console.log('隔离浏览器测试数据库已删除');
   }
   await admin.end();
+  await rm(TEST_UPLOAD_DIR, { recursive: true, force: true });
 }

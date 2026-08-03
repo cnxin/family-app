@@ -11,6 +11,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MenusModule } from './menus/menus.module';
 import { MediaModule } from './media/media.module';
+import { MemoriesModule } from './memories/memories.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PollsModule } from './polls/polls.module';
 import { PointsModule } from './points/points.module';
@@ -35,6 +36,7 @@ import { UploadModule } from './upload/upload.module';
     KnowledgeModule,
     MenusModule,
     MediaModule,
+    MemoriesModule,
     NotificationsModule,
     PollsModule,
     PointsModule,

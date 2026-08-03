@@ -23,7 +23,9 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
   await page.goto('/');
 
   await expect(page.getByTestId('consumer-home')).toBeVisible();
-  await expect(page.getByText('今天的家', { exact: true })).toBeVisible();
+  await expect(page.getByText('今日家庭助理', { exact: true })).toBeVisible();
+  await expect(page.getByText('本周概览', { exact: true })).toBeVisible();
+  await expect(page.getByText('最近回忆', { exact: true })).toBeVisible();
   await expect(page.getByText('家庭工作台', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('admin-desktop-sidebar')).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
@@ -36,6 +38,24 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
     await expect(tab).toBeVisible();
     await expectTouchTarget(tab, `${name}标签`);
   }
+
+  const memoriesLink = page.getByRole('link', { name: '全部回忆', exact: true });
+  await expectTouchTarget(memoriesLink, '全部回忆入口');
+  await memoriesLink.click();
+  await expect(page).toHaveURL(/\/memories$/);
+  await expect(page.getByRole('heading', { name: '家庭回忆', exact: true })).toBeVisible();
+  const createMemory = page.getByRole('button', { name: '新建家庭回忆', exact: true });
+  await expectTouchTarget(createMemory, '记录家庭回忆按钮');
+  await createMemory.click();
+  const memoryDialog = page.getByTestId('memory-form-dialog');
+  await expect(memoryDialog).toBeVisible();
+  await expect(memoryDialog.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  await memoryDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(memoryDialog).not.toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole('tab', { name: '今天', exact: true }).click();
+  await expect(page.getByTestId('consumer-home')).toBeVisible();
 
   const pollLink = page.getByTestId('consumer-quick-polls');
   await expectTouchTarget(pollLink, '家庭投票入口');

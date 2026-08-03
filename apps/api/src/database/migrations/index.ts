@@ -40,6 +40,7 @@ import { AddBackupRunNotificationState1785230200000 } from './1785230200000-add-
 import { AddHouseholdKnowledge1785230300000 } from './1785230300000-add-household-knowledge';
 import { ConvergeHouseholdKnowledge1785230400000 } from './1785230400000-converge-household-knowledge';
 import { AddHouseholdTravel1785230500000 } from './1785230500000-add-household-travel';
+import { AddFamilyMemories1785230600000 } from './1785230600000-add-family-memories';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -84,4 +85,5 @@ export const ALL_MIGRATIONS = [
   AddHouseholdKnowledge1785230300000,
   ConvergeHouseholdKnowledge1785230400000,
   AddHouseholdTravel1785230500000,
+  AddFamilyMemories1785230600000,
 ];

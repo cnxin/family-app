@@ -266,6 +266,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="memories"
+        options={{
+          title: '家庭回忆',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="travel"
         options={{
           title: '出行',

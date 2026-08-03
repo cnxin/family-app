@@ -7,6 +7,7 @@ import {
   CookingPot,
   Film,
   Gift,
+  Images,
   ListTodo,
   Plane,
   ShoppingCart,
@@ -15,6 +16,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react-native';
+import { Image } from 'expo-image';
 import { useRouter, type Href } from 'expo-router';
 import React from 'react';
 import {
@@ -37,6 +39,7 @@ import { todayStr } from '../../lib/date';
 import {
   useAssets,
   useKnowledgeArticles,
+  useMemories,
   useMedia,
   useMenusOfDate,
   useNotifications,
@@ -48,8 +51,10 @@ import {
   useTravelPlans,
   useVisits,
 } from '../../lib/queries';
+import { photoUri } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
+import type { FamilyMemory } from '../../lib/types';
 
 interface HomeModuleEntry {
   background: string;
@@ -259,34 +264,118 @@ function ConsumerServiceLink({ entry }: { entry: HomeModuleEntry }) {
   );
 }
 
+function ConsumerOverviewItem({
+  color,
+  href,
+  icon: Icon,
+  label,
+  value,
+}: {
+  color: string;
+  href: Href;
+  icon: LucideIcon;
+  label: string;
+  value: number;
+}) {
+  const c = useTheme();
+  const router = useRouter();
+  return (
+    <PressableScale
+      accessibilityLabel={`${label}，${value}项`}
+      accessibilityRole="link"
+      onPress={() => router.push(href)}
+      style={styles.consumerOverviewCell}
+    >
+      <Card style={styles.consumerOverviewCard}>
+        <Icon color={color} size={18} />
+        <Text style={[t.title2, { color: c.label, marginTop: 10 }]}>{value}</Text>
+        <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>{label}</Text>
+      </Card>
+    </PressableScale>
+  );
+}
+
+function RecentMemory({ memory }: { memory: FamilyMemory }) {
+  const c = useTheme();
+  const router = useRouter();
+  const cover = memory.photos[0];
+  return (
+    <PressableScale
+      accessibilityLabel={`打开回忆${memory.title}`}
+      accessibilityRole="link"
+      onPress={() => router.push(`/memories?memoryId=${memory.id}` as Href)}
+    >
+      <Card style={styles.consumerMemoryCard}>
+        {cover ? (
+          <Image
+            accessibilityLabel={cover.caption || memory.title}
+            contentFit="cover"
+            source={{ uri: photoUri(cover.contentUrl)! }}
+            style={styles.consumerMemoryImage}
+          />
+        ) : (
+          <View style={[styles.consumerMemoryPlaceholder, { backgroundColor: c.accentSoft }]}>
+            <Images color={c.accent} size={23} strokeWidth={1.8} />
+          </View>
+        )}
+        <View style={styles.consumerMemoryCopy}>
+          <Text numberOfLines={1} style={[t.headline, { color: c.label }]}>{memory.title}</Text>
+          <Text numberOfLines={1} style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>
+            {formatMemoryDate(memory.happenedOn)} · {memory.createdBy.name}
+          </Text>
+        </View>
+        <ArrowRight color={c.tertiaryLabel} size={16} />
+      </Card>
+    </PressableScale>
+  );
+}
+
+function formatMemoryDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' })
+    .format(new Date(year, month - 1, day, 12));
+}
+
 function ConsumerHome({
+  activeTrips,
   avatarEmoji,
   memberName,
   menuItems,
+  memories,
+  memoriesLoading,
   moduleEntries,
   pendingTasks,
+  dueMaintenance,
   remindersLoading,
   shoppingPending,
   tasksLoading,
   menusLoading,
   unreadCount,
+  upcomingVisits,
   upcomingReminder,
+  weekPendingTasks,
 }: {
+  activeTrips: number;
   avatarEmoji: string;
   memberName: string;
   menuItems: number;
+  memories: FamilyMemory[];
+  memoriesLoading: boolean;
   moduleEntries: HomeModuleEntry[];
   pendingTasks: number;
+  dueMaintenance: number;
   remindersLoading: boolean;
   shoppingPending: number;
   tasksLoading: boolean;
   menusLoading: boolean;
   unreadCount: number;
+  upcomingVisits: number;
   upcomingReminder: ReturnType<typeof useReminders>['data'] extends infer T
     ? T extends readonly (infer R)[]
       ? R | undefined
       : never
     : never;
+  weekPendingTasks: number;
 }) {
   const c = useTheme();
   const router = useRouter();
@@ -331,7 +420,7 @@ function ConsumerHome({
           </View>
 
           <View style={[styles.consumerHero, { backgroundColor: c.tintSoft }]}>
-            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>今天的家</Text>
+            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>今日家庭助理</Text>
             <Text style={[t.title1, styles.consumerHeroTitle, { color: c.label }]}>
               {attentionCount
                 ? `有 ${attentionCount} 件事等你一起看看`
@@ -427,6 +516,52 @@ function ConsumerHome({
           )}
 
           <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>本周概览</Text>
+          </View>
+          <View style={styles.consumerOverviewGrid} testID="consumer-week-overview">
+            <ConsumerOverviewItem color={c.tint} href="/tasks" icon={ListTodo} label="本周待办" value={weekPendingTasks} />
+            <ConsumerOverviewItem color={c.blue} href="/guests" icon={UsersRound} label="待来访" value={upcomingVisits} />
+            <ConsumerOverviewItem color={c.orange} href="/home-assets" icon={Wrench} label="近期维护" value={dueMaintenance} />
+            <ConsumerOverviewItem color={c.accent} href="/travel" icon={Plane} label="计划行程" value={activeTrips} />
+          </View>
+
+          <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>最近回忆</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/memories')}
+              style={styles.textLink}
+            >
+              <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>全部回忆</Text>
+              <ArrowRight color={c.tint} size={15} />
+            </Pressable>
+          </View>
+          {memoriesLoading ? (
+            <Card><SkeletonRows /></Card>
+          ) : memories.length ? (
+            <View style={styles.consumerMemories} testID="consumer-recent-memories">
+              {memories.slice(0, 2).map((memory) => <RecentMemory key={memory.id} memory={memory} />)}
+            </View>
+          ) : (
+            <PressableScale
+              accessibilityLabel="记录第一条家庭回忆"
+              accessibilityRole="link"
+              onPress={() => router.push('/memories')}
+            >
+              <Card style={styles.consumerMemoryEmpty}>
+                <View style={[styles.consumerMemoryPlaceholder, { backgroundColor: c.accentSoft }]}>
+                  <Images color={c.accent} size={23} />
+                </View>
+                <View style={styles.consumerMemoryCopy}>
+                  <Text style={[t.headline, { color: c.label }]}>记录第一条家庭回忆</Text>
+                  <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>把一顿饭、一次出行或平常的一天留下来</Text>
+                </View>
+                <ArrowRight color={c.tertiaryLabel} size={16} />
+              </Card>
+            </PressableScale>
+          )}
+
+          <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>更多家里服务</Text>
           </View>
           <View style={styles.consumerServiceGrid}>
@@ -447,6 +582,7 @@ export default function HomeScreen() {
   const { data: menus, isLoading: menusLoading } = useMenusOfDate(today);
   const { data: shopping } = useShoppingList(today);
   const { data: tasks, isLoading: tasksLoading } = useTasks(today, today);
+  const { data: weekTasks } = useTasks(today, todayStr(6));
   const { data: notifications } = useNotifications();
   const { data: polls } = usePolls();
   const { data: media } = useMedia('all');
@@ -456,6 +592,7 @@ export default function HomeScreen() {
   const { data: pointsAccounts } = usePointsAccounts();
   const { data: knowledgeArticles } = useKnowledgeArticles('active');
   const { data: travelPlans } = useTravelPlans('active');
+  const { data: memories, isLoading: memoriesLoading } = useMemories('active', 'all', '', 3);
 
   const menuItems =
     menus?.reduce(
@@ -464,6 +601,7 @@ export default function HomeScreen() {
     ) ?? 0;
   const shoppingPending = shopping?.filter((item) => !item.checked).length ?? 0;
   const pendingTasks = tasks?.filter((entry) => entry.status === 'pending') ?? [];
+  const weekPendingTasks = weekTasks?.filter((entry) => entry.status === 'pending').length ?? 0;
   const openPolls = polls?.filter((poll) => poll.status === 'open') ?? [];
   const unreadCount = notifications?.length ?? 0;
   const activeMedia =
@@ -563,22 +701,36 @@ export default function HomeScreen() {
       label: '家庭出行',
       status: `${travelPlans?.length ?? 0} 个计划中行程`,
     },
+    {
+      background: c.accentSoft,
+      color: c.accent,
+      href: '/memories',
+      icon: Images,
+      label: '家庭回忆',
+      status: `${memories?.length ?? 0} 条珍藏`,
+    },
   ];
 
   if (member?.role === 'member') {
     return (
       <ConsumerHome
+        activeTrips={travelPlans?.length ?? 0}
         avatarEmoji={member.avatarEmoji}
         memberName={member.name}
         menuItems={menuItems}
+        memories={memories ?? []}
+        memoriesLoading={memoriesLoading}
         menusLoading={menusLoading}
         moduleEntries={moduleEntries}
         pendingTasks={pendingTasks.length}
+        dueMaintenance={dueMaintenance}
         remindersLoading={remindersLoading}
         shoppingPending={shoppingPending}
         tasksLoading={tasksLoading}
         unreadCount={unreadCount}
+        upcomingVisits={upcomingVisits}
         upcomingReminder={upcomingReminder}
+        weekPendingTasks={weekPendingTasks}
       />
     );
   }
@@ -759,6 +911,15 @@ const styles = StyleSheet.create({
   },
   consumerAgendaCopy: { flex: 1, minWidth: 0 },
   consumerAgendaTitle: { fontWeight: '600' },
+  consumerOverviewGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  consumerOverviewCell: { flexGrow: 1, minWidth: 0, width: '47%' },
+  consumerOverviewCard: { minHeight: 112, padding: 15 },
+  consumerMemories: { gap: 9 },
+  consumerMemoryCard: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 82, overflow: 'hidden', paddingRight: 14 },
+  consumerMemoryEmpty: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 92, padding: 14 },
+  consumerMemoryImage: { height: 82, width: 92 },
+  consumerMemoryPlaceholder: { alignItems: 'center', borderRadius: radius.sm, height: 54, justifyContent: 'center', width: 54 },
+  consumerMemoryCopy: { flex: 1, minWidth: 0 },
   consumerServiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   consumerServiceLink: {
     alignItems: 'center',

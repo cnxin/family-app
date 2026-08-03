@@ -1,6 +1,10 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import type { AssetDocument, AssetDocumentType } from './types';
+import type {
+  AssetDocument,
+  AssetDocumentType,
+  FamilyMemoryPhoto,
+} from './types';
 
 // Expo Go 开发期：API 跑在起 dev server 的同一台电脑上，从 hostUri 取局域网 IP
 function resolveBaseUrl(): string {
@@ -179,6 +183,48 @@ export async function uploadAssetDocument(
     );
   }
   return json.data as AssetDocument;
+}
+
+export async function uploadMemoryPhoto(
+  memoryId: string,
+  caption: string,
+  asset: {
+    uri: string;
+    file?: Blob | null;
+    fileName?: string | null;
+    mimeType?: string | null;
+  },
+): Promise<FamilyMemoryPhoto> {
+  const form = new FormData();
+  form.append('caption', caption.trim());
+  form.append(
+    'idempotencyKey',
+    `memory:photo:${memoryId}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+  );
+  const fileName = asset.fileName || 'family-memory.jpg';
+  if (Platform.OS === 'web' && asset.file) {
+    form.append('file', asset.file, fileName);
+  } else {
+    form.append('file', {
+      uri: asset.uri,
+      name: fileName,
+      type: asset.mimeType || 'image/jpeg',
+    } as unknown as Blob);
+  }
+  const response = await fetchWithSession(
+    `${BASE_URL}/memories/${encodeURIComponent(memoryId)}/photos`,
+    { method: 'POST', body: form },
+    true,
+  );
+  const json = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      json?.error?.code ?? 'UPLOAD_FAILED',
+      json?.error?.message ?? '回忆照片上传失败',
+      response.status,
+    );
+  }
+  return json.data as FamilyMemoryPhoto;
 }
 
 export function photoUri(url: string | null): string | null {
