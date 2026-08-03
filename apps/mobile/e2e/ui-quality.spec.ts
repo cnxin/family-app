@@ -153,6 +153,13 @@ test('投票表单适配视口且核心操作支持鼠标和触控', async ({ pa
 
   const createButton = page.getByRole('button', { name: '发起投票', exact: true });
   await expectTouchTarget(createButton, '发起投票按钮');
+  await expect(createButton).toHaveCSS('cursor', 'pointer');
+  await createButton.focus();
+  await expect(createButton).toHaveCSS('outline-style', 'solid');
+  await expect(page.getByRole('heading', { name: '家庭投票', exact: true })).toHaveCSS(
+    'font-size',
+    testInfo.project.name === 'mobile-chrome' ? '26px' : '32px',
+  );
   await createButton.click();
 
   const dialog = page.getByTestId('poll-form-dialog');
@@ -187,7 +194,11 @@ test('知识库筛选、弹层和未保存保护支持鼠标和触控', async ({
   await openAuthenticatedHome(page);
   await page.goto('/knowledge');
 
-  await expectTouchTarget(page.getByRole('button', { name: '新建知识文章', exact: true }), '新建知识文章');
+  const createArticleButton = page.getByRole('button', { name: '新建知识文章', exact: true });
+  await expectTouchTarget(createArticleButton, '新建知识文章');
+  await expect(createArticleButton).toHaveCSS('cursor', 'pointer');
+  await createArticleButton.focus();
+  await expect(createArticleButton).toHaveCSS('outline-style', 'solid');
   for (const label of ['全部', '家庭流程', '设备说明', '常用联系', '居家资料', '其他']) {
     await expectTouchTarget(page.getByRole('button', { name: label, exact: true }), `${label}筛选`);
   }
@@ -238,4 +249,26 @@ test('知识库筛选、弹层和未保存保护支持鼠标和触控', async ({
   await detail.getByRole('button', { name: '历史', exact: true }).click();
   await expect(detail.getByText('版本历史', { exact: true })).toBeVisible();
   await expectTouchTarget(detail.getByRole('button', { name: '返回文章详情', exact: true }), '返回文章详情');
+});
+
+test('知识库在中等宽度使用扩展工具栏且不产生横向溢出', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chrome');
+  await page.setViewportSize({ width: 820, height: 900 });
+  await openAuthenticatedHome(page);
+  await page.goto('/knowledge');
+
+  const searchBox = page.getByLabel('搜索家庭知识库').locator('xpath=..');
+  const statusFilter = page.getByRole('button', { name: '使用中', exact: true }).locator('xpath=..');
+  await expect(searchBox).toBeVisible();
+  await expect(statusFilter).toBeVisible();
+  const searchBoxBounds = await searchBox.boundingBox();
+  const statusFilterBounds = await statusFilter.boundingBox();
+  expect(searchBoxBounds).not.toBeNull();
+  expect(statusFilterBounds).not.toBeNull();
+  expect(Math.abs((searchBoxBounds?.y ?? 0) - (statusFilterBounds?.y ?? 0))).toBeLessThanOrEqual(2);
+  await expect(page.getByRole('heading', { name: '家庭知识库', exact: true })).toHaveCSS(
+    'font-size',
+    '32px',
+  );
+  await expectNoHorizontalOverflow(page);
 });

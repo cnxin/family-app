@@ -30,13 +30,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import {
+  PageContainer,
+  PageHeader,
+  useLayoutMode,
+} from '../../components/app-shell';
 import {
   AdaptiveDialog,
   Card,
   ConfirmDialog,
   EmptyState,
   PrimaryButton,
+  PressableScale,
   Segmented,
 } from '../../components/ui';
 import {
@@ -166,11 +171,11 @@ function ArticleCard({
 }) {
   const c = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityLabel={`打开${article.title}`}
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
+      style={styles.articlePressable}
     >
       <Card style={styles.articleCard}>
         <View style={styles.cardTopRow}>
@@ -207,7 +212,7 @@ function ArticleCard({
           <ChevronRight color={c.tertiaryLabel} size={17} />
         </View>
       </Card>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -251,7 +256,8 @@ function Field({
 
 export default function KnowledgeScreen() {
   const c = useTheme();
-  const desktop = useDesktopLayout();
+  const layout = useLayoutMode();
+  const multiColumn = layout !== 'compact';
   const { member } = useSession();
   const canPin = member?.role === 'owner' || member?.role === 'admin';
   const [status, setStatus] = useState<'active' | 'archived'>('active');
@@ -419,26 +425,23 @@ export default function KnowledgeScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer style={styles.page}>
-        <View style={styles.header}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[desktop ? t.largeTitle : t.title1, { color: c.label }]}>家庭知识库</Text>
-            <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>流程、说明与常用资料</Text>
-          </View>
-          <Pressable
-            accessibilityLabel="新建知识文章"
-            accessibilityRole="button"
-            onPress={openCreate}
-            style={({ pressed }) => [
-              styles.createButton,
-              { backgroundColor: pressed ? c.green : c.tint },
-            ]}
-          >
-            <FilePlus2 color="#FFFFFF" size={18} />
-            <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新建</Text>
-          </Pressable>
-        </View>
+        <PageHeader
+          action={(
+            <PressableScale
+              accessibilityLabel="新建知识文章"
+              haptic
+              onPress={openCreate}
+              style={[styles.createButton, { backgroundColor: c.tint }]}
+            >
+              <FilePlus2 color="#FFFFFF" size={18} />
+              <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新建</Text>
+            </PressableScale>
+          )}
+          subtitle="流程、说明与常用资料"
+          title="家庭知识库"
+        />
 
-        <View style={[styles.toolbar, desktop && styles.toolbarDesktop]}>
+        <View style={[styles.toolbar, multiColumn && styles.toolbarExpanded]}>
           <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.separator }]}>
             <Search color={c.tertiaryLabel} size={18} />
             <TextInput
@@ -545,9 +548,14 @@ export default function KnowledgeScreen() {
               </Pressable>
             </View>
           ) : articlesQuery.data?.length ? (
-            <View style={[styles.articleGrid, desktop && styles.articleGridDesktop]}>
+            <View style={[styles.articleGrid, multiColumn && styles.articleGridExpanded]}>
               {articlesQuery.data.map((article) => (
-                <View key={article.id} style={desktop ? styles.articleCellDesktop : undefined}>
+                <View
+                  key={article.id}
+                  style={multiColumn
+                    ? [styles.articleCellExpanded, layout === 'wide' && styles.articleCellWide]
+                    : undefined}
+                >
                   <ArticleCard
                     article={article}
                     onPress={() => {
@@ -560,7 +568,9 @@ export default function KnowledgeScreen() {
             </View>
           ) : (
             <EmptyState
-              emoji="🗂️"
+              icon={BookOpenText}
+              iconBackground={c.tintSoft}
+              iconColor={c.tint}
               title={status === 'active' ? '还没有知识文章' : '没有已归档文章'}
             />
           )}
@@ -962,7 +972,6 @@ export default function KnowledgeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   page: { flex: 1, paddingTop: 22 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   createButton: {
     minHeight: 44,
     paddingHorizontal: 16,
@@ -973,7 +982,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   toolbar: { marginTop: 20, gap: 10 },
-  toolbarDesktop: { flexDirection: 'row', alignItems: 'center' },
+  toolbarExpanded: { flexDirection: 'row', alignItems: 'center' },
   searchBox: {
     flex: 1,
     minHeight: 46,
@@ -992,8 +1001,10 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: 40, flexGrow: 1 },
   loader: { marginVertical: 48 },
   articleGrid: { gap: 12 },
-  articleGridDesktop: { flexDirection: 'row', flexWrap: 'wrap' },
-  articleCellDesktop: { width: '32%', minWidth: 280, flexGrow: 1 },
+  articleGridExpanded: { flexDirection: 'row', flexWrap: 'wrap' },
+  articleCellExpanded: { width: '48%', minWidth: 280, flexGrow: 1 },
+  articleCellWide: { width: '31%' },
+  articlePressable: { width: '100%' },
   articleCard: { minHeight: 174, padding: 16 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   categoryBadge: { minHeight: 25, borderRadius: radius.sm, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },

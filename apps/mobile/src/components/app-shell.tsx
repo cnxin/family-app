@@ -40,6 +40,16 @@ import { radius, type as t, useTheme } from '../lib/theme';
 import { IconButton, PressSurface } from './ui';
 
 export const DESKTOP_BREAKPOINT = 1024;
+export const COMPACT_BREAKPOINT = 700;
+
+export type LayoutMode = 'compact' | 'medium' | 'wide';
+
+export function useLayoutMode(): LayoutMode {
+  const { width } = useWindowDimensions();
+  if (width < COMPACT_BREAKPOINT) return 'compact';
+  if (width < DESKTOP_BREAKPOINT) return 'medium';
+  return 'wide';
+}
 
 export function useDesktopLayout() {
   const { width } = useWindowDimensions();
@@ -55,16 +65,54 @@ export function PageContainer({
   maxWidth?: number;
   style?: StyleProp<ViewStyle>;
 }) {
-  const desktop = useDesktopLayout();
+  const layout = useLayoutMode();
+  const gutter = layout === 'compact' ? 16 : layout === 'medium' ? 24 : 32;
   return (
     <View
       style={[
         styles.pageContainer,
-        { maxWidth, paddingHorizontal: desktop ? 32 : 16 },
+        { maxWidth, paddingHorizontal: gutter },
         style,
       ]}
     >
       {children}
+    </View>
+  );
+}
+
+export function PageHeader({
+  action,
+  eyebrow,
+  subtitle,
+  title,
+}: {
+  action?: React.ReactNode;
+  eyebrow?: string;
+  subtitle?: string;
+  title: string;
+}) {
+  const c = useTheme();
+  const layout = useLayoutMode();
+
+  return (
+    <View style={styles.pageHeader}>
+      <View style={styles.pageHeaderCopy}>
+        {eyebrow ? (
+          <Text style={[t.footnote, styles.pageEyebrow, { color: c.tint }]}>{eyebrow}</Text>
+        ) : null}
+        <Text
+          accessibilityRole="header"
+          style={[layout === 'compact' ? t.title1 : t.largeTitle, { color: c.label }]}
+        >
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[t.subhead, styles.pageSubtitle, { color: c.secondaryLabel }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {action ? <View style={styles.pageHeaderAction}>{action}</View> : null}
     </View>
   );
 }
@@ -563,6 +611,18 @@ const styles = StyleSheet.create({
   },
   notificationBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
   pageContainer: { width: '100%', alignSelf: 'center' },
+  pageHeader: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  pageHeaderCopy: { flex: 1, minWidth: 220 },
+  pageHeaderAction: { alignSelf: 'center' },
+  pageEyebrow: { fontWeight: '700', marginBottom: 6 },
+  pageSubtitle: { marginTop: 4 },
   moduleBackButton: {
     minHeight: 44,
     alignSelf: 'flex-start',

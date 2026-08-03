@@ -1359,10 +1359,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByText('编辑家庭投票', { exact: true })).not.toBeVisible();
   await expect(page.getByText('浏览器端已编辑投票', { exact: true })).toBeVisible();
 
+  await page.getByRole('button', { name: `更多投票操作${pollTitle}` }).click();
+  await expect(page.getByTestId('poll-management-dialog')).toBeVisible();
   await page.getByRole('button', { name: `结束投票${pollTitle}` }).click();
   await expect(page.getByText('结束这个投票？', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '结束投票', exact: true }).click();
   await page.getByRole('button', { name: '已结束', exact: true }).click();
+  await page.getByRole('button', { name: `更多投票操作${pollTitle}` }).click();
   await expect(page.getByRole('button', { name: `重新开启投票${pollTitle}` })).toBeVisible();
   await page.getByRole('button', { name: `重新开启投票${pollTitle}` }).click();
   await page.getByRole('button', { name: '进行中', exact: true }).click();
@@ -1370,6 +1373,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     pollCard.getByRole('radio', { name: '取消选择周六上午', exact: true }),
   ).toBeVisible();
 
+  await page.getByRole('button', { name: `更多投票操作${pollTitle}` }).click();
   await page.getByRole('button', { name: `删除投票${pollTitle}` }).click();
   await expect(page.getByText('删除这个投票？', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '删除投票', exact: true }).click();

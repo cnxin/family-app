@@ -25,6 +25,13 @@ import Animated, {
 import { radius, type as t, useTheme } from '../lib/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const NATIVE_DIALOG_SHADOW: ViewStyle = {
+  shadowColor: '#000000',
+  shadowOffset: { width: 0, height: 14 },
+  shadowOpacity: 0.22,
+  shadowRadius: 30,
+  elevation: 16,
+};
 
 export function PressableScale({
   children,
@@ -47,7 +54,9 @@ export function PressableScale({
   accessibilityState?: AccessibilityState;
   testID?: string;
 }) {
+  const c = useTheme();
   const reduceMotion = useReducedMotion();
+  const [focused, setFocused] = React.useState(false);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -61,6 +70,8 @@ export function PressableScale({
       accessibilityState={accessibilityState}
       disabled={disabled}
       hitSlop={6}
+      onBlur={() => setFocused(false)}
+      onFocus={() => setFocused(true)}
       onPressIn={() => {
         opacity.value = withTiming(0.8, { duration: 80 });
         scale.value = reduceMotion
@@ -77,7 +88,18 @@ export function PressableScale({
         if (haptic) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress?.();
       }}
-      style={[style, animatedStyle]}
+      style={[
+        style,
+        Platform.OS === 'web' && styles.webInteractive,
+        Platform.OS === 'web' && focused && {
+          outlineColor: c.tint,
+          outlineOffset: 2,
+          outlineStyle: 'solid',
+          outlineWidth: 2,
+        },
+        animatedStyle,
+        disabled && styles.disabledInteractive,
+      ]}
       testID={testID}
     >
       {children}
@@ -92,6 +114,7 @@ export function PressSurface({
   accessibilityState,
   children,
   disabled,
+  hitSlop = 6,
   onPress,
   pressedColor,
   style,
@@ -103,12 +126,14 @@ export function PressSurface({
   accessibilityState?: AccessibilityState;
   children: React.ReactNode;
   disabled?: boolean;
+  hitSlop?: number;
   onPress?: () => void;
   pressedColor?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
   const c = useTheme();
+  const [focused, setFocused] = React.useState(false);
   return (
     <Pressable
       aria-expanded={ariaExpanded}
@@ -116,12 +141,22 @@ export function PressSurface({
       accessibilityRole={accessibilityRole}
       accessibilityState={accessibilityState}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={hitSlop}
+      onBlur={() => setFocused(false)}
+      onFocus={() => setFocused(true)}
       onPress={onPress}
       style={({ pressed }) => [
         styles.pressSurface,
         style,
-        { backgroundColor: pressed ? (pressedColor ?? c.fill) : undefined },
+        pressed && { backgroundColor: pressedColor ?? c.fill },
+        Platform.OS === 'web' && styles.webInteractive,
+        Platform.OS === 'web' && focused && {
+          outlineColor: c.tint,
+          outlineOffset: 2,
+          outlineStyle: 'solid',
+          outlineWidth: 2,
+        },
+        disabled && styles.disabledInteractive,
       ]}
       testID={testID}
     >
@@ -229,10 +264,11 @@ export function Segmented<T extends string>({
       {options.map((opt) => {
         const active = opt.value === value;
         return (
-          <Pressable
+          <PressSurface
             key={opt.value}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
+            hitSlop={0}
             style={[
               styles.segment,
               active && {
@@ -246,6 +282,7 @@ export function Segmented<T extends string>({
                 onChange(opt.value);
               }
             }}
+            pressedColor={c.cardPressed}
           >
             <Text
               style={[
@@ -255,7 +292,7 @@ export function Segmented<T extends string>({
             >
               {opt.label}
             </Text>
-          </Pressable>
+          </PressSurface>
         );
       })}
     </View>
@@ -303,11 +340,31 @@ export function PrimaryButton({
   );
 }
 
-export function EmptyState({ emoji, title, hint }: { emoji: string; title: string; hint?: string }) {
+export function EmptyState({
+  emoji,
+  hint,
+  icon: Icon,
+  iconBackground,
+  iconColor,
+  title,
+}: {
+  emoji?: string;
+  hint?: string;
+  icon?: LucideIcon;
+  iconBackground?: string;
+  iconColor?: string;
+  title: string;
+}) {
   const c = useTheme();
   return (
     <View style={styles.empty}>
-      <Text style={{ fontSize: 56 }}>{emoji}</Text>
+      {Icon ? (
+        <View style={[styles.emptyIcon, { backgroundColor: iconBackground ?? c.fill }]}>
+          <Icon color={iconColor ?? c.secondaryLabel} size={28} strokeWidth={1.8} />
+        </View>
+      ) : emoji ? (
+        <Text style={styles.emptyEmoji}>{emoji}</Text>
+      ) : null}
       <Text style={[t.headline, { color: c.label, marginTop: 12 }]}>{title}</Text>
       {hint ? (
         <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4, textAlign: 'center' }]}>
@@ -379,7 +436,7 @@ export function AdaptiveDialog({
     : undefined;
   const shadowStyle = Platform.OS === 'web'
     ? ({ boxShadow: '0 16px 44px rgba(0, 0, 0, 0.22)' } as ViewStyle)
-    : styles.nativeDialogShadow;
+    : NATIVE_DIALOG_SHADOW;
 
   return (
     <Modal
@@ -491,6 +548,8 @@ export function ConfirmDialog({
 }
 
 const styles = StyleSheet.create({
+  webInteractive: { cursor: 'pointer' },
+  disabledInteractive: { cursor: 'auto' as const, opacity: 0.48 },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -533,6 +592,14 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
     paddingHorizontal: 32,
   },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyEmoji: { fontSize: 56 },
   skeleton: { borderRadius: radius.sm, opacity: 0.72 },
   skeletonRow: {
     minHeight: 70,
@@ -561,13 +628,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     maxHeight: '92%',
     overflow: 'hidden',
-  },
-  nativeDialogShadow: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.22,
-    shadowRadius: 30,
-    elevation: 16,
   },
   adaptiveDialogCompact: {
     borderBottomLeftRadius: 0,
