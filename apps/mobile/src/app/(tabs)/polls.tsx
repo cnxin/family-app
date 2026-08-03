@@ -939,10 +939,13 @@ export default function PollsScreen() {
       ),
     [candidateIdsParam],
   );
-  const source =
-    sourceModule === 'media' && sourceId && sourceTitle
-      ? { module: 'media' as const, id: sourceId, title: sourceTitle }
-      : null;
+  const source = useMemo(
+    () =>
+      sourceModule === 'media' && sourceId && sourceTitle
+        ? { module: 'media' as const, id: sourceId, title: sourceTitle }
+        : null,
+    [sourceId, sourceModule, sourceTitle],
+  );
   const { data: polls, isLoading, error } = usePolls();
   const { data: householdMedia } = useMedia(
     'all',

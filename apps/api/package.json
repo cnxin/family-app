@@ -11,6 +11,7 @@
     "start:prod": "node dist/main.js",
     "seed": "ts-node -r dotenv/config src/seed.ts",
     "test:api": "node scripts/run-api-tests.mjs",
+    "test:web": "node scripts/run-web-tests.mjs",
     "test:connectors": "node -r ts-node/register scripts/media-connectors.contract.ts",
     "test:reconciliation": "node -r ts-node/register scripts/moviepilot-reconciliation.contract.ts",
     "test:metadata": "node -r ts-node/register scripts/media-metadata.contract.ts",

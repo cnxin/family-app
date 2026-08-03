@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const APP_API_URL = (
+  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3100'
+).replace(/\/+$/, '');
+
 const account = {
   id: 'account-moviepilot-webhook-fixture',
   loginName: 'moviepilot-webhook-fixture',
@@ -185,8 +189,7 @@ test('Plex 与 MoviePilot 回调地址可生成并通过按钮复制', async ({ 
   );
   await page.getByRole('button', { name: 'MoviePilot 生成回调地址', exact: true }).click();
 
-  const callbackUrl =
-    'http://localhost:3100/media/webhooks/moviepilot/00000000-0000-4000-8000-000000000099/one-time-fixture-secret';
+  const callbackUrl = `${APP_API_URL}/media/webhooks/moviepilot/00000000-0000-4000-8000-000000000099/one-time-fixture-secret`;
   await expect(page.getByLabel('MoviePilot 回调地址')).toHaveValue(callbackUrl);
   await expect(
     page.getByRole('button', { name: 'MoviePilot 重新生成回调地址', exact: true }),
@@ -198,7 +201,7 @@ test('Plex 与 MoviePilot 回调地址可生成并通过按钮复制', async ({ 
   );
   await page.getByRole('button', { name: 'Plex 生成回调地址', exact: true }).click();
   await expect(page.getByLabel('Plex 回调地址')).toHaveValue(
-    'http://localhost:3100/media/webhooks/playback/plex/00000000-0000-4000-8000-000000000088/one-time-playback-secret',
+    `${APP_API_URL}/media/webhooks/playback/plex/00000000-0000-4000-8000-000000000088/one-time-playback-secret`,
   );
   await expect(
     page.getByRole('button', { name: 'Plex 重新生成回调地址', exact: true }),

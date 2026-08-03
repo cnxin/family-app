@@ -170,12 +170,12 @@ npx pnpm --filter api test:schema
 docker compose -f docker-compose.dev.yml run --rm --no-deps api \
   pnpm --filter api test:api
 
-# 固定 Chrome 回归：鼠标登录、390px 移动视口、1440px 桌面视口和核心导航
-# 运行前保持 API/数据库健康；日历事件和任务在用例内创建、编辑并停用，不保留活动测试数据
+# 隔离 Chrome 回归：自动创建临时数据库及专用账号，覆盖鼠标登录、
+# 390px 移动视口、1440px 桌面视口和核心导航，结束后删除临时数据库
 corepack pnpm test:web
 ```
 
-Playwright 默认依次兼容全新开发卷密码 `family1234` 和旧库迁移出的空密码。账号已经补设其他密码时，使用 `E2E_ACCOUNT_PASSWORD='<测试密码>' corepack pnpm test:web`；也可通过 `E2E_LOGIN_NAME` 指定测试账号。它直接使用本机安装的 Google Chrome，不会额外下载浏览器。失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。
+Playwright 回归使用随机命名的临时 PostgreSQL 数据库和随机测试密码，不读取或修改当前开发账号。它直接使用本机安装的 Google Chrome，不会额外下载浏览器；失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。测试进程无论成功或失败都会终止隔离 API 并删除临时数据库。
 
 ## 项目结构
 

@@ -2,7 +2,6 @@ import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   BellPlus,
-  CalendarCheck2,
   Check,
   Circle,
   CircleDollarSign,

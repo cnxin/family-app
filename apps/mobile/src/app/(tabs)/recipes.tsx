@@ -1,11 +1,9 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
-  BookOpenText,
   ChevronRight,
   Plus,
   Search,
-  UsersRound,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
