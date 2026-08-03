@@ -3,7 +3,6 @@ import { Minus, PackageCheck, Plus, Trash2, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,9 +15,11 @@ import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import { InventoryPanel } from '../../components/inventory-panel';
 import {
+  AdaptiveDialog,
   Card,
   ConfirmDialog,
   EmptyState,
+  IconButton,
   PressableScale,
   SectionHeader,
   Segmented,
@@ -223,21 +224,12 @@ function StockConfirmDialog({
   };
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible>
-      <View style={styles.stockOverlay}>
-        <Pressable
-          accessibilityLabel="关闭入库确认"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          accessibilityViewIsModal
-          style={[
-            styles.stockDialog,
-            { backgroundColor: c.card, borderColor: c.separator },
-          ]}
-        >
+    <AdaptiveDialog
+      accessibilityLabel={`确认${name}入库`}
+      maxWidth={480}
+      onClose={onClose}
+      visible
+    >
           <View style={styles.stockDialogHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.title2, { color: c.label }]}>确认「{name}」入库</Text>
@@ -245,14 +237,13 @@ function StockConfirmDialog({
                 采购数量 {quantityLabel(item.totalQty)} {item.unit ?? ''}
               </Text>
             </View>
-            <PressableScale
+            <IconButton
               accessibilityLabel="关闭"
-              haptic={false}
+              backgroundColor="transparent"
+              color={c.secondaryLabel}
+              icon={X}
               onPress={onClose}
-              style={styles.stockClose}
-            >
-              <X color={c.secondaryLabel} size={20} />
-            </PressableScale>
+            />
           </View>
 
           {preview.isLoading ? <ActivityIndicator style={{ marginVertical: 28 }} /> : null}
@@ -261,6 +252,7 @@ function StockConfirmDialog({
             <ScrollView
               contentContainerStyle={styles.stockDialogContent}
               showsVerticalScrollIndicator={false}
+              style={styles.stockDialogScroll}
             >
               <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>库存项</Text>
               {data.candidates.length ? (
@@ -345,9 +337,7 @@ function StockConfirmDialog({
               )}
             </Pressable>
           </View>
-        </View>
-      </View>
-    </Modal>
+    </AdaptiveDialog>
   );
 }
 
@@ -661,7 +651,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stockButton: {
-    minHeight: 34,
+    minHeight: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 9,
     flexDirection: 'row',
@@ -683,21 +673,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stockOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.38)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  stockDialog: {
-    width: '100%',
-    maxWidth: 480,
-    maxHeight: '88%',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
   stockDialogHeader: {
     minHeight: 72,
     paddingHorizontal: 18,
@@ -705,7 +680,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  stockClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  stockDialogScroll: { flexShrink: 1 },
   stockDialogContent: { paddingHorizontal: 18, paddingBottom: 16, gap: 12 },
   stockCandidates: { gap: 8 },
   stockCandidate: {
@@ -737,7 +712,7 @@ const styles = StyleSheet.create({
   manualName: {
     flex: 1,
     minWidth: 0,
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 0,
@@ -748,25 +723,25 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   stepper: {
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  stepButton: { width: 36, height: 38, alignItems: 'center', justifyContent: 'center' },
+  stepButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   quantityInput: { width: 46, textAlign: 'center', paddingVertical: 0 },
   unitInput: {
     width: 70,
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 0,
     textAlign: 'center',
   },
   addBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',

@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   addButton: {
-    height: 42,
+    height: 44,
     borderRadius: radius.md,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
   },
-  checkButton: { width: 32, height: 36, alignItems: 'center', justifyContent: 'center' },
+  checkButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   checkedCircle: {
     width: 25,
     height: 25,
@@ -834,11 +834,11 @@ const styles = StyleSheet.create({
   taskBody: { flex: 1, minWidth: 0 },
   taskTitle: { fontWeight: '600', lineHeight: 22 },
   taskMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 5 },
-  claimButton: { alignSelf: 'flex-start', minHeight: 30, justifyContent: 'center', marginTop: 4 },
-  taskActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5, maxWidth: 76 },
+  claimButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: 4 },
+  taskActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5, maxWidth: 94 },
   smallIconButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -867,8 +867,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconButton: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -893,7 +893,7 @@ const styles = StyleSheet.create({
   },
   intervalInput: {
     width: 64,
-    height: 36,
+    height: 44,
     borderRadius: radius.sm,
     textAlign: 'center',
   },
@@ -908,7 +908,7 @@ const styles = StyleSheet.create({
   },
   memberOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   memberOption: {
-    minHeight: 38,
+    minHeight: 44,
     borderRadius: radius.sm,
     borderWidth: 1,
     paddingHorizontal: 11,

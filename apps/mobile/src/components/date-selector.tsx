@@ -1,7 +1,6 @@
 import { CalendarDays } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  Modal,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
 import { formatPlanDate, parseDate, todayStr } from '../lib/date';
 import { useCalendarEntries } from '../lib/queries';
 import { radius, type as t, useTheme } from '../lib/theme';
+import { AdaptiveDialog } from './ui';
 
 export function DateSelector({
   allowPast = false,
@@ -96,41 +96,29 @@ export function DateSelector({
         </Pressable>
       </View>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-        transparent
+      <AdaptiveDialog
+        accessibilityLabel="日期选择"
+        maxWidth={388}
+        onClose={() => setOpen(false)}
+        style={styles.calendarDialog}
+        testID="date-selector-dialog"
         visible={open}
       >
-        <View style={styles.overlay}>
-          <Pressable
-            accessibilityLabel="关闭日期选择"
-            accessibilityRole="button"
-            onPress={() => setOpen(false)}
-            style={StyleSheet.absoluteFill}
+        <View style={styles.calendar}>
+          <CalendarMonth
+            entries={entries}
+            minimumDate={allowPast ? undefined : todayStr()}
+            onClose={() => setOpen(false)}
+            onMonthChange={setVisibleMonth}
+            onSelect={(date) => {
+              onChange(date);
+              setOpen(false);
+            }}
+            selectedDate={value}
+            visibleMonth={visibleMonth}
           />
-          <View
-            accessibilityViewIsModal
-            style={[
-              styles.calendar,
-              { backgroundColor: c.card, borderColor: c.separator },
-            ]}
-          >
-            <CalendarMonth
-              entries={entries}
-              minimumDate={allowPast ? undefined : todayStr()}
-              onClose={() => setOpen(false)}
-              onMonthChange={setVisibleMonth}
-              onSelect={(date) => {
-                onChange(date);
-                setOpen(false);
-              }}
-              selectedDate={value}
-              visibleMonth={visibleMonth}
-            />
-          </View>
         </View>
-      </Modal>
+      </AdaptiveDialog>
     </>
   );
 }
@@ -143,7 +131,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   quickButton: {
-    height: 40,
+    height: 44,
     minWidth: 60,
     borderRadius: radius.sm,
     borderWidth: 1,
@@ -152,7 +140,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   calendarButton: {
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -160,18 +148,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 7,
   },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.38)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
+  calendarDialog: { maxHeight: 560 },
   calendar: {
-    width: '100%',
-    maxWidth: 360,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: 14,
+    paddingHorizontal: 4,
+    paddingVertical: 14,
   },
 });

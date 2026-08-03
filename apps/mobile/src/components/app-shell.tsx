@@ -4,6 +4,7 @@ import {
   BellRing,
   BookOpenText,
   CalendarDays,
+  ChevronDown,
   CookingPot,
   DatabaseBackup,
   Film,
@@ -68,7 +69,10 @@ export function PageContainer({
   );
 }
 
+type NavGroupId = 'daily' | 'household' | 'schedule' | 'system';
+
 interface NavItem {
+  group: NavGroupId;
   label: string;
   href: Href;
   icon: LucideIcon;
@@ -77,14 +81,23 @@ interface NavItem {
   requiresMemberManagement?: boolean;
 }
 
+const NAV_GROUPS: { id: NavGroupId; label: string }[] = [
+  { id: 'daily', label: '日常' },
+  { id: 'household', label: '家庭管理' },
+  { id: 'schedule', label: '日程与消息' },
+  { id: 'system', label: '系统与账户' },
+];
+
 const NAV_ITEMS: NavItem[] = [
   {
+    group: 'daily',
     label: '家庭首页',
     href: '/',
     icon: LayoutDashboard,
     matches: (pathname) => pathname === '/',
   },
   {
+    group: 'daily',
     label: '家庭食堂',
     href: '/canteen',
     icon: CookingPot,
@@ -101,6 +114,7 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    group: 'daily',
     label: '家庭观影',
     href: '/media',
     icon: Film,
@@ -129,18 +143,19 @@ const NAV_ITEMS: NavItem[] = [
       },
     ],
   },
-  { label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },
-  { label: '采购与库存', href: '/shopping', icon: ShoppingCart, matches: (pathname) => pathname === '/shopping' },
-  { label: '家庭资产', href: '/home-assets', icon: Wrench, matches: (pathname) => pathname === '/home-assets' },
-  { label: '积分奖励', href: '/points', icon: Gift, matches: (pathname) => pathname === '/points' },
-  { label: '家庭知识库', href: '/knowledge', icon: BookOpenText, matches: (pathname) => pathname === '/knowledge' },
-  { label: '家庭出行', href: '/travel', icon: Plane, matches: (pathname) => pathname === '/travel' },
-  { label: '家庭任务', href: '/tasks', icon: ListTodo, matches: (pathname) => pathname === '/tasks' },
-  { label: '访客来访', href: '/guests', icon: UsersRound, matches: (pathname) => pathname === '/guests' },
-  { label: '家庭日历', href: '/calendar', icon: CalendarDays, matches: (pathname) => pathname === '/calendar' },
-  { label: '提醒中心', href: '/reminders', icon: BellRing, matches: (pathname) => pathname === '/reminders' },
-  { label: '家庭活动', href: '/activity', icon: History, matches: (pathname) => pathname === '/activity' },
+  { group: 'daily', label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },
+  { group: 'daily', label: '采购与库存', href: '/shopping', icon: ShoppingCart, matches: (pathname) => pathname === '/shopping' },
+  { group: 'household', label: '家庭资产', href: '/home-assets', icon: Wrench, matches: (pathname) => pathname === '/home-assets' },
+  { group: 'household', label: '积分奖励', href: '/points', icon: Gift, matches: (pathname) => pathname === '/points' },
+  { group: 'household', label: '家庭知识库', href: '/knowledge', icon: BookOpenText, matches: (pathname) => pathname === '/knowledge' },
+  { group: 'household', label: '家庭出行', href: '/travel', icon: Plane, matches: (pathname) => pathname === '/travel' },
+  { group: 'household', label: '家庭任务', href: '/tasks', icon: ListTodo, matches: (pathname) => pathname === '/tasks' },
+  { group: 'household', label: '访客来访', href: '/guests', icon: UsersRound, matches: (pathname) => pathname === '/guests' },
+  { group: 'schedule', label: '家庭日历', href: '/calendar', icon: CalendarDays, matches: (pathname) => pathname === '/calendar' },
+  { group: 'schedule', label: '提醒中心', href: '/reminders', icon: BellRing, matches: (pathname) => pathname === '/reminders' },
+  { group: 'schedule', label: '家庭活动', href: '/activity', icon: History, matches: (pathname) => pathname === '/activity' },
   {
+    group: 'system',
     label: '系统备份',
     href: '/system-backups',
     icon: DatabaseBackup,
@@ -148,13 +163,14 @@ const NAV_ITEMS: NavItem[] = [
     requiresMemberManagement: true,
   },
   {
+    group: 'system',
     label: '成员管理',
     href: '/members',
     icon: UsersRound,
     matches: (pathname) => pathname === '/members',
     requiresMemberManagement: true,
   },
-  { label: '我的', href: '/profile', icon: UserRound, matches: (pathname) => pathname === '/profile' },
+  { group: 'system', label: '我的', href: '/profile', icon: UserRound, matches: (pathname) => pathname === '/profile' },
 ];
 
 function formatToday() {
@@ -173,6 +189,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { member } = useSession();
   const { data: notifications } = useNotifications(false, desktop);
   const activeModule = NAV_ITEMS.find((item) => item.matches(pathname));
+  const activeGroupId = activeModule?.group;
+  const [expandedGroups, setExpandedGroups] = React.useState<Record<NavGroupId, boolean>>(
+    () => ({
+      daily: !activeGroupId || activeGroupId === 'daily',
+      household: activeGroupId === 'household',
+      schedule: activeGroupId === 'schedule',
+      system: activeGroupId === 'system',
+    }),
+  );
+  React.useEffect(() => {
+    if (!activeGroupId) return;
+    setExpandedGroups((current) =>
+      current[activeGroupId] ? current : { ...current, [activeGroupId]: true },
+    );
+  }, [activeGroupId]);
   const activeChild = activeModule?.children?.find((item) => item.matches(pathname));
   const activeItem = pathname === '/notifications'
     ? { label: '通知中心', icon: Bell }
@@ -211,65 +242,123 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           showsVerticalScrollIndicator={false}
           style={styles.nav}
         >
-          {NAV_ITEMS.filter(
-            (item) =>
-              !item.requiresMemberManagement ||
-              member?.role === 'owner' ||
-              member?.role === 'admin',
-          ).map((item) => {
-            const active = activeModule === item;
-            const Icon = item.icon;
+          {NAV_GROUPS.map((group) => {
+            const groupItems = NAV_ITEMS.filter(
+              (item) =>
+                item.group === group.id &&
+                (!item.requiresMemberManagement ||
+                  member?.role === 'owner' ||
+                  member?.role === 'admin'),
+            );
+            if (!groupItems.length) return null;
+            const activeGroup = activeGroupId === group.id;
+            const expanded = activeGroup || expandedGroups[group.id];
             return (
-              <View key={item.label}>
+              <View key={group.id} style={styles.navGroup}>
                 <PressSurface
-                  accessibilityRole="link"
-                  onPress={() => router.replace(item.href)}
+                  ariaExpanded={expanded}
+                  accessibilityLabel={`${expanded ? '收起' : '展开'}${group.label}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: activeGroup, expanded }}
+                  disabled={activeGroup}
+                  onPress={() =>
+                    setExpandedGroups((current) => ({
+                      ...current,
+                      [group.id]: !current[group.id],
+                    }))
+                  }
                   pressedColor={c.fill}
                   style={[
-                    styles.navItem,
-                    { backgroundColor: active ? c.tintSoft : 'transparent' },
+                    styles.navGroupHeader,
+                    activeGroup && { backgroundColor: c.fill },
                   ]}
+                  testID={`desktop-nav-group-${group.id}`}
                 >
-                  <Icon color={active ? c.tint : c.secondaryLabel} size={20} />
                   <Text
                     style={[
-                      t.subhead,
-                      { color: active ? c.tint : c.label, fontWeight: active ? '700' : '500' },
+                      t.caption,
+                      {
+                        color: activeGroup ? c.label : c.secondaryLabel,
+                        fontWeight: '700',
+                      },
                     ]}
                   >
-                    {item.label}
+                    {group.label}
                   </Text>
+                  <ChevronDown
+                    color={activeGroup ? c.label : c.tertiaryLabel}
+                    size={16}
+                    style={{ transform: [{ rotate: expanded ? '0deg' : '-90deg' }] }}
+                  />
                 </PressSurface>
-                {active && item.children ? (
-                  <View style={styles.subnav}>
-                    {item.children.map((child) => {
-                      const childActive = child.matches(pathname);
+                {expanded ? (
+                  <View style={styles.navGroupItems}>
+                    {groupItems.map((item) => {
+                      const active = activeModule === item;
+                      const Icon = item.icon;
                       return (
-                        <PressSurface
-                          accessibilityRole="link"
-                          key={child.label}
-                          onPress={() => router.replace(child.href)}
-                          pressedColor={c.fill}
-                          style={styles.subnavItem}
-                        >
-                          <View
+                        <View key={item.label}>
+                          <PressSurface
+                            accessibilityRole="link"
+                            onPress={() => router.replace(item.href)}
+                            pressedColor={c.fill}
                             style={[
-                              styles.subnavMarker,
-                              { backgroundColor: childActive ? c.tint : c.separator },
-                            ]}
-                          />
-                          <Text
-                            style={[
-                              t.footnote,
-                              {
-                                color: childActive ? c.tint : c.secondaryLabel,
-                                fontWeight: childActive ? '700' : '500',
-                              },
+                              styles.navItem,
+                              { backgroundColor: active ? c.tintSoft : 'transparent' },
                             ]}
                           >
-                            {child.label}
-                          </Text>
-                        </PressSurface>
+                            <Icon color={active ? c.tint : c.secondaryLabel} size={20} />
+                            <Text
+                              style={[
+                                t.subhead,
+                                {
+                                  color: active ? c.tint : c.label,
+                                  fontWeight: active ? '700' : '500',
+                                },
+                              ]}
+                            >
+                              {item.label}
+                            </Text>
+                          </PressSurface>
+                          {active && item.children ? (
+                            <View style={styles.subnav}>
+                              {item.children.map((child) => {
+                                const childActive = child.matches(pathname);
+                                return (
+                                  <PressSurface
+                                    accessibilityRole="link"
+                                    key={child.label}
+                                    onPress={() => router.replace(child.href)}
+                                    pressedColor={c.fill}
+                                    style={styles.subnavItem}
+                                  >
+                                    <View
+                                      style={[
+                                        styles.subnavMarker,
+                                        {
+                                          backgroundColor: childActive
+                                            ? c.tint
+                                            : c.separator,
+                                        },
+                                      ]}
+                                    />
+                                    <Text
+                                      style={[
+                                        t.footnote,
+                                        {
+                                          color: childActive ? c.tint : c.secondaryLabel,
+                                          fontWeight: childActive ? '700' : '500',
+                                        },
+                                      ]}
+                                    >
+                                      {child.label}
+                                    </Text>
+                                  </PressSurface>
+                                );
+                              })}
+                            </View>
+                          ) : null}
+                        </View>
                       );
                     })}
                   </View>
@@ -399,8 +488,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nav: { flex: 1, marginTop: 22 },
-  navContent: { gap: 6, paddingBottom: 18 },
+  nav: { flex: 1, marginTop: 14 },
+  navContent: { gap: 2, paddingBottom: 18 },
+  navGroup: { gap: 1 },
+  navGroupHeader: {
+    height: 44,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  navGroupItems: { gap: 2, paddingBottom: 4 },
   navItem: {
     height: 44,
     borderRadius: radius.md,

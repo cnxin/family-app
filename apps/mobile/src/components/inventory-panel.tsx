@@ -14,7 +14,6 @@ import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -42,9 +41,11 @@ import type {
 } from '../lib/types';
 import { radius, type as t, useTheme } from '../lib/theme';
 import {
+  AdaptiveDialog,
   Card,
   ConfirmDialog,
   EmptyState,
+  IconButton,
   PressableScale,
   PrimaryButton,
   SectionHeader,
@@ -160,43 +161,38 @@ function InventoryEditor({
   };
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible>
+    <AdaptiveDialog
+      accessibilityLabel={item ? '编辑库存' : '新增库存'}
+      maxWidth={520}
+      onClose={onClose}
+      visible
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.editorOverlay}
+        style={styles.editorKeyboard}
       >
-        <Pressable
-          accessibilityLabel="关闭库存编辑"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          accessibilityViewIsModal
-          style={[styles.editor, { backgroundColor: c.card, borderColor: c.separator }]}
-        >
-          <View style={styles.editorHeader}>
-            <View>
-              <Text style={[t.title2, { color: c.label }]}>
-                {item ? '编辑库存' : '新增库存'}
-              </Text>
-              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>设置余量与补货提醒</Text>
-            </View>
-            <PressableScale
-              accessibilityLabel="关闭"
-              haptic={false}
-              onPress={onClose}
-              style={styles.closeButton}
-            >
-              <X color={c.secondaryLabel} size={20} />
-            </PressableScale>
+        <View style={styles.editorHeader}>
+          <View>
+            <Text style={[t.title2, { color: c.label }]}>
+              {item ? '编辑库存' : '新增库存'}
+            </Text>
+            <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>设置余量与补货提醒</Text>
           </View>
+          <IconButton
+            accessibilityLabel="关闭"
+            backgroundColor="transparent"
+            color={c.secondaryLabel}
+            icon={X}
+            onPress={onClose}
+          />
+        </View>
 
-          <ScrollView
-            contentContainerStyle={styles.editorContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+        <ScrollView
+          contentContainerStyle={styles.editorContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.editorScroll}
+        >
             <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>关联食材</Text>
             {selectedIngredient ? (
               <View
@@ -382,10 +378,9 @@ function InventoryEditor({
                 title="保存库存"
               />
             </View>
-          </ScrollView>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
-    </Modal>
+    </AdaptiveDialog>
   );
 }
 
@@ -817,7 +812,7 @@ const styles = StyleSheet.create({
   },
   panelActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
   newButton: {
-    height: 42,
+    height: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 15,
     flexDirection: 'row',
@@ -826,7 +821,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   restockAllButton: {
-    height: 42,
+    height: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 15,
     flexDirection: 'row',
@@ -837,7 +832,7 @@ const styles = StyleSheet.create({
   message: { marginTop: 12, borderRadius: radius.sm, padding: 11 },
   filters: { gap: 8, paddingRight: 8, marginTop: 16 },
   filterButton: {
-    height: 34,
+    height: 44,
     minWidth: 58,
     paddingHorizontal: 13,
     borderRadius: radius.full,
@@ -867,8 +862,8 @@ const styles = StyleSheet.create({
   lowBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
   inventoryControls: { flexDirection: 'row', gap: 6, marginLeft: 6 },
   iconAction: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -890,28 +885,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reverseButton: {
-    minHeight: 34,
+    minHeight: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 9,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
   },
-  editorOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.38)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  editor: {
-    width: '100%',
-    maxWidth: 520,
-    maxHeight: '92%',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
+  editorKeyboard: { width: '100%', maxHeight: '100%' },
+  editorScroll: { flexShrink: 1 },
   editorHeader: {
     minHeight: 70,
     paddingHorizontal: 18,
@@ -919,11 +901,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  closeButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   editorContent: { paddingHorizontal: 18, paddingBottom: 18 },
   fieldLabel: { marginTop: 12, marginBottom: 6, fontWeight: '700' },
   input: {
-    height: 42,
+    height: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 11,
     paddingVertical: 0,
@@ -959,7 +940,13 @@ const styles = StyleSheet.create({
   },
   noIngredientResult: { paddingHorizontal: 12, paddingVertical: 14 },
   categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  categoryChip: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 7 },
+  categoryChip: {
+    minHeight: 44,
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   formField: { width: '48%', flexGrow: 1, minWidth: 140 },
   editorActions: { flexDirection: 'row', gap: 10, marginTop: 20 },

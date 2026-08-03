@@ -3,12 +3,12 @@ import { expect, test, type Page } from '@playwright/test';
 const API_URL = process.env.FAMILY_API_URL ?? 'http://127.0.0.1:3100';
 
 const NAVIGATION = {
-  home: { mobile: '首页', desktop: '家庭首页', path: '/' },
-  order: { mobile: '点菜', desktop: '点菜', path: '/order', module: '家庭食堂' },
-  kitchen: { mobile: '菜单安排', desktop: '菜单安排', path: '/kitchen', module: '家庭食堂' },
-  calendar: { mobile: '日历', desktop: '家庭日历', path: '/calendar' },
-  shopping: { mobile: '采购与库存', desktop: '采购与库存', path: '/shopping', module: '采购与库存' },
-  profile: { mobile: '我的', desktop: '我的', path: '/profile' },
+  home: { mobile: '首页', desktop: '家庭首页', path: '/', group: 'daily' },
+  order: { mobile: '点菜', desktop: '点菜', path: '/order', module: '家庭食堂', group: 'daily' },
+  kitchen: { mobile: '菜单安排', desktop: '菜单安排', path: '/kitchen', module: '家庭食堂', group: 'daily' },
+  calendar: { mobile: '日历', desktop: '家庭日历', path: '/calendar', group: 'schedule' },
+  shopping: { mobile: '采购与库存', desktop: '采购与库存', path: '/shopping', module: '采购与库存', group: 'daily' },
+  profile: { mobile: '我的', desktop: '我的', path: '/profile', group: 'system' },
 } as const;
 
 type NavigationKey = keyof typeof NAVIGATION;
@@ -34,6 +34,14 @@ async function openSection(
       const moduleLink = page.getByRole('link', { name: module, exact: true });
       await expect(moduleLink).toBeVisible();
       await moduleLink.click();
+    }
+  }
+
+  if (projectName === 'desktop-chrome') {
+    const targetLink = page.getByRole('link', { name: target.desktop, exact: true }).first();
+    if (!(await targetLink.isVisible())) {
+      const group = page.getByTestId(`desktop-nav-group-${target.group}`);
+      if (!(await group.isDisabled())) await group.click();
     }
   }
 
@@ -1229,6 +1237,9 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     testInfo.project.name === 'mobile-chrome'
       ? page.getByRole('link').filter({ hasText: '家庭任务' }).first()
       : page.getByRole('link', { name: '家庭任务', exact: true });
+  if (testInfo.project.name === 'desktop-chrome' && !(await tasksLink.isVisible())) {
+    await page.getByTestId('desktop-nav-group-household').click();
+  }
   await expect(tasksLink).toBeVisible();
   await tasksLink.click();
   await expect(page).toHaveURL(/\/tasks$/);

@@ -86,6 +86,7 @@ export function PressableScale({
 }
 
 export function PressSurface({
+  ariaExpanded,
   accessibilityLabel,
   accessibilityRole = 'button',
   accessibilityState,
@@ -96,6 +97,7 @@ export function PressSurface({
   style,
   testID,
 }: {
+  ariaExpanded?: boolean;
   accessibilityLabel?: string;
   accessibilityRole?: AccessibilityRole;
   accessibilityState?: AccessibilityState;
@@ -109,6 +111,7 @@ export function PressSurface({
   const c = useTheme();
   return (
     <Pressable
+      aria-expanded={ariaExpanded}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
       accessibilityState={accessibilityState}
