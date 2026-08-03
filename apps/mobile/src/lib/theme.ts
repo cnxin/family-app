@@ -1,27 +1,30 @@
 import { useColorScheme } from 'react-native';
 
 const light = {
-  bg: '#F4F6F3',
+  bg: '#F5F7F5',
   card: '#FFFFFF',
   cardPressed: '#EDF1ED',
   label: '#19211C',
-  secondaryLabel: '#627068',
-  tertiaryLabel: '#96A098',
-  separator: '#DDE4DE',
-  tint: '#197A55',
+  secondaryLabel: '#4F5D54',
+  tertiaryLabel: '#69766E',
+  separator: '#D5DDD7',
+  tint: '#176B4C',
   tintSoft: '#E2F1E9',
-  green: '#2E8B57',
+  green: '#1F754A',
   greenSoft: '#E5F4EA',
-  orange: '#C56A12',
+  orange: '#9B560F',
   orangeSoft: '#FFF0D8',
-  red: '#C8463D',
+  red: '#B83A33',
   redSoft: '#FCE8E6',
-  blue: '#386FA4',
+  blue: '#2E6396',
   blueSoft: '#E7F0F8',
-  accent: '#D66A52',
+  accent: '#B84F3B',
   accentSoft: '#FBEAE5',
   fill: '#EDF1ED',
   fillStrong: '#D5DDD7',
+  chrome: 'rgba(255, 255, 255, 0.82)',
+  chromeStrong: 'rgba(255, 255, 255, 0.94)',
+  scrim: 'rgba(17, 25, 20, 0.42)',
 };
 
 const dark: typeof light = {
@@ -46,6 +49,9 @@ const dark: typeof light = {
   accentSoft: '#442821',
   fill: '#242C27',
   fillStrong: '#3A463E',
+  chrome: 'rgba(25, 31, 27, 0.82)',
+  chromeStrong: 'rgba(25, 31, 27, 0.95)',
+  scrim: 'rgba(0, 0, 0, 0.58)',
 };
 
 export type Palette = typeof light;

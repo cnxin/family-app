@@ -18,7 +18,6 @@ import {
 import { useRouter, type Href } from 'expo-router';
 import React from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,7 +26,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageContainer, useDesktopLayout } from '../../components/app-shell';
-import { Card } from '../../components/ui';
+import {
+  Card,
+  IconButton,
+  PressableScale,
+  PressSurface,
+  SkeletonRows,
+} from '../../components/ui';
 import { todayStr } from '../../lib/date';
 import {
   useAssets,
@@ -79,7 +84,6 @@ function ModuleCard({
   icon: Icon,
   label,
   status,
-  desktop,
 }: {
   background: string;
   color: string;
@@ -87,19 +91,14 @@ function ModuleCard({
   icon: LucideIcon;
   label: string;
   status: string;
-  desktop: boolean;
 }) {
   const c = useTheme();
   const router = useRouter();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="link"
       onPress={() => router.push(href)}
-      style={({ pressed }) => [
-        styles.moduleCell,
-        desktop && styles.moduleCellDesktop,
-        { opacity: pressed ? 0.72 : 1 },
-      ]}
+      style={styles.moduleCell}
     >
       <Card style={styles.moduleCard}>
         <View style={[styles.moduleIcon, { backgroundColor: background }]}>
@@ -115,7 +114,7 @@ function ModuleCard({
         </View>
         <ArrowRight color={c.tertiaryLabel} size={17} />
       </Card>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -137,13 +136,11 @@ function TodayRow({
   const c = useTheme();
   const router = useRouter();
   return (
-    <Pressable
+    <PressSurface
       accessibilityRole="link"
       onPress={() => router.push(href)}
-      style={({ pressed }) => [
-        styles.todayRow,
-        { borderBottomColor: c.separator, backgroundColor: pressed ? c.fill : 'transparent' },
-      ]}
+      pressedColor={c.fill}
+      style={[styles.todayRow, { borderBottomColor: c.separator }]}
     >
       <View style={[styles.todayIcon, { backgroundColor: background }]}>
         <Icon color={color} size={18} />
@@ -155,7 +152,7 @@ function TodayRow({
         </Text>
       </View>
       <ArrowRight color={c.tertiaryLabel} size={16} />
-    </Pressable>
+    </PressSurface>
   );
 }
 
@@ -201,6 +198,97 @@ export default function HomeScreen() {
       0,
     ) ?? 0;
   const ownPoints = pointsAccounts?.find((account) => account.memberId === member?.id)?.balance ?? 0;
+  const moduleEntries: {
+    background: string;
+    color: string;
+    href: Href;
+    icon: LucideIcon;
+    label: string;
+    status: string;
+  }[] = [
+    {
+      background: c.orangeSoft,
+      color: c.orange,
+      href: '/canteen',
+      icon: CookingPot,
+      label: '家庭食堂',
+      status: `今日 ${menuItems} 道菜`,
+    },
+    {
+      background: c.accentSoft,
+      color: c.accent,
+      href: '/media',
+      icon: Film,
+      label: '家庭观影',
+      status: `${activeMedia} 部待看`,
+    },
+    {
+      background: c.blueSoft,
+      color: c.blue,
+      href: '/polls',
+      icon: Vote,
+      label: '家庭投票',
+      status: `${openPolls.length} 个进行中`,
+    },
+    {
+      background: c.greenSoft,
+      color: c.green,
+      href: '/shopping',
+      icon: ShoppingCart,
+      label: '采购与库存',
+      status: `${shoppingPending} 项待购买`,
+    },
+    {
+      background: c.tintSoft,
+      color: c.tint,
+      href: '/tasks',
+      icon: ListTodo,
+      label: '家庭任务',
+      status: `${pendingTasks.length} 项待办`,
+    },
+    {
+      background: c.blueSoft,
+      color: c.blue,
+      href: '/guests',
+      icon: UsersRound,
+      label: '访客来访',
+      status: `${upcomingVisits} 次待安排`,
+    },
+    {
+      background: c.orangeSoft,
+      color: c.orange,
+      href: '/home-assets',
+      icon: Wrench,
+      label: '家庭资产',
+      status: dueMaintenance
+        ? `${dueMaintenance} 项维护将到期`
+        : `${assets?.length ?? 0} 件在用`,
+    },
+    {
+      background: c.accentSoft,
+      color: c.accent,
+      href: '/points',
+      icon: Gift,
+      label: '积分奖励',
+      status: `我的积分 ${ownPoints}`,
+    },
+    {
+      background: c.tintSoft,
+      color: c.tint,
+      href: '/knowledge',
+      icon: BookOpenText,
+      label: '家庭知识库',
+      status: `${knowledgeArticles?.length ?? 0} 篇文章`,
+    },
+    {
+      background: c.blueSoft,
+      color: c.blue,
+      href: '/travel',
+      icon: Plane,
+      label: '家庭出行',
+      status: `${travelPlans?.length ?? 0} 个计划中行程`,
+    },
+  ];
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -214,130 +302,40 @@ export default function HomeScreen() {
               </Text>
               <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 6 }]}>{fullDate()}</Text>
             </View>
+            {!desktop ? (
+              <View>
+                <IconButton
+                  accessibilityLabel={`打开通知中心${unreadCount ? `，${unreadCount}条未读` : ''}`}
+                  backgroundColor={c.card}
+                  color={unreadCount ? c.tint : c.secondaryLabel}
+                  icon={Bell}
+                  onPress={() => router.push('/notifications')}
+                  style={[styles.bellButton, { borderColor: c.separator }]}
+                  testID="home-notification-button"
+                />
+                {unreadCount ? (
+                  <View style={[styles.bellBadge, { backgroundColor: c.red }]}>
+                    <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.sectionTitle}>
+            <Text style={[t.title2, { color: c.label }]}>今天需要关注</Text>
             <Pressable
-              accessibilityLabel={`打开通知中心${unreadCount ? `，${unreadCount}条未读` : ''}`}
-              accessibilityRole="button"
-              onPress={() => router.push('/notifications')}
-              style={({ pressed }) => [
-                styles.bellButton,
-                { backgroundColor: pressed ? c.fillStrong : c.card, borderColor: c.separator },
-              ]}
+              accessibilityRole="link"
+              onPress={() => router.push('/calendar')}
+              style={styles.textLink}
             >
-              <Bell color={unreadCount ? c.tint : c.secondaryLabel} size={20} />
-              {unreadCount ? (
-                <View style={[styles.bellBadge, { backgroundColor: c.red }]}>
-                  <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-          </View>
-
-          <View style={styles.sectionTitle}>
-            <Text style={[t.title2, { color: c.label }]}>功能模块</Text>
-          </View>
-          <View style={styles.moduleGrid}>
-            <ModuleCard
-              background={c.orangeSoft}
-              color={c.orange}
-              desktop={desktop}
-              href="/canteen"
-              icon={CookingPot}
-              label="家庭食堂"
-              status={`今日 ${menuItems} 道菜`}
-            />
-            <ModuleCard
-              background={c.accentSoft}
-              color={c.accent}
-              desktop={desktop}
-              href="/media"
-              icon={Film}
-              label="家庭观影"
-              status={`${activeMedia} 部待看`}
-            />
-            <ModuleCard
-              background={c.blueSoft}
-              color={c.blue}
-              desktop={desktop}
-              href="/polls"
-              icon={Vote}
-              label="家庭投票"
-              status={`${openPolls.length} 个进行中`}
-            />
-            <ModuleCard
-              background={c.greenSoft}
-              color={c.green}
-              desktop={desktop}
-              href="/shopping"
-              icon={ShoppingCart}
-              label="采购与库存"
-              status={`${shoppingPending} 项待购买`}
-            />
-            <ModuleCard
-              background={c.tintSoft}
-              color={c.tint}
-              desktop={desktop}
-              href="/tasks"
-              icon={ListTodo}
-              label="家庭任务"
-              status={`${pendingTasks.length} 项待办`}
-            />
-            <ModuleCard
-              background={c.blueSoft}
-              color={c.blue}
-              desktop={desktop}
-              href="/guests"
-              icon={UsersRound}
-              label="访客来访"
-              status={`${upcomingVisits} 次待安排`}
-            />
-            <ModuleCard
-              background={c.orangeSoft}
-              color={c.orange}
-              desktop={desktop}
-              href="/home-assets"
-              icon={Wrench}
-              label="家庭资产"
-              status={dueMaintenance ? `${dueMaintenance} 项维护将到期` : `${assets?.length ?? 0} 件在用`}
-            />
-            <ModuleCard
-              background={c.accentSoft}
-              color={c.accent}
-              desktop={desktop}
-              href="/points"
-              icon={Gift}
-              label="积分奖励"
-              status={`我的积分 ${ownPoints}`}
-            />
-            <ModuleCard
-              background={c.tintSoft}
-              color={c.tint}
-              desktop={desktop}
-              href="/knowledge"
-              icon={BookOpenText}
-              label="家庭知识库"
-              status={`${knowledgeArticles?.length ?? 0} 篇文章`}
-            />
-            <ModuleCard
-              background={c.blueSoft}
-              color={c.blue}
-              desktop={desktop}
-              href="/travel"
-              icon={Plane}
-              label="家庭出行"
-              status={`${travelPlans?.length ?? 0} 个计划中行程`}
-            />
-          </View>
-
-          <View style={styles.sectionTitle}>
-            <Text style={[t.title2, { color: c.label }]}>今天</Text>
-            <Pressable accessibilityRole="link" onPress={() => router.push('/calendar')} style={styles.textLink}>
               <CalendarDays color={c.tint} size={16} />
               <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>家庭日历</Text>
             </Pressable>
           </View>
-          <Card style={styles.todayCard}>
+          <Card style={[styles.todayCard, desktop && styles.todayCardDesktop]}>
             {menusLoading || tasksLoading || remindersLoading ? (
-              <ActivityIndicator color={c.tint} style={styles.loader} />
+              <SkeletonRows />
             ) : (
               <>
                 <TodayRow
@@ -371,6 +369,19 @@ export default function HomeScreen() {
               </>
             )}
           </Card>
+
+          {!desktop ? (
+            <>
+              <View style={styles.sectionTitle}>
+                <Text style={[t.title2, { color: c.label }]}>功能模块</Text>
+              </View>
+              <View style={styles.moduleGrid}>
+                {moduleEntries.map((entry) => (
+                  <ModuleCard key={entry.label} {...entry} />
+                ))}
+              </View>
+            </>
+          ) : null}
         </PageContainer>
       </ScrollView>
     </SafeAreaView>
@@ -384,12 +395,7 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
   heroDesktop: { alignItems: 'center' },
   bellButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   bellBadge: {
     position: 'absolute',
@@ -414,12 +420,12 @@ const styles = StyleSheet.create({
   },
   moduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   moduleCell: { width: '47%', minWidth: 0, flexGrow: 1 },
-  moduleCellDesktop: { width: '18%' },
   moduleCard: {
-    minHeight: 132,
-    padding: 14,
-    alignItems: 'flex-start',
-    gap: 10,
+    minHeight: 82,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
   },
   moduleIcon: {
     width: 42,
@@ -428,8 +434,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  textLink: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  textLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 5 },
   todayCard: { overflow: 'hidden' },
+  todayCardDesktop: { maxWidth: 760 },
   todayRow: {
     minHeight: 70,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -445,5 +452,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loader: { marginVertical: 36 },
 });

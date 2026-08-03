@@ -167,7 +167,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   } else {
     await page.getByRole('link', { name: '家庭首页', exact: true }).click();
   }
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/(?:\?.*)?$/);
 
   const mediaRoute = /\/media(\?|$)/;
   const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;

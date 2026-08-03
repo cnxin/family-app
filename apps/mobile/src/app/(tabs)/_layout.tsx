@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import React from 'react';
-import { ColorValue } from 'react-native';
+import { ColorValue, Platform, type ViewStyle } from 'react-native';
 import { AppShell, useDesktopLayout } from '../../components/app-shell';
 import { useNotifications } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -28,6 +28,9 @@ export default function TabLayout() {
   const desktop = useDesktopLayout();
   const { member, ready } = useSession();
   const { data: notifications } = useNotifications(false, ready && Boolean(member) && !desktop);
+  const tabBarMaterial = Platform.OS === 'web'
+    ? ({ backdropFilter: 'blur(22px) saturate(155%)' } as ViewStyle)
+    : undefined;
 
   if (!ready) return null;
   if (!member) return <Redirect href="/login" />;
@@ -41,11 +44,12 @@ export default function TabLayout() {
         tabBarStyle: desktop
           ? { display: 'none' }
           : {
-              backgroundColor: c.card,
+              backgroundColor: c.chrome,
               borderTopColor: c.separator,
               height: 68,
               paddingTop: 7,
               paddingBottom: 8,
+              ...tabBarMaterial,
             },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}

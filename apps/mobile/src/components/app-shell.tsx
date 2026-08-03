@@ -24,7 +24,6 @@ import { usePathname, useRouter, type Href } from 'expo-router';
 import React from 'react';
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -37,6 +36,7 @@ import { useSession } from '../lib/session';
 import { memberSubtitle } from '../lib/member';
 import { useNotifications } from '../lib/queries';
 import { radius, type as t, useTheme } from '../lib/theme';
+import { IconButton, PressSurface } from './ui';
 
 export const DESKTOP_BREAKPOINT = 1024;
 
@@ -181,6 +181,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       : { label: activeModule?.label ?? '小管家', icon: activeModule?.icon ?? House };
   const ActiveIcon = activeItem.icon;
   const unreadCount = notifications?.length ?? 0;
+  const materialStyle = Platform.OS === 'web'
+    ? ({ backdropFilter: 'blur(22px) saturate(155%)' } as ViewStyle)
+    : undefined;
 
   if (!desktop) return <>{children}</>;
 
@@ -189,7 +192,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <View
         style={[
           styles.sidebar,
-          { backgroundColor: c.card, borderRightColor: c.separator },
+          { backgroundColor: c.chromeStrong, borderRightColor: c.separator },
+          materialStyle,
         ]}
       >
         <View style={styles.brand}>
@@ -217,18 +221,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const Icon = item.icon;
             return (
               <View key={item.label}>
-                <Pressable
+                <PressSurface
                   accessibilityRole="link"
                   onPress={() => router.replace(item.href)}
-                  style={({ pressed }) => [
+                  pressedColor={c.fill}
+                  style={[
                     styles.navItem,
-                    {
-                      backgroundColor: active
-                        ? c.tintSoft
-                        : pressed
-                          ? c.fill
-                          : 'transparent',
-                    },
+                    { backgroundColor: active ? c.tintSoft : 'transparent' },
                   ]}
                 >
                   <Icon color={active ? c.tint : c.secondaryLabel} size={20} />
@@ -240,20 +239,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   >
                     {item.label}
                   </Text>
-                </Pressable>
+                </PressSurface>
                 {active && item.children ? (
                   <View style={styles.subnav}>
                     {item.children.map((child) => {
                       const childActive = child.matches(pathname);
                       return (
-                        <Pressable
+                        <PressSurface
                           accessibilityRole="link"
                           key={child.label}
                           onPress={() => router.replace(child.href)}
-                          style={({ pressed }) => [
-                            styles.subnavItem,
-                            { backgroundColor: pressed ? c.fill : 'transparent' },
-                          ]}
+                          pressedColor={c.fill}
+                          style={styles.subnavItem}
                         >
                           <View
                             style={[
@@ -272,7 +269,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                           >
                             {child.label}
                           </Text>
-                        </Pressable>
+                        </PressSurface>
                       );
                     })}
                   </View>
@@ -282,16 +279,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </ScrollView>
 
-        <Pressable
+        <PressSurface
           accessibilityRole="button"
           onPress={() => router.replace('/profile')}
-          style={({ pressed }) => [
-            styles.member,
-            {
-              borderTopColor: c.separator,
-              backgroundColor: pressed ? c.fill : 'transparent',
-            },
-          ]}
+          pressedColor={c.fill}
+          style={[styles.member, { borderTopColor: c.separator }]}
         >
           <View style={[styles.avatar, { backgroundColor: c.orangeSoft }]}>
             <Text style={styles.avatarEmoji}>{member?.avatarEmoji ?? '👤'}</Text>
@@ -305,14 +297,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Text>
           </View>
           <UserRound color={c.tertiaryLabel} size={18} />
-        </Pressable>
+        </PressSurface>
       </View>
 
       <View style={{ flex: 1, minWidth: 0 }}>
         <View
           style={[
             styles.topbar,
-            { backgroundColor: c.card, borderBottomColor: c.separator },
+            { backgroundColor: c.chrome, borderBottomColor: c.separator },
+            materialStyle,
           ]}
         >
           <View style={styles.topbarTitle}>
@@ -323,16 +316,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </View>
           <View style={styles.topbarActions}>
             <Text style={[t.footnote, { color: c.secondaryLabel }]}>{formatToday()}</Text>
-            <Pressable
-              accessibilityLabel={`打开通知中心${unreadCount ? `，${unreadCount}条未读` : ''}`}
-              accessibilityRole="button"
-              onPress={() => router.push('/notifications')}
-              style={({ pressed }) => [
-                styles.notificationButton,
-                { backgroundColor: pressed ? c.fill : 'transparent' },
-              ]}
-            >
-              <Bell color={unreadCount ? c.tint : c.secondaryLabel} size={19} />
+            <View>
+              <IconButton
+                accessibilityLabel={`打开通知中心${unreadCount ? `，${unreadCount}条未读` : ''}`}
+                backgroundColor="transparent"
+                color={unreadCount ? c.tint : c.secondaryLabel}
+                icon={Bell}
+                onPress={() => router.push('/notifications')}
+                style={styles.notificationButton}
+                testID="desktop-notification-button"
+              />
               {unreadCount ? (
                 <View style={[styles.notificationBadge, { backgroundColor: c.red }]}>
                   <Text style={styles.notificationBadgeText}>
@@ -340,7 +333,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </Text>
                 </View>
               ) : null}
-            </Pressable>
+            </View>
           </View>
         </View>
         <View style={{ flex: 1, minHeight: 0 }}>{children}</View>
@@ -365,18 +358,22 @@ export function ModuleBackButton({
   if (desktop && !showOnDesktop) return null;
 
   return (
-    <Pressable
+    <PressSurface
       accessibilityLabel={`返回${label}`}
       accessibilityRole="button"
-      onPress={() => router.replace(href)}
-      style={({ pressed }) => [
-        styles.moduleBackButton,
-        { backgroundColor: pressed ? c.fillStrong : c.card, borderColor: c.separator },
-      ]}
+      onPress={() => {
+        if (href === '/' && router.canGoBack()) {
+          router.back();
+          return;
+        }
+        router.replace(href);
+      }}
+      pressedColor={c.fillStrong}
+      style={[styles.moduleBackButton, { backgroundColor: c.card, borderColor: c.separator }]}
     >
       <ArrowLeft color={c.label} size={18} />
       <Text style={[t.footnote, { color: c.label, fontWeight: '700' }]}>{label}</Text>
-    </Pressable>
+    </PressSurface>
   );
 }
 
@@ -414,7 +411,7 @@ const styles = StyleSheet.create({
   },
   subnav: { paddingLeft: 21, paddingTop: 4, paddingBottom: 3, gap: 1 },
   subnavItem: {
-    height: 34,
+    minHeight: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 10,
     flexDirection: 'row',
@@ -446,15 +443,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    zIndex: 10,
   },
   topbarTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topbarActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   notificationButton: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
   },
   notificationBadge: {
     position: 'absolute',
@@ -470,7 +465,7 @@ const styles = StyleSheet.create({
   notificationBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
   pageContainer: { width: '100%', alignSelf: 'center' },
   moduleBackButton: {
-    minHeight: 36,
+    minHeight: 44,
     alignSelf: 'flex-start',
     borderWidth: 1,
     borderRadius: radius.sm,
