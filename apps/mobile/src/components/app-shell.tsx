@@ -16,6 +16,7 @@ import {
   ListTodo,
   Plane,
   ShoppingCart,
+  Sparkles,
   UserRound,
   UsersRound,
   Vote,
@@ -138,6 +139,13 @@ const NAV_GROUPS: { id: NavGroupId; label: string }[] = [
 ];
 
 const NAV_ITEMS: NavItem[] = [
+  {
+    group: 'daily',
+    label: '问问小管家',
+    href: '/assistant',
+    icon: Sparkles,
+    matches: (pathname) => pathname === '/assistant',
+  },
   {
     group: 'daily',
     label: '家庭首页',

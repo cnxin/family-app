@@ -1,0 +1,98 @@
+x-container-logging: &container-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  api:
+    environment:
+      AGENT_DATA_KEY_FILE: /run/secrets/agent_data_key
+      AGENT_MCP_KEY_FILE: /run/secrets/agent_mcp_key
+      AGENT_RUNTIME_KEY_FILE: /run/secrets/agent_runtime_key
+      AGENT_RUNTIME_URL: http://hermes:8642
+    secrets:
+      - agent_data_key
+      - agent_mcp_key
+      - agent_runtime_key
+    networks:
+      - agent_link
+
+  hermes:
+    image: nousresearch/hermes-agent:main@sha256:9fdeb877ec279fee2d431a4458015ea97eb3f7f784bf059f96b81423b1f60b9f
+    restart: unless-stopped
+    init: true
+    read_only: true
+    command:
+      - sh
+      - -ec
+      - >-
+        export API_SERVER_KEY="$$(cat /run/secrets/agent_runtime_key)";
+        export AGENT_MCP_KEY="$$(cat /run/secrets/agent_mcp_key)";
+        exec hermes gateway run
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: 8642
+      HERMES_DASHBOARD: "0"
+      OPENAI_API_KEY: ${HERMES_OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${HERMES_OPENAI_BASE_URL:-}
+      TZ: ${TZ:-Asia/Shanghai}
+    secrets:
+      - agent_runtime_key
+      - agent_mcp_key
+    configs:
+      - source: family_agent_hermes_config
+        target: /opt/data/config.yaml
+        mode: 0444
+    volumes:
+      - family_agent_hermes_data:/opt/data
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid
+      - /run:size=64m,nosuid
+    expose:
+      - "8642"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python3 -c "import urllib.request;
+          r=urllib.request.Request('http://127.0.0.1:8642/v1/capabilities',headers={'Authorization':'Bearer '+open('/run/secrets/agent_runtime_key').read().strip()});
+          raise SystemExit(0 if urllib.request.urlopen(r,timeout=3).status==200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging: *container-logging
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - agent_link
+      - agent_egress
+    pids_limit: 256
+    deploy:
+      resources:
+        limits:
+          cpus: "${HERMES_CPU_LIMIT:-2.00}"
+          memory: ${HERMES_MEMORY_LIMIT:-2G}
+          pids: 256
+
+configs:
+  family_agent_hermes_config:
+    file: ./deploy/hermes/config.yaml
+
+secrets:
+  agent_data_key:
+    file: ${AGENT_DATA_KEY_SECRET_PATH:-./deploy/secrets/agent_data_key.txt}
+  agent_mcp_key:
+    file: ${AGENT_MCP_KEY_SECRET_PATH:-./deploy/secrets/agent_mcp_key.txt}
+  agent_runtime_key:
+    file: ${AGENT_RUNTIME_KEY_SECRET_PATH:-./deploy/secrets/agent_runtime_key.txt}
+
+volumes:
+  family_agent_hermes_data:
+
+networks:
+  agent_link:
+    internal: true
+  agent_egress:

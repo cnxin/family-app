@@ -11,6 +11,7 @@ import {
   ListTodo,
   Plane,
   ShoppingCart,
+  Sparkles,
   UsersRound,
   Vote,
   Wrench,
@@ -38,6 +39,7 @@ import {
 import { todayStr } from '../../lib/date';
 import {
   useAssets,
+  useAgentStatus,
   useKnowledgeArticles,
   useMemories,
   useMedia,
@@ -593,6 +595,7 @@ export default function HomeScreen() {
   const { data: knowledgeArticles } = useKnowledgeArticles('active');
   const { data: travelPlans } = useTravelPlans('active');
   const { data: memories, isLoading: memoriesLoading } = useMemories('active', 'all', '', 3);
+  const { data: agentStatus } = useAgentStatus();
 
   const menuItems =
     menus?.reduce(
@@ -619,6 +622,18 @@ export default function HomeScreen() {
     ) ?? 0;
   const ownPoints = pointsAccounts?.find((account) => account.memberId === member?.id)?.balance ?? 0;
   const moduleEntries: HomeModuleEntry[] = [
+    {
+      background: c.tintSoft,
+      color: c.tint,
+      href: '/assistant',
+      icon: Sparkles,
+      label: '问问小管家',
+      status: agentStatus?.enabled
+        ? agentStatus.selected.available
+          ? '可以问问家里的安排'
+          : '本地摘要可用'
+        : '尚未启用',
+    },
     {
       background: c.orangeSoft,
       color: c.orange,

@@ -255,6 +255,7 @@ try {
   await runScript('scripts/backups.mjs');
   await runScript('scripts/knowledge.mjs');
   await runScript('scripts/memories.mjs');
+  await runScript('scripts/agent.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');

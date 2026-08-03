@@ -1,0 +1,25 @@
+platform_toolsets:
+  api_server:
+    - family_app
+
+mcp_servers:
+  family_app:
+    url: http://api:3100/internal/agent/mcp
+    headers:
+      Authorization: Bearer ${AGENT_MCP_KEY}
+    tools:
+      include:
+        - get_today_summary
+        - get_calendar
+        - get_inventory_alerts
+        - search_knowledge
+        - get_travel_checklist
+        - get_watch_candidates
+        - get_recent_memories
+      prompts: false
+      resources: false
+
+memory:
+  enabled: false
+
+worktree: false

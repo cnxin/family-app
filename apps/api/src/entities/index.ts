@@ -198,6 +198,16 @@ export type BackupRunStatus =
   | 'cancelled';
 export type BackupRunTrigger = 'manual' | 'scheduled';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
+export type AgentRuntimeKind = 'fake' | 'hermes';
+export type AgentConversationStatus = 'active' | 'archived' | 'expired';
+export type AgentMessageRole = 'user' | 'assistant';
+export type AgentRunStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+export type AgentToolEventStatus = 'running' | 'completed' | 'failed';
 
 export interface DishRecipeStep {
   text: string;
@@ -5536,6 +5546,330 @@ export class BackupRun {
   updatedAt: Date;
 }
 
+@Entity('agent_settings')
+@Unique('UQ_agent_settings_household', ['householdId'])
+@Check('CHK_agent_settings_runtime_kind', `"runtimeKind" IN ('fake', 'hermes')`)
+@Check('CHK_agent_settings_retention_days', `"retentionDays" BETWEEN 1 AND 30`)
+export class AgentSetting {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_settings_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ default: true })
+  enabled: boolean;
+
+  @Column({ type: 'varchar', length: 16, default: 'fake' })
+  runtimeKind: AgentRuntimeKind;
+
+  @Column({ type: 'varchar', length: 64, default: 'default' })
+  runtimeProfile: string;
+
+  @Column({ type: 'varchar', length: 120, default: 'hermes-agent' })
+  modelAlias: string;
+
+  @Column({ type: 'int', default: 7 })
+  retentionDays: number;
+
+  @Column({ type: 'jsonb', default: [] })
+  readToolsEnabled: string[];
+
+  @Column({ type: 'jsonb', default: [] })
+  proposalToolsEnabled: string[];
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_settings_updated_by',
+  })
+  updatedByMember: Member;
+
+  @Column('uuid')
+  updatedByMemberId: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_conversations')
+@Check(
+  'CHK_agent_conversations_status',
+  `"status" IN ('active', 'archived', 'expired')`,
+)
+@Check('CHK_agent_conversations_source', `"source" IN ('app')`)
+@Index('IDX_agent_conversations_household_member', [
+  'householdId',
+  'createdByMemberId',
+  'updatedAt',
+])
+export class AgentConversation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_conversations_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdByMemberId',
+    foreignKeyConstraintName: 'FK_agent_conversations_created_by',
+  })
+  createdByMember: Member;
+
+  @Column('uuid')
+  createdByMemberId: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'app' })
+  source: 'app';
+
+  @Column({ type: 'varchar', length: 120, default: '新对话' })
+  title: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'active' })
+  status: AgentConversationStatus;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_messages')
+@Check('CHK_agent_messages_role', `"role" IN ('user', 'assistant')`)
+@Check('CHK_agent_messages_content_version', `"contentVersion" >= 1`)
+@Index('IDX_agent_messages_conversation_created', ['conversationId', 'createdAt'])
+export class AgentMessage {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_messages_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentConversation, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'conversationId',
+    foreignKeyConstraintName: 'FK_agent_messages_conversation',
+  })
+  conversation: AgentConversation;
+
+  @Column('uuid')
+  conversationId: string;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_agent_messages_member',
+  })
+  member: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  memberId: string | null;
+
+  @Column({ type: 'varchar', length: 16 })
+  role: AgentMessageRole;
+
+  @Column({ type: 'text' })
+  contentCiphertext: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  contentNonce: string;
+
+  @Column({ type: 'int', default: 1 })
+  contentVersion: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('agent_runs')
+@Unique('UQ_agent_runs_household_idempotency', [
+  'householdId',
+  'clientRequestId',
+])
+@Check(
+  'CHK_agent_runs_status',
+  `"status" IN ('queued', 'running', 'completed', 'failed', 'cancelled')`,
+)
+@Check('CHK_agent_runs_runtime_kind', `"runtimeKind" IN ('fake', 'hermes')`)
+@Check(
+  'CHK_agent_runs_tokens',
+  `("inputTokens" IS NULL OR "inputTokens" >= 0) AND ("outputTokens" IS NULL OR "outputTokens" >= 0)`,
+)
+@Index('IDX_agent_runs_conversation_created', ['conversationId', 'createdAt'])
+@Index('IDX_agent_runs_authorization_expiry', ['authorizationExpiresAt'])
+export class AgentRun {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_runs_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentConversation, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'conversationId',
+    foreignKeyConstraintName: 'FK_agent_runs_conversation',
+  })
+  conversation: AgentConversation;
+
+  @Column('uuid')
+  conversationId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'requestedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_runs_requested_by',
+  })
+  requestedByMember: Member;
+
+  @Column('uuid')
+  requestedByMemberId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  clientRequestId: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  runtimeKind: AgentRuntimeKind;
+
+  @Column({ type: 'varchar', length: 64 })
+  runtimeVersion: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  modelAlias: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'queued' })
+  status: AgentRunStatus;
+
+  @Column({ type: 'jsonb', default: [] })
+  allowedTools: string[];
+
+  @Column({ type: 'timestamptz' })
+  authorizationExpiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  startedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  finishedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  cancelRequestedAt: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  inputTokens: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  outputTokens: number | null;
+
+  @Column({ type: 'numeric', precision: 12, scale: 6, nullable: true })
+  estimatedCost: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  errorCode: string | null;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  errorMessage: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_tool_events')
+@Check(
+  'CHK_agent_tool_events_status',
+  `"status" IN ('running', 'completed', 'failed')`,
+)
+@Index('IDX_agent_tool_events_run_started', ['runId', 'startedAt'])
+export class AgentToolEvent {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_tool_events_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentRun, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'runId',
+    foreignKeyConstraintName: 'FK_agent_tool_events_run',
+  })
+  run: AgentRun;
+
+  @Column('uuid')
+  runId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  toolName: string;
+
+  @Column({ type: 'varchar', length: 40 })
+  sourceModule: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  sourceId: string | null;
+
+  @Column({ type: 'varchar', length: 16 })
+  status: AgentToolEventStatus;
+
+  @Column({ type: 'jsonb', default: {} })
+  inputSummary: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', default: {} })
+  outputSummary: Record<string, unknown>;
+
+  @Column({ type: 'timestamptz' })
+  startedAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  finishedAt: Date | null;
+}
+
 export const ALL_ENTITIES = [
   Account,
   Household,
@@ -5612,4 +5946,9 @@ export const ALL_ENTITIES = [
   FamilyMemoryOperation,
   BackupPolicy,
   BackupRun,
+  AgentSetting,
+  AgentConversation,
+  AgentMessage,
+  AgentRun,
+  AgentToolEvent,
 ];

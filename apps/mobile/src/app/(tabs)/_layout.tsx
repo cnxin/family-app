@@ -112,6 +112,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="assistant"
+        options={{
+          title: '问问小管家',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="order"
         options={{
           title: '点菜',

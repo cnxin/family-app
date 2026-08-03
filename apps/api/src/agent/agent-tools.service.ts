@@ -1,0 +1,303 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { JwtUser } from '../auth/jwt.guard';
+import { CalendarService } from '../calendar/calendar.module';
+import {
+  AgentRun,
+  AgentToolEvent,
+  InventoryItem,
+  Member,
+} from '../entities';
+import { KnowledgeService } from '../knowledge/knowledge.module';
+import { MediaService } from '../media/media.module';
+import { MemoriesService } from '../memories/memories.module';
+import { TravelService } from '../travel/travel.module';
+import { AGENT_READ_TOOLS, AgentReadToolName } from './agent.types';
+
+const MAX_RESULT_ITEMS = 20;
+const MAX_RESPONSE_BYTES = 48_000;
+
+function dateOnly(value: unknown, fallback: string) {
+  const normalized = typeof value === 'string' ? value : fallback;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new BadRequestException('日期必须使用 YYYY-MM-DD 格式');
+  }
+  return normalized;
+}
+
+function limited(value: unknown, fallback = 10) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, MAX_RESULT_ITEMS);
+}
+
+function today() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function userFor(run: AgentRun, member: Member): JwtUser {
+  return {
+    sub: member.accountId ?? member.id,
+    accountId: member.accountId ?? member.id,
+    memberId: member.id,
+    householdId: run.householdId,
+    sid: `agent:${run.id}`,
+    name: member.name,
+    role: member.role,
+  };
+}
+
+@Injectable()
+export class AgentToolsService {
+  constructor(
+    @InjectRepository(AgentRun) private readonly runs: Repository<AgentRun>,
+    @InjectRepository(AgentToolEvent)
+    private readonly events: Repository<AgentToolEvent>,
+    @InjectRepository(Member) private readonly members: Repository<Member>,
+    @InjectRepository(InventoryItem)
+    private readonly inventory: Repository<InventoryItem>,
+    private readonly calendar: CalendarService,
+    private readonly knowledge: KnowledgeService,
+    private readonly travel: TravelService,
+    private readonly media: MediaService,
+    private readonly memories: MemoriesService,
+  ) {}
+
+  async execute(
+    toolName: string,
+    input: Record<string, unknown>,
+  ): Promise<unknown> {
+    if (!AGENT_READ_TOOLS.includes(toolName as AgentReadToolName)) {
+      throw new BadRequestException('未开放的智能体工具');
+    }
+    const runId = typeof input.runId === 'string' ? input.runId : '';
+    const run = await this.runs.findOneBy({ id: runId });
+    if (!run) throw new NotFoundException('智能体运行不存在');
+    if (run.status !== 'running') {
+      throw new ForbiddenException('智能体运行当前不可调用工具');
+    }
+    if (run.authorizationExpiresAt.getTime() <= Date.now()) {
+      throw new ForbiddenException('智能体工具授权已过期');
+    }
+    if (!run.allowedTools.includes(toolName)) {
+      throw new ForbiddenException('本次运行未授权这个工具');
+    }
+    const member = await this.members.findOne({
+      where: { id: run.requestedByMemberId, householdId: run.householdId },
+    });
+    if (!member || member.disabledAt) {
+      throw new ForbiddenException('发起成员已停用');
+    }
+
+    const startedAt = new Date();
+    const user = userFor(run, member);
+    try {
+      const output = await this.callTool(toolName as AgentReadToolName, input, user);
+      const serialized = JSON.stringify(output);
+      if (Buffer.byteLength(serialized, 'utf8') > MAX_RESPONSE_BYTES) {
+        throw new BadRequestException('工具返回内容超过大小限制');
+      }
+      await this.saveEvent(run, toolName, input, 'completed', output, startedAt);
+      return output;
+    } catch (error) {
+      await this.saveEvent(run, toolName, input, 'failed', null, startedAt);
+      throw error;
+    }
+  }
+
+  private async callTool(
+    toolName: AgentReadToolName,
+    input: Record<string, unknown>,
+    user: JwtUser,
+  ) {
+    if (toolName === 'get_today_summary') {
+      const date = today();
+      const [entries, alerts] = await Promise.all([
+        this.calendar.list(date, date, user),
+        this.inventoryAlerts(user.householdId, 8),
+      ]);
+      return {
+        date,
+        entries: entries.slice(0, MAX_RESULT_ITEMS).map((entry) => ({
+          module: entry.module,
+          date: entry.date,
+          title: entry.title,
+          status: entry.status,
+          summary: entry.summary ? String(entry.summary).slice(0, 200) : null,
+          targetPath: entry.targetPath,
+        })),
+        inventoryAlerts: alerts,
+      };
+    }
+    if (toolName === 'get_calendar') {
+      const start = dateOnly(input.start, today());
+      const end = dateOnly(input.end, addDays(start, 6));
+      const days = Math.round(
+        (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) /
+          86_400_000,
+      );
+      if (days < 0 || days > 31) {
+        throw new BadRequestException('智能体日历单次最多查询 32 天');
+      }
+      const entries = await this.calendar.list(start, end, user);
+      return entries.slice(0, MAX_RESULT_ITEMS).map((entry) => ({
+        module: entry.module,
+        date: entry.date,
+        title: entry.title,
+        status: entry.status,
+        summary: entry.summary ? String(entry.summary).slice(0, 200) : null,
+        targetPath: entry.targetPath,
+      }));
+    }
+    if (toolName === 'get_inventory_alerts') {
+      return this.inventoryAlerts(user.householdId, limited(input.limit));
+    }
+    if (toolName === 'search_knowledge') {
+      const query = typeof input.query === 'string' ? input.query.trim().slice(0, 80) : '';
+      const rows = await this.knowledge.list(
+        { status: 'active', q: query || undefined, limit: limited(input.limit) },
+        user,
+      );
+      return rows.map((article) => ({
+        id: article.id,
+        title: article.title,
+        category: article.category,
+        summary: article.summary?.slice(0, 300) ?? null,
+        tags: article.tags,
+        referenceUrl: article.referenceUrl,
+        targetPath: `/knowledge?articleId=${article.id}`,
+        untrustedContent: true,
+      }));
+    }
+    if (toolName === 'get_travel_checklist') {
+      const planId = typeof input.travelPlanId === 'string' ? input.travelPlanId : '';
+      const plan = planId
+        ? await this.travel.detail(planId, user)
+        : (await this.travel.listPlans({ status: 'active' }, user))[0];
+      if (!plan) return null;
+      return {
+        id: plan.id,
+        title: plan.title,
+        destination: plan.destination,
+        startDate: plan.startDate,
+        endDate: plan.endDate,
+        status: plan.status,
+        items: plan.items.slice(0, MAX_RESULT_ITEMS).map((item) => ({
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          quantity: item.quantity,
+          status: item.status,
+          assignedMemberName: item.assignedMember?.name ?? null,
+        })),
+        targetPath: `/travel?planId=${plan.id}`,
+      };
+    }
+    if (toolName === 'get_watch_candidates') {
+      const rows = await this.media.list({ status: 'all' }, user);
+      return rows
+        .filter((entry) => !['completed', 'dropped'].includes(entry.status))
+        .slice(0, limited(input.limit))
+        .map((entry) => ({
+          id: entry.id,
+          title: entry.mediaTitle.title,
+          type: entry.mediaTitle.type,
+          year: entry.mediaTitle.year,
+          status: entry.status,
+          scheduledFor: entry.scheduledFor,
+          targetPath: `/media?mediaId=${entry.id}`,
+        }));
+    }
+    const rows = await this.memories.list(
+      { status: 'active', limit: limited(input.limit) },
+      user,
+    );
+    return rows.map((memory) => ({
+      id: memory.id,
+      title: memory.title,
+      happenedOn: memory.happenedOn,
+      category: memory.category,
+      tags: memory.tags,
+      targetPath: `/memories?memoryId=${memory.id}`,
+      untrustedContent: true,
+    }));
+  }
+
+  private async inventoryAlerts(householdId: string, limit: number) {
+    const rows = await this.inventory
+      .createQueryBuilder('item')
+      .where('item.householdId = :householdId', { householdId })
+      .andWhere('item.quantity <= item.lowStockThreshold')
+      .orderBy('item.quantity', 'ASC')
+      .addOrderBy('item.name', 'ASC')
+      .take(limit)
+      .getMany();
+    return rows.map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: Number(item.quantity),
+      unit: item.unit,
+      lowStockThreshold: Number(item.lowStockThreshold),
+      targetPath: '/shopping',
+    }));
+  }
+
+  private async saveEvent(
+    run: AgentRun,
+    toolName: string,
+    input: Record<string, unknown>,
+    status: 'completed' | 'failed',
+    output: unknown,
+    startedAt: Date,
+  ) {
+    const sourceModule: Record<string, string> = {
+      get_today_summary: 'calendar',
+      get_calendar: 'calendar',
+      get_inventory_alerts: 'inventory',
+      search_knowledge: 'knowledge',
+      get_travel_checklist: 'travel',
+      get_watch_candidates: 'media',
+      get_recent_memories: 'memory',
+    };
+    await this.events.save(
+      this.events.create({
+        householdId: run.householdId,
+        runId: run.id,
+        toolName,
+        sourceModule: sourceModule[toolName] ?? 'agent',
+        sourceId:
+          typeof input.travelPlanId === 'string' ? input.travelPlanId : null,
+        status,
+        inputSummary: {
+          hasQuery: Boolean(input.query),
+          start: typeof input.start === 'string' ? input.start : null,
+          end: typeof input.end === 'string' ? input.end : null,
+          limit: typeof input.limit === 'number' ? input.limit : null,
+        },
+        outputSummary: {
+          itemCount: Array.isArray(output) ? output.length : output ? 1 : 0,
+          ok: status === 'completed',
+        },
+        startedAt,
+        finishedAt: new Date(),
+      }),
+    );
+  }
+}

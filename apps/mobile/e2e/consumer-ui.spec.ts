@@ -39,6 +39,21 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
     await expectTouchTarget(tab, `${name}标签`);
   }
 
+  const assistantLink = page.getByTestId('consumer-quick-assistant');
+  await expectTouchTarget(assistantLink, '问问小管家入口');
+  await assistantLink.click();
+  await expect(page).toHaveURL(/\/assistant$/);
+  const assistantInput = page.getByTestId('agent-message-input');
+  const assistantSend = page.getByTestId('agent-send-button');
+  await expectTouchTarget(assistantSend, '小管家发送按钮');
+  await page.getByRole('button', { name: '今天家里有什么安排？', exact: true }).click();
+  await expect(assistantInput).toHaveValue('今天家里有什么安排？');
+  await assistantSend.click();
+  await expect(page.getByText(/今天家里|今天暂时/).last()).toBeVisible({ timeout: 15_000 });
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('tab', { name: '今天', exact: true }).click();
+  await expect(page.getByTestId('consumer-home')).toBeVisible();
+
   const memoriesLink = page.getByRole('link', { name: '全部回忆', exact: true });
   await expectTouchTarget(memoriesLink, '全部回忆入口');
   await memoriesLink.click();

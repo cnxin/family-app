@@ -1580,3 +1580,76 @@ export interface HouseholdReminder {
   createdAt: string;
   updatedAt: string;
 }
+
+export type AgentRuntimeKind = 'fake' | 'hermes';
+export type AgentRunStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface AgentRuntimeHealth {
+  available: boolean;
+  configured: boolean;
+  version: string;
+  message?: string;
+}
+
+export interface AgentStatus {
+  enabled: boolean;
+  runtimeKind: AgentRuntimeKind;
+  selected: AgentRuntimeHealth;
+  runtimes: Record<AgentRuntimeKind, AgentRuntimeHealth>;
+  fallbackAvailable: boolean;
+  persistenceEncrypted: boolean;
+  readToolsEnabled: string[];
+}
+
+export interface AgentSettings {
+  enabled: boolean;
+  runtimeKind: AgentRuntimeKind;
+  runtimeProfile: string;
+  modelAlias: string;
+  retentionDays: number;
+  readToolsEnabled: string[];
+  proposalToolsEnabled: string[];
+  version: number;
+  updatedAt: string;
+}
+
+export interface AgentRun {
+  id: string;
+  conversationId: string;
+  runtimeKind: AgentRuntimeKind;
+  status: AgentRunStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  cancelRequestedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentConversation {
+  id: string;
+  title: string;
+  status: 'active' | 'archived' | 'expired';
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  latestRun: AgentRun | null;
+}
+
+export interface AgentMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface AgentConversationDetail extends AgentConversation {
+  messages: AgentMessage[];
+  runs: AgentRun[];
+}

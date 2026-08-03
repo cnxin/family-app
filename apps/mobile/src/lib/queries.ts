@@ -6,6 +6,11 @@ import {
 import { api, uploadAssetDocument, uploadMemoryPhoto } from './api';
 import type {
   AccountProfile,
+  AgentConversation,
+  AgentConversationDetail,
+  AgentRun,
+  AgentSettings,
+  AgentStatus,
   AppNotification,
   AssetCategory,
   AssetDocument,
@@ -104,6 +109,110 @@ import type {
   Visit,
   VisitStatus,
 } from './types';
+
+export function useAgentStatus(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-status'],
+    queryFn: () => api<AgentStatus>('/agent/status'),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useAgentSettings(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-settings'],
+    queryFn: () => api<AgentSettings>('/agent/settings'),
+    enabled,
+  });
+}
+
+export function useUpdateAgentSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<Omit<AgentSettings, 'version' | 'updatedAt' | 'proposalToolsEnabled'>> & {
+      expectedVersion: number;
+    }) => api<AgentSettings>('/agent/settings', { method: 'PUT', body: input }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent-settings'] });
+      void qc.invalidateQueries({ queryKey: ['agent-status'] });
+    },
+  });
+}
+
+export function useAgentConversations(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-conversations'],
+    queryFn: () => api<AgentConversation[]>('/agent/conversations'),
+    enabled,
+  });
+}
+
+export function useAgentConversation(id: string | null) {
+  return useQuery({
+    queryKey: ['agent-conversation', id],
+    queryFn: () => api<AgentConversationDetail>(`/agent/conversations/${id}`),
+    enabled: Boolean(id),
+    refetchInterval: (query) => {
+      const detail = query.state.data as AgentConversationDetail | undefined;
+      return detail?.runs.some((run) => run.status === 'queued' || run.status === 'running')
+        ? 700
+        : false;
+    },
+  });
+}
+
+export function useCreateAgentConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (title?: string) =>
+      api<AgentConversation>('/agent/conversations', {
+        method: 'POST',
+        body: title ? { title } : {},
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-conversations'] }),
+  });
+}
+
+export function useSendAgentMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { conversationId: string; message: string; clientRequestId?: string }) =>
+      api<AgentRun>(`/agent/conversations/${input.conversationId}/messages`, {
+        method: 'POST',
+        body: {
+          message: input.message,
+          clientRequestId:
+            input.clientRequestId ?? operationKey(`agent:message:${input.conversationId}`),
+        },
+      }),
+    onSuccess: (_run, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-conversations'] });
+      void qc.invalidateQueries({ queryKey: ['agent-conversation', input.conversationId] });
+    },
+  });
+}
+
+export function useCancelAgentRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { runId: string; conversationId: string }) =>
+      api<AgentRun>(`/agent/runs/${input.runId}/cancel`, { method: 'POST' }),
+    onSuccess: (_run, input) =>
+      void qc.invalidateQueries({ queryKey: ['agent-conversation', input.conversationId] }),
+  });
+}
+
+export function useArchiveAgentConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; archived: true }>(`/agent/conversations/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-conversations'] }),
+  });
+}
 
 export interface KnowledgeArticleInput {
   title: string;
