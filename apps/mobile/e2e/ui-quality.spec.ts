@@ -136,11 +136,48 @@ test('日期选择在移动端贴底、桌面居中且核心操作不少于 44px
       if (!settledBox || !viewport) return Number.POSITIVE_INFINITY;
       return Math.abs(settledBox.y + settledBox.height - viewport.height);
     }).toBeLessThanOrEqual(4);
+
+    const dragHandle = page.getByTestId('adaptive-dialog-drag-handle');
+    await expectTouchTarget(dragHandle, '弹层拖动区域');
+    await expect(dragHandle).toHaveCSS('cursor', 'grab');
+    const handleBox = await dragHandle.boundingBox();
+    const dialogBox = await dialog.boundingBox();
+    expect(handleBox).not.toBeNull();
+    expect(dialogBox).not.toBeNull();
+
+    const pointerX = (handleBox?.x ?? 0) + (handleBox?.width ?? 0) / 2;
+    const pointerY = (handleBox?.y ?? 0) + (handleBox?.height ?? 0) / 2;
+    const initialY = dialogBox?.y ?? 0;
+    await page.mouse.move(pointerX, pointerY);
+    await page.mouse.down();
+    await page.mouse.move(pointerX, pointerY + 84, { steps: 6 });
+    const draggedDownY = (await dialog.boundingBox())?.y ?? 0;
+    expect(draggedDownY - initialY).toBeGreaterThan(60);
+
+    await page.mouse.move(pointerX, pointerY + 28, { steps: 4 });
+    const reversedY = (await dialog.boundingBox())?.y ?? 0;
+    expect(draggedDownY - reversedY).toBeGreaterThan(35);
+    await page.mouse.up();
+    await expect.poll(async () => {
+      const settledBox = await dialog.boundingBox();
+      return Math.abs((settledBox?.y ?? 0) - initialY);
+    }).toBeLessThanOrEqual(4);
+
+    const settledHandleBox = await dragHandle.boundingBox();
+    const dismissX = (settledHandleBox?.x ?? 0) + (settledHandleBox?.width ?? 0) / 2;
+    const dismissY = (settledHandleBox?.y ?? 0) + (settledHandleBox?.height ?? 0) / 2;
+    await page.mouse.move(dismissX, dismissY);
+    await page.mouse.down();
+    await page.mouse.move(dismissX, dismissY + 240, { steps: 4 });
+    await page.mouse.up();
+    await expect(dialog).not.toBeVisible();
+    return;
   } else {
     const settledBox = await dialog.boundingBox();
     expect(settledBox).not.toBeNull();
     expect(settledBox?.y ?? 0).toBeGreaterThan(80);
     expect((settledBox?.y ?? 0) + (settledBox?.height ?? 0)).toBeLessThan((viewport?.height ?? 0) - 80);
+    await expect(page.getByTestId('adaptive-dialog-drag-handle')).toHaveCount(0);
   }
 
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();

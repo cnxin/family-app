@@ -15,13 +15,16 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { radius, type as t, useTheme } from '../lib/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -429,8 +432,14 @@ export function AdaptiveDialog({
 }) {
   const c = useTheme();
   const reduceMotion = useReducedMotion();
-  const { width } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const compact = width < 700;
+  const translateY = useSharedValue(0);
+  const dragStartY = useSharedValue(0);
+  const sheetHeight = useSharedValue(Math.max(height * 0.5, 320));
+  const overlayOpacity = useSharedValue(1);
+  const sheetOpacity = useSharedValue(1);
+  const wasVisible = React.useRef(false);
   const materialStyle = Platform.OS === 'web'
     ? ({ backdropFilter: 'blur(24px) saturate(155%)' } as ViewStyle)
     : undefined;
@@ -438,10 +447,186 @@ export function AdaptiveDialog({
     ? ({ boxShadow: '0 16px 44px rgba(0, 0, 0, 0.22)' } as ViewStyle)
     : NATIVE_DIALOG_SHADOW;
 
+  React.useEffect(() => {
+    if (!visible) {
+      wasVisible.current = false;
+      return;
+    }
+
+    if (wasVisible.current) {
+      translateY.value = 0;
+      overlayOpacity.value = 1;
+      sheetOpacity.value = 1;
+      return;
+    }
+
+    wasVisible.current = true;
+    cancelAnimation(translateY);
+    cancelAnimation(overlayOpacity);
+    cancelAnimation(sheetOpacity);
+
+    if (!compact) {
+      translateY.value = 0;
+      overlayOpacity.value = 1;
+      sheetOpacity.value = 1;
+      return;
+    }
+
+    overlayOpacity.value = 0;
+    overlayOpacity.value = withTiming(1, { duration: reduceMotion ? 140 : 180 });
+    if (reduceMotion) {
+      translateY.value = 0;
+      sheetOpacity.value = 0;
+      sheetOpacity.value = withTiming(1, { duration: 140 });
+      return;
+    }
+
+    sheetOpacity.value = 1;
+    translateY.value = height;
+    translateY.value = withSpring(0, {
+      damping: 35,
+      mass: 0.9,
+      overshootClamping: true,
+      stiffness: 320,
+    });
+  }, [
+    compact,
+    height,
+    overlayOpacity,
+    reduceMotion,
+    sheetOpacity,
+    translateY,
+    visible,
+  ]);
+
+  const closeSheet = React.useCallback(() => {
+    if (!compact) {
+      onClose();
+      return;
+    }
+
+    cancelAnimation(translateY);
+    cancelAnimation(overlayOpacity);
+    cancelAnimation(sheetOpacity);
+    overlayOpacity.value = withTiming(0, { duration: reduceMotion ? 120 : 180 });
+
+    if (reduceMotion) {
+      sheetOpacity.value = withTiming(0, { duration: 120 }, (finished) => {
+        if (finished) scheduleOnRN(onClose);
+      });
+      return;
+    }
+
+    const exitY = Math.max(sheetHeight.value + 40, 320);
+    translateY.value = withTiming(exitY, { duration: 220 }, (finished) => {
+      if (finished) scheduleOnRN(onClose);
+    });
+  }, [
+    compact,
+    onClose,
+    overlayOpacity,
+    reduceMotion,
+    sheetHeight,
+    sheetOpacity,
+    translateY,
+  ]);
+
+  const dragGesture = React.useMemo(() => Gesture.Pan()
+    .enabled(compact)
+    .activeOffsetY([-6, 6])
+    .shouldCancelWhenOutside(false)
+    .activeCursor('grabbing')
+    .onStart(() => {
+      cancelAnimation(translateY);
+      cancelAnimation(overlayOpacity);
+      cancelAnimation(sheetOpacity);
+      dragStartY.value = translateY.value;
+      overlayOpacity.value = withTiming(1, { duration: 80 });
+      sheetOpacity.value = 1;
+    })
+    .onUpdate((event) => {
+      const nextY = dragStartY.value + event.translationY;
+      if (nextY >= 0) {
+        translateY.value = nextY;
+      } else {
+        const overshoot = -nextY;
+        const dimension = Math.max(sheetHeight.value, 1);
+        translateY.value = -((overshoot * dimension * 0.45)
+          / (dimension + 0.45 * overshoot));
+      }
+
+      const dismissProgress = Math.min(
+        Math.max(translateY.value, 0) / Math.max(sheetHeight.value, 1),
+        1,
+      );
+      overlayOpacity.value = 1 - dismissProgress * 0.72;
+    })
+    .onEnd((event) => {
+      const projectedY = translateY.value + event.velocityY * 0.18;
+      const dismissThreshold = Math.min(sheetHeight.value * 0.34, 180);
+      const shouldDismiss = event.velocityY > 900
+        || (event.velocityY >= 0 && projectedY > dismissThreshold);
+
+      if (shouldDismiss) {
+        overlayOpacity.value = withTiming(0, { duration: reduceMotion ? 120 : 180 });
+        if (reduceMotion) {
+          sheetOpacity.value = withTiming(0, { duration: 120 }, (finished) => {
+            if (finished) scheduleOnRN(onClose);
+          });
+          return;
+        }
+
+        translateY.value = withSpring(Math.max(sheetHeight.value + 40, 320), {
+          damping: 35,
+          mass: 0.9,
+          overshootClamping: true,
+          stiffness: 320,
+          velocity: Math.max(event.velocityY, 0),
+        }, (finished) => {
+          if (finished) scheduleOnRN(onClose);
+        });
+        return;
+      }
+
+      overlayOpacity.value = withTiming(1, { duration: reduceMotion ? 100 : 160 });
+      translateY.value = reduceMotion
+        ? withTiming(0, { duration: 120 })
+        : withSpring(0, {
+          damping: 28,
+          mass: 0.9,
+          stiffness: 320,
+          velocity: event.velocityY,
+        });
+    })
+    .onFinalize((_event, success) => {
+      if (success || translateY.value === 0) return;
+      overlayOpacity.value = withTiming(1, { duration: reduceMotion ? 100 : 160 });
+      translateY.value = reduceMotion
+        ? withTiming(0, { duration: 120 })
+        : withSpring(0, { damping: 35, mass: 0.9, stiffness: 320 });
+    }), [
+    compact,
+    dragStartY,
+    onClose,
+    overlayOpacity,
+    reduceMotion,
+    sheetHeight,
+    sheetOpacity,
+    translateY,
+  ]);
+
+  const overlayAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: sheetOpacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
   return (
     <Modal
-      animationType={reduceMotion ? 'fade' : compact ? 'slide' : 'fade'}
-      onRequestClose={onClose}
+      animationType={compact ? 'none' : 'fade'}
+      onRequestClose={closeSheet}
       transparent
       visible={visible}
     >
@@ -449,18 +634,27 @@ export function AdaptiveDialog({
         style={[
           styles.adaptiveOverlay,
           compact ? styles.adaptiveOverlayCompact : styles.adaptiveOverlayWide,
-          { backgroundColor: c.scrim },
         ]}
       >
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: c.scrim, pointerEvents: 'none' },
+            overlayAnimatedStyle,
+          ]}
+        />
         <Pressable
           accessibilityLabel={`关闭${accessibilityLabel}`}
           accessibilityRole="button"
-          onPress={onClose}
+          onPress={closeSheet}
           style={StyleSheet.absoluteFill}
         />
-        <View
+        <Animated.View
           accessibilityLabel={accessibilityLabel}
           accessibilityViewIsModal
+          onLayout={(event) => {
+            sheetHeight.value = event.nativeEvent.layout.height;
+          }}
           style={[
             styles.adaptiveDialog,
             compact && styles.adaptiveDialogCompact,
@@ -472,14 +666,32 @@ export function AdaptiveDialog({
             materialStyle,
             shadowStyle,
             style,
+            sheetAnimatedStyle,
           ]}
           testID={testID}
         >
           {compact ? (
-            <View style={[styles.sheetHandle, { backgroundColor: c.tertiaryLabel }]} />
+            <GestureDetector
+              enableContextMenu={false}
+              gesture={dragGesture}
+              touchAction="none"
+              userSelect="none"
+            >
+              <View
+                accessibilityLabel={`拖动${accessibilityLabel}`}
+                collapsable={false}
+                style={[
+                  styles.sheetDragArea,
+                  Platform.OS === 'web' && styles.sheetDragAreaWeb,
+                ]}
+                testID="adaptive-dialog-drag-handle"
+              >
+                <View style={[styles.sheetHandle, { backgroundColor: c.tertiaryLabel }]} />
+              </View>
+            </GestureDetector>
           ) : null}
           {children}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -635,14 +847,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     maxHeight: '94%',
   },
+  sheetDragArea: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    minHeight: 44,
+    width: '100%',
+  },
+  sheetDragAreaWeb: { cursor: 'grab' as never },
   sheetHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     opacity: 0.55,
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 2,
   },
   confirmContent: { padding: 20 },
   dialogMessage: { marginTop: 8, lineHeight: 22 },
