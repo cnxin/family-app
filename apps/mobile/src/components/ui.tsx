@@ -577,7 +577,7 @@ export function AdaptiveDialog({
     })
     .onEnd((event) => {
       const projectedY = translateY.value + event.velocityY * 0.18;
-      const dismissThreshold = Math.min(sheetHeight.value * 0.34, 180);
+      const dismissThreshold = Math.min(sheetHeight.value * 0.3, 140);
       const shouldDismiss = event.velocityY > 900
         || (event.velocityY >= 0 && projectedY > dismissThreshold);
 
@@ -799,7 +799,7 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 46,
     paddingVertical: 6,
     alignItems: 'center',
     borderRadius: 7,

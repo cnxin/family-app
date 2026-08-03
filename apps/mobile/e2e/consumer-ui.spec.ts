@@ -49,9 +49,55 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
   await expectTouchTarget(taskLink, '家庭任务入口');
   await taskLink.click();
   await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByTestId('consumer-tasks-header')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('consumer-tasks.png'), fullPage: true });
+
+  const addTask = page.getByRole('button', { name: '添加任务', exact: true });
+  await expectTouchTarget(addTask, '添加任务按钮');
+  await addTask.click();
+  const taskDialog = page.getByTestId('task-form-dialog');
+  await expect(taskDialog).toBeVisible();
+  await expect(taskDialog.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  await taskDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(taskDialog).not.toBeVisible();
 
   await page.getByRole('tab', { name: '吃饭', exact: true }).click();
   await expect(page).toHaveURL(/\/canteen$/);
+  await expect(page.getByTestId('consumer-canteen-header')).toBeVisible();
+  await expectTouchTarget(
+    page.getByRole('link', { name: '开始点菜', exact: true }),
+    '开始点菜按钮',
+  );
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('consumer-canteen.png'), fullPage: true });
+
+  await page.getByRole('tab', { name: '安排', exact: true }).click();
+  await expect(page).toHaveURL(/\/calendar$/);
+  await expect(page.getByTestId('consumer-calendar-header')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('consumer-calendar.png'), fullPage: true });
+
+  const addEvent = page.getByRole('button', { name: '添加事件', exact: true });
+  await expectTouchTarget(addEvent, '添加事件按钮');
+  await addEvent.click();
+  const eventDialog = page.getByTestId('calendar-event-dialog');
+  await expect(eventDialog).toBeVisible();
+  await expect(eventDialog.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  await eventDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(eventDialog).not.toBeVisible();
+
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByTestId('consumer-profile-header')).toBeVisible();
+  await expect(page.getByLabel('新密码', { exact: true })).toHaveCount(0);
+  const securityDisclosure = page.getByTestId('consumer-security-disclosure');
+  await expectTouchTarget(securityDisclosure, '账号安全设置');
+  await page.screenshot({ path: testInfo.outputPath('consumer-profile.png'), fullPage: true });
+  await securityDisclosure.click();
+  await expect(page.getByLabel('新密码', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: '打开我的积分', exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await page.screenshot({
