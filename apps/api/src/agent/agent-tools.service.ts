@@ -18,7 +18,15 @@ import { KnowledgeService } from '../knowledge/knowledge.module';
 import { MediaService } from '../media/media.module';
 import { MemoriesService } from '../memories/memories.module';
 import { TravelService } from '../travel/travel.module';
-import { AGENT_READ_TOOLS, AgentReadToolName } from './agent.types';
+import {
+  AGENT_READ_TOOLS,
+  AgentReadToolName,
+  AgentToolName,
+} from './agent.types';
+import {
+  AgentProposalsService,
+  isAgentProposalTool,
+} from './agent-proposals.service';
 
 const MAX_RESULT_ITEMS = 20;
 const MAX_RESPONSE_BYTES = 48_000;
@@ -78,13 +86,17 @@ export class AgentToolsService {
     private readonly travel: TravelService,
     private readonly media: MediaService,
     private readonly memories: MemoriesService,
+    private readonly proposals: AgentProposalsService,
   ) {}
 
   async execute(
     toolName: string,
     input: Record<string, unknown>,
   ): Promise<unknown> {
-    if (!AGENT_READ_TOOLS.includes(toolName as AgentReadToolName)) {
+    if (
+      !AGENT_READ_TOOLS.includes(toolName as AgentReadToolName) &&
+      !isAgentProposalTool(toolName)
+    ) {
       throw new BadRequestException('未开放的智能体工具');
     }
     const runId = typeof input.runId === 'string' ? input.runId : '';
@@ -109,7 +121,7 @@ export class AgentToolsService {
     const startedAt = new Date();
     const user = userFor(run, member);
     try {
-      const output = await this.callTool(toolName as AgentReadToolName, input, user);
+      const output = await this.callTool(toolName as AgentToolName, input, user, run);
       const serialized = JSON.stringify(output);
       if (Buffer.byteLength(serialized, 'utf8') > MAX_RESPONSE_BYTES) {
         throw new BadRequestException('工具返回内容超过大小限制');
@@ -123,10 +135,14 @@ export class AgentToolsService {
   }
 
   private async callTool(
-    toolName: AgentReadToolName,
+    toolName: AgentToolName,
     input: Record<string, unknown>,
     user: JwtUser,
+    run: AgentRun,
   ) {
+    if (isAgentProposalTool(toolName)) {
+      return this.proposals.createFromRun(toolName, input, run, user);
+    }
     if (toolName === 'get_today_summary') {
       const date = today();
       const [entries, alerts] = await Promise.all([
@@ -275,6 +291,11 @@ export class AgentToolsService {
       get_travel_checklist: 'travel',
       get_watch_candidates: 'media',
       get_recent_memories: 'memory',
+      propose_task: 'task',
+      propose_reminder: 'reminder',
+      propose_poll: 'poll',
+      propose_menu: 'menu',
+      propose_shopping_items: 'shopping',
     };
     await this.events.save(
       this.events.create({

@@ -10,6 +10,17 @@ export const AGENT_READ_TOOLS = [
 
 export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];
 
+export const AGENT_PROPOSAL_TOOLS = [
+  'propose_task',
+  'propose_reminder',
+  'propose_poll',
+  'propose_menu',
+  'propose_shopping_items',
+] as const;
+
+export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];
+export type AgentToolName = AgentReadToolName | AgentProposalToolName;
+
 export interface AgentChatInput {
   runId: string;
   modelAlias: string;

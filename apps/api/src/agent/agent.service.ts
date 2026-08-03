@@ -18,7 +18,12 @@ import {
 } from '../entities';
 import { decryptAgentContent, encryptAgentContent } from './agent.crypto';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
-import { AGENT_READ_TOOLS, AgentRuntime } from './agent.types';
+import {
+  AGENT_PROPOSAL_TOOLS,
+  AGENT_READ_TOOLS,
+  AgentRuntime,
+} from './agent.types';
+import { AgentProposalsService } from './agent-proposals.service';
 
 interface UpdateAgentSettingsInput {
   enabled?: boolean;
@@ -27,6 +32,7 @@ interface UpdateAgentSettingsInput {
   modelAlias?: string;
   retentionDays?: number;
   readToolsEnabled?: string[];
+  proposalToolsEnabled?: string[];
   expectedVersion: number;
 }
 
@@ -56,6 +62,7 @@ export class AgentService {
     private readonly dataSource: DataSource,
     private readonly fakeRuntime: FakeAgentRuntime,
     private readonly hermesRuntime: HermesAgentRuntime,
+    private readonly proposals: AgentProposalsService,
   ) {}
 
   async status(user: JwtUser) {
@@ -77,6 +84,7 @@ export class AgentService {
         '00000000-0000-0000-0000-000000000000',
       ) != null,
       readToolsEnabled: setting.readToolsEnabled,
+      proposalToolsEnabled: setting.proposalToolsEnabled,
     };
   }
 
@@ -102,6 +110,19 @@ export class AgentService {
     if (input.readToolsEnabled && tools.length !== input.readToolsEnabled.length) {
       throw new ForbiddenException('设置中包含未开放的智能体工具');
     }
+    const proposalTools = input.proposalToolsEnabled
+      ? [...new Set(input.proposalToolsEnabled)].filter((tool) =>
+          AGENT_PROPOSAL_TOOLS.includes(
+            tool as (typeof AGENT_PROPOSAL_TOOLS)[number],
+          ),
+        )
+      : current.proposalToolsEnabled;
+    if (
+      input.proposalToolsEnabled &&
+      proposalTools.length !== input.proposalToolsEnabled.length
+    ) {
+      throw new ForbiddenException('设置中包含未开放的操作提案工具');
+    }
     const result = await this.settings.update(
       { id: current.id, version: input.expectedVersion },
       {
@@ -117,6 +138,7 @@ export class AgentService {
             : trimmed(input.modelAlias, 'hermes-agent'),
         retentionDays: input.retentionDays ?? current.retentionDays,
         readToolsEnabled: tools,
+        proposalToolsEnabled: proposalTools,
         updatedByMemberId: user.memberId,
         version: current.version + 1,
       },
@@ -182,6 +204,10 @@ export class AgentService {
         take: 50,
       }),
     ]);
+    const proposals = await this.proposals.listForConversation(
+      runs.map((run) => run.id),
+      user,
+    );
     return {
       ...(await this.conversationSummary(conversation)),
       messages: messages.flatMap((message) => {
@@ -207,6 +233,7 @@ export class AgentService {
         }
       }),
       runs: runs.map((run) => this.presentRun(run)),
+      proposals,
     };
   }
 
@@ -282,7 +309,10 @@ export class AgentService {
                 : this.fakeRuntime.version,
             modelAlias: setting.modelAlias,
             status: 'queued',
-            allowedTools: setting.readToolsEnabled,
+            allowedTools: [
+              ...setting.readToolsEnabled,
+              ...setting.proposalToolsEnabled,
+            ],
             authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
             startedAt: null,
             finishedAt: null,
@@ -455,7 +485,7 @@ export class AgentService {
           modelAlias: 'hermes-agent',
           retentionDays: 7,
           readToolsEnabled: [...AGENT_READ_TOOLS],
-          proposalToolsEnabled: [],
+          proposalToolsEnabled: [...AGENT_PROPOSAL_TOOLS],
           version: 1,
           updatedByMemberId: user.memberId,
         }),
@@ -528,7 +558,7 @@ export class AgentService {
       modelAlias: setting.modelAlias,
       retentionDays: setting.retentionDays,
       readToolsEnabled: setting.readToolsEnabled,
-      proposalToolsEnabled: [],
+      proposalToolsEnabled: setting.proposalToolsEnabled,
       version: setting.version,
       updatedAt: setting.updatedAt,
     };

@@ -23,8 +23,9 @@ import {
 } from '@nestjs/common';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { AGENT_READ_TOOLS } from './agent.types';
+import { AGENT_PROPOSAL_TOOLS, AGENT_READ_TOOLS } from './agent.types';
 import { AgentService } from './agent.service';
+import { AgentProposalsService } from './agent-proposals.service';
 
 class CreateConversationDto {
   @IsOptional()
@@ -76,6 +77,29 @@ class UpdateAgentSettingsDto {
   @IsString({ each: true })
   readToolsEnabled?: string[];
 
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(AGENT_PROPOSAL_TOOLS.length)
+  @IsString({ each: true })
+  proposalToolsEnabled?: string[];
+
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
+class ConfirmAgentProposalDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(180)
+  clientRequestId: string;
+}
+
+class RejectAgentProposalDto {
   @IsInt()
   @Min(1)
   expectedVersion: number;
@@ -84,7 +108,10 @@ class UpdateAgentSettingsDto {
 @Controller('agent')
 @RequireCapabilities('use_agent')
 export class AgentController {
-  constructor(private readonly service: AgentService) {}
+  constructor(
+    private readonly service: AgentService,
+    private readonly proposals: AgentProposalsService,
+  ) {}
 
   @Get('status')
   status(@CurrentUser() user: JwtUser) {
@@ -141,5 +168,28 @@ export class AgentController {
   @Post('runs/:id/cancel')
   cancel(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.service.cancel(id, user);
+  }
+
+  @Post('proposals/:id/confirm')
+  confirmProposal(
+    @Param('id') id: string,
+    @Body() dto: ConfirmAgentProposalDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.proposals.confirm(
+      id,
+      dto.expectedVersion,
+      dto.clientRequestId,
+      user,
+    );
+  }
+
+  @Post('proposals/:id/reject')
+  rejectProposal(
+    @Param('id') id: string,
+    @Body() dto: RejectAgentProposalDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.proposals.reject(id, dto.expectedVersion, user);
   }
 }

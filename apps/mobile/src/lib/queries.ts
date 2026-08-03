@@ -11,6 +11,7 @@ import type {
   AgentRun,
   AgentSettings,
   AgentStatus,
+  AgentActionProposal,
   AppNotification,
   AssetCategory,
   AssetDocument,
@@ -211,6 +212,49 @@ export function useArchiveAgentConversation() {
         method: 'DELETE',
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-conversations'] }),
+  });
+}
+
+export function useConfirmAgentProposal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      conversationId: string;
+      expectedVersion: number;
+      clientRequestId?: string;
+    }) =>
+      api<AgentActionProposal>(`/agent/proposals/${input.id}/confirm`, {
+        method: 'POST',
+        body: {
+          expectedVersion: input.expectedVersion,
+          clientRequestId:
+            input.clientRequestId ?? operationKey(`agent:proposal:${input.id}`),
+        },
+      }),
+    onSettled: (_data, _error, input) =>
+      void qc.invalidateQueries({
+        queryKey: ['agent-conversation', input.conversationId],
+      }),
+  });
+}
+
+export function useRejectAgentProposal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      conversationId: string;
+      expectedVersion: number;
+    }) =>
+      api<AgentActionProposal>(`/agent/proposals/${input.id}/reject`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSettled: (_data, _error, input) =>
+      void qc.invalidateQueries({
+        queryKey: ['agent-conversation', input.conversationId],
+      }),
   });
 }
 

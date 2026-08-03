@@ -70,7 +70,7 @@ class ReminderQueryDto {
   status?: ReminderStatus | 'all';
 }
 
-class CreateReminderDto {
+export class CreateReminderDto {
   @IsIn(['menu', 'task', 'calendar', 'poll', 'maintenance', 'travel'])
   sourceModule: ReminderSourceModule;
 
@@ -292,51 +292,80 @@ export class RemindersService
   }
 
   async create(dto: CreateReminderDto, user: JwtUser) {
+    const id = await this.dataSource.transaction((manager) =>
+      this.createWithinTransaction(dto, user, manager),
+    );
+    return this.get(id, user);
+  }
+
+  async createWithinTransaction(
+    dto: CreateReminderDto,
+    user: JwtUser,
+    manager: EntityManager,
+  ) {
     assertOccurrenceDate(dto.sourceModule, dto.occurrenceDate);
     const remindAt = parseRemindAt(dto.remindAt);
-    const id = await this.dataSource.transaction(async (manager) => {
-      const source = await this.resolveSource(
-        manager,
-        {
+    const source = await this.resolveSource(
+      manager,
+      {
+        householdId: user.householdId,
+        sourceModule: dto.sourceModule,
+        sourceId: dto.sourceId,
+        occurrenceDate: dto.occurrenceDate ?? null,
+      },
+      true,
+    );
+    if (!source) throw new NotFoundException('关联事项不存在或已经结束');
+    const members = await this.requireMembers(dto.recipientIds, user, manager);
+    const reminders = manager.getRepository(Reminder);
+    const recipients = manager.getRepository(ReminderRecipient);
+    const reminder = await reminders.save(
+      reminders.create({
+        householdId: user.householdId,
+        sourceModule: dto.sourceModule,
+        sourceId: dto.sourceId,
+        occurrenceDate: dto.occurrenceDate ?? null,
+        remindAt,
+        status: 'scheduled',
+        createdById: user.memberId,
+        sentAt: null,
+        cancelledAt: null,
+        cancelReason: null,
+      }),
+    );
+    await recipients.save(
+      members.map((member) =>
+        recipients.create({
           householdId: user.householdId,
-          sourceModule: dto.sourceModule,
-          sourceId: dto.sourceId,
-          occurrenceDate: dto.occurrenceDate ?? null,
-        },
-        true,
-      );
-      if (!source) throw new NotFoundException('关联事项不存在或已经结束');
-      const members = await this.requireMembers(dto.recipientIds, user, manager);
-      const reminders = manager.getRepository(Reminder);
-      const recipients = manager.getRepository(ReminderRecipient);
-      const reminder = await reminders.save(
-        reminders.create({
-          householdId: user.householdId,
-          sourceModule: dto.sourceModule,
-          sourceId: dto.sourceId,
-          occurrenceDate: dto.occurrenceDate ?? null,
-          remindAt,
-          status: 'scheduled',
-          createdById: user.memberId,
-          sentAt: null,
-          cancelledAt: null,
-          cancelReason: null,
+          reminderId: reminder.id,
+          memberId: member.id,
+          notificationId: null,
+          deliveredAt: null,
         }),
-      );
-      await recipients.save(
-        members.map((member) =>
-          recipients.create({
-            householdId: user.householdId,
-            reminderId: reminder.id,
-            memberId: member.id,
-            notificationId: null,
-            deliveredAt: null,
-          }),
-        ),
-      );
-      return reminder.id;
-    });
-    return this.get(id, user);
+      ),
+    );
+    return reminder.id;
+  }
+
+  async previewSource(dto: CreateReminderDto, user: JwtUser) {
+    assertOccurrenceDate(dto.sourceModule, dto.occurrenceDate);
+    const source = await this.resolveSource(
+      this.dataSource.manager,
+      {
+        householdId: user.householdId,
+        sourceModule: dto.sourceModule,
+        sourceId: dto.sourceId,
+        occurrenceDate: dto.occurrenceDate ?? null,
+      },
+      true,
+    );
+    if (!source) throw new NotFoundException('关联事项不存在或已经结束');
+    const members = await this.requireMembers(
+      dto.recipientIds,
+      user,
+      this.dataSource.manager,
+    );
+    return { source, members };
   }
 
   async update(id: string, dto: UpdateReminderDto, user: JwtUser) {

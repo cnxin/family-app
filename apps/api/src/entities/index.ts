@@ -208,6 +208,14 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 export type AgentToolEventStatus = 'running' | 'completed' | 'failed';
+export type AgentActionType = 'task' | 'reminder' | 'poll' | 'menu' | 'shopping';
+export type AgentActionProposalStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'executed'
+  | 'rejected'
+  | 'expired'
+  | 'failed';
 
 export interface DishRecipeStep {
   text: string;
@@ -5582,7 +5590,16 @@ export class AgentSetting {
   @Column({ type: 'jsonb', default: [] })
   readToolsEnabled: string[];
 
-  @Column({ type: 'jsonb', default: [] })
+  @Column({
+    type: 'jsonb',
+    default: [
+      'propose_task',
+      'propose_reminder',
+      'propose_poll',
+      'propose_menu',
+      'propose_shopping_items',
+    ],
+  })
   proposalToolsEnabled: string[];
 
   @Column({ type: 'int', default: 1 })
@@ -5870,6 +5887,127 @@ export class AgentToolEvent {
   finishedAt: Date | null;
 }
 
+@Entity('agent_action_proposals')
+@Unique('UQ_agent_action_proposals_creation', ['householdId', 'idempotencyKey'])
+@Unique('UQ_agent_action_proposals_confirmation', [
+  'householdId',
+  'confirmationKey',
+])
+@Check(
+  'CHK_agent_action_proposals_type',
+  `"actionType" IN ('task', 'reminder', 'poll', 'menu', 'shopping')`,
+)
+@Check(
+  'CHK_agent_action_proposals_status',
+  `"status" IN ('pending', 'confirmed', 'executed', 'rejected', 'expired', 'failed')`,
+)
+@Check('CHK_agent_action_proposals_version', `"version" >= 1`)
+@Index('IDX_agent_action_proposals_member_status', [
+  'householdId',
+  'createdByMemberId',
+  'status',
+  'createdAt',
+])
+@Index('IDX_agent_action_proposals_run_created', ['runId', 'createdAt'])
+export class AgentActionProposal {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentRun, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'runId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_run',
+  })
+  run: AgentRun;
+
+  @Column('uuid')
+  runId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdByMemberId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_created_by',
+  })
+  createdByMember: Member;
+
+  @Column('uuid')
+  createdByMemberId: string;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'confirmedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_confirmed_by',
+  })
+  confirmedByMember: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  confirmedByMemberId: string | null;
+
+  @Column({ type: 'varchar', length: 24 })
+  actionType: AgentActionType;
+
+  @Column({ type: 'jsonb' })
+  payload: Record<string, unknown>;
+
+  @Column({ type: 'jsonb' })
+  preview: Record<string, unknown>;
+
+  @Column({ type: 'varchar', length: 64 })
+  requestFingerprint: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @Column({ type: 'varchar', length: 180, nullable: true })
+  confirmationKey: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  expectedSourceVersion: number | null;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: AgentActionProposalStatus;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  confirmedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  executedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  resultModule: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  resultId: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  failureCode: string | null;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  failureMessage: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 export const ALL_ENTITIES = [
   Account,
   Household,
@@ -5951,4 +6089,5 @@ export const ALL_ENTITIES = [
   AgentMessage,
   AgentRun,
   AgentToolEvent,
+  AgentActionProposal,
 ];

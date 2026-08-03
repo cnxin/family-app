@@ -117,6 +117,81 @@ export class AgentMcpController {
       runId,
       limit: z.number().int().min(1).max(20).optional(),
     });
+    register('propose_task', '生成家庭任务提案，等待成员在 Family App 内确认', {
+      runId,
+      title: z.string().min(1).max(120),
+      note: z.string().max(1000).nullable().optional(),
+      startsOn: z.string(),
+      recurrence: z.enum(['once', 'daily', 'weekly', 'monthly']).optional(),
+      repeatInterval: z.number().int().min(1).max(365).optional(),
+      endsOn: z.string().nullable().optional(),
+      defaultAssigneeId: z.string().uuid().nullable().optional(),
+      rewardPoints: z.number().int().min(0).max(10_000).optional(),
+    });
+    register('propose_reminder', '为现有家庭事项生成提醒提案', {
+      runId,
+      sourceModule: z.enum([
+        'menu',
+        'task',
+        'calendar',
+        'poll',
+        'maintenance',
+        'travel',
+      ]),
+      sourceId: z.string().uuid(),
+      occurrenceDate: z.string().nullable().optional(),
+      remindAt: z.string(),
+      recipientIds: z.array(z.string().uuid()).min(1).max(20),
+    });
+    register('propose_poll', '生成家庭投票提案', {
+      runId,
+      title: z.string().min(1).max(120),
+      description: z.string().max(1000).nullable().optional(),
+      category: z
+        .enum(['general', 'meal', 'activity', 'movie', 'shopping'])
+        .optional(),
+      voteMode: z.enum(['single', 'multiple']).optional(),
+      maxChoices: z.number().int().min(1).max(12).optional(),
+      closesAt: z.string().nullable().optional(),
+      options: z
+        .array(
+          z.object({
+            label: z.string().min(1).max(120),
+            description: z.string().max(500).nullable().optional(),
+          }),
+        )
+        .min(2)
+        .max(12),
+    });
+    register('propose_menu', '生成指定日期和餐次的菜单点菜提案', {
+      runId,
+      date: z.string(),
+      mealType: z.enum(['breakfast', 'lunch', 'dinner']),
+      items: z
+        .array(
+          z.object({
+            dishId: z.string().uuid(),
+            recipeVariantId: z.string().uuid().optional(),
+            note: z.string().max(200).optional(),
+          }),
+        )
+        .min(1)
+        .max(12),
+    });
+    register('propose_shopping_items', '生成手动购物清单提案，不直接修改库存', {
+      runId,
+      date: z.string(),
+      items: z
+        .array(
+          z.object({
+            customName: z.string().min(1).max(120),
+            totalQty: z.number().positive().max(99_999).optional(),
+            unit: z.string().max(32).optional(),
+          }),
+        )
+        .min(1)
+        .max(20),
+    });
     return server;
   }
 }

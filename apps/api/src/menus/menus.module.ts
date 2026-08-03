@@ -26,7 +26,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { DataSource, In, IsNull, Not, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Not, Repository } from 'typeorm';
 import { assertCapability, RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
@@ -43,7 +43,7 @@ import {
 } from '../entities';
 import { buildRecipeSnapshot } from '../recipes/recipe.snapshot';
 
-class OrderItemDto {
+export class OrderItemDto {
   @IsUUID()
   dishId: string;
 
@@ -57,7 +57,7 @@ class OrderItemDto {
   note?: string;
 }
 
-class AddItemsDto {
+export class AddItemsDto {
   @IsArray()
   @ArrayNotEmpty()
   @ValidateNested({ each: true })
@@ -151,19 +151,34 @@ export class MenusService {
   ) {}
 
   async findOrCreate(householdId: string, date: string, mealType: MealType) {
-    let menu = await this.menus.findOne({
+    return this.findOrCreateWithinTransaction(
+      householdId,
+      date,
+      mealType,
+      this.dataSource.manager,
+    );
+  }
+
+  async findOrCreateWithinTransaction(
+    householdId: string,
+    date: string,
+    mealType: MealType,
+    manager: EntityManager,
+  ) {
+    const menus = manager.getRepository(Menu);
+    let menu = await menus.findOne({
       where: { householdId, date, mealType },
       relations: { items: true },
       order: { items: { createdAt: 'ASC' } },
     });
     if (!menu) {
-      await this.menus
+      await menus
         .createQueryBuilder()
         .insert()
         .values({ householdId, date, mealType })
         .orIgnore()
         .execute();
-      menu = await this.menus.findOne({
+      menu = await menus.findOne({
         where: { householdId, date, mealType },
         relations: { items: true },
         order: { items: { createdAt: 'ASC' } },
@@ -209,102 +224,17 @@ export class MenusService {
     householdId: string,
     userId: string,
   ) {
-    let menuDate = '';
-    let menuMealType: MealType = 'dinner';
     try {
-      await this.dataSource.transaction(async (manager) => {
-        const menus = manager.getRepository(Menu);
-        const items = manager.getRepository(MenuItem);
-        const dishes = manager.getRepository(Dish);
-        const variants = manager.getRepository(DishRecipeVariant);
-        const events = manager.getRepository(MenuEvent);
-        const menu = await menus
-          .createQueryBuilder('menu')
-          .where('menu.id = :menuId', { menuId })
-          .andWhere('menu.householdId = :householdId', { householdId })
-          .setLock('pessimistic_write')
-          .getOne();
-        if (!menu) throw new NotFoundException('菜单不存在');
-        assertMenuOpen(menu);
-        menuDate = menu.date;
-        menuMealType = menu.mealType;
-
-        const dishIds = [...new Set(dto.items.map((item) => item.dishId))];
-        if (dishIds.length !== dto.items.length) {
-          throw new ConflictException('一次点菜中不能重复选择同一道菜');
-        }
-        const dishCount = await dishes.countBy({
-          id: In(dishIds),
+      const menu = await this.dataSource.transaction((manager) =>
+        this.addItemsWithinTransaction(
+          menuId,
+          dto,
           householdId,
-        });
-        if (dishCount !== dishIds.length) {
-          throw new NotFoundException('菜品不存在');
-        }
-        const availableVariants = await variants.find({
-          where: {
-            householdId,
-            dishId: In(dishIds),
-            isArchived: false,
-          },
-        });
-        const selectedRecipes = new Map<string, DishRecipeVariant>();
-        for (const input of dto.items) {
-          const selected = input.recipeVariantId
-            ? availableVariants.find(
-                (variant) =>
-                  variant.id === input.recipeVariantId &&
-                  variant.dishId === input.dishId,
-              )
-            : availableVariants.find(
-                (variant) =>
-                  variant.dishId === input.dishId && variant.isDefault,
-              );
-          if (!selected) {
-            throw new NotFoundException(
-              input.recipeVariantId ? '所选做法不存在' : '菜品缺少家庭默认做法',
-            );
-          }
-          selectedRecipes.set(input.dishId, selected);
-        }
-
-        const existing = await items.findOne({
-          where: {
-            menuId,
-            dishId: In(dishIds),
-            requestedById: userId,
-            status: Not('rejected'),
-          },
-        });
-        if (existing) {
-          throw new ConflictException('这餐已经点过所选菜品，请勿重复提交');
-        }
-
-        const savedItems = await items.save(
-          dto.items.map((item) => {
-            const recipe = selectedRecipes.get(item.dishId)!;
-            return items.create({
-              menuId,
-              dishId: item.dishId,
-              requestedById: userId,
-              note: item.note?.trim() || null,
-              recipeVariantId: recipe.id,
-              recipeSnapshot: buildRecipeSnapshot(recipe),
-            });
-          }),
-        );
-        await events.save(
-          savedItems.map((item) =>
-            events.create({
-              householdId,
-              menuId,
-              menuItemId: item.id,
-              actorId: userId,
-              type: 'item_ordered',
-              toValue: 'pending',
-            }),
-          ),
-        );
-      });
+          userId,
+          manager,
+        ),
+      );
+      return this.findOrCreate(householdId, menu.date, menu.mealType);
     } catch (error) {
       if (error instanceof ConflictException) throw error;
       if (isUniqueViolation(error)) {
@@ -312,7 +242,129 @@ export class MenusService {
       }
       throw error;
     }
-    return this.findOrCreate(householdId, menuDate, menuMealType);
+  }
+
+  async addItemsForAgent(
+    date: string,
+    mealType: MealType,
+    dto: AddItemsDto,
+    user: JwtUser,
+    manager: EntityManager,
+  ) {
+    assertCapability(user, 'place_meal_order');
+    const menu = await this.findOrCreateWithinTransaction(
+      user.householdId,
+      date,
+      mealType,
+      manager,
+    );
+    await this.addItemsWithinTransaction(
+      menu.id,
+      dto,
+      user.householdId,
+      user.memberId,
+      manager,
+    );
+    return menu.id;
+  }
+
+  async addItemsWithinTransaction(
+    menuId: string,
+    dto: AddItemsDto,
+    householdId: string,
+    userId: string,
+    manager: EntityManager,
+  ) {
+    const menus = manager.getRepository(Menu);
+    const items = manager.getRepository(MenuItem);
+    const dishes = manager.getRepository(Dish);
+    const variants = manager.getRepository(DishRecipeVariant);
+    const events = manager.getRepository(MenuEvent);
+    const menu = await menus
+      .createQueryBuilder('menu')
+      .where('menu.id = :menuId', { menuId })
+      .andWhere('menu.householdId = :householdId', { householdId })
+      .setLock('pessimistic_write')
+      .getOne();
+    if (!menu) throw new NotFoundException('菜单不存在');
+    assertMenuOpen(menu);
+
+    const dishIds = [...new Set(dto.items.map((item) => item.dishId))];
+    if (dishIds.length !== dto.items.length) {
+      throw new ConflictException('一次点菜中不能重复选择同一道菜');
+    }
+    const dishCount = await dishes.countBy({
+      id: In(dishIds),
+      householdId,
+    });
+    if (dishCount !== dishIds.length) {
+      throw new NotFoundException('菜品不存在');
+    }
+    const availableVariants = await variants.find({
+      where: {
+        householdId,
+        dishId: In(dishIds),
+        isArchived: false,
+      },
+    });
+    const selectedRecipes = new Map<string, DishRecipeVariant>();
+    for (const input of dto.items) {
+      const selected = input.recipeVariantId
+        ? availableVariants.find(
+            (variant) =>
+              variant.id === input.recipeVariantId &&
+              variant.dishId === input.dishId,
+          )
+        : availableVariants.find(
+            (variant) =>
+              variant.dishId === input.dishId && variant.isDefault,
+          );
+      if (!selected) {
+        throw new NotFoundException(
+          input.recipeVariantId ? '所选做法不存在' : '菜品缺少家庭默认做法',
+        );
+      }
+      selectedRecipes.set(input.dishId, selected);
+    }
+
+    const existing = await items.findOne({
+      where: {
+        menuId,
+        dishId: In(dishIds),
+        requestedById: userId,
+        status: Not('rejected'),
+      },
+    });
+    if (existing) {
+      throw new ConflictException('这餐已经点过所选菜品，请勿重复提交');
+    }
+
+    const savedItems = await items.save(
+      dto.items.map((item) => {
+        const recipe = selectedRecipes.get(item.dishId)!;
+        return items.create({
+          menuId,
+          dishId: item.dishId,
+          requestedById: userId,
+          note: item.note?.trim() || null,
+          recipeVariantId: recipe.id,
+          recipeSnapshot: buildRecipeSnapshot(recipe),
+        });
+      }),
+    );
+    await events.save(
+      savedItems.map((item) =>
+        events.create({
+          householdId,
+          menuId,
+          menuItemId: item.id,
+          actorId: userId,
+          type: 'item_ordered',
+          toValue: 'pending',
+        }),
+      ),
+    );
+    return menu;
   }
 
   async updateItem(id: string, dto: UpdateItemDto, user: JwtUser) {

@@ -75,6 +75,11 @@ function toolCall(id, name, runId, args = {}) {
   };
 }
 
+function toolResult(response) {
+  const text = response.body?.result?.content?.[0]?.text;
+  return typeof text === 'string' ? JSON.parse(text) : null;
+}
+
 const db = new Client({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
@@ -300,6 +305,302 @@ try {
       ) &&
       restoredSettings.status === 200,
     'Hermes 不可用时透明降级为本地摘要且不影响核心功能',
+  );
+
+  console.log('5. 操作提案创建、预览和并发幂等确认');
+  const proposalConversation = await request(
+    '/agent/conversations',
+    member.accessToken,
+    'POST',
+    { title: '操作提案回归' },
+  );
+  const proposalRunId = randomUUID();
+  const proposalTools = [
+    'propose_task',
+    'propose_reminder',
+    'propose_poll',
+    'propose_menu',
+    'propose_shopping_items',
+  ];
+  await db.query(
+    `INSERT INTO agent_runs (
+       id, "householdId", "conversationId", "requestedByMemberId", "clientRequestId",
+       "runtimeKind", "runtimeVersion", "modelAlias", status, "allowedTools",
+       "authorizationExpiresAt", "startedAt"
+     ) VALUES ($1, $2, $3, $4, $5, 'fake', 'proposal-contract', 'hermes-agent',
+       'running', $6, now() + interval '5 minutes', now())`,
+    [
+      proposalRunId,
+      member.member.householdId,
+      proposalConversation.data.id,
+      member.member.id,
+      `proposal:${proposalRunId}`,
+      JSON.stringify(proposalTools),
+    ],
+  );
+
+  const taskTitle = `智能体并发任务-${randomUUID()}`;
+  const taskCall = toolCall(10, 'propose_task', proposalRunId, {
+    title: taskTitle,
+    startsOn: '2199-12-30',
+    recurrence: 'once',
+    defaultAssigneeId: member.member.id,
+  });
+  const [taskProposalResponse, duplicateTaskProposal] = await Promise.all([
+    mcp(taskCall),
+    mcp(taskCall),
+  ]);
+  const taskProposal = toolResult(taskProposalResponse);
+  const duplicateProposal = toolResult(duplicateTaskProposal);
+  const proposalDetail = await request(
+    `/agent/conversations/${proposalConversation.data.id}`,
+    member.accessToken,
+  );
+  const otherMemberConfirm = await request(
+    `/agent/proposals/${taskProposal.id}/confirm`,
+    owner.accessToken,
+    'POST',
+    { expectedVersion: 1, clientRequestId: randomUUID() },
+  );
+  const confirmationKey = randomUUID();
+  const concurrentConfirmations = await Promise.all([
+    request(
+      `/agent/proposals/${taskProposal.id}/confirm`,
+      member.accessToken,
+      'POST',
+      { expectedVersion: 1, clientRequestId: confirmationKey },
+    ),
+    request(
+      `/agent/proposals/${taskProposal.id}/confirm`,
+      member.accessToken,
+      'POST',
+      { expectedVersion: 1, clientRequestId: confirmationKey },
+    ),
+  ]);
+  const taskCount = await db.query(
+    'SELECT COUNT(*)::int AS count FROM household_tasks WHERE "householdId" = $1 AND title = $2',
+    [member.member.householdId, taskTitle],
+  );
+  const repeatedConfirmation = await request(
+    `/agent/proposals/${taskProposal.id}/confirm`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: 1, clientRequestId: randomUUID() },
+  );
+  assert(
+    taskProposalResponse.status === 200 &&
+      duplicateTaskProposal.status === 200 &&
+      taskProposal.id === duplicateProposal.id &&
+      taskProposal.preview.title === taskTitle &&
+      proposalDetail.data.proposals.some((entry) => entry.id === taskProposal.id) &&
+      otherMemberConfirm.status === 404 &&
+      concurrentConfirmations.every(
+        (entry) => entry.status === 201 && entry.data.status === 'executed',
+      ) &&
+      repeatedConfirmation.data.status === 'executed' &&
+      taskCount.rows[0].count === 1,
+    '重复提案只保留一份，成员隔离有效，并发和重复确认只创建一次任务',
+  );
+
+  console.log('6. 投票、菜单、购物和提醒复用现有业务服务执行');
+  const pollTitle = `智能体投票-${randomUUID()}`;
+  const pollProposal = toolResult(
+    await mcp(
+      toolCall(11, 'propose_poll', proposalRunId, {
+        title: pollTitle,
+        voteMode: 'single',
+        options: [{ label: '方案 A' }, { label: '方案 B' }],
+      }),
+    ),
+  );
+  const pollConfirmed = await request(
+    `/agent/proposals/${pollProposal.id}/confirm`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: pollProposal.version, clientRequestId: randomUUID() },
+  );
+
+  const dish = await db.query(
+    `SELECT d.id AS "dishId", v.id AS "variantId"
+     FROM dishes d
+     JOIN dish_recipe_variants v ON v."dishId" = d.id
+     WHERE d."householdId" = $1 AND d."isActive" = true
+       AND v."isDefault" = true AND v."isArchived" = false
+     ORDER BY d."createdAt" ASC
+     LIMIT 1`,
+    [member.member.householdId],
+  );
+  const menuProposal = toolResult(
+    await mcp(
+      toolCall(12, 'propose_menu', proposalRunId, {
+        date: '2198-11-17',
+        mealType: 'breakfast',
+        items: [
+          {
+            dishId: dish.rows[0].dishId,
+            recipeVariantId: dish.rows[0].variantId,
+          },
+        ],
+      }),
+    ),
+  );
+  const menuConfirmed = await request(
+    `/agent/proposals/${menuProposal.id}/confirm`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: menuProposal.version, clientRequestId: randomUUID() },
+  );
+
+  const shoppingName = `提案购物-${randomUUID()}`;
+  const shoppingProposal = toolResult(
+    await mcp(
+      toolCall(13, 'propose_shopping_items', proposalRunId, {
+        date: '2198-11-17',
+        items: [{ customName: shoppingName, totalQty: 2, unit: '盒' }],
+      }),
+    ),
+  );
+  const shoppingConfirmed = await request(
+    `/agent/proposals/${shoppingProposal.id}/confirm`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: shoppingProposal.version, clientRequestId: randomUUID() },
+  );
+
+  const reminderProposal = toolResult(
+    await mcp(
+      toolCall(14, 'propose_reminder', proposalRunId, {
+        sourceModule: 'task',
+        sourceId: concurrentConfirmations[0].data.resultId,
+        occurrenceDate: '2199-12-30',
+        remindAt: '2199-12-29T10:00:00.000+08:00',
+        recipientIds: [member.member.id],
+      }),
+    ),
+  );
+  const reminderConfirmed = await request(
+    `/agent/proposals/${reminderProposal.id}/confirm`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: reminderProposal.version, clientRequestId: randomUUID() },
+  );
+  const createdBusinessRows = await db.query(
+    `SELECT
+       (SELECT COUNT(*) FROM polls WHERE "householdId" = $1 AND title = $2) AS polls,
+       (SELECT COUNT(*) FROM shopping_items WHERE "householdId" = $1 AND "customName" = $3) AS shopping,
+       (SELECT COUNT(*) FROM reminders WHERE "householdId" = $1 AND "sourceId" = $4) AS reminders,
+       (SELECT COUNT(*) FROM menu_items WHERE "menuId" = $5 AND "dishId" = $6) AS menu_items`,
+    [
+      member.member.householdId,
+      pollTitle,
+      shoppingName,
+      concurrentConfirmations[0].data.resultId,
+      menuConfirmed.data.resultId,
+      dish.rows[0].dishId,
+    ],
+  );
+  assert(
+    [pollConfirmed, menuConfirmed, shoppingConfirmed, reminderConfirmed].every(
+      (entry) => entry.status === 201 && entry.data.status === 'executed',
+    ) &&
+      Number(createdBusinessRows.rows[0].polls) === 1 &&
+      Number(createdBusinessRows.rows[0].shopping) === 1 &&
+      Number(createdBusinessRows.rows[0].reminders) === 1 &&
+      Number(createdBusinessRows.rows[0].menu_items) === 1,
+    '五类提案均通过原有业务服务落库，购物自由名称项没有绕过库存确认',
+  );
+
+  console.log('7. 放弃、过期、版本冲突、权限变化和不可删除历史');
+  const rejectedProposal = toolResult(
+    await mcp(
+      toolCall(15, 'propose_task', proposalRunId, {
+        title: `放弃任务-${randomUUID()}`,
+        startsOn: '2199-12-30',
+      }),
+    ),
+  );
+  const staleReject = await request(
+    `/agent/proposals/${rejectedProposal.id}/reject`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: 99 },
+  );
+  const rejected = await request(
+    `/agent/proposals/${rejectedProposal.id}/reject`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: rejectedProposal.version },
+  );
+
+  const expiredProposal = toolResult(
+    await mcp(
+      toolCall(16, 'propose_task', proposalRunId, {
+        title: `过期任务-${randomUUID()}`,
+        startsOn: '2199-12-30',
+      }),
+    ),
+  );
+  await db.query(
+    'UPDATE agent_action_proposals SET "expiresAt" = now() - interval \'1 minute\' WHERE id = $1',
+    [expiredProposal.id],
+  );
+  const expired = await request(
+    `/agent/proposals/${expiredProposal.id}/confirm`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: expiredProposal.version, clientRequestId: randomUUID() },
+  );
+
+  const permissionProposal = toolResult(
+    await mcp(
+      toolCall(17, 'propose_task', proposalRunId, {
+        title: `权限变化任务-${randomUUID()}`,
+        startsOn: '2199-12-30',
+      }),
+    ),
+  );
+  const proposalSettings = await request('/agent/settings', owner.accessToken);
+  const disabledProposalTools = await request(
+    '/agent/settings',
+    owner.accessToken,
+    'PUT',
+    {
+      proposalToolsEnabled: proposalSettings.data.proposalToolsEnabled.filter(
+        (tool) => tool !== 'propose_task',
+      ),
+      expectedVersion: proposalSettings.data.version,
+    },
+  );
+  const permissionDenied = await request(
+    `/agent/proposals/${permissionProposal.id}/confirm`,
+    member.accessToken,
+    'POST',
+    { expectedVersion: permissionProposal.version, clientRequestId: randomUUID() },
+  );
+  const permissionState = await request(
+    `/agent/conversations/${proposalConversation.data.id}`,
+    member.accessToken,
+  );
+  await request('/agent/settings', owner.accessToken, 'PUT', {
+    proposalToolsEnabled: proposalTools,
+    expectedVersion: disabledProposalTools.data.version,
+  });
+
+  let proposalImmutable = false;
+  try {
+    await db.query('DELETE FROM agent_action_proposals WHERE id = $1', [rejectedProposal.id]);
+  } catch (error) {
+    proposalImmutable = error.code === '55000';
+  }
+  assert(
+    staleReject.status === 409 &&
+      rejected.data.status === 'rejected' &&
+      expired.data.status === 'expired' &&
+      permissionDenied.status === 403 &&
+      permissionState.data.proposals.find((entry) => entry.id === permissionProposal.id)
+        ?.status === 'failed' &&
+      proposalImmutable,
+    '旧版本被拒绝，放弃、过期和权限失败状态保留，历史提案不可删除',
   );
 
   console.log('家庭智能体 API 回归通过');

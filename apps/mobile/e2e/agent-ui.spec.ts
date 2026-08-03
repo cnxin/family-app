@@ -15,6 +15,12 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client);
 }
 
+async function activate(locator: Locator, touch: boolean) {
+  await locator.scrollIntoViewIfNeeded();
+  if (touch) await locator.tap();
+  else await locator.click();
+}
+
 test('管理员可用鼠标或触控使用小管家并查看运行时设置', async ({ page }, testInfo) => {
   await page.goto('/assistant');
   await expect(page.getByRole('heading', { name: '问问小管家', exact: true })).toBeVisible();
@@ -30,6 +36,20 @@ test('管理员可用鼠标或触控使用小管家并查看运行时设置', as
   await expect(input).toHaveValue('最近有哪些东西快没了？');
   await send.click();
   await expect(page.getByText(/库存|低库存/).last()).toBeVisible({ timeout: 15_000 });
+
+  const proposalTitle = `触控回归任务-${Date.now()}`;
+  const proposalDate = new Date().toISOString().slice(0, 10);
+  await input.fill(`创建任务：${proposalTitle} ${proposalDate}`);
+  await activate(send, testInfo.project.name === 'mobile-chrome');
+  const confirm = page.getByRole('button', { name: '确认执行', exact: true }).last();
+  const reject = page.getByRole('button', { name: '放弃', exact: true }).last();
+  await expect(page.getByText(proposalTitle, { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expectTouchTarget(confirm, '提案确认按钮');
+  await expectTouchTarget(reject, '提案放弃按钮');
+  await activate(reject, testInfo.project.name === 'mobile-chrome');
+  await expect(page.getByText('操作提案 · 已放弃').last()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   if (testInfo.project.name === 'desktop-chrome') {

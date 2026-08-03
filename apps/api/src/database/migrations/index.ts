@@ -42,6 +42,7 @@ import { ConvergeHouseholdKnowledge1785230400000 } from './1785230400000-converg
 import { AddHouseholdTravel1785230500000 } from './1785230500000-add-household-travel';
 import { AddFamilyMemories1785230600000 } from './1785230600000-add-family-memories';
 import { AddFamilyAgent1785230700000 } from './1785230700000-add-family-agent';
+import { AddAgentActionProposals1785230800000 } from './1785230800000-add-agent-action-proposals';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -88,4 +89,5 @@ export const ALL_MIGRATIONS = [
   AddHouseholdTravel1785230500000,
   AddFamilyMemories1785230600000,
   AddFamilyAgent1785230700000,
+  AddAgentActionProposals1785230800000,
 ];

@@ -1,13 +1,19 @@
 import {
   Archive,
   Bot,
+  Check,
+  CheckCircle2,
   CircleStop,
   CloudOff,
+  Clock3,
+  ListChecks,
   MessageCircleMore,
   Plus,
   Send,
   Settings2,
   Sparkles,
+  TriangleAlert,
+  X,
 } from 'lucide-react-native';
 import React from 'react';
 import {
@@ -38,16 +44,28 @@ import {
   useAgentStatus,
   useArchiveAgentConversation,
   useCancelAgentRun,
+  useConfirmAgentProposal,
   useCreateAgentConversation,
   useSendAgentMessage,
+  useRejectAgentProposal,
   useUpdateAgentSettings,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
-import type { AgentMessage, AgentRuntimeKind } from '../../lib/types';
+import type {
+  AgentActionProposal,
+  AgentMessage,
+  AgentRuntimeKind,
+} from '../../lib/types';
 
 const SUGGESTIONS = [
   '今天家里有什么安排？',
+  `创建任务：整理冰箱 ${new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())}`,
   '最近有哪些东西快没了？',
   '家庭片单里有什么可以看？',
   '接下来的行程还缺什么？',
@@ -80,6 +98,156 @@ function MessageBubble({ message }: { message: AgentMessage }) {
           {message.content}
         </Text>
       </View>
+    </View>
+  );
+}
+
+const PROPOSAL_STATUS = {
+  pending: { label: '需要确认', tone: 'orange' },
+  confirmed: { label: '正在执行', tone: 'blue' },
+  executed: { label: '已确认并执行', tone: 'green' },
+  rejected: { label: '已放弃', tone: 'secondary' },
+  expired: { label: '已过期', tone: 'secondary' },
+  failed: { label: '执行失败', tone: 'red' },
+} as const;
+
+function ProposalCard({
+  proposal,
+  conversationId,
+}: {
+  proposal: AgentActionProposal;
+  conversationId: string;
+}) {
+  const c = useTheme();
+  const confirm = useConfirmAgentProposal();
+  const reject = useRejectAgentProposal();
+  const [message, setMessage] = React.useState<string | null>(null);
+  const busy = confirm.isPending || reject.isPending;
+  const state = PROPOSAL_STATUS[proposal.status];
+  const tone =
+    state.tone === 'green'
+      ? c.green
+      : state.tone === 'orange'
+        ? c.orange
+        : state.tone === 'blue'
+          ? c.blue
+          : state.tone === 'red'
+            ? c.red
+            : c.secondaryLabel;
+  const soft =
+    state.tone === 'green'
+      ? c.greenSoft
+      : state.tone === 'orange'
+        ? c.orangeSoft
+        : state.tone === 'blue'
+          ? c.blueSoft
+          : state.tone === 'red'
+            ? c.redSoft
+            : c.fill;
+
+  const act = async (action: 'confirm' | 'reject') => {
+    setMessage(null);
+    try {
+      if (action === 'confirm') {
+        await confirm.mutateAsync({
+          id: proposal.id,
+          conversationId,
+          expectedVersion: proposal.version,
+        });
+      } else {
+        await reject.mutateAsync({
+          id: proposal.id,
+          conversationId,
+          expectedVersion: proposal.version,
+        });
+      }
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  };
+
+  return (
+    <View
+      accessibilityLabel={`${proposal.actionLabel}操作提案`}
+      style={[styles.proposal, { backgroundColor: soft, borderLeftColor: tone }]}
+      testID={`agent-proposal-${proposal.id}`}
+    >
+      <View style={styles.proposalHeading}>
+        <View style={[styles.proposalIcon, { backgroundColor: c.card }]}>
+          {proposal.status === 'executed' ? (
+            <CheckCircle2 color={tone} size={19} />
+          ) : proposal.status === 'failed' ? (
+            <TriangleAlert color={tone} size={19} />
+          ) : proposal.status === 'pending' ? (
+            <ListChecks color={tone} size={19} />
+          ) : (
+            <Clock3 color={tone} size={19} />
+          )}
+        </View>
+        <View style={styles.flexCopy}>
+          <Text style={[t.caption, { color: tone, fontWeight: '600' }]}>操作提案 · {state.label}</Text>
+          <Text style={[t.headline, { color: c.label, marginTop: 3 }]}>{proposal.preview.title}</Text>
+        </View>
+      </View>
+
+      <Text style={[t.footnote, styles.proposalSummary, { color: c.secondaryLabel }]}>
+        {proposal.preview.summary}
+      </Text>
+      <View style={[styles.proposalChanges, { borderTopColor: c.separator }]}>
+        {proposal.preview.changes.map((change) => (
+          <View key={`${change.label}:${change.value}`} style={styles.proposalChange}>
+            <Text style={[t.caption, styles.proposalChangeLabel, { color: c.secondaryLabel }]}>
+              {change.label}
+            </Text>
+            <Text style={[t.footnote, styles.proposalChangeValue, { color: c.label }]}>
+              {change.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+      {proposal.preview.warning ? (
+        <Text style={[t.caption, styles.proposalWarning, { color: c.orange }]}>
+          {proposal.preview.warning}
+        </Text>
+      ) : null}
+      {proposal.status === 'failed' && proposal.failureMessage ? (
+        <Text accessibilityLiveRegion="polite" style={[t.footnote, { color: c.red }]}>
+          {proposal.failureMessage}
+        </Text>
+      ) : null}
+      {message ? (
+        <Text accessibilityLiveRegion="polite" role="alert" style={[t.footnote, { color: c.red }]}>
+          {message}
+        </Text>
+      ) : null}
+      {proposal.status === 'pending' ? (
+        <View style={styles.proposalActions}>
+          <PressSurface
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => void act('reject')}
+            style={[styles.proposalButton, { backgroundColor: c.card, borderColor: c.separator }]}
+            testID={`agent-proposal-reject-${proposal.id}`}
+          >
+            <X color={c.secondaryLabel} size={18} />
+            <Text style={[t.footnote, { color: c.label, fontWeight: '600' }]}>放弃</Text>
+          </PressSurface>
+          <PressSurface
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => void act('confirm')}
+            style={[styles.proposalButton, { backgroundColor: c.tint, borderColor: c.tint }]}
+            testID={`agent-proposal-confirm-${proposal.id}`}
+          >
+            {confirm.isPending ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Check color="#FFFFFF" size={18} />
+            )}
+            <Text style={[t.footnote, { color: '#FFFFFF', fontWeight: '600' }]}>确认执行</Text>
+          </PressSurface>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -223,7 +391,7 @@ export default function AssistantScreen() {
           <PageHeader
             eyebrow="家庭助理"
             title="问问小管家"
-            subtitle="查询家庭安排、库存、知识、出行、观影和回忆"
+            subtitle="查询家庭资料，也可以生成等待你确认的操作提案"
             action={
               <IconButton
                 accessibilityLabel="开始新对话"
@@ -252,6 +420,7 @@ export default function AssistantScreen() {
               contentContainerStyle={styles.conversationTabs}
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.conversationScroller}
               testID="agent-conversation-list"
             >
               {conversations.map((item) => (
@@ -352,6 +521,16 @@ export default function AssistantScreen() {
                 </View>
               )}
 
+              {conversationId
+                ? conversation?.proposals.map((proposal) => (
+                    <ProposalCard
+                      conversationId={conversationId}
+                      key={proposal.id}
+                      proposal={proposal}
+                    />
+                  ))
+                : null}
+
               {activeRun ? (
                 <View
                   accessibilityLiveRegion="polite"
@@ -432,7 +611,7 @@ export default function AssistantScreen() {
                   testID="agent-send-button"
                 />
               </View>
-              <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 7 }]}>只读查询，不会替你修改家庭数据</Text>
+              <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 7 }]}>查询可直接返回，任何修改都需要你明确确认</Text>
             </View>
           </Card>
         </PageContainer>
@@ -470,7 +649,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   noticeText: { flex: 1, lineHeight: 19 },
-  conversationTabs: { gap: 8, paddingBottom: 12 },
+  conversationScroller: { flexGrow: 0, maxHeight: 56 },
+  conversationTabs: { alignItems: 'center', gap: 8, paddingBottom: 12 },
   conversationTab: {
     alignItems: 'center',
     borderRadius: radius.md,
@@ -516,6 +696,40 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   messageText: { lineHeight: 25 },
+  proposal: {
+    alignSelf: 'stretch',
+    borderLeftWidth: 3,
+    gap: 11,
+    maxWidth: 680,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  proposalHeading: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  proposalIcon: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  proposalSummary: { lineHeight: 19 },
+  proposalChanges: { borderTopWidth: 1, gap: 8, paddingTop: 10 },
+  proposalChange: { flexDirection: 'row', gap: 12 },
+  proposalChangeLabel: { minWidth: 68, paddingTop: 1 },
+  proposalChangeValue: { flex: 1, lineHeight: 19 },
+  proposalWarning: { lineHeight: 18 },
+  proposalActions: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end' },
+  proposalButton: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 112,
+    paddingHorizontal: 14,
+  },
   welcome: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingVertical: 42 },
   welcomeIcon: {
     alignItems: 'center',

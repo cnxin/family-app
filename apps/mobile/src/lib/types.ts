@@ -1604,6 +1604,7 @@ export interface AgentStatus {
   fallbackAvailable: boolean;
   persistenceEncrypted: boolean;
   readToolsEnabled: string[];
+  proposalToolsEnabled: string[];
 }
 
 export interface AgentSettings {
@@ -1649,7 +1650,41 @@ export interface AgentMessage {
   createdAt: string;
 }
 
+export type AgentProposalStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'executed'
+  | 'rejected'
+  | 'expired'
+  | 'failed';
+
+export interface AgentActionProposal {
+  id: string;
+  runId: string;
+  actionType: 'task' | 'reminder' | 'poll' | 'menu' | 'shopping';
+  actionLabel: string;
+  preview: {
+    title: string;
+    summary: string;
+    changes: { label: string; value: string }[];
+    targetPath?: string;
+    warning?: string;
+  };
+  status: AgentProposalStatus;
+  expiresAt: string;
+  confirmedAt: string | null;
+  executedAt: string | null;
+  resultModule: string | null;
+  resultId: string | null;
+  failureCode: string | null;
+  failureMessage: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AgentConversationDetail extends AgentConversation {
   messages: AgentMessage[];
   runs: AgentRun[];
+  proposals: AgentActionProposal[];
 }
