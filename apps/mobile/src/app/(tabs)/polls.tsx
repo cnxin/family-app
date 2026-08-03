@@ -4,12 +4,14 @@ import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import {
   BellPlus,
   Check,
+  CheckCircle2,
   Clock3,
   Film,
   LockKeyhole,
   Pencil,
   Plus,
   RotateCcw,
+  TriangleAlert,
   Trash2,
   UserRound,
   Vote,
@@ -19,7 +21,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -36,6 +37,7 @@ import {
 } from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import {
+  AdaptiveDialog,
   Card,
   ConfirmDialog,
   EmptyState,
@@ -260,15 +262,13 @@ function PollForm({
   };
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
-      <View style={styles.modalOverlay}>
-        <Pressable
-          accessibilityLabel="关闭投票编辑"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.formSheet, { backgroundColor: c.card, borderColor: c.separator }]}>
+    <AdaptiveDialog
+      accessibilityLabel={poll ? '编辑家庭投票' : '发起家庭投票'}
+      maxWidth={600}
+      onClose={onClose}
+      testID="poll-form-dialog"
+      visible={visible}
+    >
           <View style={styles.formHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.title2, { color: c.label }]}>
@@ -329,17 +329,41 @@ function PollForm({
                   </Text>
                 </View>
               ) : (
-                <Segmented<PollCategory>
-                  onChange={setCategory}
-                  options={[
-                    { label: '家庭', value: 'general' },
-                    { label: '吃什么', value: 'meal' },
-                    { label: '活动', value: 'activity' },
-                    { label: '观影', value: 'movie' },
-                    { label: '采购', value: 'shopping' },
-                  ]}
-                  value={category}
-                />
+                <View style={styles.categoryChoices}>
+                  {(Object.entries(CATEGORY_LABELS) as [PollCategory, string][]).map(
+                    ([value, label]) => {
+                      const active = category === value;
+                      return (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          key={value}
+                          onPress={() => setCategory(value)}
+                          style={({ pressed }) => [
+                            styles.categoryChoice,
+                            {
+                              backgroundColor: active
+                                ? c.tintSoft
+                                : pressed
+                                  ? c.fillStrong
+                                  : c.fill,
+                              borderColor: active ? c.tint : c.separator,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              t.subhead,
+                              { color: active ? c.tint : c.secondaryLabel, fontWeight: active ? '700' : '500' },
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </Pressable>
+                      );
+                    },
+                  )}
+                </View>
               )}
             </View>
 
@@ -564,14 +588,23 @@ function PollForm({
               </View>
             ) : null}
 
-            {message ? <Text style={[t.footnote, { color: c.red }]}>{message}</Text> : null}
-
+          </ScrollView>
+          <View style={[styles.formFooter, { borderTopColor: c.separator, backgroundColor: c.chromeStrong }]}>
+            {message ? (
+              <View accessibilityLiveRegion="polite" style={[styles.formMessage, { backgroundColor: c.redSoft }]}>
+                <TriangleAlert color={c.red} size={17} />
+                <Text style={[t.footnote, { color: c.red, flex: 1 }]}>{message}</Text>
+              </View>
+            ) : null}
             <View style={styles.formActions}>
               <Pressable
                 accessibilityRole="button"
                 disabled={save.isPending}
                 onPress={onClose}
-                style={[styles.cancelButton, { backgroundColor: c.fill }]}
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  { backgroundColor: pressed ? c.fillStrong : c.fill },
+                ]}
               >
                 <Text style={[t.headline, { color: c.label }]}>取消</Text>
               </Pressable>
@@ -582,10 +615,8 @@ function PollForm({
                 title={poll ? '保存修改' : '发起投票'}
               />
             </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
+          </View>
+    </AdaptiveDialog>
   );
 }
 
@@ -611,20 +642,36 @@ function PollCard({
   const c = useTheme();
   const vote = useVotePoll();
   const [selected, setSelected] = useState(poll.selectedOptionIds);
+  const [feedback, setFeedback] = useState<{
+    type: 'success' | 'warning' | 'error';
+    text: string;
+  } | null>(null);
 
   useEffect(() => setSelected(poll.selectedOptionIds), [poll.selectedOptionIds]);
+  useEffect(() => setFeedback(null), [poll.id]);
 
   const toggle = (optionId: string) => {
     if (!poll.canVote) return;
-    setSelected((current) => {
-      if (poll.voteMode === 'single') return current.includes(optionId) ? [] : [optionId];
-      if (current.includes(optionId)) return current.filter((id) => id !== optionId);
-      if (current.length >= poll.maxChoices) {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        return current;
-      }
-      return [...current, optionId];
-    });
+    if (poll.voteMode === 'single') {
+      setFeedback(null);
+      setSelected(selected.includes(optionId) ? [] : [optionId]);
+      return;
+    }
+    if (selected.includes(optionId)) {
+      setFeedback(null);
+      setSelected(selected.filter((id) => id !== optionId));
+      return;
+    }
+    if (selected.length >= poll.maxChoices) {
+      setFeedback({
+        type: 'warning',
+        text: `这个投票最多选择 ${poll.maxChoices} 项`,
+      });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    setFeedback(null);
+    setSelected([...selected, optionId]);
   };
 
   const changed = !sameSelection(selected, poll.selectedOptionIds);
@@ -632,10 +679,15 @@ function PollCard({
     vote.mutate(
       { id: poll.id, optionIds: selected },
       {
-        onSuccess: () =>
-          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+        onSuccess: () => {
+          setFeedback({ type: 'success', text: '投票已提交，可以继续修改选择' });
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
         onError: (error) =>
-          Alert.alert('投票失败', error instanceof Error ? error.message : '请稍后再试'),
+          setFeedback({
+            type: 'error',
+            text: error instanceof Error ? error.message : '投票失败，请稍后再试',
+          }),
       },
     );
   };
@@ -688,58 +740,63 @@ function PollCard({
             <Text style={[t.caption, { color: c.secondaryLabel }]}>{poll.createdBy.name}</Text>
           </View>
         </View>
-        {poll.canManage ? (
-          <View style={styles.manageActions}>
+      </View>
+
+      {poll.canManage ? (
+        <View style={styles.managementActions}>
+          <Pressable
+            accessibilityLabel={`编辑投票${poll.title}`}
+            accessibilityRole="button"
+            onPress={onEdit}
+            style={({ pressed }) => [
+              styles.managementButton,
+              { backgroundColor: pressed ? c.tintSoft : c.fill },
+            ]}
+          >
+            <Pencil color={c.tint} size={16} />
+            <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>编辑</Text>
+          </Pressable>
+          {poll.status === 'open' ? (
             <Pressable
-              accessibilityLabel={`编辑投票${poll.title}`}
+              accessibilityLabel={`结束投票${poll.title}`}
               accessibilityRole="button"
-              onPress={onEdit}
+              onPress={onClose}
               style={({ pressed }) => [
-                styles.smallIconButton,
+                styles.managementButton,
+                { backgroundColor: pressed ? c.orangeSoft : c.fill },
+              ]}
+            >
+              <LockKeyhole color={c.orange} size={16} />
+              <Text style={[t.footnote, { color: c.orange, fontWeight: '700' }]}>结束</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityLabel={`重新开启投票${poll.title}`}
+              accessibilityRole="button"
+              onPress={onReopen}
+              style={({ pressed }) => [
+                styles.managementButton,
                 { backgroundColor: pressed ? c.tintSoft : c.fill },
               ]}
             >
-              <Pencil color={c.tint} size={15} />
+              <RotateCcw color={c.tint} size={16} />
+              <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>重开</Text>
             </Pressable>
-            {poll.status === 'open' ? (
-              <Pressable
-                accessibilityLabel={`结束投票${poll.title}`}
-                accessibilityRole="button"
-                onPress={onClose}
-                style={({ pressed }) => [
-                  styles.smallIconButton,
-                  { backgroundColor: pressed ? c.orangeSoft : c.fill },
-                ]}
-              >
-                <LockKeyhole color={c.orange} size={15} />
-              </Pressable>
-            ) : (
-              <Pressable
-                accessibilityLabel={`重新开启投票${poll.title}`}
-                accessibilityRole="button"
-                onPress={onReopen}
-                style={({ pressed }) => [
-                  styles.smallIconButton,
-                  { backgroundColor: pressed ? c.tintSoft : c.fill },
-                ]}
-              >
-                <RotateCcw color={c.tint} size={15} />
-              </Pressable>
-            )}
-            <Pressable
-              accessibilityLabel={`删除投票${poll.title}`}
-              accessibilityRole="button"
-              onPress={onArchive}
-              style={({ pressed }) => [
-                styles.smallIconButton,
-                { backgroundColor: pressed ? c.redSoft : c.fill },
-              ]}
-            >
-              <Trash2 color={c.red} size={15} />
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
+          )}
+          <Pressable
+            accessibilityLabel={`删除投票${poll.title}`}
+            accessibilityRole="button"
+            onPress={onArchive}
+            style={({ pressed }) => [
+              styles.managementButton,
+              { backgroundColor: pressed ? c.redSoft : c.fill },
+            ]}
+          >
+            <Trash2 color={c.red} size={16} />
+            <Text style={[t.footnote, { color: c.red, fontWeight: '700' }]}>删除</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.utilityActions}>
         {poll.sourceModule === 'media' && poll.sourceId ? (
@@ -785,7 +842,7 @@ function PollCard({
             <View key={option.id} style={styles.resultOption}>
               <Pressable
                 accessibilityLabel={`${active ? '取消选择' : '选择'}${option.label}`}
-                accessibilityRole="checkbox"
+                accessibilityRole={poll.voteMode === 'single' ? 'radio' : 'checkbox'}
                 accessibilityState={{ checked: active, disabled: !poll.canVote }}
                 disabled={!poll.canVote}
                 onPress={() => toggle(option.id)}
@@ -871,6 +928,49 @@ function PollCard({
         })}
       </View>
 
+      {feedback ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.voteFeedback,
+            {
+              backgroundColor:
+                feedback.type === 'success'
+                  ? c.greenSoft
+                  : feedback.type === 'warning'
+                    ? c.orangeSoft
+                    : c.redSoft,
+            },
+          ]}
+        >
+          {feedback.type === 'success' ? (
+            <CheckCircle2 color={c.green} size={18} />
+          ) : (
+            <TriangleAlert
+              color={feedback.type === 'warning' ? c.orange : c.red}
+              size={18}
+            />
+          )}
+          <Text
+            style={[
+              t.footnote,
+              {
+                color:
+                  feedback.type === 'success'
+                    ? c.green
+                    : feedback.type === 'warning'
+                      ? c.orange
+                      : c.red,
+                flex: 1,
+                fontWeight: '600',
+              },
+            ]}
+          >
+            {feedback.text}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={[styles.pollFooter, { borderTopColor: c.separator }]}>
         <View style={styles.deadlineMeta}>
           <Clock3 color={c.tertiaryLabel} size={14} />
@@ -946,7 +1046,7 @@ export default function PollsScreen() {
         : null,
     [sourceId, sourceModule, sourceTitle],
   );
-  const { data: polls, isLoading, error } = usePolls();
+  const { data: polls, isLoading, error, refetch } = usePolls();
   const { data: householdMedia } = useMedia(
     'all',
     '',
@@ -1082,8 +1182,19 @@ export default function PollsScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {isLoading ? <ActivityIndicator color={c.tint} style={styles.loader} /> : null}
           {error ? (
-            <Card>
+            <Card style={styles.loadErrorCard}>
               <EmptyState emoji="🗳️" title="投票加载失败" hint="请检查 API 服务" />
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void refetch()}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  { backgroundColor: pressed ? c.tintSoft : c.fill },
+                ]}
+              >
+                <RotateCcw color={c.tint} size={17} />
+                <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>重新加载</Text>
+              </Pressable>
             </Card>
           ) : null}
           {!isLoading && !error && visiblePolls.length
@@ -1216,7 +1327,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   addButton: {
-    height: 42,
+    minHeight: 44,
     borderRadius: radius.md,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -1227,6 +1338,16 @@ const styles = StyleSheet.create({
   filterWrap: { width: 310, maxWidth: '100%', marginTop: 20 },
   scrollContent: { paddingTop: 18, paddingBottom: 44, gap: 14 },
   loader: { marginTop: 100 },
+  loadErrorCard: { paddingBottom: 20 },
+  retryButton: {
+    minHeight: 44,
+    alignSelf: 'center',
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
   pollCard: { padding: 0, overflow: 'hidden' },
   pollHeader: {
     minHeight: 74,
@@ -1247,9 +1368,23 @@ const styles = StyleSheet.create({
   pollTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   statusPill: { minHeight: 24, borderRadius: radius.sm, paddingHorizontal: 8, justifyContent: 'center' },
   pollMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 5 },
-  manageActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5, maxWidth: 70 },
+  managementActions: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  managementButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
   reminderButton: {
-    minHeight: 36,
+    minHeight: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 11,
     flexDirection: 'row',
@@ -1262,13 +1397,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-  },
-  smallIconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   pollDescription: { paddingHorizontal: 16, paddingTop: 8, lineHeight: 21 },
   optionsList: { paddingHorizontal: 16, paddingTop: 15, paddingBottom: 14, gap: 13 },
@@ -1293,7 +1421,7 @@ const styles = StyleSheet.create({
   pollOptionPoster: { width: 36, height: 52, borderRadius: 4 },
   optionSourceLink: {
     alignSelf: 'flex-start',
-    minHeight: 30,
+    minHeight: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 7,
     marginTop: 4,
@@ -1303,6 +1431,16 @@ const styles = StyleSheet.create({
   },
   progressTrack: { height: 5, borderRadius: 3, marginTop: 6, overflow: 'hidden' },
   progressFill: { height: 5, borderRadius: 3 },
+  voteFeedback: {
+    minHeight: 44,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   pollFooter: {
     minHeight: 58,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1316,28 +1454,13 @@ const styles = StyleSheet.create({
   deadlineMeta: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 },
   voteButton: {
     minWidth: 112,
-    height: 38,
+    minHeight: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.42)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  formSheet: {
-    width: '100%',
-    maxWidth: 600,
-    maxHeight: '94%',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
   },
   formHeader: {
     minHeight: 70,
@@ -1348,15 +1471,41 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconButton: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  formContent: { paddingHorizontal: 20, paddingBottom: 20, gap: 16 },
+  formContent: { paddingHorizontal: 20, paddingBottom: 24, gap: 16 },
+  formFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    gap: 10,
+  },
+  formMessage: {
+    minHeight: 44,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   field: { gap: 7 },
   fieldLabel: { fontWeight: '600' },
+  categoryChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryChoice: {
+    minWidth: 94,
+    flexGrow: 1,
+    minHeight: 44,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sourceNotice: {
     minHeight: 46,
     borderRadius: radius.sm,
@@ -1388,9 +1537,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 9,
   },
-  numberInput: { width: 64, height: 36, borderRadius: radius.sm, textAlign: 'center' },
+  numberInput: { width: 64, height: 44, borderRadius: radius.sm, textAlign: 'center' },
   optionsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  addOptionButton: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  addOptionButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4 },
   optionInputs: { gap: 8 },
   candidateInputs: { gap: 8 },
   candidateInput: {
@@ -1407,8 +1556,8 @@ const styles = StyleSheet.create({
   optionInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   optionInput: { flex: 1, minWidth: 0, height: 44, borderRadius: radius.sm, paddingHorizontal: 12 },
   removeOptionButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',

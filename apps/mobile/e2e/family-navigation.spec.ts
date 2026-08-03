@@ -1341,13 +1341,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
   const pollCard = page
     .getByRole('button', { name: `编辑投票${pollTitle}`, exact: true })
-    .locator('xpath=ancestor::div[.//*[@role="checkbox"]][1]');
+    .locator('xpath=ancestor::div[.//*[@role="radio"]][1]');
   await expect(
-    pollCard.getByRole('checkbox', { name: '选择周六上午', exact: true }),
+    pollCard.getByRole('radio', { name: '选择周六上午', exact: true }),
   ).toBeVisible();
 
   await pollCard
-    .getByRole('checkbox', { name: '选择周六上午', exact: true })
+    .getByRole('radio', { name: '选择周六上午', exact: true })
     .click();
   await pollCard.getByRole('button', { name: `提交${pollTitle}的投票` }).click();
   await expect(page.getByText(/1 票 · 100%/).first()).toBeVisible();
@@ -1367,7 +1367,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.getByRole('button', { name: `重新开启投票${pollTitle}` }).click();
   await page.getByRole('button', { name: '进行中', exact: true }).click();
   await expect(
-    pollCard.getByRole('checkbox', { name: '取消选择周六上午', exact: true }),
+    pollCard.getByRole('radio', { name: '取消选择周六上午', exact: true }),
   ).toBeVisible();
 
   await page.getByRole('button', { name: `删除投票${pollTitle}` }).click();

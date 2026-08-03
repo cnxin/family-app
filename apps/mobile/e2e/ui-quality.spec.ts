@@ -146,3 +146,96 @@ test('日期选择在移动端贴底、桌面居中且核心操作不少于 44px
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(dialog).not.toBeVisible();
 });
+
+test('投票表单适配视口且核心操作支持鼠标和触控', async ({ page }, testInfo) => {
+  await openAuthenticatedHome(page);
+  await page.goto('/polls');
+
+  const createButton = page.getByRole('button', { name: '发起投票', exact: true });
+  await expectTouchTarget(createButton, '发起投票按钮');
+  await createButton.click();
+
+  const dialog = page.getByTestId('poll-form-dialog');
+  await expect(dialog).toBeVisible();
+  await expectTouchTarget(dialog.getByRole('button', { name: '关闭', exact: true }), '关闭投票表单');
+  await expectTouchTarget(dialog.getByRole('button', { name: '家庭', exact: true }), '家庭分类');
+  await expectTouchTarget(dialog.getByRole('button', { name: '采购', exact: true }), '采购分类');
+  await expectTouchTarget(dialog.getByRole('button', { name: '取消', exact: true }), '取消投票表单');
+  await expectTouchTarget(dialog.getByRole('button', { name: '发起投票', exact: true }), '提交投票表单');
+
+  const viewport = page.viewportSize();
+  const box = await dialog.boundingBox();
+  expect(viewport).not.toBeNull();
+  expect(box).not.toBeNull();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect.poll(async () => {
+      const settledBox = await dialog.boundingBox();
+      if (!settledBox || !viewport) return Number.POSITIVE_INFINITY;
+      return Math.abs(settledBox.y + settledBox.height - viewport.height);
+    }).toBeLessThanOrEqual(4);
+  } else {
+    expect(box?.y ?? 0).toBeGreaterThan(40);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThan((viewport?.height ?? 0) - 40);
+  }
+
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test('知识库筛选、弹层和未保存保护支持鼠标和触控', async ({ page }, testInfo) => {
+  await openAuthenticatedHome(page);
+  await page.goto('/knowledge');
+
+  await expectTouchTarget(page.getByRole('button', { name: '新建知识文章', exact: true }), '新建知识文章');
+  for (const label of ['全部', '家庭流程', '设备说明', '常用联系', '居家资料', '其他']) {
+    await expectTouchTarget(page.getByRole('button', { name: label, exact: true }), `${label}筛选`);
+  }
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole('button', { name: '新建知识文章', exact: true }).click();
+  const editor = page.getByTestId('knowledge-editor-dialog');
+  await expect(editor).toBeVisible();
+  await expectTouchTarget(editor.getByRole('button', { name: '关闭', exact: true }), '关闭知识编辑器');
+  await expectTouchTarget(editor.getByRole('button', { name: '创建文章', exact: true }), '创建文章');
+
+  const viewport = page.viewportSize();
+  const box = await editor.boundingBox();
+  expect(viewport).not.toBeNull();
+  expect(box).not.toBeNull();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect.poll(async () => {
+      const settledBox = await editor.boundingBox();
+      if (!settledBox || !viewport) return Number.POSITIVE_INFINITY;
+      return Math.abs(settledBox.y + settledBox.height - viewport.height);
+    }).toBeLessThanOrEqual(4);
+  } else {
+    expect(box?.y ?? 0).toBeGreaterThan(40);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThan((viewport?.height ?? 0) - 40);
+  }
+
+  await editor.getByLabel('标题', { exact: true }).fill('未保存的知识文章');
+  await editor.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByText('放弃未保存的修改？', { exact: true })).toBeVisible();
+  await expect(editor).toBeVisible();
+  await expectTouchTarget(page.getByRole('button', { name: '放弃编辑', exact: true }), '放弃编辑');
+  await page.getByRole('button', { name: '放弃编辑', exact: true }).click();
+  await expect(editor).not.toBeVisible();
+
+  const articleTitle = `知识库 UI 回归-${testInfo.project.name}-${Date.now()}`;
+  await page.getByRole('button', { name: '新建知识文章', exact: true }).click();
+  await editor.getByLabel('标题', { exact: true }).fill(articleTitle);
+  await editor.getByLabel('正文', { exact: true }).fill('用于检查详情、历史与固定操作栏。');
+  await editor.getByRole('button', { name: '创建文章', exact: true }).click();
+
+  const articleCard = page.getByRole('button', { name: `打开${articleTitle}`, exact: true });
+  await expect(articleCard).toBeVisible();
+  const detail = page.getByTestId('knowledge-detail-dialog');
+  await expect(detail).toBeVisible();
+  await expectTouchTarget(detail.getByRole('button', { name: '历史', exact: true }), '版本历史');
+  await expectTouchTarget(detail.getByRole('button', { name: '编辑', exact: true }), '编辑文章');
+  await expectTouchTarget(detail.getByRole('button', { name: '归档', exact: true }), '归档文章');
+  await detail.getByRole('button', { name: '历史', exact: true }).click();
+  await expect(detail.getByText('版本历史', { exact: true })).toBeVisible();
+  await expectTouchTarget(detail.getByRole('button', { name: '返回文章详情', exact: true }), '返回文章详情');
+});
