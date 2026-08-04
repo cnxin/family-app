@@ -416,46 +416,48 @@ export default function AssistantScreen() {
           ) : null}
 
           {conversations?.length ? (
-            <ScrollView
-              contentContainerStyle={styles.conversationTabs}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.conversationScroller}
-              testID="agent-conversation-list"
-            >
-              {conversations.map((item) => (
-                <PressSurface
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: item.id === conversationId }}
-                  key={item.id}
-                  onPress={() => setConversationId(item.id)}
-                  style={[
-                    styles.conversationTab,
-                    {
-                      backgroundColor: item.id === conversationId ? c.tintSoft : c.fill,
-                      borderColor: item.id === conversationId ? c.tint : c.separator,
-                    },
-                  ]}
-                >
-                  <MessageCircleMore
-                    color={item.id === conversationId ? c.tint : c.secondaryLabel}
-                    size={16}
-                  />
-                  <Text
-                    numberOfLines={1}
+            <View style={styles.conversationBar}>
+              <ScrollView
+                contentContainerStyle={styles.conversationTabs}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.conversationScroller}
+                testID="agent-conversation-list"
+              >
+                {conversations.map((item) => (
+                  <PressSurface
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: item.id === conversationId }}
+                    key={item.id}
+                    onPress={() => setConversationId(item.id)}
                     style={[
-                      t.footnote,
+                      styles.conversationTab,
                       {
-                        color: item.id === conversationId ? c.tint : c.label,
-                        fontWeight: '600',
+                        backgroundColor: item.id === conversationId ? c.tintSoft : c.fill,
+                        borderColor: item.id === conversationId ? c.tint : c.separator,
                       },
                     ]}
                   >
-                    {item.title}
-                  </Text>
-                </PressSurface>
-              ))}
-            </ScrollView>
+                    <MessageCircleMore
+                      color={item.id === conversationId ? c.tint : c.secondaryLabel}
+                      size={16}
+                    />
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        t.footnote,
+                        {
+                          color: item.id === conversationId ? c.tint : c.label,
+                          fontWeight: '600',
+                        },
+                      ]}
+                    >
+                      {item.title}
+                    </Text>
+                  </PressSurface>
+                ))}
+              </ScrollView>
+            </View>
           ) : null}
 
           <Card style={[styles.chat, layout === 'compact' && styles.chatCompact]}>
@@ -622,7 +624,7 @@ export default function AssistantScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  page: { flex: 1, paddingBottom: 14 },
+  page: { flex: 1, minHeight: 0, paddingBottom: 14 },
   flexCopy: { flex: 1, minWidth: 0 },
   settingsPanel: {
     borderWidth: 1,
@@ -649,19 +651,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   noticeText: { flex: 1, lineHeight: 19 },
-  conversationScroller: { flexGrow: 0, maxHeight: 56 },
+  conversationBar: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 56,
+    position: 'relative',
+    zIndex: 20,
+  },
+  conversationScroller: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 56,
+    maxHeight: 56,
+  },
   conversationTabs: { alignItems: 'center', gap: 8, paddingBottom: 12 },
   conversationTab: {
     alignItems: 'center',
     borderRadius: radius.md,
     borderWidth: 1,
     flexDirection: 'row',
+    flexShrink: 0,
     gap: 7,
     maxWidth: 220,
     minHeight: 44,
     paddingHorizontal: 12,
   },
-  chat: { flex: 1, minHeight: 560, overflow: 'hidden' },
+  chat: { flex: 1, minHeight: 0, overflow: 'hidden', zIndex: 10 },
   chatCompact: { minHeight: 0 },
   chatHeader: {
     alignItems: 'center',
@@ -678,7 +693,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 42,
   },
-  messages: { flexGrow: 1, gap: 14, padding: 16 },
+  messages: { flex: 1, flexGrow: 1, minHeight: 0, gap: 14, padding: 16 },
   messageRow: { alignItems: 'flex-end', flexDirection: 'row', gap: 8, maxWidth: '88%' },
   messageRowMine: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
   messageAvatar: {

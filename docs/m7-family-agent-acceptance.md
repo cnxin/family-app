@@ -80,9 +80,11 @@ POST   /internal/agent/mcp
 - API 回归覆盖五类提案、并发与重复确认、版本冲突、放弃、过期、权限变化、成员隔离和不可删除历史。
 - 开发与生产 Compose 叠加解析通过，开发 API 镜像已重建并健康运行，`/agent/status` 已加载且要求登录。
 - Chrome 在 390 x 844 手机视口使用真实登录态完成任务提案生成与放弃流程；确认和放弃按钮均为 112 x 44，页面 `scrollWidth` 为 390，放弃后状态正确变为“操作提案 · 已放弃”。
-- 实测发现横向对话选择器在手机端会纵向拉伸，已通过限制 `flexGrow` 和最大高度修复；修复后 API/Mobile TypeScript、Expo lint 与 Web export 均通过。
-- 修复后浏览器会话过期并被重定向到登录页，因此最终手机复查和 1440 x 900 桌面登录态流程未完成；未读取或重置密码。
-- Docker Hub 标签 API 已验证固定清单和 arm64 镜像；Docker Registry 连接在本机代理链上发生 TLS 超时或重置，Hermes 镜像实际拉取与容器健康检查尚未完成。Hermes 未启动不影响本地摘要和 `/health/ready`。
+- 实测发现横向对话选择器在手机端会纵向拉伸并遮挡后续聊天区域；已增加独立 56px 会话栏、固定滚动区域、`minHeight: 0` 收缩约束和层级，避免聊天卡顶出可视区域；修复后 API/Mobile TypeScript、Expo lint 与 Web export 均通过。
+- 小管家专项 Playwright 回归 5/5 通过：隔离管理员登录、390 x 844 触控、1440 x 900 鼠标、提案生成与放弃状态，以及页面无横向溢出。
+- 全量浏览器回归 30 项通过、2 项失败；失败均为既有 `family-navigation.spec.ts` 期待“家庭工作台”文案但当前首页没有该文案，与小管家改动无关。
+- 本机 Hermes 已使用临时隔离配置和运行时密钥完成真实链路：隔离 API 3199 先启动后，Hermes 8642 发现 12 个 Family App MCP 工具，`get_today_summary` 工具事件为 `completed`，回答成功写回加密对话；测试数据库已删除，未读取或重置现有账号密码。
+- 本次只验证本机 Hermes；NAS/Docker Hermes 的镜像拉取、容器网络与健康检查仍待部署批次完成，不影响当前 API/Web 服务。
 
 ## 后续批次
 
