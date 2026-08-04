@@ -8,7 +8,8 @@
 - M7-A4.4 已实现 provider-agnostic 消息渠道绑定层；本批只提供 Family App 管理 API 和 Hermes 内部接口，不宣称真实 Telegram、Discord 或 NAS 网关已接通。
 
 - NestJS 新增可替换 `AgentRuntime`，包含确定性 `FakeAgentRuntime` 与 Hermes OpenAI 兼容适配器。
-- 新增标准 Streamable HTTP MCP：Hermes 只可调用家庭摘要、日历、低库存、知识库、出行清单、观影候选和最近回忆七个只读工具。
+- 新增标准 Streamable HTTP MCP：首批开放家庭摘要、日历、低库存、知识库、出行清单、观影候选和最近回忆七个只读工具。
+- 日常查询扩充为十个只读工具，新增最多 32 天的家庭任务、指定日期购物清单和已有三餐菜单；菜单工具不创建空菜单，所有结果继续受家庭与运行白名单约束。
 - MCP 同时校验内部 Bearer 密钥和五分钟短时 `runId`；家庭、成员和工具白名单均由服务器端运行记录确定。
 - 新增有序迁移 `AddFamilyAgent1785230700000`（第 44 个），建立设置、对话、加密消息、运行与不可变工具审计五张表；`synchronize` 继续为 `false`。
 - 对话正文使用独立 `AGENT_DATA_KEY` 进行 AES-256-GCM 加密。生产未配置数据密钥时默认不启用对话，不回退到明文保存。
@@ -100,7 +101,9 @@ GET    /internal/agent/channels/:channelId/runs/:runId
 - 本轮聊天工作区重构后再次以 390 x 844 视口访问 `8082/assistant`，现有浏览器会话仍重定向到登录页；因此本轮没有宣称完成登录后截图回归，也没有为测试读取或重置当前账号密码。专项 Playwright 用例已同步覆盖设置、会话历史入口的 44px 触达区域，以及两类手机面板的可拖动把手。
 - 本机已建立独立 `familyapp` Hermes profile，不复制个人消息渠道、技能或会话；其 LaunchAgent `ai.hermes.gateway-familyapp` 登录自启并与默认 Hermes Gateway 并行运行。Family App API 通过 `docker-compose.local-agent.yml` 访问 `host.docker.internal:8642`，Hermes 只通过 `127.0.0.1:3100/internal/agent/mcp` 回调 API。
 - `scripts/setup-local-hermes-secrets.mjs` 只生成缺失的 MCP/运行时密钥并保持 `0600`，不会输出或覆盖密钥；profile 只继承当前 `opencode-zen` 模型所需的单个凭据，不继承 Telegram、Discord、自定义提供方或其他渠道凭据。对话数据继续使用开发环境原有数据密钥，避免破坏已有加密对话。
-- 本机常驻链路已验证：API 容器到 Hermes `/v1/capabilities` 返回 200，Hermes 到 Family MCP 发现 12 个白名单工具，非家庭数据模型健康检查返回正常回答、`finish_reason=stop` 且包含用量统计。当前家庭设置已启用并选择 `hermes`；由于没有读取或重置当前账号密码，本轮没有通过登录后页面发送真实家庭问题。
+- 本机常驻链路已验证：API 容器到 Hermes `/v1/capabilities` 返回 200，Hermes 到 Family MCP 原有 12 个白名单工具可用，非家庭数据模型健康检查返回正常回答、`finish_reason=stop` 且包含用量统计。当前家庭设置已启用并选择 `hermes`；由于没有读取或重置当前账号密码，本轮没有通过登录后页面发送真实家庭问题。
+- M7-A4.5 日常查询批次新增 `get_tasks`、`get_shopping_list`、`get_meal_plan`，白名单总数增至 15。第 52 个迁移只为仍使用完整旧默认白名单的家庭追加权限，不覆盖已缩减的自定义授权；Fake 降级运行时同步支持三类问法并遵守运行白名单，Hermes 提示会声明上海时区日期和本次运行实际授权工具。
+- 本批开发库迁移前已完成备份；隔离临时数据库全量 API 回归、空库迁移、结构漂移、API/Mobile TypeScript、Expo lint、65 路由 Web export、开发与生产 Compose 解析均通过。开发 API 镜像已重建，`familyapp` Gateway 发现 15 个工具，API 与 Web 健康检查通过。
 - NAS/Docker Hermes 的镜像拉取、容器网络与健康检查仍待部署批次完成，不影响当前本机 Hermes、API、Web 和其他家庭功能。
 
 ## M7-A4.4 验收步骤
@@ -113,4 +116,4 @@ GET    /internal/agent/channels/:channelId/runs/:runId
 
 ## 后续批次
 
-M7-A4.5 完成 Hermes 生产容器网络和出口加固。长期主动任务、访客采纳、敏感生活数据和没有明确撤销契约的自动撤销仍不在本批范围。
+M7-A4.6 完成 Hermes 生产容器网络和出口加固。长期主动任务、访客采纳、敏感生活数据和没有明确撤销契约的自动撤销仍不在本批范围。

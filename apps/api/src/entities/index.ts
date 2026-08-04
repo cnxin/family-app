@@ -5750,7 +5750,21 @@ export class AgentSetting {
   @Column({ type: 'int', default: 7 })
   retentionDays: number;
 
-  @Column({ type: 'jsonb', default: [] })
+  @Column({
+    type: 'jsonb',
+    default: [
+      'get_today_summary',
+      'get_calendar',
+      'get_tasks',
+      'get_shopping_list',
+      'get_meal_plan',
+      'get_inventory_alerts',
+      'search_knowledge',
+      'get_travel_checklist',
+      'get_watch_candidates',
+      'get_recent_memories',
+    ],
+  })
   readToolsEnabled: string[];
 
   @Column({

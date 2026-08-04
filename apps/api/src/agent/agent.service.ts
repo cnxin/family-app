@@ -610,6 +610,7 @@ export class AgentService {
           runId: run.id,
           modelAlias: run.modelAlias,
           message,
+          allowedTools: run.allowedTools,
           history,
         });
       } catch (error) {
@@ -621,6 +622,7 @@ export class AgentService {
           runId: run.id,
           modelAlias: run.modelAlias,
           message,
+          allowedTools: run.allowedTools,
           history,
         });
         result.content = `Hermes 暂时不可用，下面由本地家庭摘要回答。\n\n${result.content}`;

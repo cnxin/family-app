@@ -1,6 +1,9 @@
 export const AGENT_READ_TOOLS = [
   'get_today_summary',
   'get_calendar',
+  'get_tasks',
+  'get_shopping_list',
+  'get_meal_plan',
   'get_inventory_alerts',
   'search_knowledge',
   'get_travel_checklist',
@@ -25,6 +28,7 @@ export interface AgentChatInput {
   runId: string;
   modelAlias: string;
   message: string;
+  allowedTools: string[];
   history: { role: 'user' | 'assistant'; content: string }[];
 }
 

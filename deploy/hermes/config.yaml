@@ -11,6 +11,9 @@ mcp_servers:
       include:
         - get_today_summary
         - get_calendar
+        - get_tasks
+        - get_shopping_list
+        - get_meal_plan
         - get_inventory_alerts
         - search_knowledge
         - get_travel_checklist

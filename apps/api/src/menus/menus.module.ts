@@ -195,6 +195,14 @@ export class MenusService {
     return [breakfast, lunch, dinner];
   }
 
+  async listExistingByDate(householdId: string, date: string) {
+    return this.menus.find({
+      where: { householdId, date },
+      relations: { items: true },
+      order: { items: { createdAt: 'ASC' } },
+    });
+  }
+
   async listDateCounts(householdId: string, start: string, end: string) {
     const rows = await this.items
       .createQueryBuilder('item')

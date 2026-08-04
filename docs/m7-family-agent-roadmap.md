@@ -185,6 +185,9 @@ nonce
 | --- | --- | --- |
 | `family-app:get_today_summary` | 当前家庭与成员 | 今日菜单、任务、提醒、购物、来访和维护摘要 |
 | `family-app:get_calendar` | 指定日期范围 | 授权可见的统一日历事项 |
+| `family-app:get_tasks` | 最多 32 天 | 待办、状态、负责人和积分 |
+| `family-app:get_shopping_list` | 指定日期 | 待采购项、数量、单位和库存关联状态 |
+| `family-app:get_meal_plan` | 指定日期 | 已有三餐菜单、菜品状态和掌勺人 |
 | `family-app:get_inventory_alerts` | 当前家庭 | 低库存及后续临期批次 |
 | `family-app:get_menu_shopping_gap` | 指定菜单 | 菜谱快照、库存抵扣和建议采购 |
 | `family-app:search_knowledge` | 当前家庭 | 标题、摘要、标签和授权参考链接 |

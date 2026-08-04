@@ -139,11 +139,14 @@ try {
   ]);
   assert(
     settings.status === 200 &&
+      ['get_tasks', 'get_shopping_list', 'get_meal_plan'].every((tool) =>
+        settings.data.readToolsEnabled.includes(tool),
+      ) &&
       forbiddenSettings.status === 403 &&
       conversation.status === 201 &&
       duplicate.every((entry) => entry.status === 202) &&
       duplicate[0].data.id === duplicate[1].data.id,
-    '成员可使用小管家但不能改设置，重复发送只创建一次运行',
+    '新家庭默认开放日常只读工具，成员可使用小管家但不能改设置，重复发送只创建一次运行',
   );
   const completed = await waitForRun(
     member.accessToken,
@@ -222,7 +225,11 @@ try {
   const expiredRunId = randomUUID();
   const whitelistRunId = randomUUID();
   for (const [runId, expires, tools] of [
-    [validRunId, "now() + interval '5 minutes'", ['get_today_summary']],
+    [
+      validRunId,
+      "now() + interval '5 minutes'",
+      ['get_today_summary', 'get_tasks', 'get_shopping_list', 'get_meal_plan'],
+    ],
     [expiredRunId, "now() - interval '1 minute'", ['get_today_summary']],
     [whitelistRunId, "now() + interval '5 minutes'", ['get_calendar']],
   ]) {
@@ -263,6 +270,73 @@ try {
       JSON.stringify(blockedTool.body).includes('未授权') &&
       immutable,
     'MCP 要求内部密钥，拒绝过期和白名单外工具，审计事件不可变',
+  );
+
+  const dailyReadDate = '2199-11-10';
+  const emptyMealDate = '2199-11-11';
+  const dailyTaskTitle = `智能体日常任务-${randomUUID()}`;
+  const dailyShoppingName = `智能体采购项-${randomUUID()}`;
+  await request('/tasks', owner.accessToken, 'POST', {
+    title: dailyTaskTitle,
+    startsOn: dailyReadDate,
+    recurrence: 'once',
+  });
+  await request('/shopping-items', owner.accessToken, 'POST', {
+    date: dailyReadDate,
+    customName: dailyShoppingName,
+    totalQty: 2,
+    unit: '件',
+  });
+  const dishes = await request('/dishes', owner.accessToken);
+  const dailyMenu = await request(
+    `/menus?date=${dailyReadDate}&mealType=dinner`,
+    owner.accessToken,
+  );
+  const dailyDish = dishes.data[0];
+  await request(`/menus/${dailyMenu.data.id}/items`, owner.accessToken, 'POST', {
+    items: [{ dishId: dailyDish.id }],
+  });
+  const emptyMenusBefore = await db.query(
+    'SELECT COUNT(*)::int AS count FROM menus WHERE "householdId" = $1 AND date = $2',
+    [owner.member.householdId, emptyMealDate],
+  );
+  const taskTool = await mcp(
+    toolCall(5, 'get_tasks', validRunId, {
+      start: dailyReadDate,
+      end: dailyReadDate,
+    }),
+  );
+  const shoppingTool = await mcp(
+    toolCall(6, 'get_shopping_list', validRunId, { date: dailyReadDate }),
+  );
+  const mealTool = await mcp(
+    toolCall(7, 'get_meal_plan', validRunId, { date: dailyReadDate }),
+  );
+  const emptyMealTool = await mcp(
+    toolCall(8, 'get_meal_plan', validRunId, { date: emptyMealDate }),
+  );
+  const oversizedTaskRange = await mcp(
+    toolCall(9, 'get_tasks', validRunId, {
+      start: '2199-01-01',
+      end: '2199-03-01',
+    }),
+  );
+  const emptyMenusAfter = await db.query(
+    'SELECT COUNT(*)::int AS count FROM menus WHERE "householdId" = $1 AND date = $2',
+    [owner.member.householdId, emptyMealDate],
+  );
+  assert(
+      toolResult(taskTool)?.some((entry) => entry.title === dailyTaskTitle) &&
+      toolResult(shoppingTool)?.some((entry) => entry.name === dailyShoppingName) &&
+      toolResult(mealTool)?.some((menu) =>
+        menu.items.some((item) => item.dishName === dailyDish.name),
+      ) &&
+      Array.isArray(toolResult(emptyMealTool)) &&
+      toolResult(emptyMealTool).length === 0 &&
+      JSON.stringify(oversizedTaskRange.body).includes('最多查询 32 天') &&
+      emptyMenusBefore.rows[0].count === 0 &&
+      emptyMenusAfter.rows[0].count === 0,
+    '任务、购物和三餐工具限制家庭与日期范围，菜单只读查询没有写副作用',
   );
 
   console.log('4. 恶意知识内容仅作为数据，Hermes 离线自动降级');

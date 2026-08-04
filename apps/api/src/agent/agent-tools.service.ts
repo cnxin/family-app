@@ -17,6 +17,9 @@ import {
 import { KnowledgeService } from '../knowledge/knowledge.module';
 import { MediaService } from '../media/media.module';
 import { MemoriesService } from '../memories/memories.module';
+import { MenusService } from '../menus/menus.module';
+import { ShoppingService } from '../shopping/shopping.module';
+import { TasksService } from '../tasks/tasks.module';
 import { TravelService } from '../travel/travel.module';
 import {
   AGENT_READ_TOOLS,
@@ -86,6 +89,9 @@ export class AgentToolsService {
     private readonly travel: TravelService,
     private readonly media: MediaService,
     private readonly memories: MemoriesService,
+    private readonly menus: MenusService,
+    private readonly shopping: ShoppingService,
+    private readonly tasks: TasksService,
     private readonly proposals: AgentProposalsService,
   ) {}
 
@@ -181,6 +187,76 @@ export class AgentToolsService {
         summary: entry.summary ? String(entry.summary).slice(0, 200) : null,
         targetPath: entry.targetPath,
       }));
+    }
+    if (toolName === 'get_tasks') {
+      const start = dateOnly(input.start, today());
+      const end = dateOnly(input.end, addDays(start, 6));
+      const days = Math.round(
+        (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) /
+          86_400_000,
+      );
+      if (days < 0 || days > 31) {
+        throw new BadRequestException('智能体任务单次最多查询 32 天');
+      }
+      const includeCompleted = input.includeCompleted === true;
+      const rows = await this.tasks.list(start, end, user);
+      return rows
+        .filter((row) => includeCompleted || row.status === 'pending')
+        .slice(0, limited(input.limit))
+        .map((row) => ({
+          id: row.id,
+          taskId: row.taskId,
+          title: row.task.title,
+          dueDate: row.dueDate,
+          status: row.status,
+          assigneeName: row.assignee?.name ?? row.task.defaultAssignee?.name ?? null,
+          rewardPoints: row.task.rewardPoints,
+          targetPath: `/tasks?date=${row.dueDate}&taskId=${row.taskId}`,
+        }));
+    }
+    if (toolName === 'get_shopping_list') {
+      const date = dateOnly(input.date, today());
+      const includeChecked = input.includeChecked === true;
+      const rows = await this.shopping.list(user.householdId, date);
+      return rows
+        .filter((row) => includeChecked || !row.checked)
+        .slice(0, limited(input.limit))
+        .map((row) => ({
+          id: row.id,
+          date: row.date,
+          name: row.ingredient?.name ?? row.customName ?? '未命名采购项',
+          quantity: row.totalQty == null ? null : Number(row.totalQty),
+          unit: row.unit,
+          checked: row.checked,
+          source: row.source,
+          inventoryLinked: row.inventoryItemId != null,
+          targetPath: `/shopping?date=${row.date}`,
+        }));
+    }
+    if (toolName === 'get_meal_plan') {
+      const date = dateOnly(input.date, today());
+      const menus = await this.menus.listExistingByDate(user.householdId, date);
+      const mealOrder = { breakfast: 0, lunch: 1, dinner: 2 } as const;
+      return menus
+        .sort((left, right) => mealOrder[left.mealType] - mealOrder[right.mealType])
+        .map((menu) => ({
+          id: menu.id,
+          date: menu.date,
+          mealType: menu.mealType,
+          status: menu.status,
+          chefName: menu.chef?.name ?? null,
+          items: menu.items
+            .filter((item) => item.status !== 'rejected')
+            .slice(0, MAX_RESULT_ITEMS)
+            .map((item) => ({
+              id: item.id,
+              dishName: item.dish.name,
+              status: item.status,
+              requestedByName: item.requestedBy.name,
+              assignedToName: item.assignedTo?.name ?? null,
+            })),
+          targetPath: `/kitchen?date=${menu.date}&mealType=${menu.mealType}`,
+        }));
     }
     if (toolName === 'get_inventory_alerts') {
       return this.inventoryAlerts(user.householdId, limited(input.limit));
@@ -286,6 +362,9 @@ export class AgentToolsService {
     const sourceModule: Record<string, string> = {
       get_today_summary: 'calendar',
       get_calendar: 'calendar',
+      get_tasks: 'task',
+      get_shopping_list: 'shopping',
+      get_meal_plan: 'menu',
       get_inventory_alerts: 'inventory',
       search_knowledge: 'knowledge',
       get_travel_checklist: 'travel',

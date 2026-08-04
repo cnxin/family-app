@@ -96,6 +96,23 @@ export class AgentMcpController {
       start: z.string().optional(),
       end: z.string().optional(),
     });
+    register('get_tasks', '读取最多 32 天的家庭任务和完成状态', {
+      runId,
+      start: z.string().optional(),
+      end: z.string().optional(),
+      includeCompleted: z.boolean().optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+    });
+    register('get_shopping_list', '读取指定日期的家庭购物清单', {
+      runId,
+      date: z.string().optional(),
+      includeChecked: z.boolean().optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+    });
+    register('get_meal_plan', '读取指定日期已有的家庭三餐菜单', {
+      runId,
+      date: z.string().optional(),
+    });
     register('get_inventory_alerts', '读取当前家庭的低库存提醒', {
       runId,
       limit: z.number().int().min(1).max(20).optional(),

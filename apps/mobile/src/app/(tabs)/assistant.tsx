@@ -68,7 +68,9 @@ import type {
 } from '../../lib/types';
 
 const SUGGESTIONS = [
-  '今天家里有什么安排？',
+  '今天三餐吃什么？',
+  '这周还有哪些家庭任务？',
+  '今天的购物清单还有什么？',
   `创建任务：整理冰箱 ${new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
     year: 'numeric',
@@ -77,7 +79,6 @@ const SUGGESTIONS = [
   }).format(new Date())}`,
   '最近有哪些东西快没了？',
   '家庭片单里有什么可以看？',
-  '接下来的行程还缺什么？',
 ];
 
 function errorMessage(error: unknown) {

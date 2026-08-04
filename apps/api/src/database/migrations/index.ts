@@ -46,6 +46,7 @@ import { AddAgentActionProposals1785230800000 } from './1785230800000-add-agent-
 import { AddAgentChannelBindings1785230900000 } from './1785230900000-add-agent-channel-bindings';
 import { NormalizeAgentChannelPairingIndex1785231000000 } from './1785231000000-normalize-agent-channel-pairing-index';
 import { LinkAgentMessagesToRuns1785231100000 } from './1785231100000-link-agent-messages-to-runs';
+import { AddAgentDailyReadTools1785231200000 } from './1785231200000-add-agent-daily-read-tools';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -96,4 +97,5 @@ export const ALL_MIGRATIONS = [
   AddAgentChannelBindings1785230900000,
   NormalizeAgentChannelPairingIndex1785231000000,
   LinkAgentMessagesToRuns1785231100000,
+  AddAgentDailyReadTools1785231200000,
 ];
