@@ -98,8 +98,10 @@ GET    /internal/agent/channels/:channelId/runs/:runId
 - 小管家专项 Playwright 回归 5/5 通过：隔离管理员登录、390 x 844 触控、1440 x 900 鼠标、提案生成与放弃状态，以及页面无横向溢出；全量浏览器回归曾有 30 项通过、2 项失败，随后聚焦重跑 `family-navigation.spec.ts` 为 5/5，失败与本批改动无关。
 - 本轮在 8082 重跑时管理员移动用例 1/1 通过；桌面用例第一次因已有异步运行状态使发送按钮暂时禁用而超时，重跑时保存的登录态已过期回到登录页。普通成员 setup 仍因未提供当前密码而未完成；没有重置或读取账号密码。
 - 本轮聊天工作区重构后再次以 390 x 844 视口访问 `8082/assistant`，现有浏览器会话仍重定向到登录页；因此本轮没有宣称完成登录后截图回归，也没有为测试读取或重置当前账号密码。专项 Playwright 用例已同步覆盖设置、会话历史入口的 44px 触达区域，以及两类手机面板的可拖动把手。
-- 本机 Hermes 已使用临时隔离配置和运行时密钥完成真实链路：隔离 API 3199 先启动后，Hermes 8642 发现 12 个 Family App MCP 工具，`get_today_summary` 工具事件为 `completed`，回答成功写回加密对话；测试数据库已删除，未读取或重置现有账号密码。
-- 本次只验证本机 Hermes；NAS/Docker Hermes 的镜像拉取、容器网络与健康检查仍待部署批次完成，不影响当前 API/Web 服务。
+- 本机已建立独立 `familyapp` Hermes profile，不复制个人消息渠道、技能或会话；其 LaunchAgent `ai.hermes.gateway-familyapp` 登录自启并与默认 Hermes Gateway 并行运行。Family App API 通过 `docker-compose.local-agent.yml` 访问 `host.docker.internal:8642`，Hermes 只通过 `127.0.0.1:3100/internal/agent/mcp` 回调 API。
+- `scripts/setup-local-hermes-secrets.mjs` 只生成缺失的 MCP/运行时密钥并保持 `0600`，不会输出或覆盖密钥；profile 只继承当前 `opencode-zen` 模型所需的单个凭据，不继承 Telegram、Discord、自定义提供方或其他渠道凭据。对话数据继续使用开发环境原有数据密钥，避免破坏已有加密对话。
+- 本机常驻链路已验证：API 容器到 Hermes `/v1/capabilities` 返回 200，Hermes 到 Family MCP 发现 12 个白名单工具，非家庭数据模型健康检查返回正常回答、`finish_reason=stop` 且包含用量统计。当前家庭设置已启用并选择 `hermes`；由于没有读取或重置当前账号密码，本轮没有通过登录后页面发送真实家庭问题。
+- NAS/Docker Hermes 的镜像拉取、容器网络与健康检查仍待部署批次完成，不影响当前本机 Hermes、API、Web 和其他家庭功能。
 
 ## M7-A4.4 验收步骤
 

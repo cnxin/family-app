@@ -1,0 +1,17 @@
+services:
+  api:
+    environment:
+      AGENT_MCP_KEY_FILE: /run/secrets/agent_mcp_key
+      AGENT_RUNTIME_KEY_FILE: /run/secrets/agent_runtime_key
+      AGENT_RUNTIME_URL: http://host.docker.internal:8642
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    secrets:
+      - agent_mcp_key
+      - agent_runtime_key
+
+secrets:
+  agent_mcp_key:
+    file: ${AGENT_MCP_KEY_SECRET_PATH:-./deploy/secrets/agent_mcp_key.txt}
+  agent_runtime_key:
+    file: ${AGENT_RUNTIME_KEY_SECRET_PATH:-./deploy/secrets/agent_runtime_key.txt}

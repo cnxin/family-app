@@ -1,10 +1,14 @@
+model:
+  default: mimo-v2.5-free
+  provider: opencode-zen
+
 platform_toolsets:
   api_server:
     - family_app
 
 mcp_servers:
   family_app:
-    url: http://api:3100/internal/agent/mcp
+    url: http://127.0.0.1:3100/internal/agent/mcp
     headers:
       Authorization: Bearer ${AGENT_MCP_KEY}
     tools:
