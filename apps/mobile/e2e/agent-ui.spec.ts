@@ -24,7 +24,14 @@ async function activate(locator: Locator, touch: boolean) {
 test('管理员可用鼠标或触控使用小管家并查看运行时设置', async ({ page }, testInfo) => {
   await page.goto('/assistant');
   await expect(page.getByRole('heading', { name: '问问小管家', exact: true })).toBeVisible();
+  const settingsTrigger = page.getByTestId('agent-settings-trigger');
+  await expectTouchTarget(settingsTrigger, '助理设置入口');
+  await activate(settingsTrigger, testInfo.project.name === 'mobile-chrome');
   await expect(page.getByTestId('agent-settings-panel')).toBeVisible();
+  await activate(
+    page.getByTestId('agent-settings-close'),
+    testInfo.project.name === 'mobile-chrome',
+  );
 
   const input = page.getByTestId('agent-message-input');
   const send = page.getByTestId('agent-send-button');

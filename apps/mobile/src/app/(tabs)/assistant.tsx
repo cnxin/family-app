@@ -3,6 +3,7 @@ import {
   Bot,
   Check,
   CheckCircle2,
+  ChevronRight,
   CircleStop,
   CloudOff,
   Clock3,
@@ -32,6 +33,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageContainer, PageHeader, useLayoutMode } from '../../components/app-shell';
 import {
+  AdaptiveDialog,
   Card,
   IconButton,
   PressSurface,
@@ -260,7 +262,7 @@ function ProposalCard({
   );
 }
 
-function RuntimeSettings() {
+function RuntimeSettings({ embedded = false }: { embedded?: boolean }) {
   const c = useTheme();
   const { data: settings } = useAgentSettings();
   const update = useUpdateAgentSettings();
@@ -278,7 +280,14 @@ function RuntimeSettings() {
 
   if (!settings) return <SkeletonRows count={2} />;
   return (
-    <View style={[styles.settingsPanel, { borderColor: c.separator }]} testID="agent-settings-panel">
+    <View
+      style={[
+        styles.settingsPanel,
+        embedded && styles.settingsPanelEmbedded,
+        { borderColor: c.separator },
+      ]}
+      testID="agent-settings-panel"
+    >
       <View style={styles.settingsHeading}>
         <View style={[styles.settingsIcon, { backgroundColor: c.fill }]}>
           <Settings2 color={c.secondaryLabel} size={18} />
@@ -311,7 +320,7 @@ function RuntimeSettings() {
   );
 }
 
-function ChannelBindings({ manager }: { manager: boolean }) {
+function ChannelBindings({ manager, embedded = false }: { manager: boolean; embedded?: boolean }) {
   const c = useTheme();
   const { data: members } = useMembers(manager);
   const { data: channels } = useAgentChannels();
@@ -364,7 +373,14 @@ function ChannelBindings({ manager }: { manager: boolean }) {
   };
 
   return (
-    <View style={[styles.settingsPanel, { borderColor: c.separator }]} testID="agent-channel-bindings">
+    <View
+      style={[
+        styles.settingsPanel,
+        embedded && styles.settingsPanelEmbedded,
+        { borderColor: c.separator },
+      ]}
+      testID="agent-channel-bindings"
+    >
       <View style={styles.settingsHeading}>
         <View style={[styles.settingsIcon, { backgroundColor: c.fill }]}>
           <Link2 color={c.secondaryLabel} size={18} />
@@ -470,6 +486,88 @@ function ChannelBindings({ manager }: { manager: boolean }) {
   );
 }
 
+function AssistantSettingsTrigger({
+  manager,
+  onPress,
+}: {
+  manager: boolean;
+  onPress: () => void;
+}) {
+  const c = useTheme();
+  const { data: channels } = useAgentChannels();
+  const activeChannels = (channels ?? []).filter((channel) => !channel.revokedAt);
+  if (!manager && !activeChannels.length) return null;
+
+  return (
+    <PressSurface
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.settingsTrigger, { backgroundColor: c.card, borderColor: c.separator }]}
+      testID="agent-settings-trigger"
+    >
+      <View style={[styles.settingsTriggerIcon, { backgroundColor: c.fill }]}>
+        <Settings2 color={c.secondaryLabel} size={18} />
+      </View>
+      <View style={styles.flexCopy}>
+        <Text style={[t.headline, { color: c.label }]}>助理设置</Text>
+        <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+          {manager ? '运行方式与消息渠道' : `${activeChannels.length} 个消息渠道已绑定`}
+        </Text>
+      </View>
+      <ChevronRight color={c.secondaryLabel} size={19} />
+    </PressSurface>
+  );
+}
+
+function AssistantSettingsSheet({
+  manager,
+  onClose,
+  visible,
+}: {
+  manager: boolean;
+  onClose: () => void;
+  visible: boolean;
+}) {
+  const c = useTheme();
+  return (
+    <AdaptiveDialog
+      accessibilityLabel="助理设置"
+      maxWidth={640}
+      onClose={onClose}
+      style={styles.settingsDialog}
+      testID="agent-settings-sheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={['bottom']} style={styles.settingsSheet}>
+        <View style={[styles.settingsSheetHeader, { borderBottomColor: c.separator }]}>
+          <View style={[styles.settingsIcon, { backgroundColor: c.fill }]}>
+            <Settings2 color={c.secondaryLabel} size={18} />
+          </View>
+          <View style={styles.flexCopy}>
+            <Text style={[t.headline, { color: c.label }]}>助理设置</Text>
+            <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>需要时再打开，不占用对话空间</Text>
+          </View>
+          <IconButton
+            accessibilityLabel="关闭助理设置"
+            backgroundColor="transparent"
+            icon={X}
+            onPress={onClose}
+            testID="agent-settings-close"
+          />
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.settingsSheetContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {manager ? <RuntimeSettings embedded /> : null}
+          <ChannelBindings embedded manager={manager} />
+        </ScrollView>
+      </SafeAreaView>
+    </AdaptiveDialog>
+  );
+}
+
 export default function AssistantScreen() {
   const c = useTheme();
   const layout = useLayoutMode();
@@ -486,6 +584,7 @@ export default function AssistantScreen() {
   const archiveConversation = useArchiveAgentConversation();
   const [draft, setDraft] = React.useState('');
   const [localError, setLocalError] = React.useState<string | null>(null);
+  const [settingsVisible, setSettingsVisible] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
   const messageCount = conversation?.messages.length ?? 0;
   const latestRunStatus = conversation?.runs[0]?.status;
@@ -558,7 +657,7 @@ export default function AssistantScreen() {
           <PageHeader
             eyebrow="家庭助理"
             title="问问小管家"
-            subtitle="查询家庭资料，也可以生成等待你确认的操作提案"
+            subtitle="家庭资料与待确认提案"
             action={
               <IconButton
                 accessibilityLabel="开始新对话"
@@ -568,9 +667,6 @@ export default function AssistantScreen() {
               />
             }
           />
-
-          {manager ? <RuntimeSettings /> : null}
-          <ChannelBindings manager={manager} />
 
           {!statusLoading && (!status?.enabled || !status.persistenceEncrypted) ? (
             <View style={[styles.notice, { backgroundColor: c.orangeSoft }]}>
@@ -583,7 +679,12 @@ export default function AssistantScreen() {
             </View>
           ) : null}
 
-          {conversations?.length ? (
+          <AssistantSettingsTrigger
+            manager={manager}
+            onPress={() => setSettingsVisible(true)}
+          />
+
+          {conversations && conversations.length > 1 ? (
             <View style={styles.conversationBar}>
               <ScrollView
                 contentContainerStyle={styles.conversationTabs}
@@ -784,6 +885,11 @@ export default function AssistantScreen() {
               <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 7 }]}>查询可直接返回，任何修改都需要你明确确认</Text>
             </View>
           </Card>
+          <AssistantSettingsSheet
+            manager={manager}
+            onClose={() => setSettingsVisible(false)}
+            visible={settingsVisible}
+          />
         </PageContainer>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -801,6 +907,40 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
+  settingsPanelEmbedded: {
+    borderWidth: 0,
+    borderRadius: 0,
+    marginBottom: 0,
+    padding: 0,
+  },
+  settingsTrigger: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+    minHeight: 56,
+    paddingHorizontal: 14,
+  },
+  settingsTriggerIcon: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  settingsDialog: { maxHeight: '92%' },
+  settingsSheet: { flexShrink: 1, maxHeight: '100%' },
+  settingsSheetHeader: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 64,
+    paddingHorizontal: 16,
+  },
+  settingsSheetContent: { gap: 24, padding: 16, paddingBottom: 32 },
   settingsHeading: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   settingsIcon: {
     alignItems: 'center',
