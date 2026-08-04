@@ -1,9 +1,7 @@
 import {
   Archive,
-  Bot,
   Check,
   CheckCircle2,
-  ChevronRight,
   CircleStop,
   CloudOff,
   Clock3,
@@ -31,7 +29,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, PageHeader, useLayoutMode } from '../../components/app-shell';
+import { PageContainer, useLayoutMode } from '../../components/app-shell';
 import {
   AdaptiveDialog,
   Card,
@@ -64,6 +62,7 @@ import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
 import type {
   AgentActionProposal,
+  AgentConversation,
   AgentMessage,
   AgentRuntimeKind,
 } from '../../lib/types';
@@ -486,39 +485,6 @@ function ChannelBindings({ manager, embedded = false }: { manager: boolean; embe
   );
 }
 
-function AssistantSettingsTrigger({
-  manager,
-  onPress,
-}: {
-  manager: boolean;
-  onPress: () => void;
-}) {
-  const c = useTheme();
-  const { data: channels } = useAgentChannels();
-  const activeChannels = (channels ?? []).filter((channel) => !channel.revokedAt);
-  if (!manager && !activeChannels.length) return null;
-
-  return (
-    <PressSurface
-      accessibilityRole="button"
-      onPress={onPress}
-      style={[styles.settingsTrigger, { backgroundColor: c.card, borderColor: c.separator }]}
-      testID="agent-settings-trigger"
-    >
-      <View style={[styles.settingsTriggerIcon, { backgroundColor: c.fill }]}>
-        <Settings2 color={c.secondaryLabel} size={18} />
-      </View>
-      <View style={styles.flexCopy}>
-        <Text style={[t.headline, { color: c.label }]}>助理设置</Text>
-        <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
-          {manager ? '运行方式与消息渠道' : `${activeChannels.length} 个消息渠道已绑定`}
-        </Text>
-      </View>
-      <ChevronRight color={c.secondaryLabel} size={19} />
-    </PressSurface>
-  );
-}
-
 function AssistantSettingsSheet({
   manager,
   onClose,
@@ -568,12 +534,125 @@ function AssistantSettingsSheet({
   );
 }
 
+function ConversationHistorySheet({
+  archiving,
+  conversations,
+  onArchive,
+  onClose,
+  onSelect,
+  selectedId,
+  visible,
+}: {
+  archiving: boolean;
+  conversations: AgentConversation[];
+  onArchive: (id: string) => void;
+  onClose: () => void;
+  onSelect: (id: string) => void;
+  selectedId: string | null;
+  visible: boolean;
+}) {
+  const c = useTheme();
+  return (
+    <AdaptiveDialog
+      accessibilityLabel="会话历史"
+      maxWidth={560}
+      onClose={onClose}
+      style={styles.historyDialog}
+      testID="agent-history-sheet"
+      visible={visible}
+    >
+      <SafeAreaView edges={['bottom']} style={styles.historySheet}>
+        <View style={[styles.settingsSheetHeader, { borderBottomColor: c.separator }]}>
+          <View style={[styles.settingsIcon, { backgroundColor: c.fill }]}>
+            <MessageCircleMore color={c.secondaryLabel} size={18} />
+          </View>
+          <View style={styles.flexCopy}>
+            <Text style={[t.headline, { color: c.label }]}>会话历史</Text>
+            <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+              {conversations.length ? `${conversations.length} 个进行中的对话` : '还没有对话'}
+            </Text>
+          </View>
+          <IconButton
+            accessibilityLabel="关闭会话历史"
+            backgroundColor="transparent"
+            icon={X}
+            onPress={onClose}
+            testID="agent-history-close"
+          />
+        </View>
+        <ScrollView
+          contentContainerStyle={styles.historyContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {conversations.length ? conversations.map((item) => {
+            const selected = item.id === selectedId;
+            return (
+              <View
+                key={item.id}
+                style={[
+                  styles.historyRow,
+                  {
+                    backgroundColor: selected ? c.tintSoft : c.card,
+                    borderColor: selected ? c.tint : c.separator,
+                  },
+                ]}
+              >
+                <PressSurface
+                  accessibilityLabel={`打开对话：${item.title}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => onSelect(item.id)}
+                  style={styles.historySelect}
+                  testID={`agent-history-item-${item.id}`}
+                >
+                  <View style={[styles.historyIcon, { backgroundColor: selected ? c.card : c.fill }]}>
+                    {selected ? <Check color={c.tint} size={18} /> : <MessageCircleMore color={c.secondaryLabel} size={18} />}
+                  </View>
+                  <View style={styles.flexCopy}>
+                    <Text numberOfLines={2} style={[t.body, { color: c.label, fontWeight: '600' }]}>
+                      {item.title}
+                    </Text>
+                    <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}>
+                      更新于 {new Date(item.updatedAt).toLocaleDateString('zh-CN', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+                </PressSurface>
+                <IconButton
+                  accessibilityLabel={`归档对话：${item.title}`}
+                  backgroundColor="transparent"
+                  disabled={archiving || Boolean(item.latestRun && ['queued', 'running'].includes(item.latestRun.status))}
+                  icon={Archive}
+                  onPress={() => onArchive(item.id)}
+                />
+              </View>
+            );
+          }) : (
+            <View style={styles.historyEmpty}>
+              <View style={[styles.welcomeIcon, { backgroundColor: c.tintSoft }]}>
+                <MessageCircleMore color={c.tint} size={25} />
+              </View>
+              <Text style={[t.headline, { color: c.label }]}>从一个新问题开始</Text>
+              <Text style={[t.footnote, styles.historyEmptyText, { color: c.secondaryLabel }]}>
+                新对话会自动出现在这里，方便之后继续。
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </AdaptiveDialog>
+  );
+}
+
 export default function AssistantScreen() {
   const c = useTheme();
   const layout = useLayoutMode();
   const { member } = useSession();
   const manager = isHouseholdManager(member);
   const { data: status, isLoading: statusLoading } = useAgentStatus();
+  const { data: channels } = useAgentChannels();
   const { data: conversations, isLoading: conversationsLoading } = useAgentConversations();
   const [conversationId, setConversationId] = React.useState<string | null>(null);
   const { data: conversation, isLoading: conversationLoading } =
@@ -585,13 +664,15 @@ export default function AssistantScreen() {
   const [draft, setDraft] = React.useState('');
   const [localError, setLocalError] = React.useState<string | null>(null);
   const [settingsVisible, setSettingsVisible] = React.useState(false);
+  const [historyVisible, setHistoryVisible] = React.useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
   const messageCount = conversation?.messages.length ?? 0;
   const latestRunStatus = conversation?.runs[0]?.status;
 
   React.useEffect(() => {
-    if (!conversationId && conversations?.length) {
-      setConversationId(conversations[0].id);
+    if (!conversations) return;
+    if (!conversationId || !conversations.some((item) => item.id === conversationId)) {
+      setConversationId(conversations[0]?.id ?? null);
     }
   }, [conversationId, conversations]);
 
@@ -636,16 +717,18 @@ export default function AssistantScreen() {
     }
   };
 
-  const archiveCurrent = async () => {
-    if (!conversationId) return;
+  const archiveById = async (id: string) => {
     setLocalError(null);
     try {
-      await archiveConversation.mutateAsync(conversationId);
-      setConversationId(null);
+      await archiveConversation.mutateAsync(id);
+      if (id === conversationId) setDraft('');
     } catch (error) {
       setLocalError(errorMessage(error));
     }
   };
+
+  const activeChannels = (channels ?? []).filter((channel) => !channel.revokedAt);
+  const showSettings = manager || activeChannels.length > 0;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
@@ -654,89 +737,14 @@ export default function AssistantScreen() {
         style={styles.screen}
       >
         <PageContainer maxWidth={1040} style={styles.page}>
-          <PageHeader
-            eyebrow="家庭助理"
-            title="问问小管家"
-            subtitle="家庭资料与待确认提案"
-            action={
-              <IconButton
-                accessibilityLabel="开始新对话"
-                icon={Plus}
-                onPress={() => void newConversation()}
-                testID="agent-new-conversation"
-              />
-            }
-          />
-
-          {!statusLoading && (!status?.enabled || !status.persistenceEncrypted) ? (
-            <View style={[styles.notice, { backgroundColor: c.orangeSoft }]}>
-              <CloudOff color={c.orange} size={19} />
-              <Text style={[t.footnote, styles.noticeText, { color: c.label }]}>
-                {!status?.enabled
-                  ? '家庭小管家当前未启用，请联系家庭管理员。'
-                  : '对话加密尚未配置，暂时不能开始新问答。'}
-              </Text>
-            </View>
-          ) : null}
-
-          <AssistantSettingsTrigger
-            manager={manager}
-            onPress={() => setSettingsVisible(true)}
-          />
-
-          {conversations && conversations.length > 1 ? (
-            <View style={styles.conversationBar}>
-              <ScrollView
-                contentContainerStyle={styles.conversationTabs}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.conversationScroller}
-                testID="agent-conversation-list"
-              >
-                {conversations.map((item) => (
-                  <PressSurface
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: item.id === conversationId }}
-                    key={item.id}
-                    onPress={() => setConversationId(item.id)}
-                    style={[
-                      styles.conversationTab,
-                      {
-                        backgroundColor: item.id === conversationId ? c.tintSoft : c.fill,
-                        borderColor: item.id === conversationId ? c.tint : c.separator,
-                      },
-                    ]}
-                  >
-                    <MessageCircleMore
-                      color={item.id === conversationId ? c.tint : c.secondaryLabel}
-                      size={16}
-                    />
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        t.footnote,
-                        {
-                          color: item.id === conversationId ? c.tint : c.label,
-                          fontWeight: '600',
-                        },
-                      ]}
-                    >
-                      {item.title}
-                    </Text>
-                  </PressSurface>
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-
           <Card style={[styles.chat, layout === 'compact' && styles.chatCompact]}>
             <View style={[styles.chatHeader, { borderBottomColor: c.separator }]}>
               <View style={[styles.botMark, { backgroundColor: c.tintSoft }]}>
-                <Bot color={c.tint} size={21} />
+                <Sparkles color={c.tint} size={20} />
               </View>
               <View style={styles.flexCopy}>
-                <Text style={[t.headline, { color: c.label }]}>家庭小管家</Text>
-                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                <Text accessibilityRole="header" style={[t.headline, { color: c.label }]}>问问小管家</Text>
+                <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
                   {status?.selected.available
                     ? status.runtimeKind === 'hermes'
                       ? 'Hermes 已连接'
@@ -744,15 +752,31 @@ export default function AssistantScreen() {
                     : '离线模式可用'}
                 </Text>
               </View>
-              {conversationId ? (
+              <View style={styles.chatActions}>
+                {showSettings ? (
+                  <IconButton
+                    accessibilityLabel="打开助理设置"
+                    backgroundColor="transparent"
+                    icon={Settings2}
+                    onPress={() => setSettingsVisible(true)}
+                    testID="agent-settings-trigger"
+                  />
+                ) : null}
                 <IconButton
-                  accessibilityLabel="归档当前对话"
+                  accessibilityLabel="打开会话历史"
                   backgroundColor="transparent"
-                  disabled={archiveConversation.isPending || Boolean(activeRun)}
-                  icon={Archive}
-                  onPress={() => void archiveCurrent()}
+                  icon={MessageCircleMore}
+                  onPress={() => setHistoryVisible(true)}
+                  testID="agent-history-trigger"
                 />
-              ) : null}
+                <IconButton
+                  accessibilityLabel="开始新对话"
+                  disabled={createConversation.isPending}
+                  icon={Plus}
+                  onPress={() => void newConversation()}
+                  testID="agent-new-conversation"
+                />
+              </View>
             </View>
 
             <ScrollView
@@ -762,6 +786,17 @@ export default function AssistantScreen() {
               showsVerticalScrollIndicator={false}
               testID="agent-message-list"
             >
+              {!statusLoading && (!status?.enabled || !status.persistenceEncrypted) ? (
+                <View style={[styles.notice, { backgroundColor: c.orangeSoft }]}>
+                  <CloudOff color={c.orange} size={19} />
+                  <Text style={[t.footnote, styles.noticeText, { color: c.label }]}>
+                    {!status?.enabled
+                      ? '家庭小管家当前未启用，请联系家庭管理员。'
+                      : '对话加密尚未配置，暂时不能开始新问答。'}
+                  </Text>
+                </View>
+              ) : null}
+
               {conversationLoading || conversationsLoading ? (
                 <SkeletonRows count={3} />
               ) : conversation?.messages.length ? (
@@ -774,7 +809,15 @@ export default function AssistantScreen() {
                     <Sparkles color={c.tint} size={26} />
                   </View>
                   <Text style={[t.title2, { color: c.label }]}>想了解家里的什么？</Text>
-                  <View style={styles.suggestions}>
+                  <Text style={[t.footnote, styles.welcomeCopy, { color: c.secondaryLabel }]}>
+                    可以查询安排、库存、片单，也可以先创建一条待确认事项。
+                  </Text>
+                  <ScrollView
+                    contentContainerStyle={styles.suggestions}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.suggestionScroller}
+                  >
                     {SUGGESTIONS.map((suggestion) => (
                       <PressSurface
                         accessibilityRole="button"
@@ -785,10 +828,10 @@ export default function AssistantScreen() {
                           { backgroundColor: c.fill, borderColor: c.separator },
                         ]}
                       >
-                        <Text style={[t.footnote, { color: c.label }]}>{suggestion}</Text>
+                        <Text numberOfLines={2} style={[t.footnote, { color: c.label }]}>{suggestion}</Text>
                       </PressSurface>
                     ))}
-                  </View>
+                  </ScrollView>
                 </View>
               )}
 
@@ -882,13 +925,24 @@ export default function AssistantScreen() {
                   testID="agent-send-button"
                 />
               </View>
-              <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 7 }]}>查询可直接返回，任何修改都需要你明确确认</Text>
             </View>
           </Card>
           <AssistantSettingsSheet
             manager={manager}
             onClose={() => setSettingsVisible(false)}
             visible={settingsVisible}
+          />
+          <ConversationHistorySheet
+            archiving={archiveConversation.isPending}
+            conversations={conversations ?? []}
+            onArchive={(id) => void archiveById(id)}
+            onClose={() => setHistoryVisible(false)}
+            onSelect={(id) => {
+              setConversationId(id);
+              setHistoryVisible(false);
+            }}
+            selectedId={conversationId}
+            visible={historyVisible}
           />
         </PageContainer>
       </KeyboardAvoidingView>
@@ -898,7 +952,7 @@ export default function AssistantScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  page: { flex: 1, minHeight: 0, paddingBottom: 14 },
+  page: { flex: 1, minHeight: 0, paddingBottom: 12, paddingTop: 12 },
   flexCopy: { flex: 1, minWidth: 0 },
   settingsPanel: {
     borderWidth: 1,
@@ -912,23 +966,6 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     marginBottom: 0,
     padding: 0,
-  },
-  settingsTrigger: {
-    alignItems: 'center',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-    minHeight: 56,
-    paddingHorizontal: 14,
-  },
-  settingsTriggerIcon: {
-    alignItems: 'center',
-    borderRadius: radius.sm,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
   },
   settingsDialog: { maxHeight: '92%' },
   settingsSheet: { flexShrink: 1, maxHeight: '100%' },
@@ -989,52 +1026,27 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 12,
     minHeight: 48,
     paddingHorizontal: 14,
   },
   noticeText: { flex: 1, lineHeight: 19 },
-  conversationBar: {
-    flexGrow: 0,
-    flexShrink: 0,
-    height: 56,
-    position: 'relative',
-    zIndex: 20,
-  },
-  conversationScroller: {
-    flexGrow: 0,
-    flexShrink: 0,
-    height: 56,
-    maxHeight: 56,
-  },
-  conversationTabs: { alignItems: 'center', gap: 8, paddingBottom: 12 },
-  conversationTab: {
-    alignItems: 'center',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    flexShrink: 0,
-    gap: 7,
-    maxWidth: 220,
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
-  chat: { flex: 1, minHeight: 0, overflow: 'hidden', zIndex: 10 },
+  chat: { flex: 1, minHeight: 0, overflow: 'hidden' },
   chatCompact: { minHeight: 0 },
   chatHeader: {
     alignItems: 'center',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    minHeight: 68,
-    paddingHorizontal: 14,
+    gap: 8,
+    minHeight: 64,
+    paddingHorizontal: 12,
   },
+  chatActions: { alignItems: 'center', flexDirection: 'row', gap: 4 },
   botMark: {
     alignItems: 'center',
     borderRadius: radius.md,
-    height: 42,
+    height: 40,
     justifyContent: 'center',
-    width: 42,
+    width: 40,
   },
   messages: { flex: 1, flexGrow: 1, minHeight: 0, gap: 14, padding: 16 },
   messageRow: { alignItems: 'flex-end', flexDirection: 'row', gap: 8, maxWidth: '88%' },
@@ -1088,7 +1100,7 @@ const styles = StyleSheet.create({
     minWidth: 112,
     paddingHorizontal: 14,
   },
-  welcome: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingVertical: 42 },
+  welcome: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingVertical: 32 },
   welcomeIcon: {
     alignItems: 'center',
     borderRadius: radius.md,
@@ -1097,18 +1109,14 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     width: 56,
   },
-  suggestions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-    marginTop: 20,
-    maxWidth: 620,
-  },
+  welcomeCopy: { lineHeight: 19, marginTop: 7, maxWidth: 430, textAlign: 'center' },
+  suggestionScroller: { alignSelf: 'stretch', flexGrow: 0, marginTop: 20 },
+  suggestions: { gap: 8, paddingHorizontal: 2 },
   suggestion: {
     borderRadius: radius.md,
     borderWidth: 1,
     justifyContent: 'center',
+    maxWidth: 260,
     minHeight: 44,
     paddingHorizontal: 13,
   },
@@ -1123,7 +1131,7 @@ const styles = StyleSheet.create({
   },
   runStateText: { flex: 1, lineHeight: 19 },
   cancelButton: { alignItems: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 8 },
-  composerArea: { borderTopWidth: 1, padding: 12 },
+  composerArea: { borderTopWidth: 1, padding: 10 },
   composer: {
     alignItems: 'flex-end',
     borderRadius: radius.md,
@@ -1140,4 +1148,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingTop: Platform.OS === 'web' ? 11 : 10,
   },
+  historyDialog: { maxHeight: '86%' },
+  historySheet: { flexShrink: 1, maxHeight: '100%' },
+  historyContent: { gap: 8, padding: 12, paddingBottom: 28 },
+  historyRow: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 68,
+    overflow: 'hidden',
+    paddingRight: 4,
+  },
+  historySelect: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 11,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  historyIcon: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  historyEmpty: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 48 },
+  historyEmptyText: { lineHeight: 19, marginTop: 6, textAlign: 'center' },
 });

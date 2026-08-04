@@ -28,8 +28,23 @@ test('管理员可用鼠标或触控使用小管家并查看运行时设置', as
   await expectTouchTarget(settingsTrigger, '助理设置入口');
   await activate(settingsTrigger, testInfo.project.name === 'mobile-chrome');
   await expect(page.getByTestId('agent-settings-panel')).toBeVisible();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect(page.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  }
   await activate(
     page.getByTestId('agent-settings-close'),
+    testInfo.project.name === 'mobile-chrome',
+  );
+
+  const historyTrigger = page.getByTestId('agent-history-trigger');
+  await expectTouchTarget(historyTrigger, '会话历史入口');
+  await activate(historyTrigger, testInfo.project.name === 'mobile-chrome');
+  await expect(page.getByTestId('agent-history-sheet')).toBeVisible();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect(page.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  }
+  await activate(
+    page.getByTestId('agent-history-close'),
     testInfo.project.name === 'mobile-chrome',
   );
 
