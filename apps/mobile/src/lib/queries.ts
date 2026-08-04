@@ -12,6 +12,8 @@ import type {
   AgentSettings,
   AgentStatus,
   AgentActionProposal,
+  AgentChannelPairing,
+  AgentMemberChannel,
   AppNotification,
   AssetCategory,
   AssetDocument,
@@ -255,6 +257,70 @@ export function useRejectAgentProposal() {
       void qc.invalidateQueries({
         queryKey: ['agent-conversation', input.conversationId],
       }),
+  });
+}
+
+export function useAgentChannels(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-channels'],
+    queryFn: () => api<AgentMemberChannel[]>('/agent/channels'),
+    enabled,
+  });
+}
+
+export function useAgentChannelPairings(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-channel-pairings'],
+    queryFn: () => api<AgentChannelPairing[]>('/agent/channel-pairings'),
+    enabled,
+  });
+}
+
+export function useCreateAgentChannelPairing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      memberId: string;
+      platform: string;
+      expiresInMinutes?: number;
+      idempotencyKey?: string;
+    }) =>
+      api<AgentChannelPairing>('/agent/channel-pairings', {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey:
+            input.idempotencyKey ?? operationKey('agent:channel-pairing'),
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent-channel-pairings'] });
+    },
+  });
+}
+
+export function useRevokeAgentChannelPairing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<AgentChannelPairing>(`/agent/channel-pairings/${id}/revoke`, {
+        method: 'POST',
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent-channel-pairings'] }),
+  });
+}
+
+export function useRevokeAgentChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemberChannel>(`/agent/channels/${input.id}/revoke`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent-channels'] }),
   });
 }
 

@@ -4,6 +4,8 @@ import { CalendarModule } from '../calendar/calendar.module';
 import {
   AgentConversation,
   AgentActionProposal,
+  AgentChannelPairing,
+  AgentMemberChannel,
   AgentMessage,
   AgentRun,
   AgentSetting,
@@ -21,17 +23,21 @@ import { ShoppingModule } from '../shopping/shopping.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { TravelModule } from '../travel/travel.module';
 import { AgentController } from './agent.controller';
+import { AgentChannelInternalController } from './agent-channel-internal.controller';
 import { AgentMcpController } from './agent-mcp.controller';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
 import { AgentService } from './agent.service';
 import { AgentToolsService } from './agent-tools.service';
 import { AgentProposalsService } from './agent-proposals.service';
+import { AgentChannelsService } from './agent-channels.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       AgentSetting,
       AgentActionProposal,
+      AgentChannelPairing,
+      AgentMemberChannel,
       AgentConversation,
       AgentMessage,
       AgentRun,
@@ -50,13 +56,18 @@ import { AgentProposalsService } from './agent-proposals.service';
     MenusModule,
     ShoppingModule,
   ],
-  controllers: [AgentController, AgentMcpController],
+  controllers: [
+    AgentController,
+    AgentMcpController,
+    AgentChannelInternalController,
+  ],
   providers: [
     AgentService,
     AgentToolsService,
     FakeAgentRuntime,
     HermesAgentRuntime,
     AgentProposalsService,
+    AgentChannelsService,
   ],
 })
 export class AgentModule {}

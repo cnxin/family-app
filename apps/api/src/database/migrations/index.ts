@@ -43,6 +43,9 @@ import { AddHouseholdTravel1785230500000 } from './1785230500000-add-household-t
 import { AddFamilyMemories1785230600000 } from './1785230600000-add-family-memories';
 import { AddFamilyAgent1785230700000 } from './1785230700000-add-family-agent';
 import { AddAgentActionProposals1785230800000 } from './1785230800000-add-agent-action-proposals';
+import { AddAgentChannelBindings1785230900000 } from './1785230900000-add-agent-channel-bindings';
+import { NormalizeAgentChannelPairingIndex1785231000000 } from './1785231000000-normalize-agent-channel-pairing-index';
+import { LinkAgentMessagesToRuns1785231100000 } from './1785231100000-link-agent-messages-to-runs';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -90,4 +93,7 @@ export const ALL_MIGRATIONS = [
   AddFamilyMemories1785230600000,
   AddFamilyAgent1785230700000,
   AddAgentActionProposals1785230800000,
+  AddAgentChannelBindings1785230900000,
+  NormalizeAgentChannelPairingIndex1785231000000,
+  LinkAgentMessagesToRuns1785231100000,
 ];

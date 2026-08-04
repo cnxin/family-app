@@ -66,6 +66,32 @@ async function mcp(body, key = MCP_KEY) {
   return { status: response.status, body: payload ? JSON.parse(payload) : null };
 }
 
+async function internal(path, method = 'GET', body, key = MCP_KEY) {
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(key ? { Authorization: `Bearer ${key}` } : {}),
+    },
+    body: body == null ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : null;
+  return { status: response.status, data: json?.data, error: json?.error, body: json };
+}
+
+async function waitForChannelRun(channelId, runId) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await internal(`/internal/agent/channels/${channelId}/runs/${runId}`);
+    if (result.data?.status === 'completed') return result.data;
+    if (['failed', 'cancelled'].includes(result.data?.status)) {
+      throw new Error(`消息渠道运行提前结束为 ${result.data.status}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`等待消息渠道运行 ${runId} 超时`);
+}
+
 function toolCall(id, name, runId, args = {}) {
   return {
     jsonrpc: '2.0',
@@ -601,6 +627,132 @@ try {
         ?.status === 'failed' &&
       proposalImmutable,
     '旧版本被拒绝，放弃、过期和权限失败状态保留，历史提案不可删除',
+  );
+
+  console.log('8. 消息渠道配对、只读隔离和撤销');
+  const pairingKey = `channel-pairing:${randomUUID()}`;
+  const forbiddenPairing = await request(
+    '/agent/channel-pairings',
+    member.accessToken,
+    'POST',
+    {
+      memberId: member.member.id,
+      platform: 'telegram',
+      idempotencyKey: `forbidden:${randomUUID()}`,
+    },
+  );
+  const pairing = await request('/agent/channel-pairings', owner.accessToken, 'POST', {
+    memberId: member.member.id,
+    platform: 'telegram',
+    expiresInMinutes: 10,
+    idempotencyKey: pairingKey,
+  });
+  const replayedPairing = await request(
+    '/agent/channel-pairings',
+    owner.accessToken,
+    'POST',
+    {
+      memberId: member.member.id,
+      platform: 'telegram',
+      idempotencyKey: pairingKey,
+    },
+  );
+  const hiddenPairingCode = await request('/agent/channel-pairings', owner.accessToken);
+  const invalidInternalPair = await internal(
+    '/internal/agent/channels/pair',
+    'POST',
+    { pairingCode: pairing.data.pairingCode, externalAccountId: 'telegram-user-1' },
+    'wrong-key',
+  );
+  const paired = await internal('/internal/agent/channels/pair', 'POST', {
+    pairingCode: pairing.data.pairingCode,
+    externalAccountId: 'telegram-user-1',
+    externalDisplayName: '家庭消息账号',
+  });
+  const replayed = await internal('/internal/agent/channels/pair', 'POST', {
+    pairingCode: pairing.data.pairingCode,
+    externalAccountId: 'telegram-user-1',
+  });
+  const otherAccount = await internal('/internal/agent/channels/pair', 'POST', {
+    pairingCode: pairing.data.pairingCode,
+    externalAccountId: 'telegram-user-2',
+  });
+  const channelId = paired.data.channel.id;
+  const channelMessage = await internal(`/internal/agent/channels/${channelId}/messages`, 'POST', {
+    externalThreadRef: 'thread-1',
+    message: '今天家里有什么安排？',
+    clientRequestId: `channel-message:${randomUUID()}`,
+  });
+  const channelRun = await waitForChannelRun(channelId, channelMessage.data.id);
+  const secondChannelMessage = await internal(
+    `/internal/agent/channels/${channelId}/messages`,
+    'POST',
+    {
+      externalThreadRef: 'thread-1',
+      message: '家庭知识库怎么使用？',
+      clientRequestId: `channel-message:${randomUUID()}`,
+    },
+  );
+  const secondChannelRun = await waitForChannelRun(
+    channelId,
+    secondChannelMessage.data.id,
+  );
+  const firstChannelRunAfterSecond = await internal(
+    `/internal/agent/channels/${channelId}/runs/${channelMessage.data.id}`,
+  );
+  const channelTools = await db.query(
+    'SELECT "allowedTools" FROM agent_runs WHERE id = $1',
+    [channelMessage.data.id],
+  );
+  const channelsForMember = await request('/agent/channels', member.accessToken);
+  const revoked = await request(
+    `/agent/channels/${channelId}/revoke`,
+    owner.accessToken,
+    'POST',
+    {
+      expectedVersion:
+        channelsForMember.data.find((entry) => entry.id === channelId)?.version ??
+        paired.data.channel.version,
+    },
+  );
+  const afterRevoke = await internal(`/internal/agent/channels/${channelId}/messages`, 'POST', {
+    externalThreadRef: 'thread-2',
+    message: '再次查询',
+    clientRequestId: `channel-message:${randomUUID()}`,
+  });
+  const afterRevokeRun = await internal(
+    `/internal/agent/channels/${channelId}/runs/${channelMessage.data.id}`,
+  );
+  const channelContractPassed =
+    forbiddenPairing.status === 403 &&
+      pairing.status === 201 &&
+      typeof pairing.data.pairingCode === 'string' &&
+      replayedPairing.data.pairingCode === null &&
+      hiddenPairingCode.status === 200 &&
+      hiddenPairingCode.data.every((entry) => !('pairingCode' in entry)) &&
+      invalidInternalPair.status === 401 &&
+      paired.status === 201 &&
+      paired.data.channel.memberId === member.member.id &&
+      replayed.status === 201 &&
+      replayed.data.replayed === true &&
+      otherAccount.status === 409 &&
+      channelMessage.status === 202 &&
+      channelRun?.status === 'completed' &&
+      channelRun.readOnly === true &&
+      secondChannelMessage.status === 202 &&
+      secondChannelRun?.status === 'completed' &&
+      secondChannelRun.content?.includes('家庭知识库') &&
+      firstChannelRunAfterSecond.data?.content?.includes('接下来一周') &&
+      !firstChannelRunAfterSecond.data?.content?.includes('家庭知识库') &&
+      JSON.stringify(channelTools.rows[0].allowedTools).includes('get_today_summary') &&
+      !JSON.stringify(channelTools.rows[0].allowedTools).includes('propose_') &&
+      channelsForMember.data.some((entry) => entry.id === channelId) &&
+      revoked.status === 201 &&
+      afterRevoke.status === 403 &&
+      afterRevokeRun.status === 403;
+  assert(
+    channelContractPassed,
+    '消息渠道只保存成员绑定，配对码一次性消费，渠道运行只读且撤销后立即失效',
   );
 
   console.log('家庭智能体 API 回归通过');

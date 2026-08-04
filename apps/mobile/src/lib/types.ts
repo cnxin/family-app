@@ -1688,3 +1688,39 @@ export interface AgentConversationDetail extends AgentConversation {
   runs: AgentRun[];
   proposals: AgentActionProposal[];
 }
+
+export type AgentChannelPairingStatus =
+  | 'pending'
+  | 'used'
+  | 'expired'
+  | 'revoked';
+
+export interface AgentMemberChannel {
+  id: string;
+  memberId: string;
+  memberName: string | null;
+  platform: string;
+  externalAccountLabel: string | null;
+  externalAccountHint: string | null;
+  pairedAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  version: number;
+  canRevoke: boolean;
+}
+
+export interface AgentChannelPairing {
+  id: string;
+  memberId: string;
+  memberName: string | null;
+  platform: string;
+  expiresAt: string;
+  usedAt: string | null;
+  revokedAt: string | null;
+  channelId: string | null;
+  status: AgentChannelPairingStatus;
+  version: number;
+  createdAt: string;
+  pairingCode?: string | null;
+  replayed?: boolean;
+}

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -6,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { createHash } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import { agentDataKey } from '../common/config';
@@ -15,6 +17,7 @@ import {
   AgentRun,
   AgentRuntimeKind,
   AgentSetting,
+  AgentMemberChannel,
 } from '../entities';
 import { decryptAgentContent, encryptAgentContent } from './agent.crypto';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
@@ -59,6 +62,8 @@ export class AgentService {
     @InjectRepository(AgentMessage)
     private readonly messages: Repository<AgentMessage>,
     @InjectRepository(AgentRun) private readonly runs: Repository<AgentRun>,
+    @InjectRepository(AgentMemberChannel)
+    private readonly channels: Repository<AgentMemberChannel>,
     private readonly dataSource: DataSource,
     private readonly fakeRuntime: FakeAgentRuntime,
     private readonly hermesRuntime: HermesAgentRuntime,
@@ -349,6 +354,200 @@ export class AgentService {
     return this.presentRun(run);
   }
 
+  async queueChannelMessage(
+    channel: AgentMemberChannel,
+    externalThreadRef: string,
+    message: string,
+    clientRequestId: string,
+  ) {
+    const content = message.trim();
+    const key = clientRequestId.trim();
+    if (!content || content.length > 2000) {
+      throw new BadRequestException('消息内容无效');
+    }
+    if (!key || key.length > 180) {
+      throw new BadRequestException('请求幂等键无效');
+    }
+    const member = channel.member;
+    const user: JwtUser = {
+      sub: member.accountId ?? member.id,
+      accountId: member.accountId ?? member.id,
+      memberId: member.id,
+      householdId: channel.householdId,
+      sid: `agent-channel:${channel.id}`,
+      name: member.name,
+      role: member.role,
+    };
+    const setting = await this.ensureSettings(user);
+    if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!agentDataKey()) {
+      throw new ServiceUnavailableException('对话加密尚未配置');
+    }
+
+    const externalThreadRefHash = createHash('sha256')
+      .update(`${channel.id}\u0000${externalThreadRef}`, 'utf8')
+      .digest('hex');
+    let conversation = await this.conversations.findOneBy({
+      householdId: channel.householdId,
+      channelId: channel.id,
+      externalThreadRefHash,
+    });
+    const expiresAt = new Date(Date.now() + setting.retentionDays * 86_400_000);
+    if (!conversation) {
+      try {
+        conversation = await this.conversations.save(
+          this.conversations.create({
+            householdId: channel.householdId,
+            createdByMemberId: member.id,
+            source: 'channel',
+            channelId: channel.id,
+            externalThreadRefHash,
+            title: `${channel.platform} 对话`,
+            status: 'active',
+            expiresAt,
+          }),
+        );
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        conversation = await this.conversations.findOneBy({
+          householdId: channel.householdId,
+          channelId: channel.id,
+          externalThreadRefHash,
+        });
+      }
+    }
+    if (!conversation) throw new ConflictException('无法创建消息渠道会话');
+    if (conversation.expiresAt.getTime() <= Date.now()) {
+      await this.conversations.update(conversation.id, {
+        status: 'active',
+        expiresAt,
+        updatedAt: new Date(),
+      });
+      conversation.status = 'active';
+      conversation.expiresAt = expiresAt;
+    } else if (conversation.status !== 'active') {
+      throw new ConflictException('消息渠道会话已经结束');
+    }
+
+    const existing = await this.runs.findOneBy({
+      householdId: channel.householdId,
+      clientRequestId: key,
+    });
+    if (existing) {
+      if (
+        existing.conversationId !== conversation.id ||
+        existing.requestedByMemberId !== member.id
+      ) {
+        throw new ConflictException('请求幂等键已用于其他消息渠道会话');
+      }
+      return this.presentRun(existing);
+    }
+
+    let run: AgentRun;
+    try {
+      run = await this.dataSource.transaction(async (manager) => {
+        const runs = manager.getRepository(AgentRun);
+        const messages = manager.getRepository(AgentMessage);
+        const encrypted = encryptAgentContent(
+          content,
+          channel.householdId,
+          conversation!.id,
+        );
+        if (encrypted) {
+          await messages.save(
+            messages.create({
+              householdId: channel.householdId,
+              conversationId: conversation!.id,
+              memberId: member.id,
+              role: 'user',
+              ...encrypted,
+            }),
+          );
+        }
+        return runs.save(
+          runs.create({
+            householdId: channel.householdId,
+            conversationId: conversation!.id,
+            requestedByMemberId: member.id,
+            clientRequestId: key,
+            runtimeKind: setting.runtimeKind,
+            runtimeVersion:
+              setting.runtimeKind === 'hermes'
+                ? this.hermesRuntime.version
+                : this.fakeRuntime.version,
+            modelAlias: setting.modelAlias,
+            status: 'queued',
+            allowedTools: [...setting.readToolsEnabled],
+            authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
+            startedAt: null,
+            finishedAt: null,
+            cancelRequestedAt: null,
+            inputTokens: null,
+            outputTokens: null,
+            estimatedCost: null,
+            errorCode: null,
+            errorMessage: null,
+          }),
+        );
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const duplicate = await this.runs.findOneBy({
+          householdId: channel.householdId,
+          clientRequestId: key,
+        });
+        if (duplicate) return this.presentRun(duplicate);
+      }
+      throw error;
+    }
+    void this.processRun(run.id, content);
+    return this.presentRun(run);
+  }
+
+  async channelRun(runId: string, channelId: string) {
+    const channel = await this.channels.findOneBy({ id: channelId });
+    if (!channel) throw new NotFoundException('消息渠道绑定不存在');
+    const run = await this.runs.findOneBy({
+      id: runId,
+      householdId: channel.householdId,
+      requestedByMemberId: channel.memberId,
+    });
+    if (!run) throw new NotFoundException('智能体运行不存在');
+    const conversation = await this.conversations.findOneBy({
+      id: run.conversationId,
+      householdId: channel.householdId,
+      channelId: channel.id,
+    });
+    if (!conversation) throw new ForbiddenException('智能体运行不属于此消息渠道');
+    const latest = await this.messages.findOne({
+      where: {
+        conversationId: conversation.id,
+        householdId: channel.householdId,
+        role: 'assistant',
+        runId,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    let content: string | null = null;
+    if (latest) {
+      try {
+        content = decryptAgentContent(
+          latest.contentCiphertext,
+          latest.contentNonce,
+          latest.householdId,
+          latest.conversationId,
+        );
+      } catch {
+        content = null;
+      }
+    }
+    return {
+      ...this.presentRun(run),
+      content,
+      readOnly: true,
+    };
+  }
+
   async cancel(runId: string, user: JwtUser) {
     const run = await this.runs.findOneBy({
       id: runId,
@@ -439,6 +638,7 @@ export class AgentService {
             householdId: run.householdId,
             conversationId: run.conversationId,
             memberId: null,
+            runId: run.id,
             role: 'assistant',
             ...encrypted,
           }),

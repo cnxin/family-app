@@ -6,6 +6,7 @@ import {
   CircleStop,
   CloudOff,
   Clock3,
+  Link2,
   ListChecks,
   MessageCircleMore,
   Plus,
@@ -13,6 +14,7 @@ import {
   Settings2,
   Sparkles,
   TriangleAlert,
+  Unlink,
   X,
 } from 'lucide-react-native';
 import React from 'react';
@@ -39,6 +41,8 @@ import {
 import { isHouseholdManager } from '../../lib/member';
 import {
   useAgentConversation,
+  useAgentChannels,
+  useAgentChannelPairings,
   useAgentConversations,
   useAgentSettings,
   useAgentStatus,
@@ -48,6 +52,10 @@ import {
   useCreateAgentConversation,
   useSendAgentMessage,
   useRejectAgentProposal,
+  useCreateAgentChannelPairing,
+  useRevokeAgentChannel,
+  useRevokeAgentChannelPairing,
+  useMembers,
   useUpdateAgentSettings,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -303,6 +311,165 @@ function RuntimeSettings() {
   );
 }
 
+function ChannelBindings({ manager }: { manager: boolean }) {
+  const c = useTheme();
+  const { data: members } = useMembers(manager);
+  const { data: channels } = useAgentChannels();
+  const { data: pairings } = useAgentChannelPairings(manager);
+  const createPairing = useCreateAgentChannelPairing();
+  const revokeChannel = useRevokeAgentChannel();
+  const revokePairing = useRevokeAgentChannelPairing();
+  const [platform, setPlatform] = React.useState('telegram');
+  const [memberId, setMemberId] = React.useState('');
+  const [pairingCode, setPairingCode] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
+
+  const activeMembers = (members ?? []).filter((item) => !item.disabledAt);
+  React.useEffect(() => {
+    if (!memberId && activeMembers[0]) setMemberId(activeMembers[0].id);
+  }, [activeMembers, memberId]);
+
+  const create = async () => {
+    if (!memberId || !platform.trim() || createPairing.isPending) return;
+    setMessage(null);
+    setPairingCode(null);
+    try {
+      const result = await createPairing.mutateAsync({
+        memberId,
+        platform: platform.trim().toLocaleLowerCase('en-US'),
+      });
+      setPairingCode(result.pairingCode ?? null);
+      if (!result.pairingCode) setMessage('这个请求已经生成过配对码，请使用首次显示的配对码。');
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  };
+
+  const revoke = async (id: string, version: number) => {
+    setMessage(null);
+    try {
+      await revokeChannel.mutateAsync({ id, expectedVersion: version });
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  };
+
+  const revokePending = async (id: string) => {
+    setMessage(null);
+    try {
+      await revokePairing.mutateAsync(id);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  };
+
+  return (
+    <View style={[styles.settingsPanel, { borderColor: c.separator }]} testID="agent-channel-bindings">
+      <View style={styles.settingsHeading}>
+        <View style={[styles.settingsIcon, { backgroundColor: c.fill }]}>
+          <Link2 color={c.secondaryLabel} size={18} />
+        </View>
+        <View style={styles.flexCopy}>
+          <Text style={[t.headline, { color: c.label }]}>消息渠道</Text>
+          <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>外部消息只读，修改回到 Family App 确认</Text>
+        </View>
+      </View>
+
+      {manager ? (
+        <>
+          <TextInput
+            accessibilityLabel="消息渠道标识"
+            autoCapitalize="none"
+            onChangeText={setPlatform}
+            placeholder="渠道标识，例如 telegram"
+            placeholderTextColor={c.tertiaryLabel}
+            style={[t.body, styles.channelInput, { color: c.label, borderColor: c.separator, backgroundColor: c.fill }]}
+            value={platform}
+          />
+          <ScrollView horizontal contentContainerStyle={styles.memberChips} showsHorizontalScrollIndicator={false}>
+            {activeMembers.map((item) => (
+              <PressSurface
+                accessibilityRole="button"
+                accessibilityState={{ selected: item.id === memberId }}
+                key={item.id}
+                onPress={() => setMemberId(item.id)}
+                style={[styles.memberChip, { backgroundColor: item.id === memberId ? c.tintSoft : c.fill, borderColor: item.id === memberId ? c.tint : c.separator }]}
+              >
+                <Text style={[t.footnote, { color: item.id === memberId ? c.tint : c.label, fontWeight: '600' }]}>
+                  {item.avatarEmoji} {item.name}
+                </Text>
+              </PressSurface>
+            ))}
+          </ScrollView>
+          <PressSurface
+            accessibilityRole="button"
+            disabled={!memberId || !platform.trim() || createPairing.isPending}
+            onPress={() => void create()}
+            style={[styles.channelAction, { backgroundColor: c.tint, borderColor: c.tint }]}
+          >
+            {createPairing.isPending ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Link2 color="#FFFFFF" size={17} />}
+            <Text style={[t.footnote, { color: '#FFFFFF', fontWeight: '600' }]}>生成一次性配对码</Text>
+          </PressSurface>
+          {pairingCode ? (
+            <View style={[styles.pairingCode, { backgroundColor: c.tintSoft, borderColor: c.tint }]}>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>仅显示这一次</Text>
+              <Text selectable style={[t.title2, styles.pairingCodeText, { color: c.tint }]}>{pairingCode}</Text>
+            </View>
+          ) : null}
+        </>
+      ) : null}
+
+      {message ? <Text accessibilityLiveRegion="polite" role="alert" style={[t.footnote, { color: c.red }]}>{message}</Text> : null}
+
+      {channels?.length ? (
+        <View style={[styles.channelList, { borderTopColor: c.separator }]}>
+          {channels.map((channel) => (
+            <View key={channel.id} style={styles.channelRow}>
+              <View style={styles.flexCopy}>
+                <Text style={[t.footnote, { color: c.label, fontWeight: '600' }]}>
+                  {channel.platform} · {channel.memberName ?? '家庭成员'}
+                </Text>
+                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                  {channel.externalAccountLabel ?? channel.externalAccountHint ?? '外部账号'}{channel.revokedAt ? ' · 已撤销' : ' · 已绑定'}
+                </Text>
+              </View>
+              {!channel.revokedAt && channel.canRevoke ? (
+                <IconButton
+                  accessibilityLabel={`撤销 ${channel.platform} 绑定`}
+                  backgroundColor="transparent"
+                  disabled={revokeChannel.isPending}
+                  icon={Unlink}
+                  onPress={() => void revoke(channel.id, channel.version)}
+                />
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {manager && pairings?.some((item) => item.status === 'pending') ? (
+        <View style={[styles.channelList, { borderTopColor: c.separator }]}>
+          {pairings.filter((item) => item.status === 'pending').slice(0, 5).map((item) => (
+            <View key={item.id} style={styles.channelRow}>
+              <View style={styles.flexCopy}>
+                <Text style={[t.footnote, { color: c.label }]}>{item.platform} · {item.memberName ?? '家庭成员'}</Text>
+                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>配对码待使用 · {new Date(item.expiresAt).toLocaleString()}</Text>
+              </View>
+              <IconButton
+                accessibilityLabel="撤销待使用配对码"
+                backgroundColor="transparent"
+                disabled={revokePairing.isPending}
+                icon={Unlink}
+                onPress={() => void revokePending(item.id)}
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export default function AssistantScreen() {
   const c = useTheme();
   const layout = useLayoutMode();
@@ -403,6 +570,7 @@ export default function AssistantScreen() {
           />
 
           {manager ? <RuntimeSettings /> : null}
+          <ChannelBindings manager={manager} />
 
           {!statusLoading && (!status?.enabled || !status.persistenceEncrypted) ? (
             <View style={[styles.notice, { backgroundColor: c.orangeSoft }]}>
@@ -641,6 +809,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 38,
   },
+  channelInput: {
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  memberChips: { gap: 8, paddingVertical: 2 },
+  memberChip: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  channelAction: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  pairingCode: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  pairingCodeText: { letterSpacing: 2, marginTop: 2 },
+  channelList: { borderTopWidth: 1, gap: 2, paddingTop: 8 },
+  channelRow: { alignItems: 'center', flexDirection: 'row', minHeight: 52, gap: 8 },
   notice: {
     alignItems: 'center',
     borderRadius: radius.md,

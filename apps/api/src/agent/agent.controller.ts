@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -26,6 +27,7 @@ import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { AGENT_PROPOSAL_TOOLS, AGENT_READ_TOOLS } from './agent.types';
 import { AgentService } from './agent.service';
 import { AgentProposalsService } from './agent-proposals.service';
+import { AgentChannelsService } from './agent-channels.service';
 
 class CreateConversationDto {
   @IsOptional()
@@ -105,12 +107,40 @@ class RejectAgentProposalDto {
   expectedVersion: number;
 }
 
+class CreateAgentChannelPairingDto {
+  @IsUUID()
+  memberId: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(32)
+  platform: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  expiresInMinutes?: number;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(180)
+  idempotencyKey: string;
+}
+
+class RevokeAgentChannelDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
 @Controller('agent')
 @RequireCapabilities('use_agent')
 export class AgentController {
   constructor(
     private readonly service: AgentService,
     private readonly proposals: AgentProposalsService,
+    private readonly channels: AgentChannelsService,
   ) {}
 
   @Get('status')
@@ -191,5 +221,40 @@ export class AgentController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.proposals.reject(id, dto.expectedVersion, user);
+  }
+
+  @Get('channels')
+  channelsList(@CurrentUser() user: JwtUser) {
+    return this.channels.listChannels(user);
+  }
+
+  @Get('channel-pairings')
+  @RequireCapabilities('manage_agent')
+  pairings(@CurrentUser() user: JwtUser) {
+    return this.channels.listPairings(user);
+  }
+
+  @Post('channel-pairings')
+  @RequireCapabilities('manage_agent')
+  createPairing(
+    @Body() dto: CreateAgentChannelPairingDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.channels.createPairing(dto, user);
+  }
+
+  @Post('channel-pairings/:id/revoke')
+  @RequireCapabilities('manage_agent')
+  revokePairing(@Param('id') id: string, @CurrentUser() user: JwtUser) {
+    return this.channels.revokePairing(id, user);
+  }
+
+  @Post('channels/:id/revoke')
+  revokeChannel(
+    @Param('id') id: string,
+    @Body() dto: RevokeAgentChannelDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.channels.revokeChannel(id, dto.expectedVersion, user);
   }
 }
