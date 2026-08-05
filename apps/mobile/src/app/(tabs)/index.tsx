@@ -5,6 +5,7 @@ import {
   BookOpenText,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   CookingPot,
   Film,
@@ -455,8 +456,15 @@ function ConsumerHome({
   const c = useTheme();
   const router = useRouter();
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const attentionCount = actionItems.length;
   const loading = menusLoading || tasksLoading || remindersLoading;
+  const primaryModuleEntries = moduleEntries.filter((entry) =>
+    ['/assistant', '/media', '/polls', '/shopping'].includes(String(entry.href)),
+  );
+  const secondaryModuleEntries = moduleEntries.filter(
+    (entry) => !primaryModuleEntries.includes(entry),
+  );
 
   return (
     <SafeAreaView
@@ -559,8 +567,12 @@ function ConsumerHome({
             </Pressable>
           </View>
           <Card style={styles.consumerFocusCard}>
-            {actionItems.length ? actionItems.map((item, index) => (
-              <ConsumerFocusRow item={item} key={item.id} last={index === actionItems.length - 1} />
+            {actionItems.length ? actionItems.slice(0, 3).map((item, index) => (
+              <ConsumerFocusRow
+                item={item}
+                key={item.id}
+                last={index === Math.min(actionItems.length, 3) - 1}
+              />
             )) : (
               <View style={styles.consumerCalmState}>
                 <View style={[styles.consumerFocusIcon, { backgroundColor: c.greenSoft }]}>
@@ -574,6 +586,42 @@ function ConsumerHome({
             )}
           </Card>
 
+          <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>常用功能</Text>
+          </View>
+          <View style={styles.consumerServiceGrid} testID="consumer-primary-services">
+            {primaryModuleEntries.map((entry) => (
+              <ConsumerServiceLink entry={entry} key={entry.label} />
+            ))}
+          </View>
+
+          <PressableScale
+            accessibilityLabel={`${detailsOpen ? '收起' : '展开'}更多家庭内容`}
+            accessibilityState={{ expanded: detailsOpen }}
+            ariaExpanded={detailsOpen}
+            haptic={false}
+            onPress={() => setDetailsOpen((current) => !current)}
+            style={[
+              styles.consumerDisclosure,
+              { backgroundColor: c.fill, borderColor: c.separator },
+            ]}
+            testID="consumer-more-disclosure"
+          >
+            <View style={styles.consumerDisclosureCopy}>
+              <Text style={[t.headline, { color: c.label }]}>更多家庭内容</Text>
+              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+                本周概览、家庭动态与其他功能
+              </Text>
+            </View>
+            <ChevronDown
+              color={c.secondaryLabel}
+              size={20}
+              style={{ transform: [{ rotate: detailsOpen ? '180deg' : '0deg' }] }}
+            />
+          </PressableScale>
+
+          {detailsOpen ? (
+            <View testID="consumer-more-content">
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>接下来</Text>
             <Pressable
@@ -618,42 +666,39 @@ function ConsumerHome({
             </View>
           )}
 
-          <View style={styles.consumerSectionHeader}>
-            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>等待家人</Text>
-          </View>
-          <Card style={styles.consumerFocusCard}>
-            {waitingItems.length ? waitingItems.map((item, index) => (
+          {waitingItems.length ? (
+            <>
+              <View style={styles.consumerSectionHeader}>
+                <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>等待家人</Text>
+              </View>
+              <Card style={styles.consumerFocusCard}>
+                {waitingItems.map((item, index) => (
               <ConsumerFocusRow item={item} key={item.id} last={index === waitingItems.length - 1} />
-            )) : (
-              <View style={styles.consumerCalmState}>
-                <View style={[styles.consumerFocusIcon, { backgroundColor: c.blueSoft }]}>
-                  <Clock3 color={c.blue} size={19} />
-                </View>
-                <Text style={[t.subhead, { color: c.secondaryLabel, flex: 1 }]}>暂时没有正在等待的家庭协作</Text>
-              </View>
-            )}
-          </Card>
+                ))}
+              </Card>
+            </>
+          ) : null}
 
-          <View style={styles.consumerSectionHeader}>
-            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>家里刚刚完成</Text>
-            <Pressable
-              accessibilityRole="link"
-              onPress={() => router.push('/activity')}
-              style={styles.textLink}
-            >
-              <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>全部进展</Text>
-              <ArrowRight color={c.tint} size={15} />
-            </Pressable>
-          </View>
-          <Card style={styles.consumerActivityCard}>
-            {activities.length ? activities.map((activity) => (
-              <ConsumerActivityRow activity={activity} key={activity.id} />
-            )) : (
-              <View style={styles.consumerCalmState}>
-                <Text style={[t.subhead, { color: c.secondaryLabel }]}>家里的新进展会出现在这里</Text>
+          {activities.length ? (
+            <>
+              <View style={styles.consumerSectionHeader}>
+                <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>家里刚刚完成</Text>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => router.push('/activity')}
+                  style={styles.textLink}
+                >
+                  <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>全部进展</Text>
+                  <ArrowRight color={c.tint} size={15} />
+                </Pressable>
               </View>
-            )}
-          </Card>
+              <Card style={styles.consumerActivityCard}>
+                {activities.map((activity) => (
+                  <ConsumerActivityRow activity={activity} key={activity.id} />
+                ))}
+              </Card>
+            </>
+          ) : null}
 
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>本周概览</Text>
@@ -702,11 +747,15 @@ function ConsumerHome({
           )}
 
           <View style={styles.consumerSectionHeader}>
-            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>全部功能</Text>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>其他功能</Text>
           </View>
           <View style={styles.consumerServiceGrid}>
-            {moduleEntries.map((entry) => <ConsumerServiceLink entry={entry} key={entry.label} />)}
+            {secondaryModuleEntries.map((entry) => (
+              <ConsumerServiceLink entry={entry} key={entry.label} />
+            ))}
           </View>
+            </View>
+          ) : null}
         </PageContainer>
       </ScrollView>
       <QuickAddDialog onClose={() => setQuickAddOpen(false)} visible={quickAddOpen} />
@@ -1198,6 +1247,17 @@ const styles = StyleSheet.create({
   },
   consumerServiceCopy: { flex: 1, minWidth: 0 },
   consumerServiceTitle: { fontWeight: '600' },
+  consumerDisclosure: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    marginTop: 18,
+    minHeight: 68,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+  },
+  consumerDisclosureCopy: { flex: 1, minWidth: 0 },
   content: { paddingTop: 18, paddingBottom: 40 },
   contentDesktop: { paddingTop: 32 },
   hero: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },

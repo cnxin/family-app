@@ -48,6 +48,7 @@ import { NormalizeAgentChannelPairingIndex1785231000000 } from './1785231000000-
 import { LinkAgentMessagesToRuns1785231100000 } from './1785231100000-link-agent-messages-to-runs';
 import { AddAgentDailyReadTools1785231200000 } from './1785231200000-add-agent-daily-read-tools';
 import { AgentRunRetryPresentations1785231300000 } from './1785231300000-agent-run-retry-presentations';
+import { AddFoodBatchesAndSmartMenus1785231400000 } from './1785231400000-add-food-batches-and-smart-menus';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -100,4 +101,5 @@ export const ALL_MIGRATIONS = [
   LinkAgentMessagesToRuns1785231100000,
   AddAgentDailyReadTools1785231200000,
   AgentRunRetryPresentations1785231300000,
+  AddFoodBatchesAndSmartMenus1785231400000,
 ];

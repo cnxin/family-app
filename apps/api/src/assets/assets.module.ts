@@ -1306,9 +1306,17 @@ export class AssetsService {
       for (const pending of pendingTransactions) {
         pending.item.quantity = pending.transaction.quantityAfter;
         await manager.getRepository(InventoryItem).save(pending.item);
-        await manager
+        const savedTransaction = await manager
           .getRepository(InventoryTransaction)
           .save(pending.transaction);
+        await this.inventoryLedger.applyBatchConsumption(manager, {
+          item: pending.item,
+          quantity: -Number(savedTransaction.delta),
+          transaction: savedTransaction,
+          actor: user,
+          sourceType: 'maintenance_record',
+          sourceId: recordId,
+        });
       }
       plan.nextDueDate = nextDueDateAfter;
       await manager.getRepository(MaintenancePlan).save(plan);

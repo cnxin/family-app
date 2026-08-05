@@ -530,7 +530,16 @@ function MealMenuSection({
   const consumptionMessage = inventoryPreview.data?.rows
     .map((row) => {
       if (row.status === 'ready') {
-        return `${row.inventoryItemName}：${row.quantityBefore} → ${row.quantityAfter} ${row.unit}（-${row.quantity}）`;
+        const allocations = [
+          ...row.batchAllocations.map(
+            (batch) =>
+              `${batch.expiresOn ? `${batch.expiresOn} 到期` : `${batch.receivedOn} 入库`} -${batch.quantity}`,
+          ),
+          ...(row.untrackedQuantity > 0
+            ? [`未分批库存 -${row.untrackedQuantity}`]
+            : []),
+        ];
+        return `${row.inventoryItemName}：${row.quantityBefore} → ${row.quantityAfter} ${row.unit}（-${row.quantity}）${allocations.length ? `\n先进先出：${allocations.join('；')}` : ''}`;
       }
       if (row.status === 'missing_inventory') {
         return `${row.ingredientName}：未建立库存，本次跳过`;

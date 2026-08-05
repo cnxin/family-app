@@ -179,12 +179,21 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('今日工作台、家庭收件箱和快捷新增在移动 Web 可完整操作', async ({ page }, testInfo) => {
+  if (testInfo.project.name === 'desktop-chrome') {
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
   await page.goto('/');
   await expect(page.getByTestId('consumer-home')).toBeVisible();
   await expect(page.getByText('今日家庭工作台', { exact: true })).toBeVisible();
   await expect(page.getByText('整理客厅', { exact: true })).toBeVisible();
   await expect(page.getByText('周末去哪里散步', { exact: true })).toBeVisible();
+  await expect(page.getByText('常用功能', { exact: true })).toBeVisible();
+  await expect(page.getByText('爸爸完成了倒垃圾', { exact: true })).toHaveCount(0);
+  const moreDisclosure = page.getByTestId('consumer-more-disclosure');
+  await expect(moreDisclosure).toHaveAttribute('aria-expanded', 'false');
+  await moreDisclosure.click();
   await expect(page.getByText('爸爸完成了倒垃圾', { exact: true })).toBeVisible();
+  await expect(moreDisclosure).toHaveAttribute('aria-expanded', 'true');
   await expectNoHorizontalOverflow(page);
 
   const quickAdd = page.getByTestId('consumer-quick-add-button');
@@ -194,20 +203,45 @@ test('今日工作台、家庭收件箱和快捷新增在移动 Web 可完整操
   await quickAdd.click();
   const quickDialog = page.getByTestId('quick-add-dialog');
   await expect(quickDialog).toBeVisible();
-  const dragHandle = quickDialog.getByTestId('adaptive-dialog-drag-handle');
-  await expect(dragHandle).toBeVisible();
+  await page.waitForTimeout(500);
   await expect(quickDialog.getByRole('button', { name: '关闭', exact: true })).toBeVisible();
   for (const id of ['quick-add-task', 'quick-add-shopping', 'quick-add-reminder', 'quick-add-order', 'quick-add-poll']) {
     const box = await quickDialog.getByTestId(id).boundingBox();
     expect(box?.height, id).toBeGreaterThanOrEqual(44);
   }
-  await page.screenshot({ path: testInfo.outputPath('quick-add-sheet-mobile.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('quick-add-dialog.png'), fullPage: true });
+  const dragHandle = quickDialog.getByTestId('adaptive-dialog-drag-handle');
+  await expect(dragHandle).toBeVisible();
   const handleBox = await dragHandle.boundingBox();
+  const sheetBeforeDrag = await quickDialog.boundingBox();
   if (!handleBox) throw new Error('快捷新增拖动把手不可见');
-  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + 320, { steps: 8 });
-  await page.mouse.up();
+  if (!sheetBeforeDrag) throw new Error('快捷新增弹层不可见');
+  const dragX = handleBox.x + handleBox.width / 2;
+  const dragY = handleBox.y + handleBox.height / 2;
+  if (testInfo.project.name === 'mobile-chrome') {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      touchPoints: [{ id: 0, x: dragX, y: dragY }],
+      type: 'touchStart',
+    });
+    for (let step = 1; step <= 8; step += 1) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        touchPoints: [{ id: 0, x: dragX, y: dragY + step * 40 }],
+        type: 'touchMove',
+      });
+      await page.waitForTimeout(20);
+    }
+    const sheetDuringDrag = await quickDialog.boundingBox();
+    expect(sheetDuringDrag?.y ?? 0).toBeGreaterThan(sheetBeforeDrag.y + 100);
+    await cdp.send('Input.dispatchTouchEvent', { touchPoints: [], type: 'touchEnd' });
+  } else {
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + 320, { steps: 8 });
+    const sheetDuringDrag = await quickDialog.boundingBox();
+    expect(sheetDuringDrag?.y ?? 0).toBeGreaterThan(sheetBeforeDrag.y + 100);
+    await page.mouse.up();
+  }
   await expect(quickDialog).not.toBeVisible();
   await quickAdd.click();
   await expect(quickDialog).toBeVisible();
@@ -243,7 +277,9 @@ test('今日工作台在 375 像素小屏和横屏没有溢出或底栏遮挡', 
     await page.setViewportSize(viewport);
     await page.goto('/');
     await expect(page.getByTestId('consumer-home')).toBeVisible();
-    await expect(page.getByText('全部功能', { exact: true })).toBeVisible();
+    await expect(page.getByText('常用功能', { exact: true })).toBeVisible();
+    await page.getByTestId('consumer-more-disclosure').click();
+    await expect(page.getByText('其他功能', { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     const lastFeature = page.getByTestId('consumer-quick-memories');
     await lastFeature.scrollIntoViewIfNeeded();

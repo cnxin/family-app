@@ -19,6 +19,7 @@ import { PointsModule } from './points/points.module';
 import { RecipesModule } from './recipes/recipes.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { ShoppingModule } from './shopping/shopping.module';
+import { SmartMenuModule } from './smart-menu/smart-menu.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TravelModule } from './travel/travel.module';
@@ -45,6 +46,7 @@ import { UploadModule } from './upload/upload.module';
     RecipesModule,
     RemindersModule,
     ShoppingModule,
+    SmartMenuModule,
     SystemModule,
     TasksModule,
     TravelModule,

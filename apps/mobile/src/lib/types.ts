@@ -536,6 +536,41 @@ export interface InventoryItem {
   unit: string;
   lowStockThreshold: string;
   restockQuantity: string;
+  batchSummary: {
+    trackedQuantity: number;
+    untrackedQuantity: number;
+    activeBatchCount: number;
+    earliestExpiresOn: string | null;
+    expiringCount: number;
+    expiredCount: number;
+  };
+  updatedAt: string;
+}
+
+export type InventoryBatchStatus =
+  | 'fresh'
+  | 'expiring'
+  | 'expired'
+  | 'undated'
+  | 'consumed';
+
+export interface InventoryBatch {
+  id: string;
+  inventoryItemId: string;
+  inventoryItem: InventoryItem;
+  quantity: string;
+  receivedOn: string;
+  productionDate: string | null;
+  expiresOn: string | null;
+  openedOn: string | null;
+  sourceType: 'manual' | 'shopping_item';
+  sourceId: string;
+  version: number;
+  createdById: string;
+  createdBy: Member;
+  status: InventoryBatchStatus;
+  daysRemaining: number | null;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -575,6 +610,48 @@ export interface InventoryActionResult {
   alreadyConfirmed?: boolean;
   alreadyReversed?: boolean;
   transactions: InventoryTransaction[];
+}
+
+export interface SmartMenuCandidate {
+  id: string;
+  dishId: string;
+  dish: Dish;
+  recipeVariantId: string;
+  recipeVariant: DishRecipeVariant;
+  targetDate: string;
+  mealType: MealType;
+  score: number;
+  reasons: string[];
+  expiringIngredients: {
+    ingredientId: string;
+    name: string;
+    expiresOn: string;
+    daysRemaining: number;
+  }[];
+  pollOptionId: string | null;
+  adoptedMenuId: string | null;
+  sortOrder: number;
+  voteCount: number;
+}
+
+export interface SmartMenuPlan {
+  id: string;
+  startsOn: string;
+  endsOn: string;
+  status: 'draft' | 'voting' | 'adopted';
+  pollId: string | null;
+  pollStatus: 'open' | 'closed' | null;
+  candidates: SmartMenuCandidate[];
+  createdById: string;
+  createdBy: Member;
+  adoptedById: string | null;
+  adoptedBy: Member | null;
+  adoptedAt: string | null;
+  canCreatePoll: boolean;
+  canAdopt: boolean;
+  adoptedCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type AssetCategory =
@@ -773,6 +850,18 @@ export interface MenuInventoryPreview {
     quantityBefore: number | null;
     quantityAfter: number | null;
     availableUnits: string[];
+    batchAllocations: {
+      batchId: string;
+      receivedOn: string;
+      productionDate: string | null;
+      expiresOn: string | null;
+      openedOn: string | null;
+      status: InventoryBatchStatus;
+      quantityBefore: number;
+      quantity: number;
+      quantityAfter: number;
+    }[];
+    untrackedQuantity: number;
   }[];
   transactions: {
     id: string;

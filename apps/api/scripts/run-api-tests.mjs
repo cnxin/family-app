@@ -267,6 +267,7 @@ try {
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');
   await runScript('scripts/shopping-inventory.mjs');
+  await runScript('scripts/food-batches-smart-menu.mjs');
   await runScript('scripts/assets.mjs');
   await wait(50);
   assertApiLogs(activeApiOutput);

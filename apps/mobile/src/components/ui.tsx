@@ -6,6 +6,7 @@ import {
   type AccessibilityState,
   ActivityIndicator,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   StyleProp,
@@ -15,7 +16,6 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -53,6 +53,7 @@ export function PressableScale({
   accessibilityLabel,
   accessibilityRole = 'button',
   accessibilityState,
+  ariaExpanded,
   testID,
 }: {
   children: React.ReactNode;
@@ -63,6 +64,7 @@ export function PressableScale({
   accessibilityLabel?: string;
   accessibilityRole?: AccessibilityRole;
   accessibilityState?: AccessibilityState;
+  ariaExpanded?: boolean;
   testID?: string;
 }) {
   const c = useTheme();
@@ -79,6 +81,7 @@ export function PressableScale({
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
       accessibilityState={accessibilityState}
+      aria-expanded={ariaExpanded}
       disabled={disabled}
       hitSlop={6}
       onBlur={() => setFocused(false)}
@@ -545,88 +548,163 @@ export function AdaptiveDialog({
     translateY,
   ]);
 
-  const dragGesture = React.useMemo(() => Gesture.Pan()
-    .enabled(compact)
-    .activeOffsetY([-6, 6])
-    .shouldCancelWhenOutside(false)
-    .activeCursor('grabbing')
-    .onStart(() => {
-      cancelAnimation(translateY);
-      cancelAnimation(overlayOpacity);
-      cancelAnimation(sheetOpacity);
-      dragStartY.value = translateY.value;
-      overlayOpacity.value = withTiming(1, { duration: 80 });
-      sheetOpacity.value = 1;
-    })
-    .onUpdate((event) => {
-      const nextY = dragStartY.value + event.translationY;
-      if (nextY >= 0) {
-        translateY.value = nextY;
-      } else {
-        const overshoot = -nextY;
-        const dimension = Math.max(sheetHeight.value, 1);
-        translateY.value = -((overshoot * dimension * 0.45)
-          / (dimension + 0.45 * overshoot));
-      }
+  const resetSheetPosition = React.useCallback((velocityY = 0) => {
+    overlayOpacity.value = withTiming(1, { duration: reduceMotion ? 100 : 160 });
+    translateY.value = reduceMotion
+      ? withTiming(0, { duration: 120 })
+      : withSpring(0, {
+        damping: 28,
+        mass: 0.9,
+        stiffness: 320,
+        velocity: velocityY,
+      });
+  }, [overlayOpacity, reduceMotion, translateY]);
 
-      const dismissProgress = Math.min(
-        Math.max(translateY.value, 0) / Math.max(sheetHeight.value, 1),
-        1,
-      );
-      overlayOpacity.value = 1 - dismissProgress * 0.72;
-    })
-    .onEnd((event) => {
-      const projectedY = translateY.value + event.velocityY * 0.18;
-      const dismissThreshold = Math.min(sheetHeight.value * 0.3, 140);
-      const shouldDismiss = event.velocityY > 900
-        || (event.velocityY >= 0 && projectedY > dismissThreshold);
+  const dismissDraggedSheet = React.useCallback(() => {
+    overlayOpacity.value = withTiming(0, { duration: reduceMotion ? 120 : 180 });
+    if (reduceMotion) {
+      sheetOpacity.value = withTiming(0, { duration: 120 }, (finished) => {
+        if (finished) scheduleOnRN(onClose);
+      });
+      return;
+    }
 
-      if (shouldDismiss) {
-        overlayOpacity.value = withTiming(0, { duration: reduceMotion ? 120 : 180 });
-        if (reduceMotion) {
-          sheetOpacity.value = withTiming(0, { duration: 120 }, (finished) => {
-            if (finished) scheduleOnRN(onClose);
-          });
-          return;
-        }
+    translateY.value = withTiming(
+      Math.max(sheetHeight.value + 40, 320),
+      { duration: 220 },
+      (finished) => {
+        if (finished) scheduleOnRN(onClose);
+      },
+    );
+  }, [onClose, overlayOpacity, reduceMotion, sheetHeight, sheetOpacity, translateY]);
 
-        translateY.value = withSpring(Math.max(sheetHeight.value + 40, 320), {
-          damping: 35,
-          mass: 0.9,
-          overshootClamping: true,
-          stiffness: 320,
-          velocity: Math.max(event.velocityY, 0),
-        }, (finished) => {
-          if (finished) scheduleOnRN(onClose);
-        });
-        return;
-      }
+  const beginSheetDrag = React.useCallback(() => {
+    cancelAnimation(translateY);
+    cancelAnimation(overlayOpacity);
+    cancelAnimation(sheetOpacity);
+    dragStartY.value = translateY.value;
+    overlayOpacity.value = withTiming(1, { duration: 80 });
+    sheetOpacity.value = 1;
+  }, [dragStartY, overlayOpacity, sheetOpacity, translateY]);
 
-      overlayOpacity.value = withTiming(1, { duration: reduceMotion ? 100 : 160 });
-      translateY.value = reduceMotion
-        ? withTiming(0, { duration: 120 })
-        : withSpring(0, {
-          damping: 28,
-          mass: 0.9,
-          stiffness: 320,
-          velocity: event.velocityY,
-        });
-    })
-    .onFinalize((_event, success) => {
-      if (success || translateY.value === 0) return;
-      overlayOpacity.value = withTiming(1, { duration: reduceMotion ? 100 : 160 });
-      translateY.value = reduceMotion
-        ? withTiming(0, { duration: 120 })
-        : withSpring(0, { damping: 35, mass: 0.9, stiffness: 320 });
-    }), [
+  const updateSheetDrag = React.useCallback((translationY: number) => {
+    const nextY = dragStartY.value + translationY;
+    if (nextY >= 0) {
+      translateY.value = nextY;
+    } else {
+      const overshoot = -nextY;
+      const dimension = Math.max(sheetHeight.value, 1);
+      translateY.value = -((overshoot * dimension * 0.45)
+        / (dimension + 0.45 * overshoot));
+    }
+
+    const dismissProgress = Math.min(
+      Math.max(translateY.value, 0) / Math.max(sheetHeight.value, 1),
+      1,
+    );
+    overlayOpacity.value = 1 - dismissProgress * 0.72;
+  }, [dragStartY, overlayOpacity, sheetHeight, translateY]);
+
+  const finishSheetDrag = React.useCallback((translationY: number, velocityY: number) => {
+    const projectedY = Math.max(translateY.value, translationY)
+      + Math.max(velocityY, 0) * 0.12;
+    const dismissThreshold = Math.min(sheetHeight.value * 0.3, 140);
+    if (velocityY > 900 || projectedY > dismissThreshold) {
+      dismissDraggedSheet();
+      return;
+    }
+    resetSheetPosition(velocityY);
+  }, [dismissDraggedSheet, resetSheetPosition, sheetHeight, translateY]);
+
+  const dragResponder = React.useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => compact,
+    onMoveShouldSetPanResponder: (_event, gestureState) => compact
+      && Math.abs(gestureState.dy) > 6
+      && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
+    onPanResponderGrant: beginSheetDrag,
+    onPanResponderMove: (_event, gestureState) => updateSheetDrag(gestureState.dy),
+    onPanResponderRelease: (_event, gestureState) =>
+      finishSheetDrag(gestureState.dy, gestureState.vy * 1000),
+    onPanResponderTerminate: () => resetSheetPosition(),
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
+  }), [
     compact,
-    dragStartY,
-    onClose,
-    overlayOpacity,
-    reduceMotion,
-    sheetHeight,
-    sheetOpacity,
-    translateY,
+    beginSheetDrag,
+    finishSheetDrag,
+    resetSheetPosition,
+    updateSheetDrag,
+  ]);
+
+  const dragHandleRef = React.useRef<View>(null);
+  const webDrag = React.useRef<{
+    pointerId: number;
+    startY: number;
+    lastY: number;
+    lastAt: number;
+  } | null>(null);
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || !compact || !visible) return;
+    const element = dragHandleRef.current as unknown as HTMLElement | null;
+    if (!element?.addEventListener) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      const current = webDrag.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      updateSheetDrag(event.clientY - current.startY);
+      current.lastY = event.clientY;
+      current.lastAt = event.timeStamp;
+    };
+    const stopTracking = () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerCancel);
+    };
+    function onPointerUp(event: PointerEvent) {
+      const current = webDrag.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      const elapsed = Math.max(event.timeStamp - current.lastAt, 1);
+      const velocityY = ((event.clientY - current.lastY) / elapsed) * 1000;
+      finishSheetDrag(event.clientY - current.startY, velocityY);
+      webDrag.current = null;
+      stopTracking();
+    }
+    function onPointerCancel(event: PointerEvent) {
+      if (webDrag.current?.pointerId !== event.pointerId) return;
+      webDrag.current = null;
+      stopTracking();
+      resetSheetPosition();
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      webDrag.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        lastY: event.clientY,
+        lastAt: event.timeStamp,
+      };
+      window.addEventListener('pointermove', onPointerMove, { passive: false });
+      window.addEventListener('pointerup', onPointerUp, { passive: false });
+      window.addEventListener('pointercancel', onPointerCancel, { passive: false });
+      beginSheetDrag();
+    };
+
+    element.addEventListener('pointerdown', onPointerDown, { passive: false });
+    return () => {
+      element.removeEventListener('pointerdown', onPointerDown);
+      stopTracking();
+      webDrag.current = null;
+    };
+  }, [
+    beginSheetDrag,
+    compact,
+    finishSheetDrag,
+    resetSheetPosition,
+    updateSheetDrag,
+    visible,
   ]);
 
   const overlayAnimatedStyle = useAnimatedStyle(() => ({
@@ -682,27 +760,23 @@ export function AdaptiveDialog({
             style,
             sheetAnimatedStyle,
           ]}
+          role="dialog"
           testID={testID}
         >
           {compact ? (
-            <GestureDetector
-              enableContextMenu={false}
-              gesture={dragGesture}
-              touchAction="none"
-              userSelect="none"
+            <View
+              {...(Platform.OS === 'web' ? {} : dragResponder.panHandlers)}
+              accessibilityLabel={`拖动${accessibilityLabel}`}
+              collapsable={false}
+              ref={dragHandleRef}
+              style={[
+                styles.sheetDragArea,
+                Platform.OS === 'web' && styles.sheetDragAreaWeb,
+              ]}
+              testID="adaptive-dialog-drag-handle"
             >
-              <View
-                accessibilityLabel={`拖动${accessibilityLabel}`}
-                collapsable={false}
-                style={[
-                  styles.sheetDragArea,
-                  Platform.OS === 'web' && styles.sheetDragAreaWeb,
-                ]}
-                testID="adaptive-dialog-drag-handle"
-              >
-                <View style={[styles.sheetHandle, { backgroundColor: c.tertiaryLabel }]} />
-              </View>
-            </GestureDetector>
+              <View style={[styles.sheetHandle, { backgroundColor: c.tertiaryLabel }]} />
+            </View>
           ) : null}
           {children}
         </Animated.View>
@@ -868,7 +942,11 @@ const styles = StyleSheet.create({
     minHeight: 44,
     width: '100%',
   },
-  sheetDragAreaWeb: { cursor: 'grab' as never },
+  sheetDragAreaWeb: {
+    cursor: 'grab' as never,
+    touchAction: 'none' as never,
+    userSelect: 'none' as never,
+  },
   sheetHandle: {
     width: 36,
     height: 4,

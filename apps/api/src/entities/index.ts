@@ -38,6 +38,21 @@ export type InventoryTransactionSourceType =
   | 'inventory_item'
   | 'manual_adjustment'
   | 'inventory_transaction';
+export type InventoryBatchSourceType = 'manual' | 'shopping_item';
+export type InventoryBatchMovementType =
+  | 'allocation'
+  | 'receipt'
+  | 'consumption'
+  | 'adjustment'
+  | 'reversal';
+export type InventoryBatchMovementSourceType =
+  | 'batch_registration'
+  | 'shopping_item'
+  | 'menu'
+  | 'maintenance_record'
+  | 'manual_adjustment'
+  | 'inventory_transaction';
+export type SmartMenuPlanStatus = 'draft' | 'voting' | 'adopted';
 export type PointsLedgerType =
   | 'award'
   | 'adjustment'
@@ -3906,10 +3921,111 @@ export class InventoryItem {
   @Column({ type: 'numeric', precision: 10, scale: 2, default: 1 })
   restockQuantity: string;
 
+  @OneToMany(() => InventoryBatch, (batch) => batch.inventoryItem)
+  batches: InventoryBatch[];
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+@Entity('inventory_batches')
+@Check(
+  'CHK_inventory_batches_quantity',
+  `"quantity" >= 0 AND "quantity" <= 99999999.99`,
+)
+@Check(
+  'CHK_inventory_batches_source',
+  `"sourceType" IN ('manual', 'shopping_item')`,
+)
+@Check('CHK_inventory_batches_version', `"version" > 0`)
+@Check(
+  'CHK_inventory_batches_dates',
+  `"productionDate" IS NULL OR "expiresOn" IS NULL OR "expiresOn" >= "productionDate"`,
+)
+@Index(
+  'UQ_inventory_batches_household_source',
+  ['householdId', 'sourceType', 'sourceId'],
+  { unique: true },
+)
+@Index('IDX_inventory_batches_household_expiry', ['householdId', 'expiresOn'], {
+  where: '"quantity" > 0',
+})
+@Index('IDX_inventory_batches_item_received', [
+  'inventoryItemId',
+  'receivedOn',
+  'createdAt',
+])
+export class InventoryBatch {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_inventory_batches_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => InventoryItem, (item) => item.batches, {
+    eager: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'inventoryItemId',
+    foreignKeyConstraintName: 'FK_inventory_batches_item',
+  })
+  inventoryItem: InventoryItem;
+
+  @Column('uuid')
+  inventoryItemId: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantity: string;
+
+  @Column({ type: 'date' })
+  receivedOn: string;
+
+  @Column({ type: 'date', nullable: true })
+  productionDate: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  expiresOn: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  openedOn: string | null;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: InventoryBatchSourceType;
+
+  @Column('uuid')
+  sourceId: string;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_inventory_batches_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @OneToMany(() => InventoryBatchMovement, (movement) => movement.batch)
+  movements: InventoryBatchMovement[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }
 
@@ -4097,6 +4213,142 @@ export class InventoryTransaction {
 
   @Column({ type: 'uuid', nullable: true })
   reversesTransactionId: string | null;
+
+  @OneToMany(
+    () => InventoryBatchMovement,
+    (movement) => movement.inventoryTransaction,
+  )
+  batchMovements: InventoryBatchMovement[];
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  createdAt: Date;
+}
+
+@Entity('inventory_batch_movements')
+@Check(
+  'CHK_inventory_batch_movements_type',
+  `"type" IN ('allocation', 'receipt', 'consumption', 'adjustment', 'reversal')`,
+)
+@Check(
+  'CHK_inventory_batch_movements_source',
+  `"sourceType" IN ('batch_registration', 'shopping_item', 'menu', 'maintenance_record', 'manual_adjustment', 'inventory_transaction')`,
+)
+@Check(
+  'CHK_inventory_batch_movements_quantities',
+  `"quantityBefore" >= 0 AND "quantityAfter" >= 0 AND "delta" <> 0 AND "quantityAfter" = "quantityBefore" + "delta"`,
+)
+@Check(
+  'CHK_inventory_batch_movements_reversal',
+  `("type" = 'reversal' AND "reversesMovementId" IS NOT NULL) OR ("type" <> 'reversal' AND "reversesMovementId" IS NULL)`,
+)
+@Index(
+  'UQ_inventory_batch_movements_household_idempotency',
+  ['householdId', 'idempotencyKey'],
+  { unique: true },
+)
+@Index('IDX_inventory_batch_movements_batch_created', [
+  'batchId',
+  'createdAt',
+])
+@Index(
+  'IDX_inventory_batch_movements_transaction',
+  ['inventoryTransactionId'],
+  { where: '"inventoryTransactionId" IS NOT NULL' },
+)
+@Index('UQ_inventory_batch_movements_reversal', ['reversesMovementId'], {
+  unique: true,
+  where: '"reversesMovementId" IS NOT NULL',
+})
+export class InventoryBatchMovement {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => InventoryBatch, (batch) => batch.movements, {
+    eager: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'batchId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_batch',
+  })
+  batch: InventoryBatch;
+
+  @Column('uuid')
+  batchId: string;
+
+  @ManyToOne(
+    () => InventoryTransaction,
+    (transaction) => transaction.batchMovements,
+    { nullable: true, onDelete: 'RESTRICT' },
+  )
+  @JoinColumn({
+    name: 'inventoryTransactionId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_transaction',
+  })
+  inventoryTransaction: InventoryTransaction | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  inventoryTransactionId: string | null;
+
+  @Column('uuid')
+  operationId: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  type: InventoryBatchMovementType;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantityBefore: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  delta: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantityAfter: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_actor',
+  })
+  actor: Member;
+
+  @Column('uuid')
+  actorId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  actorName: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: InventoryBatchMovementSourceType;
+
+  @Column('uuid')
+  sourceId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @ManyToOne(() => InventoryBatchMovement, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'reversesMovementId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_reverses',
+  })
+  reversesMovement: InventoryBatchMovement | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reversesMovementId: string | null;
 
   @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
   createdAt: Date;
@@ -6241,6 +6493,215 @@ export class AgentActionProposal {
   updatedAt: Date;
 }
 
+@Entity('smart_menu_plans')
+@Check(
+  'CHK_smart_menu_plans_status',
+  `"status" IN ('draft', 'voting', 'adopted')`,
+)
+@Check('CHK_smart_menu_plans_dates', `"endsOn" >= "startsOn"`)
+@Check(
+  'CHK_smart_menu_plans_adopted',
+  `("status" = 'adopted' AND "adoptedById" IS NOT NULL AND "adoptedAt" IS NOT NULL) OR ("status" <> 'adopted' AND "adoptedById" IS NULL AND "adoptedAt" IS NULL)`,
+)
+@Index(
+  'UQ_smart_menu_plans_household_idempotency',
+  ['householdId', 'idempotencyKey'],
+  { unique: true },
+)
+@Index('UQ_smart_menu_plans_poll', ['pollId'], {
+  unique: true,
+  where: '"pollId" IS NOT NULL',
+})
+@Index('IDX_smart_menu_plans_household_created', [
+  'householdId',
+  'createdAt',
+])
+export class SmartMenuPlan {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'date' })
+  startsOn: string;
+
+  @Column({ type: 'date' })
+  endsOn: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'draft' })
+  status: SmartMenuPlanStatus;
+
+  @ManyToOne(() => Poll, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'pollId',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_poll',
+  })
+  poll: Poll | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  pollId: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'adoptedById',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_adopted_by',
+  })
+  adoptedBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  adoptedById: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  adoptedAt: Date | null;
+
+  @OneToMany(() => SmartMenuCandidate, (candidate) => candidate.plan)
+  candidates: SmartMenuCandidate[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('smart_menu_candidates')
+@Check(
+  'CHK_smart_menu_candidates_meal',
+  `"mealType" IN ('breakfast', 'lunch', 'dinner')`,
+)
+@Check(
+  'CHK_smart_menu_candidates_order',
+  `"sortOrder" >= 0 AND "sortOrder" < 12`,
+)
+@Index('UQ_smart_menu_candidates_plan_order', ['planId', 'sortOrder'], {
+  unique: true,
+})
+@Index('UQ_smart_menu_candidates_plan_dish', ['planId', 'dishId'], {
+  unique: true,
+})
+@Index('UQ_smart_menu_candidates_poll_option', ['pollOptionId'], {
+  unique: true,
+  where: '"pollOptionId" IS NOT NULL',
+})
+@Index('IDX_smart_menu_candidates_household_plan', [
+  'householdId',
+  'planId',
+  'sortOrder',
+])
+export class SmartMenuCandidate {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => SmartMenuPlan, (plan) => plan.candidates, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'planId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_plan',
+  })
+  plan: SmartMenuPlan;
+
+  @Column('uuid')
+  planId: string;
+
+  @ManyToOne(() => Dish, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'dishId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_dish',
+  })
+  dish: Dish;
+
+  @Column('uuid')
+  dishId: string;
+
+  @ManyToOne(() => DishRecipeVariant, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'recipeVariantId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_variant',
+  })
+  recipeVariant: DishRecipeVariant;
+
+  @Column('uuid')
+  recipeVariantId: string;
+
+  @Column({ type: 'date' })
+  targetDate: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'dinner' })
+  mealType: MealType;
+
+  @Column({ type: 'int' })
+  score: number;
+
+  @Column({ type: 'jsonb', default: [] })
+  reasons: string[];
+
+  @Column({ type: 'jsonb', default: [] })
+  expiringIngredients: {
+    ingredientId: string;
+    name: string;
+    expiresOn: string;
+    daysRemaining: number;
+  }[];
+
+  @ManyToOne(() => PollOption, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'pollOptionId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_poll_option',
+  })
+  pollOption: PollOption | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  pollOptionId: string | null;
+
+  @ManyToOne(() => Menu, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'adoptedMenuId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_adopted_menu',
+  })
+  adoptedMenu: Menu | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  adoptedMenuId: string | null;
+
+  @Column({ type: 'int' })
+  sortOrder: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
 export const ALL_ENTITIES = [
   Account,
   Household,
@@ -6298,8 +6759,10 @@ export const ALL_ENTITIES = [
   MaintenanceRecord,
   ShoppingItem,
   InventoryItem,
+  InventoryBatch,
   MaintenanceConsumable,
   InventoryTransaction,
+  InventoryBatchMovement,
   PointsAccount,
   PointsLedger,
   Reward,
@@ -6325,4 +6788,6 @@ export const ALL_ENTITIES = [
   AgentRun,
   AgentToolEvent,
   AgentActionProposal,
+  SmartMenuPlan,
+  SmartMenuCandidate,
 ];

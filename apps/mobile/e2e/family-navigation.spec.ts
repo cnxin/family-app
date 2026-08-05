@@ -74,26 +74,53 @@ async function expectNoHorizontalOverflow(page: Page) {
   );
 }
 
+async function ensureIsolatedManagerLogin(page: Page) {
+  await page.goto('/');
+  if (!/\/login\/?$/.test(new URL(page.url()).pathname)) return;
+
+  const testPassword = process.env.E2E_ACCOUNT_PASSWORD;
+  expect(
+    testPassword,
+    '隔离浏览器回归缺少 E2E_ACCOUNT_PASSWORD，拒绝猜测或修改开发账号密码',
+  ).toBeTruthy();
+  await page.getByPlaceholder('输入账号').fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
+  await page.getByPlaceholder('输入密码').fill(testPassword!);
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await expect(page).not.toHaveURL(/\/login\/?$/);
+}
+
 test('家庭成员可浏览核心页面且布局不横向溢出', async (
   { page, request },
   testInfo,
 ) => {
   test.setTimeout(180_000);
   const runtimeErrors: string[] = [];
-  let simulatingUnauthorized = false;
+  let expectedUnauthorizedConsoleErrors = 0;
+  let acceptingInitialRefreshUnauthorized = true;
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
+    const locationUrl = message.location().url;
     if (
-      simulatingUnauthorized &&
+      acceptingInitialRefreshUnauthorized &&
+      message.text().includes('status of 401') &&
+      locationUrl &&
+      new URL(locationUrl).pathname === '/auth/refresh'
+    ) {
+      return;
+    }
+    if (
+      expectedUnauthorizedConsoleErrors > 0 &&
       message.text().includes('status of 401')
     ) {
+      expectedUnauthorizedConsoleErrors -= 1;
       return;
     }
     runtimeErrors.push(message.text());
   });
 
-  await page.goto('/');
+  await ensureIsolatedManagerLogin(page);
+  acceptingInitialRefreshUnauthorized = false;
   await expect(
     page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
@@ -105,7 +132,6 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   let rejectedAuthorization: string | undefined;
   const staleAccessRoute =
     /\/(dishes|menus|shopping-list|tasks|polls|reminders|notifications)(\?|$)/;
-  simulatingUnauthorized = true;
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/auth/refresh') {
       refreshRequests += 1;
@@ -127,6 +153,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
       forcedUnauthorized < 1
     ) {
       forcedUnauthorized += 1;
+      expectedUnauthorizedConsoleErrors += 1;
       await route.fulfill({
         status: 401,
         contentType: 'application/json',
@@ -150,7 +177,6 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   );
   await page.waitForLoadState('networkidle');
   await page.unroute(staleAccessRoute);
-  simulatingUnauthorized = false;
   expect(runtimeErrors).toEqual([]);
   await page.screenshot({
     path: testInfo.outputPath('platform-home.png'),

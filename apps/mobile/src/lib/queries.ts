@@ -58,6 +58,7 @@ import type {
   MediaSourceConfig,
   InventoryCategory,
   InventoryActionResult,
+  InventoryBatch,
   InventoryItem,
   InventoryTransaction,
   FamilyMemory,
@@ -100,6 +101,7 @@ import type {
   ReminderStatus,
   ShoppingItem,
   ShoppingInventoryPreview,
+  SmartMenuPlan,
   TaskInstanceStatus,
   TaskOccurrence,
   TaskRecurrence,
@@ -2958,12 +2960,19 @@ export function useShoppingInventoryPreview(
 export function useConfirmShoppingReceipt() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { shoppingItemId: string; inventoryItemId?: string }) =>
+    mutationFn: (input: {
+      shoppingItemId: string;
+      inventoryItemId?: string;
+      batch?: InventoryBatchDatesInput;
+    }) =>
       api<InventoryActionResult>(
         `/shopping-items/${input.shoppingItemId}/confirm-stock`,
         {
           method: 'POST',
-          body: { inventoryItemId: input.inventoryItemId },
+          body: {
+            inventoryItemId: input.inventoryItemId,
+            batch: input.batch,
+          },
         },
       ),
     onSuccess: (_, input) => {
@@ -2973,6 +2982,8 @@ export function useConfirmShoppingReceipt() {
       });
       void qc.invalidateQueries({ queryKey: ['inventory'] });
       void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
     },
   });
 }
@@ -3014,6 +3025,8 @@ export function useUpsertInventoryItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['inventory'] });
       void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
     },
   });
 }
@@ -3049,6 +3062,122 @@ export function useReverseInventoryTransaction() {
       void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
       void qc.invalidateQueries({ queryKey: ['shopping'] });
       void qc.invalidateQueries({ queryKey: ['menu-inventory-preview'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+    },
+  });
+}
+
+export interface InventoryBatchDatesInput {
+  receivedOn?: string | null;
+  productionDate?: string | null;
+  expiresOn?: string | null;
+  openedOn?: string | null;
+}
+
+export function useInventoryBatches(
+  status: 'all' | 'active' | 'expiring' | 'expired' = 'all',
+  days = 7,
+) {
+  return useQuery({
+    queryKey: ['inventory-batches', status, days],
+    queryFn: () =>
+      api<InventoryBatch[]>(`/inventory-batches?status=${status}&days=${days}`),
+  });
+}
+
+export function useCreateInventoryBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: InventoryBatchDatesInput & {
+        inventoryItemId: string;
+        quantity: number;
+      },
+    ) =>
+      api<InventoryBatch>('/inventory-batches', {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey: operationKey(`inventory-batch:${input.inventoryItemId}`),
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+    },
+  });
+}
+
+export function useUpdateInventoryBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: InventoryBatchDatesInput & { id: string; expectedVersion: number }) =>
+      api<InventoryBatch>(`/inventory-batches/${id}`, {
+        method: 'PATCH',
+        body,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+    },
+  });
+}
+
+export function useSmartMenuPlans() {
+  return useQuery({
+    queryKey: ['smart-menu-plans'],
+    queryFn: () => api<SmartMenuPlan[]>('/smart-menu-plans'),
+  });
+}
+
+export function useCreateSmartMenuPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (startsOn: string) =>
+      api<SmartMenuPlan>('/smart-menu-plans', {
+        method: 'POST',
+        body: {
+          startsOn,
+          idempotencyKey: operationKey(`smart-menu:${startsOn}`),
+        },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] }),
+  });
+}
+
+export function useCreateSmartMenuPoll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, closesAt }: { id: string; closesAt?: string | null }) =>
+      api<SmartMenuPlan>(`/smart-menu-plans/${id}/poll`, {
+        method: 'POST',
+        body: { closesAt },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+      void qc.invalidateQueries({ queryKey: ['polls'] });
+    },
+  });
+}
+
+export function useAdoptSmartMenuPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<SmartMenuPlan>(`/smart-menu-plans/${id}/adopt`, {
+        method: 'POST',
+        body: { idempotencyKey: operationKey(`smart-menu-adopt:${id}`) },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+      void qc.invalidateQueries({ queryKey: ['menus'] });
+      void qc.invalidateQueries({ queryKey: ['menu-date-counts'] });
     },
   });
 }

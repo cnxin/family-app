@@ -1,9 +1,12 @@
 import {
   AlertTriangle,
+  CalendarClock,
+  CircleAlert,
   History,
   Link2,
   Minus,
   Package,
+  PackageOpen,
   Plus,
   ShoppingCart,
   Trash2,
@@ -28,6 +31,7 @@ import {
   useDeleteInventoryItem,
   useIngredients,
   useInventory,
+  useInventoryBatches,
   useInventoryTransactions,
   useReverseInventoryTransaction,
   useShoppingList,
@@ -35,6 +39,7 @@ import {
 } from '../lib/queries';
 import type {
   Ingredient,
+  InventoryBatch,
   InventoryCategory,
   InventoryItem,
   InventoryTransaction,
@@ -50,6 +55,7 @@ import {
   PrimaryButton,
   SectionHeader,
 } from './ui';
+import { FoodBatchDialog } from './food-batch-dialog';
 
 const CATEGORIES: InventoryCategory[] = [
   '调料',
@@ -387,6 +393,7 @@ function InventoryEditor({
 export function InventoryPanel() {
   const c = useTheme();
   const { data: items, isLoading } = useInventory();
+  const { data: batches } = useInventoryBatches('all', 7);
   const { data: shoppingItems } = useShoppingList(todayStr());
   const upsert = useUpsertInventoryItem();
   const { data: transactions } = useInventoryTransactions();
@@ -395,6 +402,7 @@ export function InventoryPanel() {
   const addShoppingItem = useAddManualShoppingItem();
   const [filter, setFilter] = useState<'全部' | InventoryCategory>('全部');
   const [editor, setEditor] = useState<InventoryItem | 'new' | null>(null);
+  const [batchEditor, setBatchEditor] = useState<InventoryBatch | 'new' | null>(null);
   const [pendingDelete, setPendingDelete] = useState<InventoryItem | null>(null);
   const [pendingReverse, setPendingReverse] =
     useState<InventoryTransaction | null>(null);
@@ -404,6 +412,9 @@ export function InventoryPanel() {
   const lowItems = (items ?? []).filter(
     (item) => Number(item.quantity) <= Number(item.lowStockThreshold),
   );
+  const activeBatches = (batches ?? []).filter((batch) => Number(batch.quantity) > 0);
+  const expiringBatches = activeBatches.filter((batch) => batch.status === 'expiring');
+  const expiredBatches = activeBatches.filter((batch) => batch.status === 'expired');
   const shoppingNames = useMemo(
     () =>
       new Set(
@@ -512,6 +523,28 @@ export function InventoryPanel() {
               <Text style={[t.caption, { color: c.secondaryLabel }]}>待补货</Text>
             </View>
           </Card>
+          <Card style={styles.summaryCard}>
+            <View style={[styles.summaryIcon, { backgroundColor: c.orangeSoft }]}>
+              <CalendarClock color={c.orange} size={20} />
+            </View>
+            <View>
+              <Text style={[t.title2, { color: expiringBatches.length ? c.orange : c.label }]}>
+                {expiringBatches.length}
+              </Text>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>7 天内到期</Text>
+            </View>
+          </Card>
+          <Card style={styles.summaryCard}>
+            <View style={[styles.summaryIcon, { backgroundColor: c.redSoft }]}>
+              <CircleAlert color={c.red} size={20} />
+            </View>
+            <View>
+              <Text style={[t.title2, { color: expiredBatches.length ? c.red : c.label }]}>
+                {expiredBatches.length}
+              </Text>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>已过期</Text>
+            </View>
+          </Card>
         </View>
 
         <View style={styles.panelActions}>
@@ -522,6 +555,15 @@ export function InventoryPanel() {
           >
             <Plus color="#FFFFFF" size={18} />
             <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新增库存</Text>
+          </PressableScale>
+          <PressableScale
+            accessibilityLabel="登记食品批次"
+            haptic={false}
+            onPress={() => setBatchEditor('new')}
+            style={[styles.batchButton, { backgroundColor: c.greenSoft }]}
+          >
+            <PackageOpen color={c.green} size={18} />
+            <Text style={[t.subhead, { color: c.green, fontWeight: '700' }]}>登记批次</Text>
           </PressableScale>
           {needsShopping.length ? (
             <PressableScale
@@ -546,6 +588,74 @@ export function InventoryPanel() {
         {message ? (
           <View style={[styles.message, { backgroundColor: c.tintSoft }]}>
             <Text style={[t.footnote, { color: c.tint }]}>{message}</Text>
+          </View>
+        ) : null}
+
+        {activeBatches.length ? (
+          <View>
+            <SectionHeader title="批次与保质期" />
+            <Card>
+              {activeBatches
+                .slice()
+                .sort((a, b) =>
+                  (a.expiresOn ?? '9999-12-31').localeCompare(
+                    b.expiresOn ?? '9999-12-31',
+                  ),
+                )
+                .map((batch) => {
+                  const statusLabel =
+                    batch.status === 'expired'
+                      ? `已过期 ${Math.abs(batch.daysRemaining ?? 0)} 天`
+                      : batch.status === 'expiring'
+                        ? `${batch.daysRemaining} 天后到期`
+                        : batch.expiresOn
+                          ? `到期 ${batch.expiresOn}`
+                          : '未设置到期日';
+                  const statusColor =
+                    batch.status === 'expired'
+                      ? c.red
+                      : batch.status === 'expiring'
+                        ? c.orange
+                        : c.secondaryLabel;
+                  const statusBackground =
+                    batch.status === 'expired'
+                      ? c.redSoft
+                      : batch.status === 'expiring'
+                        ? c.orangeSoft
+                        : c.fill;
+                  return (
+                    <Pressable
+                      accessibilityLabel={`编辑${batch.inventoryItem.name}批次`}
+                      accessibilityRole="button"
+                      key={batch.id}
+                      onPress={() => setBatchEditor(batch)}
+                      style={[styles.batchRow, { borderBottomColor: c.separator }]}
+                    >
+                      <View style={[styles.batchIcon, { backgroundColor: statusBackground }]}>
+                        {batch.status === 'expired' ? (
+                          <CircleAlert color={statusColor} size={18} />
+                        ) : (
+                          <CalendarClock color={statusColor} size={18} />
+                        )}
+                      </View>
+                      <View style={styles.batchCopy}>
+                        <View style={styles.batchTitleRow}>
+                          <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]} numberOfLines={1}>
+                            {batch.inventoryItem.name}
+                          </Text>
+                          <Text style={[t.caption, { color: statusColor, fontWeight: '700' }]}>
+                            {statusLabel}
+                          </Text>
+                        </View>
+                        <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>
+                          余量 {Number(batch.quantity)} {batch.inventoryItem.unit} · 入库 {batch.receivedOn}
+                          {batch.openedOn ? ` · 已开封 ${batch.openedOn}` : ''}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+            </Card>
           </View>
         ) : null}
 
@@ -612,7 +722,10 @@ export function InventoryPanel() {
                       <Text style={styles.inventoryEmoji}>{CATEGORY_EMOJI[item.category]}</Text>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <View style={styles.inventoryNameRow}>
-                          <Text style={[t.body, { color: c.label, fontWeight: '700' }]} numberOfLines={1}>
+                          <Text
+                            style={[t.body, styles.inventoryName, { color: c.label, fontWeight: '700' }]}
+                            numberOfLines={1}
+                          >
                             {item.name}
                           </Text>
                           {item.ingredient ? <Link2 color={c.tint} size={13} /> : null}
@@ -621,10 +734,44 @@ export function InventoryPanel() {
                               <Text style={styles.lowBadgeText}>待补货</Text>
                             </View>
                           ) : null}
+                          {item.batchSummary?.earliestExpiresOn ? (
+                            <View
+                              style={[
+                                styles.expiryBadge,
+                                {
+                                  backgroundColor: item.batchSummary.expiredCount
+                                    ? c.redSoft
+                                    : item.batchSummary.expiringCount
+                                      ? c.orangeSoft
+                                      : c.fill,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.expiryBadgeText,
+                                  {
+                                    color: item.batchSummary.expiredCount
+                                      ? c.red
+                                      : item.batchSummary.expiringCount
+                                        ? c.orange
+                                        : c.secondaryLabel,
+                                  },
+                                ]}
+                              >
+                                {item.batchSummary.earliestExpiresOn}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
                         <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
                           剩余 {Number(item.quantity)} {item.unit} · {Number(item.lowStockThreshold)} 以下提醒
                         </Text>
+                        {item.batchSummary?.activeBatchCount ? (
+                          <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 2 }]}>
+                            {item.batchSummary.activeBatchCount} 个批次 · 未分批 {item.batchSummary.untrackedQuantity} {item.unit}
+                          </Text>
+                        ) : null}
                       </View>
                     </Pressable>
 
@@ -744,6 +891,19 @@ export function InventoryPanel() {
         />
       ) : null}
 
+      {batchEditor ? (
+        <FoodBatchDialog
+          batch={batchEditor === 'new' ? null : batchEditor}
+          inventory={items ?? []}
+          key={batchEditor === 'new' ? 'new-batch' : batchEditor.id}
+          onClose={() => setBatchEditor(null)}
+          onSuccess={(batchMessage) => {
+            setBatchEditor(null);
+            setMessage(batchMessage);
+          }}
+        />
+      ) : null}
+
       <ConfirmDialog
         confirmLabel="删除库存"
         loading={remove.isPending}
@@ -794,9 +954,11 @@ export function InventoryPanel() {
 
 const styles = StyleSheet.create({
   panelContent: { paddingBottom: 36 },
-  summaryRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
   summaryCard: {
     flex: 1,
+    flexBasis: '46%',
+    minWidth: 150,
     minHeight: 82,
     padding: 14,
     flexDirection: 'row',
@@ -829,7 +991,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
+  batchButton: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    gap: 7,
+    height: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 15,
+  },
   message: { marginTop: 12, borderRadius: radius.sm, padding: 11 },
+  batchRow: {
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 66,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  batchIcon: {
+    alignItems: 'center',
+    borderRadius: 19,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  batchCopy: { flex: 1, minWidth: 0 },
+  batchTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
   filters: { gap: 8, paddingRight: 8, marginTop: 16 },
   filterButton: {
     height: 44,
@@ -858,6 +1052,9 @@ const styles = StyleSheet.create({
   },
   inventoryEmoji: { fontSize: 23 },
   inventoryNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  inventoryName: { flexShrink: 1, minWidth: 0 },
+  expiryBadge: { borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 3 },
+  expiryBadgeText: { fontSize: 10, fontWeight: '700' },
   lowBadge: { borderRadius: radius.full, paddingHorizontal: 6, paddingVertical: 2 },
   lowBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
   inventoryControls: { flexDirection: 'row', gap: 6, marginLeft: 6 },
