@@ -4,12 +4,15 @@ import {
   BellRing,
   BookOpenText,
   CalendarDays,
+  CheckCircle2,
+  Clock3,
   CookingPot,
   Film,
   Gift,
   Images,
   ListTodo,
   Plane,
+  Plus,
   ShoppingCart,
   Sparkles,
   UsersRound,
@@ -19,7 +22,7 @@ import {
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useRouter, type Href } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -29,6 +32,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import { QuickAddDialog } from '../../components/quick-add-dialog';
 import {
   Card,
   IconButton,
@@ -39,6 +43,7 @@ import {
 import { todayStr } from '../../lib/date';
 import {
   useAssets,
+  useActivities,
   useAgentStatus,
   useKnowledgeArticles,
   useMemories,
@@ -56,7 +61,10 @@ import {
 import { photoUri } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
-import type { FamilyMemory } from '../../lib/types';
+import type {
+  FamilyMemory,
+  HouseholdActivity,
+} from '../../lib/types';
 
 interface HomeModuleEntry {
   background: string;
@@ -65,6 +73,17 @@ interface HomeModuleEntry {
   icon: LucideIcon;
   label: string;
   status: string;
+}
+
+interface ConsumerFocusItem {
+  background: string;
+  badge?: string;
+  color: string;
+  href: Href;
+  icon: LucideIcon;
+  id: string;
+  summary: string;
+  title: string;
 }
 
 function greeting() {
@@ -172,32 +191,6 @@ function TodayRow({
   );
 }
 
-function ConsumerQuickCard({ entry }: { entry: HomeModuleEntry }) {
-  const c = useTheme();
-  const router = useRouter();
-  return (
-    <PressableScale
-      accessibilityLabel={`${entry.label}，${entry.status}`}
-      accessibilityRole="link"
-      onPress={() => router.push(entry.href)}
-      style={styles.consumerQuickCell}
-      testID={`consumer-quick-${String(entry.href).replaceAll('/', '')}`}
-    >
-      <Card style={styles.consumerQuickCard}>
-        <View style={[styles.consumerQuickIcon, { backgroundColor: entry.background }]}>
-          <entry.icon color={entry.color} size={22} strokeWidth={2} />
-        </View>
-        <Text style={[t.headline, styles.consumerQuickTitle, { color: c.label }]}>
-          {entry.label}
-        </Text>
-        <Text numberOfLines={1} style={[t.footnote, { color: c.secondaryLabel }]}>
-          {entry.status}
-        </Text>
-      </Card>
-    </PressableScale>
-  );
-}
-
 function ConsumerAgendaRow({
   background,
   color,
@@ -239,6 +232,79 @@ function ConsumerAgendaRow({
   );
 }
 
+function ConsumerFocusRow({ item, last }: { item: ConsumerFocusItem; last: boolean }) {
+  const c = useTheme();
+  const router = useRouter();
+  const Icon = item.icon;
+  return (
+    <PressSurface
+      accessibilityLabel={`${item.title}，${item.summary}`}
+      accessibilityRole="link"
+      onPress={() => router.push(item.href)}
+      pressedColor={c.fill}
+      style={[
+        styles.consumerFocusRow,
+        !last && { borderBottomColor: c.separator, borderBottomWidth: StyleSheet.hairlineWidth },
+      ]}
+    >
+      <View style={[styles.consumerFocusIcon, { backgroundColor: item.background }]}>
+        <Icon color={item.color} size={18} />
+      </View>
+      <View style={styles.consumerFocusCopy}>
+        <View style={styles.consumerFocusTitleRow}>
+          <Text numberOfLines={1} style={[t.subhead, styles.consumerFocusTitle, { color: c.label }]}>
+            {item.title}
+          </Text>
+          {item.badge ? (
+            <View style={[styles.consumerFocusBadge, { backgroundColor: item.background }]}>
+              <Text style={[t.caption, { color: item.color, fontWeight: '700' }]}>{item.badge}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text numberOfLines={2} style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+          {item.summary}
+        </Text>
+      </View>
+      <ArrowRight color={c.tertiaryLabel} size={16} />
+    </PressSurface>
+  );
+}
+
+function ConsumerActivityRow({ activity }: { activity: HouseholdActivity }) {
+  const c = useTheme();
+  const router = useRouter();
+  const content = (
+    <View style={styles.consumerActivityRow}>
+      <View style={[styles.consumerActivityAvatar, { backgroundColor: c.fill }]}>
+        <Text style={styles.consumerActivityEmoji}>{activity.actor.avatarEmoji}</Text>
+      </View>
+      <View style={styles.consumerFocusCopy}>
+        <Text numberOfLines={2} style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
+          {activity.summary}
+        </Text>
+        <Text style={[t.caption, { color: c.tertiaryLabel, marginTop: 4 }]}>
+          {activity.actor.name} · {new Intl.DateTimeFormat('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(new Date(activity.occurredAt))}
+        </Text>
+      </View>
+      {activity.targetPath ? <ArrowRight color={c.tertiaryLabel} size={16} /> : null}
+    </View>
+  );
+
+  return activity.targetPath ? (
+    <PressSurface
+      accessibilityLabel={`打开家庭进展：${activity.summary}`}
+      accessibilityRole="link"
+      onPress={() => router.push(activity.targetPath as Href)}
+      pressedColor={c.fill}
+    >
+      {content}
+    </PressSurface>
+  ) : content;
+}
+
 function ConsumerServiceLink({ entry }: { entry: HomeModuleEntry }) {
   const c = useTheme();
   const router = useRouter();
@@ -250,6 +316,7 @@ function ConsumerServiceLink({ entry }: { entry: HomeModuleEntry }) {
       onPress={() => router.push(entry.href)}
       pressedColor={c.fillStrong}
       style={[styles.consumerServiceLink, { backgroundColor: c.fill }]}
+      testID={`consumer-quick-${String(entry.href).replaceAll('/', '')}`}
     >
       <View style={[styles.consumerServiceIcon, { backgroundColor: entry.background }]}>
         <Icon color={entry.color} size={18} strokeWidth={2} />
@@ -339,7 +406,9 @@ function formatMemoryDate(value: string) {
 }
 
 function ConsumerHome({
+  actionItems,
   activeTrips,
+  activities,
   avatarEmoji,
   memberName,
   menuItems,
@@ -356,8 +425,11 @@ function ConsumerHome({
   upcomingVisits,
   upcomingReminder,
   weekPendingTasks,
+  waitingItems,
 }: {
+  actionItems: ConsumerFocusItem[];
   activeTrips: number;
+  activities: HouseholdActivity[];
   avatarEmoji: string;
   memberName: string;
   menuItems: number;
@@ -378,12 +450,12 @@ function ConsumerHome({
       : never
     : never;
   weekPendingTasks: number;
+  waitingItems: ConsumerFocusItem[];
 }) {
   const c = useTheme();
   const router = useRouter();
-  const attentionCount = pendingTasks + shoppingPending + (upcomingReminder ? 1 : 0);
-  const quickEntries = moduleEntries.slice(0, 4);
-  const serviceEntries = moduleEntries.slice(4);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const attentionCount = actionItems.length;
   const loading = menusLoading || tasksLoading || remindersLoading;
 
   return (
@@ -404,6 +476,15 @@ function ConsumerHome({
                 {fullDate()}
               </Text>
             </View>
+            <IconButton
+              accessibilityLabel="快捷新增家庭事项"
+              backgroundColor={c.tint}
+              color="#FFFFFF"
+              haptic
+              icon={Plus}
+              onPress={() => setQuickAddOpen(true)}
+              testID="consumer-quick-add-button"
+            />
             <View>
               <IconButton
                 accessibilityLabel={`打开消息${unreadCount ? `，${unreadCount}条未读` : ''}`}
@@ -422,7 +503,7 @@ function ConsumerHome({
           </View>
 
           <View style={[styles.consumerHero, { backgroundColor: c.tintSoft }]}>
-            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>今日家庭助理</Text>
+            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>今日家庭工作台</Text>
             <Text style={[t.title1, styles.consumerHeroTitle, { color: c.label }]}>
               {attentionCount
                 ? `有 ${attentionCount} 件事等你一起看看`
@@ -467,11 +548,31 @@ function ConsumerHome({
           </View>
 
           <View style={styles.consumerSectionHeader}>
-            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>常用</Text>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>需要我处理</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/notifications')}
+              style={styles.textLink}
+            >
+              <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>家庭收件箱</Text>
+              <ArrowRight color={c.tint} size={15} />
+            </Pressable>
           </View>
-          <View style={styles.consumerQuickGrid}>
-            {quickEntries.map((entry) => <ConsumerQuickCard entry={entry} key={entry.label} />)}
-          </View>
+          <Card style={styles.consumerFocusCard}>
+            {actionItems.length ? actionItems.map((item, index) => (
+              <ConsumerFocusRow item={item} key={item.id} last={index === actionItems.length - 1} />
+            )) : (
+              <View style={styles.consumerCalmState}>
+                <View style={[styles.consumerFocusIcon, { backgroundColor: c.greenSoft }]}>
+                  <CheckCircle2 color={c.green} size={19} />
+                </View>
+                <View style={styles.consumerFocusCopy}>
+                  <Text style={[t.headline, { color: c.label }]}>现在没有需要你处理的事</Text>
+                  <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>新的任务和投票会出现在这里</Text>
+                </View>
+              </View>
+            )}
+          </Card>
 
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>接下来</Text>
@@ -516,6 +617,43 @@ function ConsumerHome({
               />
             </View>
           )}
+
+          <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>等待家人</Text>
+          </View>
+          <Card style={styles.consumerFocusCard}>
+            {waitingItems.length ? waitingItems.map((item, index) => (
+              <ConsumerFocusRow item={item} key={item.id} last={index === waitingItems.length - 1} />
+            )) : (
+              <View style={styles.consumerCalmState}>
+                <View style={[styles.consumerFocusIcon, { backgroundColor: c.blueSoft }]}>
+                  <Clock3 color={c.blue} size={19} />
+                </View>
+                <Text style={[t.subhead, { color: c.secondaryLabel, flex: 1 }]}>暂时没有正在等待的家庭协作</Text>
+              </View>
+            )}
+          </Card>
+
+          <View style={styles.consumerSectionHeader}>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>家里刚刚完成</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/activity')}
+              style={styles.textLink}
+            >
+              <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>全部进展</Text>
+              <ArrowRight color={c.tint} size={15} />
+            </Pressable>
+          </View>
+          <Card style={styles.consumerActivityCard}>
+            {activities.length ? activities.map((activity) => (
+              <ConsumerActivityRow activity={activity} key={activity.id} />
+            )) : (
+              <View style={styles.consumerCalmState}>
+                <Text style={[t.subhead, { color: c.secondaryLabel }]}>家里的新进展会出现在这里</Text>
+              </View>
+            )}
+          </Card>
 
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>本周概览</Text>
@@ -564,13 +702,14 @@ function ConsumerHome({
           )}
 
           <View style={styles.consumerSectionHeader}>
-            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>更多家里服务</Text>
+            <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>全部功能</Text>
           </View>
           <View style={styles.consumerServiceGrid}>
-            {serviceEntries.map((entry) => <ConsumerServiceLink entry={entry} key={entry.label} />)}
+            {moduleEntries.map((entry) => <ConsumerServiceLink entry={entry} key={entry.label} />)}
           </View>
         </PageContainer>
       </ScrollView>
+      <QuickAddDialog onClose={() => setQuickAddOpen(false)} visible={quickAddOpen} />
     </SafeAreaView>
   );
 }
@@ -582,6 +721,7 @@ export default function HomeScreen() {
   const { member } = useSession();
   const today = todayStr();
   const { data: menus, isLoading: menusLoading } = useMenusOfDate(today);
+  const { data: activities } = useActivities();
   const { data: shopping } = useShoppingList(today);
   const { data: tasks, isLoading: tasksLoading } = useTasks(today, today);
   const { data: weekTasks } = useTasks(today, todayStr(6));
@@ -621,6 +761,72 @@ export default function HomeScreen() {
       0,
     ) ?? 0;
   const ownPoints = pointsAccounts?.find((account) => account.memberId === member?.id)?.balance ?? 0;
+  const actionItems: ConsumerFocusItem[] = [
+    ...pendingTasks
+      .filter((entry) => entry.canUpdate && (entry.assigneeId == null || entry.assigneeId === member?.id))
+      .slice(0, 3)
+      .map((entry): ConsumerFocusItem => ({
+        background: c.tintSoft,
+        badge: entry.assigneeId ? '交给我' : '待认领',
+        color: c.tint,
+        href: `/tasks?date=${entry.dueDate}&taskId=${entry.taskId}` as Href,
+        icon: ListTodo,
+        id: `task:${entry.id}`,
+        summary: entry.task.note || '今天完成后记得在任务中确认',
+        title: entry.task.title,
+      })),
+    ...openPolls
+      .filter((poll) => poll.canVote && poll.selectedOptionIds.length === 0)
+      .slice(0, 2)
+      .map((poll): ConsumerFocusItem => ({
+        background: c.accentSoft,
+        badge: '待投票',
+        color: c.accent,
+        href: `/polls?pollId=${poll.id}` as Href,
+        icon: Vote,
+        id: `poll:${poll.id}`,
+        summary: poll.description || `${poll.options.length} 个选项等你选择`,
+        title: poll.title,
+      })),
+    ...(shoppingPending ? [{
+      background: c.greenSoft,
+      badge: `${shoppingPending} 项`,
+      color: c.green,
+      href: '/shopping' as Href,
+      icon: ShoppingCart,
+      id: 'shopping:today',
+      summary: '采购完成后可以确认入库',
+      title: '今天的购物清单',
+    }] : []),
+  ].slice(0, 5);
+  const waitingItems: ConsumerFocusItem[] = [
+    ...pendingTasks
+      .filter((entry) => entry.assigneeId != null && entry.assigneeId !== member?.id)
+      .slice(0, 2)
+      .map((entry): ConsumerFocusItem => ({
+        background: c.blueSoft,
+        badge: entry.assignee?.name ?? '家人',
+        color: c.blue,
+        href: `/tasks?date=${entry.dueDate}&taskId=${entry.taskId}` as Href,
+        icon: Clock3,
+        id: `waiting-task:${entry.id}`,
+        summary: `已交给${entry.assignee?.name ?? '家人'}处理`,
+        title: entry.task.title,
+      })),
+    ...openPolls
+      .filter((poll) => poll.selectedOptionIds.length > 0)
+      .slice(0, 2)
+      .map((poll): ConsumerFocusItem => ({
+        background: c.orangeSoft,
+        badge: `${poll.totalVoters} 人已投`,
+        color: c.orange,
+        href: `/polls?pollId=${poll.id}` as Href,
+        icon: Vote,
+        id: `waiting-poll:${poll.id}`,
+        summary: '你已经投票，等待其他家人一起决定',
+        title: poll.title,
+      })),
+  ].slice(0, 4);
   const moduleEntries: HomeModuleEntry[] = [
     {
       background: c.tintSoft,
@@ -729,7 +935,9 @@ export default function HomeScreen() {
   if (member?.role === 'member') {
     return (
       <ConsumerHome
+        actionItems={actionItems}
         activeTrips={travelPlans?.length ?? 0}
+        activities={(activities ?? []).slice(0, 4)}
         avatarEmoji={member.avatarEmoji}
         memberName={member.name}
         menuItems={menuItems}
@@ -746,6 +954,7 @@ export default function HomeScreen() {
         upcomingVisits={upcomingVisits}
         upcomingReminder={upcomingReminder}
         weekPendingTasks={weekPendingTasks}
+        waitingItems={waitingItems}
       />
     );
   }
@@ -850,7 +1059,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  consumerContent: { paddingTop: 14, paddingBottom: 56 },
+  consumerContent: { paddingTop: 14, paddingBottom: 104 },
   consumerHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -898,17 +1107,6 @@ const styles = StyleSheet.create({
     minHeight: 38,
   },
   consumerSectionTitle: { fontWeight: '600' },
-  consumerQuickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  consumerQuickCell: { flexGrow: 1, minWidth: 0, width: '47%' },
-  consumerQuickCard: { minHeight: 132, padding: 16 },
-  consumerQuickIcon: {
-    alignItems: 'center',
-    borderRadius: 21,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  consumerQuickTitle: { fontWeight: '600', marginTop: 13 },
   consumerAgenda: { gap: 9 },
   consumerAgendaRow: {
     alignItems: 'center',
@@ -926,6 +1124,51 @@ const styles = StyleSheet.create({
   },
   consumerAgendaCopy: { flex: 1, minWidth: 0 },
   consumerAgendaTitle: { fontWeight: '600' },
+  consumerFocusCard: { overflow: 'hidden' },
+  consumerFocusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 11,
+    minHeight: 74,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  consumerFocusIcon: {
+    alignItems: 'center',
+    borderRadius: 19,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  consumerFocusCopy: { flex: 1, minWidth: 0 },
+  consumerFocusTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  consumerFocusTitle: { flex: 1, fontWeight: '700' },
+  consumerFocusBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  consumerCalmState: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 11,
+    minHeight: 78,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  consumerActivityCard: { gap: 2, overflow: 'hidden', paddingVertical: 4 },
+  consumerActivityRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 11,
+    minHeight: 68,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  consumerActivityAvatar: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  consumerActivityEmoji: { fontSize: 18 },
   consumerOverviewGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   consumerOverviewCell: { flexGrow: 1, minWidth: 0, width: '47%' },
   consumerOverviewCard: { minHeight: 112, padding: 15 },

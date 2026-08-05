@@ -16,7 +16,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -568,7 +568,8 @@ export default function TasksScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string; taskId?: string }>();
+  const params = useLocalSearchParams<{ create?: string; date?: string; taskId?: string }>();
+  const parameterCreate = firstParam(params.create);
   const parameterDate = validDate(firstParam(params.date));
   const parameterTaskId = firstParam(params.taskId);
   const { member } = useSession();
@@ -580,12 +581,29 @@ export default function TasksScreen() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TaskOccurrence | null>(null);
   const [pendingArchive, setPendingArchive] = useState<TaskOccurrence | null>(null);
+  const createOpened = useRef(false);
   const { data: members } = useMembers();
   const { data: tasks, isLoading, error } = useTasks(selectedDate, selectedDate);
   const updateOccurrence = useUpdateTaskOccurrence();
   const archive = useArchiveTask();
 
   useEffect(() => setSelectedDate(parameterDate), [parameterDate]);
+
+  useEffect(() => {
+    if (parameterCreate !== '1') {
+      createOpened.current = false;
+      return;
+    }
+    if (createOpened.current) return;
+    createOpened.current = true;
+    setEditingEntry(null);
+    setFormOpen(true);
+  }, [parameterCreate]);
+
+  const closeTaskForm = () => {
+    setFormOpen(false);
+    if (parameterCreate === '1') router.replace('/tasks');
+  };
 
   const visibleTasks = useMemo(
     () =>
@@ -756,9 +774,9 @@ export default function TasksScreen() {
         entry={editingEntry}
         initialDate={selectedDate}
         members={members ?? []}
-        onClose={() => setFormOpen(false)}
+        onClose={closeTaskForm}
         onSaved={(date) => {
-          setFormOpen(false);
+          closeTaskForm();
           setSelectedDate(date);
         }}
         visible={formOpen}

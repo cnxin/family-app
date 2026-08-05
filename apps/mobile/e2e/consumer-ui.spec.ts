@@ -23,7 +23,11 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
   await page.goto('/');
 
   await expect(page.getByTestId('consumer-home')).toBeVisible();
-  await expect(page.getByText('今日家庭助理', { exact: true })).toBeVisible();
+  await expect(page.getByText('今日家庭工作台', { exact: true })).toBeVisible();
+  await expect(page.getByText('需要我处理', { exact: true })).toBeVisible();
+  await expect(page.getByText('等待家人', { exact: true })).toBeVisible();
+  await expect(page.getByText('家里刚刚完成', { exact: true })).toBeVisible();
+  await expect(page.getByText('全部功能', { exact: true })).toBeVisible();
   await expect(page.getByText('本周概览', { exact: true })).toBeVisible();
   await expect(page.getByText('最近回忆', { exact: true })).toBeVisible();
   await expect(page.getByText('家庭工作台', { exact: true })).toHaveCount(0);
@@ -38,6 +42,38 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
     await expect(tab).toBeVisible();
     await expectTouchTarget(tab, `${name}标签`);
   }
+
+  const quickAdd = page.getByTestId('consumer-quick-add-button');
+  await expectTouchTarget(quickAdd, '快捷新增按钮');
+  await quickAdd.click();
+  const quickDialog = page.getByTestId('quick-add-dialog');
+  await expect(quickDialog).toBeVisible();
+  await expect(quickDialog.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  for (const target of ['quick-add-task', 'quick-add-shopping', 'quick-add-reminder', 'quick-add-order', 'quick-add-poll']) {
+    await expectTouchTarget(quickDialog.getByTestId(target), target);
+  }
+  await quickDialog.getByTestId('quick-add-task').click();
+  await expect(page).toHaveURL(/\/tasks\?create=1/);
+  const quickTaskDialog = page.getByTestId('task-form-dialog');
+  await expect(quickTaskDialog).toBeVisible();
+  await quickTaskDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page).toHaveURL(/\/tasks$/);
+  await page.getByRole('tab', { name: '今天', exact: true }).click();
+  await expect(page.getByTestId('consumer-home')).toBeVisible();
+
+  await page.getByRole('tab', { name: /消息/ }).click();
+  const familyInbox = page.getByTestId('consumer-family-inbox');
+  await expect(familyInbox).toBeVisible();
+  await expect(familyInbox.getByText('家庭收件箱', { exact: true })).toBeVisible();
+  const actionInboxTab = familyInbox.getByRole('button', { name: /需要处理/ });
+  const updateInboxTab = familyInbox.getByRole('button', { name: /仅供了解/ });
+  await expectTouchTarget(actionInboxTab, '需要处理标签');
+  await expectTouchTarget(updateInboxTab, '仅供了解标签');
+  await updateInboxTab.click();
+  await expect(familyInbox.getByText('家庭动态', { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('tab', { name: '今天', exact: true }).click();
+  await expect(page.getByTestId('consumer-home')).toBeVisible();
 
   const assistantLink = page.getByTestId('consumer-quick-assistant');
   await expectTouchTarget(assistantLink, '问问小管家入口');

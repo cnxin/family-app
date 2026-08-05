@@ -1089,6 +1089,7 @@ export default function PollsScreen() {
   const pathname = usePathname();
   const mediaScope = pathname === '/media/polls';
   const params = useLocalSearchParams<{
+    create?: string;
     pollId?: string;
     sourceModule?: string;
     sourceId?: string;
@@ -1096,6 +1097,7 @@ export default function PollsScreen() {
     returnTo?: string;
     candidateIds?: string;
   }>();
+  const parameterCreate = firstParam(params.create);
   const focusedPollId = firstParam(params.pollId);
   const sourceModule = firstParam(params.sourceModule);
   const sourceId = firstParam(params.sourceId);
@@ -1156,15 +1158,28 @@ export default function PollsScreen() {
   }, [focusedPollId, polls]);
 
   useEffect(() => {
-    if (!source && !initialMediaIds.length) return;
+    if (!source && !initialMediaIds.length && parameterCreate !== '1') return;
     const key = source
       ? `${source.module}:${source.id}`
-      : `media-candidates:${initialMediaIds.join(',')}`;
+      : initialMediaIds.length
+        ? `media-candidates:${initialMediaIds.join(',')}`
+        : 'create';
     if (openedSource.current === key) return;
     openedSource.current = key;
     setEditingPoll(null);
     setFormOpen(true);
-  }, [initialMediaIds, source]);
+  }, [initialMediaIds, parameterCreate, source]);
+
+  useEffect(() => {
+    if (parameterCreate !== '1' && openedSource.current === 'create') {
+      openedSource.current = null;
+    }
+  }, [parameterCreate]);
+
+  const closePollForm = () => {
+    setFormOpen(false);
+    if (parameterCreate === '1') router.replace('/polls');
+  };
 
   const scopedPolls = useMemo(
     () =>
@@ -1305,9 +1320,9 @@ export default function PollsScreen() {
       </PageContainer>
 
       <PollForm
-        onClose={() => setFormOpen(false)}
+        onClose={closePollForm}
         onSaved={(saved) => {
-          setFormOpen(false);
+          closePollForm();
           if (source || initialMediaIds.length) {
             if (returnTo === 'watchlist') {
               router.replace({

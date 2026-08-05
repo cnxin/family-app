@@ -600,11 +600,13 @@ export default function RemindersScreen() {
   const desktop = useDesktopLayout();
   const router = useRouter();
   const params = useLocalSearchParams<{
+    create?: string;
     sourceModule?: string;
     sourceId?: string;
     occurrenceDate?: string;
     reminderId?: string;
   }>();
+  const parameterCreate = firstParam(params.create);
   const parameterSourceModule = firstParam(params.sourceModule);
   const parameterSourceId = firstParam(params.sourceId);
   const parameterOccurrenceDate = firstParam(params.occurrenceDate);
@@ -639,10 +641,21 @@ export default function RemindersScreen() {
     if (!initialSourceKey) openedParam.current = null;
   }, [initialSourceKey]);
 
+  useEffect(() => {
+    if (parameterCreate !== '1') {
+      if (openedParam.current === 'create') openedParam.current = null;
+      return;
+    }
+    if (sourcesLoading || openedParam.current === 'create') return;
+    openedParam.current = 'create';
+    setEditingReminder(null);
+    setFormOpen(true);
+  }, [parameterCreate, sourcesLoading]);
+
   const closeForm = () => {
     setFormOpen(false);
     setEditingReminder(null);
-    if (initialSourceKey) router.replace('/reminders');
+    if (initialSourceKey || parameterCreate === '1') router.replace('/reminders');
   };
 
   const visibleReminders = useMemo(

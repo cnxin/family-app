@@ -99,6 +99,6 @@ setup('为普通成员移动视口使用鼠标登录', async ({ page, request })
     request,
     authFiles.memberMobile,
     '妈妈',
-    '今日家庭助理',
+    '今日家庭工作台',
   );
 });

@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
+import { useLocalSearchParams } from 'expo-router';
 import { Minus, PackageCheck, Plus, Trash2, X } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -344,6 +345,9 @@ function StockConfirmDialog({
 export default function ShoppingScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const params = useLocalSearchParams<{ create?: string | string[] }>();
+  const createParam = Array.isArray(params.create) ? params.create[0] : params.create;
+  const shoppingScroll = useRef<ScrollView>(null);
   const [view, setView] = useState<'shopping' | 'inventory'>('shopping');
   const [date, setDate] = useState(todayStr());
   const { data: items, isLoading } = useShoppingList(date);
@@ -359,6 +363,10 @@ export default function ShoppingScreen() {
     error: boolean;
   } | null>(null);
   const [stockMessage, setStockMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (createParam === '1') setView('shopping');
+  }, [createParam]);
 
   const groups = useMemo(() => {
     const map = new Map<string, ShoppingItem[]>();
@@ -446,6 +454,10 @@ export default function ShoppingScreen() {
 
             <ScrollView
               contentContainerStyle={styles.scrollContent}
+              onContentSizeChange={() => {
+                if (createParam === '1') shoppingScroll.current?.scrollToEnd({ animated: true });
+              }}
+              ref={shoppingScroll}
               showsVerticalScrollIndicator={false}
             >
         {isLoading ? <ActivityIndicator style={{ marginTop: 48 }} /> : null}
@@ -484,7 +496,9 @@ export default function ShoppingScreen() {
         ) : null}
 
         <SectionHeader title="手动添加" />
-        <Card style={[styles.manualForm, desktop && styles.manualFormDesktop]}>
+        <Card
+          style={[styles.manualForm, desktop && styles.manualFormDesktop]}
+        >
           <TextInput
             accessibilityLabel="物品名称"
             style={[
