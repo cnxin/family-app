@@ -54,10 +54,15 @@ test('管理员可用鼠标或触控使用小管家并查看运行时设置', as
   await expectTouchTarget(send, '发送按钮');
   await expectTouchTarget(newConversation, '新对话按钮');
 
-  await input.fill('最近有哪些东西快没了？');
-  await expect(input).toHaveValue('最近有哪些东西快没了？');
+  await input.fill('这周还有哪些家庭任务？');
+  await expect(input).toHaveValue('这周还有哪些家庭任务？');
   await send.click();
-  await expect(page.getByText(/库存|低库存/).last()).toBeVisible({ timeout: 15_000 });
+  const taskResult = page.getByTestId('agent-result-tasks').last();
+  await expect(taskResult).toBeVisible({ timeout: 15_000 });
+  await expectTouchTarget(
+    page.getByTestId('agent-result-open-tasks').last(),
+    '任务结果跳转入口',
+  );
 
   const proposalTitle = `触控回归任务-${Date.now()}`;
   const proposalDate = new Date().toISOString().slice(0, 10);

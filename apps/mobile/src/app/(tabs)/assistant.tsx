@@ -5,10 +5,12 @@ import {
   CircleStop,
   CloudOff,
   Clock3,
+  ChevronRight,
   Link2,
   ListChecks,
   MessageCircleMore,
   Plus,
+  RotateCcw,
   Send,
   Settings2,
   Sparkles,
@@ -16,6 +18,7 @@ import {
   Unlink,
   X,
 } from 'lucide-react-native';
+import { type Href, useRouter } from 'expo-router';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -52,6 +55,7 @@ import {
   useCreateAgentConversation,
   useSendAgentMessage,
   useRejectAgentProposal,
+  useRetryAgentRun,
   useCreateAgentChannelPairing,
   useRevokeAgentChannel,
   useRevokeAgentChannelPairing,
@@ -65,6 +69,8 @@ import type {
   AgentConversation,
   AgentMessage,
   AgentRuntimeKind,
+  AgentToolEvent,
+  AgentToolPresentation,
 } from '../../lib/types';
 
 const SUGGESTIONS = [
@@ -108,6 +114,118 @@ function MessageBubble({ message }: { message: AgentMessage }) {
           {message.content}
         </Text>
       </View>
+    </View>
+  );
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  get_today_summary: '汇总今日安排',
+  get_calendar: '查看家庭日历',
+  get_tasks: '查看家庭任务',
+  get_shopping_list: '查看购物清单',
+  get_meal_plan: '查看菜单安排',
+  get_inventory_alerts: '检查库存提醒',
+  search_knowledge: '搜索家庭知识库',
+  get_travel_checklist: '查看出行清单',
+  get_watch_candidates: '查看家庭片单',
+  get_recent_memories: '查看家庭回忆',
+};
+
+function ToolProgress({ events, queued }: { events: AgentToolEvent[]; queued: boolean }) {
+  const c = useTheme();
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      style={[styles.toolProgress, { backgroundColor: c.tintSoft }]}
+      testID="agent-tool-progress"
+    >
+      <ActivityIndicator color={c.tint} size="small" />
+      <View style={styles.flexCopy}>
+        <Text style={[t.footnote, { color: c.label, fontWeight: '600' }]}>小管家正在处理</Text>
+        <Text style={[t.caption, styles.toolProgressCopy, { color: c.secondaryLabel }]}>
+          {events.length
+            ? events
+                .map((event) =>
+                  `${event.status === 'failed' ? '未完成' : '已完成'}${TOOL_LABELS[event.toolName] ?? '家庭资料查询'}`,
+                )
+                .join(' · ')
+            : queued
+              ? '正在准备回答'
+              : '正在查询家庭资料'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function ToolResultCard({ presentation }: { presentation: AgentToolPresentation }) {
+  const c = useTheme();
+  const router = useRouter();
+  const open = (path: string) => router.push(path as Href);
+  return (
+    <View
+      style={[styles.resultCard, { backgroundColor: c.card, borderColor: c.separator }]}
+      testID={`agent-result-${presentation.kind}`}
+    >
+      <PressSurface
+        accessibilityRole="button"
+        accessibilityLabel={`打开${presentation.title}`}
+        onPress={() => open(presentation.targetPath)}
+        style={styles.resultHeader}
+        testID={`agent-result-open-${presentation.kind}`}
+      >
+        <View style={styles.flexCopy}>
+          <Text style={[t.headline, { color: c.label }]}>{presentation.title}</Text>
+          <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>来自家庭实时数据</Text>
+        </View>
+        <ChevronRight color={c.tertiaryLabel} size={20} />
+      </PressSurface>
+      {presentation.items.length ? (
+        <View style={[styles.resultItems, { borderTopColor: c.separator }]}>
+          {presentation.items.map((item) => (
+            <PressSurface
+              accessibilityRole="button"
+              accessibilityLabel={`打开${item.title}`}
+              key={`${presentation.kind}:${item.id}`}
+              onPress={() => open(item.targetPath)}
+              style={styles.resultItem}
+            >
+              <View style={styles.flexCopy}>
+                <Text numberOfLines={1} style={[t.footnote, { color: c.label, fontWeight: '600' }]}>
+                  {item.title}
+                </Text>
+                {item.detail ? (
+                  <Text numberOfLines={2} style={[t.caption, styles.resultDetail, { color: c.secondaryLabel }]}>
+                    {item.detail}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={[t.caption, { color: c.tint }]}>{item.status}</Text>
+            </PressSurface>
+          ))}
+        </View>
+      ) : (
+        <Text style={[t.footnote, styles.resultEmpty, { color: c.secondaryLabel }]}>
+          {presentation.emptyText}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function ToolResultGroup({ events }: { events: AgentToolEvent[] }) {
+  const presentations = events.flatMap((event) =>
+    event.presentation ? [event.presentation] : [],
+  );
+  if (!presentations.length) return null;
+  return (
+    <View style={styles.resultGroup}>
+      {presentations.map((presentation, index) => (
+        <ToolResultCard
+          key={`${presentation.kind}:${index}`}
+          presentation={presentation}
+        />
+      ))}
     </View>
   );
 }
@@ -661,6 +779,7 @@ export default function AssistantScreen() {
   const createConversation = useCreateAgentConversation();
   const sendMessage = useSendAgentMessage();
   const cancelRun = useCancelAgentRun();
+  const retryRun = useRetryAgentRun();
   const archiveConversation = useArchiveAgentConversation();
   const [draft, setDraft] = React.useState('');
   const [localError, setLocalError] = React.useState<string | null>(null);
@@ -723,6 +842,16 @@ export default function AssistantScreen() {
     try {
       await archiveConversation.mutateAsync(id);
       if (id === conversationId) setDraft('');
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    }
+  };
+
+  const retryById = async (runId: string) => {
+    if (!conversationId || retryRun.isPending) return;
+    setLocalError(null);
+    try {
+      await retryRun.mutateAsync({ runId, conversationId });
     } catch (error) {
       setLocalError(errorMessage(error));
     }
@@ -802,7 +931,16 @@ export default function AssistantScreen() {
                 <SkeletonRows count={3} />
               ) : conversation?.messages.length ? (
                 conversation.messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} />
+                  <React.Fragment key={message.id}>
+                    <MessageBubble message={message} />
+                    {message.role === 'assistant' && message.runId ? (
+                      <ToolResultGroup
+                        events={(conversation.toolEvents ?? []).filter(
+                          (event) => event.runId === message.runId,
+                        )}
+                      />
+                    ) : null}
+                  </React.Fragment>
                 ))
               ) : (
                 <View style={styles.welcome}>
@@ -847,14 +985,13 @@ export default function AssistantScreen() {
                 : null}
 
               {activeRun ? (
-                <View
-                  accessibilityLiveRegion="polite"
-                  style={[styles.runState, { backgroundColor: c.tintSoft }]}
-                >
-                  <ActivityIndicator color={c.tint} size="small" />
-                  <Text style={[t.footnote, styles.runStateText, { color: c.label }]}>
-                    {activeRun.status === 'queued' ? '正在准备回答…' : '正在查询家庭资料…'}
-                  </Text>
+                <View style={styles.activeRunGroup}>
+                  <ToolProgress
+                    events={(conversation?.toolEvents ?? []).filter(
+                      (event) => event.runId === activeRun.id,
+                    )}
+                    queued={activeRun.status === 'queued'}
+                  />
                   <PressSurface
                     accessibilityRole="button"
                     disabled={cancelRun.isPending}
@@ -864,7 +1001,7 @@ export default function AssistantScreen() {
                         conversationId: activeRun.conversationId,
                       })
                     }
-                    style={styles.cancelButton}
+                    style={[styles.cancelButton, { borderColor: c.separator }]}
                   >
                     <CircleStop color={c.red} size={17} />
                     <Text style={[t.footnote, { color: c.red, fontWeight: '600' }]}>停止</Text>
@@ -880,6 +1017,23 @@ export default function AssistantScreen() {
                       ? '这次回答已停止。'
                       : latestRun.errorMessage ?? '回答失败，输入内容已保留，可再次发送。'}
                   </Text>
+                  {latestRun.retryable ? (
+                    <PressSurface
+                      accessibilityRole="button"
+                      accessibilityLabel="重新尝试这次回答"
+                      disabled={retryRun.isPending}
+                      onPress={() => void retryById(latestRun.id)}
+                      style={styles.retryButton}
+                      testID={`agent-retry-run-${latestRun.id}`}
+                    >
+                      {retryRun.isPending ? (
+                        <ActivityIndicator color={c.red} size="small" />
+                      ) : (
+                        <RotateCcw color={c.red} size={17} />
+                      )}
+                      <Text style={[t.footnote, { color: c.red, fontWeight: '600' }]}>重试</Text>
+                    </PressSurface>
+                  ) : null}
                 </View>
               ) : latestRun?.errorCode === 'HERMES_UNAVAILABLE_FALLBACK' ? (
                 <View
@@ -889,6 +1043,23 @@ export default function AssistantScreen() {
                   <Text style={[t.footnote, styles.runStateText, { color: c.orange }]}>
                     本次由本地家庭摘要完成
                   </Text>
+                  {latestRun.retryable ? (
+                    <PressSurface
+                      accessibilityRole="button"
+                      accessibilityLabel="使用 Hermes 重新尝试"
+                      disabled={retryRun.isPending}
+                      onPress={() => void retryById(latestRun.id)}
+                      style={styles.retryButton}
+                      testID={`agent-retry-run-${latestRun.id}`}
+                    >
+                      {retryRun.isPending ? (
+                        <ActivityIndicator color={c.orange} size="small" />
+                      ) : (
+                        <RotateCcw color={c.orange} size={17} />
+                      )}
+                      <Text style={[t.footnote, { color: c.orange, fontWeight: '600' }]}>重试</Text>
+                    </PressSurface>
+                  ) : null}
                 </View>
               ) : null}
             </ScrollView>
@@ -1067,6 +1238,40 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   messageText: { lineHeight: 25 },
+  toolProgress: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  toolProgressCopy: { lineHeight: 17, marginTop: 3 },
+  resultGroup: { alignSelf: 'stretch', gap: 10, maxWidth: 680, paddingLeft: 40 },
+  resultCard: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  resultHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    minHeight: 56,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  resultItems: { borderTopWidth: 1 },
+  resultItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 54,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  resultDetail: { lineHeight: 17, marginTop: 2 },
+  resultEmpty: { lineHeight: 19, paddingHorizontal: 14, paddingVertical: 16 },
   proposal: {
     alignSelf: 'stretch',
     borderLeftWidth: 3,
@@ -1131,7 +1336,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
   },
   runStateText: { flex: 1, lineHeight: 19 },
-  cancelButton: { alignItems: 'center', flexDirection: 'row', gap: 5, paddingHorizontal: 8 },
+  activeRunGroup: { alignSelf: 'stretch', gap: 8 },
+  cancelButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 13,
+  },
+  retryButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 10,
+  },
   composerArea: { borderTopWidth: 1, padding: 10 },
   composer: {
     alignItems: 'flex-end',

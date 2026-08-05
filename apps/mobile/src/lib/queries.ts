@@ -206,6 +206,30 @@ export function useCancelAgentRun() {
   });
 }
 
+export function useRetryAgentRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      runId: string;
+      conversationId: string;
+      clientRequestId?: string;
+    }) =>
+      api<AgentRun>(`/agent/runs/${input.runId}/retry`, {
+        method: 'POST',
+        body: {
+          clientRequestId:
+            input.clientRequestId ?? operationKey(`agent:retry:${input.runId}`),
+        },
+      }),
+    onSuccess: (_run, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-conversations'] });
+      void qc.invalidateQueries({
+        queryKey: ['agent-conversation', input.conversationId],
+      });
+    },
+  });
+}
+
 export function useArchiveAgentConversation() {
   const qc = useQueryClient();
   return useMutation({

@@ -5952,6 +5952,10 @@ export class AgentMessage {
 )
 @Index('IDX_agent_runs_conversation_created', ['conversationId', 'createdAt'])
 @Index('IDX_agent_runs_authorization_expiry', ['authorizationExpiresAt'])
+@Index('UQ_agent_runs_retry_of', ['retryOfRunId'], {
+  unique: true,
+  where: `"retryOfRunId" IS NOT NULL`,
+})
 export class AgentRun {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -5988,6 +5992,16 @@ export class AgentRun {
 
   @Column({ type: 'varchar', length: 180 })
   clientRequestId: string;
+
+  @ManyToOne(() => AgentRun, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'retryOfRunId',
+    foreignKeyConstraintName: 'FK_agent_runs_retry_of',
+  })
+  retryOfRun: AgentRun | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  retryOfRunId: string | null;
 
   @Column({ type: 'varchar', length: 16 })
   runtimeKind: AgentRuntimeKind;
@@ -6043,6 +6057,10 @@ export class AgentRun {
   'CHK_agent_tool_events_status',
   `"status" IN ('running', 'completed', 'failed')`,
 )
+@Check(
+  'CHK_agent_tool_events_presentation',
+  `("presentationCiphertext" IS NULL AND "presentationNonce" IS NULL AND "presentationVersion" IS NULL) OR ("presentationCiphertext" IS NOT NULL AND "presentationNonce" IS NOT NULL AND "presentationVersion" >= 1)`,
+)
 @Index('IDX_agent_tool_events_run_started', ['runId', 'startedAt'])
 export class AgentToolEvent {
   @PrimaryGeneratedColumn('uuid')
@@ -6085,6 +6103,15 @@ export class AgentToolEvent {
 
   @Column({ type: 'jsonb', default: {} })
   outputSummary: Record<string, unknown>;
+
+  @Column({ type: 'text', nullable: true })
+  presentationCiphertext: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  presentationNonce: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  presentationVersion: number | null;
 
   @Column({ type: 'timestamptz' })
   startedAt: Date;

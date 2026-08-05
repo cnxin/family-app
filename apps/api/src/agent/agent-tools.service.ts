@@ -30,6 +30,7 @@ import {
   AgentProposalsService,
   isAgentProposalTool,
 } from './agent-proposals.service';
+import { encryptAgentContent } from './agent.crypto';
 
 const MAX_RESULT_ITEMS = 20;
 const MAX_RESPONSE_BYTES = 48_000;
@@ -73,6 +74,81 @@ function userFor(run: AgentRun, member: Member): JwtUser {
     name: member.name,
     role: member.role,
   };
+}
+
+function resultPresentation(toolName: string, output: unknown) {
+  if (!Array.isArray(output)) return null;
+  if (toolName === 'get_tasks') {
+    return {
+      kind: 'tasks',
+      title: '家庭任务',
+      emptyText: '这段时间没有待办任务',
+      targetPath: '/tasks',
+      items: output.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.title ?? '未命名任务'),
+          detail: [item.dueDate, item.assigneeName].filter(Boolean).join(' · '),
+          status: item.status === 'completed' ? '已完成' : '待完成',
+          targetPath: typeof item.targetPath === 'string' ? item.targetPath : '/tasks',
+        };
+      }),
+    };
+  }
+  if (toolName === 'get_shopping_list') {
+    return {
+      kind: 'shopping',
+      title: '购物清单',
+      emptyText: '购物清单已经处理完了',
+      targetPath: '/shopping',
+      items: output.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.name ?? '未命名采购项'),
+          detail:
+            item.quantity == null
+              ? String(item.unit ?? '')
+              : `${String(item.quantity)} ${String(item.unit ?? '')}`.trim(),
+          status: item.checked ? '已购买' : '待购买',
+          targetPath:
+            typeof item.targetPath === 'string' ? item.targetPath : '/shopping',
+        };
+      }),
+    };
+  }
+  if (toolName === 'get_meal_plan') {
+    const mealLabels: Record<string, string> = {
+      breakfast: '早餐',
+      lunch: '午餐',
+      dinner: '晚餐',
+    };
+    return {
+      kind: 'meals',
+      title: '今日菜单',
+      emptyText: '这一天还没有安排菜单',
+      targetPath: '/kitchen',
+      items: output.slice(0, 3).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        const dishes = Array.isArray(item.items)
+          ? item.items
+              .slice(0, 5)
+              .map((dish) => String((dish as Record<string, unknown>).dishName ?? ''))
+              .filter(Boolean)
+          : [];
+        return {
+          id: String(item.id ?? ''),
+          title: mealLabels[String(item.mealType)] ?? '用餐安排',
+          detail: dishes.join('、') || '还没有菜品',
+          status: item.chefName ? `${String(item.chefName)} 掌勺` : '待安排掌勺人',
+          targetPath:
+            typeof item.targetPath === 'string' ? item.targetPath : '/kitchen',
+        };
+      }),
+    };
+  }
+  return null;
 }
 
 @Injectable()
@@ -376,6 +452,15 @@ export class AgentToolsService {
       propose_menu: 'menu',
       propose_shopping_items: 'shopping',
     };
+    const presentation =
+      status === 'completed' ? resultPresentation(toolName, output) : null;
+    const encryptedPresentation = presentation
+      ? encryptAgentContent(
+          JSON.stringify(presentation),
+          run.householdId,
+          run.conversationId,
+        )
+      : null;
     await this.events.save(
       this.events.create({
         householdId: run.householdId,
@@ -395,6 +480,10 @@ export class AgentToolsService {
           itemCount: Array.isArray(output) ? output.length : output ? 1 : 0,
           ok: status === 'completed',
         },
+        presentationCiphertext:
+          encryptedPresentation?.contentCiphertext ?? null,
+        presentationNonce: encryptedPresentation?.contentNonce ?? null,
+        presentationVersion: encryptedPresentation?.contentVersion ?? null,
         startedAt,
         finishedAt: new Date(),
       }),

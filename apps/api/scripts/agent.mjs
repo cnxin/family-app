@@ -338,6 +338,35 @@ try {
       emptyMenusAfter.rows[0].count === 0,
     '任务、购物和三餐工具限制家庭与日期范围，菜单只读查询没有写副作用',
   );
+  const presentationRows = await db.query(
+    `SELECT "toolName", "presentationCiphertext", "presentationNonce", "presentationVersion"
+     FROM agent_tool_events
+     WHERE "runId" = $1
+       AND status = 'completed'
+       AND "toolName" IN ('get_tasks', 'get_shopping_list', 'get_meal_plan')`,
+    [validRunId],
+  );
+  const presentationDetail = await request(
+    `/agent/conversations/${runConversation.data.id}`,
+    owner.accessToken,
+  );
+  const presentedKinds = presentationDetail.data.toolEvents
+    .filter((event) => event.runId === validRunId && event.presentation)
+    .map((event) => event.presentation.kind);
+  assert(
+    presentationRows.rows.length === 4 &&
+      presentationRows.rows.every(
+        (row) =>
+          row.presentationCiphertext &&
+          row.presentationNonce &&
+          row.presentationVersion === 1 &&
+          !row.presentationCiphertext.includes(dailyTaskTitle) &&
+          !row.presentationCiphertext.includes(dailyShoppingName) &&
+          !row.presentationCiphertext.includes(dailyDish.name),
+      ) &&
+      ['tasks', 'shopping', 'meals'].every((kind) => presentedKinds.includes(kind)),
+    '任务、购物和菜单展示卡片只以密文保存，并在所属家庭会话中解密返回',
+  );
 
   console.log('4. 恶意知识内容仅作为数据，Hermes 离线自动降级');
   const marker = `PROMPT_INJECTION_${randomUUID()}`;
@@ -399,12 +428,65 @@ try {
   });
   assert(
     fallbackResult.run.errorCode === 'HERMES_UNAVAILABLE_FALLBACK' &&
+      fallbackResult.run.retryable === true &&
       fallbackResult.detail.messages.some(
         (message) =>
           message.role === 'assistant' && message.content.includes('本地家庭摘要'),
       ) &&
       restoredSettings.status === 200,
     'Hermes 不可用时透明降级为本地摘要且不影响核心功能',
+  );
+  const retryKey = randomUUID();
+  const retryResponses = await Promise.all([
+    request(
+      `/agent/runs/${fallbackRun.data.id}/retry`,
+      owner.accessToken,
+      'POST',
+      { clientRequestId: retryKey },
+    ),
+    request(
+      `/agent/runs/${fallbackRun.data.id}/retry`,
+      owner.accessToken,
+      'POST',
+      { clientRequestId: retryKey },
+    ),
+  ]);
+  assert(
+    retryResponses.every((entry) => entry.status === 202) &&
+      retryResponses[0].data.id === retryResponses[1].data.id,
+    '重复或并发点击重试只创建一个新运行',
+  );
+  const retriedResult = await waitForRun(
+    owner.accessToken,
+    fallbackConversation.data.id,
+    retryResponses[0].data.id,
+  );
+  const retryUserMessages = retriedResult.detail.messages.filter(
+    (message) => message.role === 'user',
+  );
+  const forbiddenRetry = await request(
+    `/agent/runs/${fallbackRun.data.id}/retry`,
+    member.accessToken,
+    'POST',
+    { clientRequestId: randomUUID() },
+  );
+  await request(
+    `/agent/conversations/${fallbackConversation.data.id}`,
+    owner.accessToken,
+    'DELETE',
+  );
+  const archivedRetry = await request(
+    `/agent/runs/${fallbackRun.data.id}/retry`,
+    owner.accessToken,
+    'POST',
+    { clientRequestId: randomUUID() },
+  );
+  assert(
+    retriedResult.run.retryOfRunId === fallbackRun.data.id &&
+      retryUserMessages.length === 1 &&
+      forbiddenRetry.status === 404 &&
+      archivedRetry.status === 409,
+    '重试复用原始问题且不增加用户气泡，并拒绝其他成员和已归档会话',
   );
 
   console.log('5. 操作提案创建、预览和并发幂等确认');

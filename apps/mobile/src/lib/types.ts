@@ -1622,6 +1622,7 @@ export interface AgentSettings {
 export interface AgentRun {
   id: string;
   conversationId: string;
+  retryOfRunId: string | null;
   runtimeKind: AgentRuntimeKind;
   status: AgentRunStatus;
   startedAt: string | null;
@@ -1629,6 +1630,7 @@ export interface AgentRun {
   cancelRequestedAt: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  retryable: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -1645,9 +1647,36 @@ export interface AgentConversation {
 
 export interface AgentMessage {
   id: string;
+  runId: string | null;
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+}
+
+export interface AgentToolPresentationItem {
+  id: string;
+  title: string;
+  detail: string;
+  status: string;
+  targetPath: string;
+}
+
+export interface AgentToolPresentation {
+  kind: 'tasks' | 'shopping' | 'meals';
+  title: string;
+  emptyText: string;
+  targetPath: string;
+  items: AgentToolPresentationItem[];
+}
+
+export interface AgentToolEvent {
+  id: string;
+  runId: string;
+  toolName: string;
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  presentation: AgentToolPresentation | null;
 }
 
 export type AgentProposalStatus =
@@ -1686,6 +1715,7 @@ export interface AgentActionProposal {
 export interface AgentConversationDetail extends AgentConversation {
   messages: AgentMessage[];
   runs: AgentRun[];
+  toolEvents: AgentToolEvent[];
   proposals: AgentActionProposal[];
 }
 

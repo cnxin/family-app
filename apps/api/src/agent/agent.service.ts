@@ -18,6 +18,7 @@ import {
   AgentRuntimeKind,
   AgentSetting,
   AgentMemberChannel,
+  AgentToolEvent,
 } from '../entities';
 import { decryptAgentContent, encryptAgentContent } from './agent.crypto';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
@@ -62,6 +63,8 @@ export class AgentService {
     @InjectRepository(AgentMessage)
     private readonly messages: Repository<AgentMessage>,
     @InjectRepository(AgentRun) private readonly runs: Repository<AgentRun>,
+    @InjectRepository(AgentToolEvent)
+    private readonly toolEvents: Repository<AgentToolEvent>,
     @InjectRepository(AgentMemberChannel)
     private readonly channels: Repository<AgentMemberChannel>,
     private readonly dataSource: DataSource,
@@ -209,6 +212,56 @@ export class AgentService {
         take: 50,
       }),
     ]);
+    const runIds = runs.map((run) => run.id);
+    const [toolEvents, linkedMessages, retries] = runIds.length
+      ? await Promise.all([
+          this.toolEvents
+            .createQueryBuilder('event')
+            .where('event.householdId = :householdId', {
+              householdId: user.householdId,
+            })
+            .andWhere('event.runId IN (:...runIds)', { runIds })
+            .orderBy('event.startedAt', 'ASC')
+            .getMany(),
+          this.messages
+            .createQueryBuilder('message')
+            .select('message.runId', 'runId')
+            .where('message.householdId = :householdId', {
+              householdId: user.householdId,
+            })
+            .andWhere('message.conversationId = :conversationId', {
+              conversationId: conversation.id,
+            })
+            .andWhere('message.role = :role', { role: 'user' })
+            .andWhere('message.runId IN (:...runIds)', { runIds })
+            .getRawMany<{ runId: string }>(),
+          this.runs
+            .createQueryBuilder('run')
+            .select('run.retryOfRunId', 'retryOfRunId')
+            .where('run.householdId = :householdId', {
+              householdId: user.householdId,
+            })
+            .andWhere('run.retryOfRunId IN (:...runIds)', { runIds })
+            .getRawMany<{ retryOfRunId: string }>(),
+        ])
+      : [[], [], []];
+    const linkedRunIds = new Set(linkedMessages.map((entry) => entry.runId));
+    const retriedRunIds = new Set(retries.map((entry) => entry.retryOfRunId));
+    const retryParents = new Map(
+      runs.flatMap((run) =>
+        run.retryOfRunId ? [[run.id, run.retryOfRunId] as const] : [],
+      ),
+    );
+    const hasLinkedInput = (runId: string) => {
+      let current: string | undefined = runId;
+      const visited = new Set<string>();
+      while (current && !visited.has(current)) {
+        if (linkedRunIds.has(current)) return true;
+        visited.add(current);
+        current = retryParents.get(current);
+      }
+      return false;
+    };
     const proposals = await this.proposals.listForConversation(
       runs.map((run) => run.id),
       user,
@@ -227,6 +280,7 @@ export class AgentService {
             ? [
                 {
                   id: message.id,
+                  runId: message.runId,
                   role: message.role,
                   content,
                   createdAt: message.createdAt,
@@ -237,7 +291,21 @@ export class AgentService {
           return [];
         }
       }),
-      runs: runs.map((run) => this.presentRun(run)),
+      runs: runs.map((run) =>
+        this.presentRun(
+          run,
+          hasLinkedInput(run.id) && !retriedRunIds.has(run.id),
+        ),
+      ),
+      toolEvents: toolEvents.map((event) => ({
+        id: event.id,
+        runId: event.runId,
+        toolName: event.toolName,
+        status: event.status,
+        startedAt: event.startedAt,
+        finishedAt: event.finishedAt,
+        presentation: this.decryptPresentation(event, conversation.id),
+      })),
       proposals,
     };
   }
@@ -285,22 +353,6 @@ export class AgentService {
       run = await this.dataSource.transaction(async (manager) => {
         const runs = manager.getRepository(AgentRun);
         const messages = manager.getRepository(AgentMessage);
-        const encrypted = encryptAgentContent(
-          content,
-          user.householdId,
-          conversation.id,
-        );
-        if (encrypted) {
-          await messages.save(
-            messages.create({
-              householdId: user.householdId,
-              conversationId: conversation.id,
-              memberId: user.memberId,
-              role: 'user',
-              ...encrypted,
-            }),
-          );
-        }
         const created = await runs.save(
           runs.create({
             householdId: user.householdId,
@@ -329,6 +381,23 @@ export class AgentService {
             errorMessage: null,
           }),
         );
+        const encrypted = encryptAgentContent(
+          content,
+          user.householdId,
+          conversation.id,
+        );
+        if (encrypted) {
+          await messages.save(
+            messages.create({
+              householdId: user.householdId,
+              conversationId: conversation.id,
+              memberId: user.memberId,
+              runId: created.id,
+              role: 'user',
+              ...encrypted,
+            }),
+          );
+        }
         if (conversation.title === '新对话') {
           await manager.getRepository(AgentConversation).update(conversation.id, {
             title: content.slice(0, 36),
@@ -448,23 +517,7 @@ export class AgentService {
       run = await this.dataSource.transaction(async (manager) => {
         const runs = manager.getRepository(AgentRun);
         const messages = manager.getRepository(AgentMessage);
-        const encrypted = encryptAgentContent(
-          content,
-          channel.householdId,
-          conversation!.id,
-        );
-        if (encrypted) {
-          await messages.save(
-            messages.create({
-              householdId: channel.householdId,
-              conversationId: conversation!.id,
-              memberId: member.id,
-              role: 'user',
-              ...encrypted,
-            }),
-          );
-        }
-        return runs.save(
+        const created = await runs.save(
           runs.create({
             householdId: channel.householdId,
             conversationId: conversation!.id,
@@ -489,6 +542,24 @@ export class AgentService {
             errorMessage: null,
           }),
         );
+        const encrypted = encryptAgentContent(
+          content,
+          channel.householdId,
+          conversation!.id,
+        );
+        if (encrypted) {
+          await messages.save(
+            messages.create({
+              householdId: channel.householdId,
+              conversationId: conversation!.id,
+              memberId: member.id,
+              runId: created.id,
+              role: 'user',
+              ...encrypted,
+            }),
+          );
+        }
+        return created;
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -570,6 +641,101 @@ export class AgentService {
     return this.presentRun((await this.runs.findOneBy({ id: run.id }))!);
   }
 
+  async retry(runId: string, clientRequestId: string, user: JwtUser) {
+    const key = clientRequestId.trim();
+    const original = await this.runs.findOneBy({
+      id: runId,
+      householdId: user.householdId,
+      requestedByMemberId: user.memberId,
+    });
+    if (!original) throw new NotFoundException('智能体运行不存在');
+    if (!this.isRetryableStatus(original)) {
+      throw new ConflictException('这次回答当前不能重试');
+    }
+    const conversation = await this.requireConversation(
+      original.conversationId,
+      user,
+      true,
+    );
+    const setting = await this.ensureSettings(user);
+    if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!agentDataKey()) {
+      throw new ServiceUnavailableException('对话加密尚未配置');
+    }
+    const inputMessage = await this.findRetryInput(original, user);
+    if (!inputMessage) throw new ConflictException('原始问题无法用于重试');
+    const content = decryptAgentContent(
+      inputMessage.contentCiphertext,
+      inputMessage.contentNonce,
+      inputMessage.householdId,
+      inputMessage.conversationId,
+    );
+    if (!content) throw new ConflictException('原始问题无法用于重试');
+
+    const duplicate = await this.runs.findOneBy({
+      householdId: user.householdId,
+      clientRequestId: key,
+    });
+    if (duplicate) {
+      if (
+        duplicate.retryOfRunId !== original.id ||
+        duplicate.requestedByMemberId !== user.memberId
+      ) {
+        throw new ConflictException('请求幂等键已用于其他运行');
+      }
+      return this.presentRun(duplicate, false);
+    }
+
+    let run: AgentRun;
+    try {
+      run = await this.runs.save(
+        this.runs.create({
+          householdId: user.householdId,
+          conversationId: conversation.id,
+          requestedByMemberId: user.memberId,
+          clientRequestId: key,
+          retryOfRunId: original.id,
+          runtimeKind: setting.runtimeKind,
+          runtimeVersion:
+            setting.runtimeKind === 'hermes'
+              ? this.hermesRuntime.version
+              : this.fakeRuntime.version,
+          modelAlias: setting.modelAlias,
+          status: 'queued',
+          allowedTools: [
+            ...setting.readToolsEnabled,
+            ...setting.proposalToolsEnabled,
+          ],
+          authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
+          startedAt: null,
+          finishedAt: null,
+          cancelRequestedAt: null,
+          inputTokens: null,
+          outputTokens: null,
+          estimatedCost: null,
+          errorCode: null,
+          errorMessage: null,
+        }),
+      );
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const raced = await this.runs.findOne({
+          where: [
+            { householdId: user.householdId, clientRequestId: key },
+            { householdId: user.householdId, retryOfRunId: original.id },
+          ],
+          order: { createdAt: 'DESC' },
+        });
+        if (raced && raced.requestedByMemberId === user.memberId) {
+          return this.presentRun(raced, false);
+        }
+      }
+      throw error;
+    }
+    void this.processRun(run.id, content);
+    return this.presentRun(run, false);
+  }
+
   private async processRun(runId: string, message: string) {
     const claimed = await this.runs.update(
       { id: runId, status: 'queued' },
@@ -579,12 +745,14 @@ export class AgentService {
     const run = await this.runs.findOneBy({ id: runId });
     if (!run) return;
     try {
+      const retryAncestorIds = await this.retryAncestorIds(run);
       const stored = await this.messages.find({
         where: { conversationId: run.conversationId, householdId: run.householdId },
         order: { createdAt: 'ASC' },
         take: 20,
       });
       const history = stored.flatMap((entry) => {
+        if (entry.runId && retryAncestorIds.has(entry.runId)) return [];
         try {
           const content = decryptAgentContent(
             entry.contentCiphertext,
@@ -672,6 +840,68 @@ export class AgentService {
 
   private runtime(kind: AgentRuntimeKind): AgentRuntime {
     return kind === 'hermes' ? this.hermesRuntime : this.fakeRuntime;
+  }
+
+  private isRetryableStatus(run: AgentRun) {
+    return (
+      run.status === 'failed' ||
+      run.status === 'cancelled' ||
+      (run.status === 'completed' &&
+        run.errorCode === 'HERMES_UNAVAILABLE_FALLBACK')
+    );
+  }
+
+  private async findRetryInput(run: AgentRun, user: JwtUser) {
+    let current: AgentRun | null = run;
+    const visited = new Set<string>();
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      const message = await this.messages.findOneBy({
+        householdId: user.householdId,
+        conversationId: run.conversationId,
+        runId: current.id,
+        role: 'user',
+      });
+      if (message) return message;
+      current = current.retryOfRunId
+        ? await this.runs.findOneBy({
+            id: current.retryOfRunId,
+            householdId: user.householdId,
+            requestedByMemberId: user.memberId,
+          })
+        : null;
+    }
+    return null;
+  }
+
+  private async retryAncestorIds(run: AgentRun) {
+    const ancestors = new Set<string>();
+    let parentId = run.retryOfRunId;
+    while (parentId && !ancestors.has(parentId)) {
+      ancestors.add(parentId);
+      const parent = await this.runs.findOneBy({
+        id: parentId,
+        householdId: run.householdId,
+        requestedByMemberId: run.requestedByMemberId,
+      });
+      parentId = parent?.retryOfRunId ?? null;
+    }
+    return ancestors;
+  }
+
+  private decryptPresentation(event: AgentToolEvent, conversationId: string) {
+    if (!event.presentationCiphertext || !event.presentationNonce) return null;
+    try {
+      const content = decryptAgentContent(
+        event.presentationCiphertext,
+        event.presentationNonce,
+        event.householdId,
+        conversationId,
+      );
+      return content ? (JSON.parse(content) as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
   }
 
   private async ensureSettings(user: JwtUser) {
@@ -766,10 +996,11 @@ export class AgentService {
     };
   }
 
-  private presentRun(run: AgentRun) {
+  private presentRun(run: AgentRun, hasRetryInput = false) {
     return {
       id: run.id,
       conversationId: run.conversationId,
+      retryOfRunId: run.retryOfRunId,
       runtimeKind: run.runtimeKind,
       status: run.status,
       startedAt: run.startedAt,
@@ -777,6 +1008,7 @@ export class AgentService {
       cancelRequestedAt: run.cancelRequestedAt,
       errorCode: run.errorCode,
       errorMessage: run.errorMessage,
+      retryable: hasRetryInput && this.isRetryableStatus(run),
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
     };

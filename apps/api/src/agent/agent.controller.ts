@@ -48,6 +48,13 @@ class SendAgentMessageDto {
   clientRequestId: string;
 }
 
+class RetryAgentRunDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(180)
+  clientRequestId: string;
+}
+
 class UpdateAgentSettingsDto {
   @IsOptional()
   @IsBoolean()
@@ -198,6 +205,16 @@ export class AgentController {
   @Post('runs/:id/cancel')
   cancel(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.service.cancel(id, user);
+  }
+
+  @Post('runs/:id/retry')
+  @HttpCode(202)
+  retry(
+    @Param('id') id: string,
+    @Body() dto: RetryAgentRunDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.retry(id, dto.clientRequestId, user);
   }
 
   @Post('proposals/:id/confirm')
