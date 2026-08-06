@@ -5,6 +5,17 @@ function additionalData(householdId: string, conversationId: string) {
   return Buffer.from(`agent:${householdId}:${conversationId}`, 'utf8');
 }
 
+function memoryAdditionalData(
+  householdId: string,
+  ownerMemberId: string | null,
+  memoryItemId: string,
+) {
+  return Buffer.from(
+    `agent-memory:${householdId}:${ownerMemberId ?? 'household'}:${memoryItemId}`,
+    'utf8',
+  );
+}
+
 export function encryptAgentContent(
   content: string,
   householdId: string,
@@ -43,6 +54,53 @@ export function decryptAgentContent(
     Buffer.from(contentNonce, 'base64'),
   );
   decipher.setAAD(additionalData(householdId, conversationId));
+  decipher.setAuthTag(payload.subarray(payload.length - 16));
+  return Buffer.concat([
+    decipher.update(payload.subarray(0, payload.length - 16)),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
+export function encryptAgentMemoryContent(
+  content: string,
+  householdId: string,
+  ownerMemberId: string | null,
+  memoryItemId: string,
+) {
+  const key = agentDataKey();
+  if (!key) return null;
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  cipher.setAAD(memoryAdditionalData(householdId, ownerMemberId, memoryItemId));
+  const ciphertext = Buffer.concat([
+    cipher.update(content, 'utf8'),
+    cipher.final(),
+    cipher.getAuthTag(),
+  ]);
+  return {
+    contentCiphertext: ciphertext.toString('base64'),
+    contentNonce: nonce.toString('base64'),
+    contentVersion: 1,
+  };
+}
+
+export function decryptAgentMemoryContent(
+  contentCiphertext: string,
+  contentNonce: string,
+  householdId: string,
+  ownerMemberId: string | null,
+  memoryItemId: string,
+) {
+  const key = agentDataKey();
+  if (!key) return null;
+  const payload = Buffer.from(contentCiphertext, 'base64');
+  if (payload.length < 17) return null;
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    key,
+    Buffer.from(contentNonce, 'base64'),
+  );
+  decipher.setAAD(memoryAdditionalData(householdId, ownerMemberId, memoryItemId));
   decipher.setAuthTag(payload.subarray(payload.length - 16));
   return Buffer.concat([
     decipher.update(payload.subarray(0, payload.length - 16)),

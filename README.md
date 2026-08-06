@@ -94,6 +94,7 @@ API 安全相关配置：
 | `LOGIN_RATE_LIMIT` | `5` | 单个来源在窗口内允许的登录次数 |
 | `LOGIN_RATE_WINDOW_MS` | `60000` | 登录限流窗口，默认 1 分钟 |
 | `REMINDER_POLL_INTERVAL_MS` | `15000` | 到期提醒扫描间隔，限制在 100 毫秒至 5 分钟 |
+| `AGENT_PURGE_POLL_INTERVAL_MS` | `60000` | 到期小管家正文清理间隔，限制在 100 毫秒至 5 分钟 |
 | `CORS_ORIGINS` | 开发环境自动允许本机和私有局域网 | 逗号分隔的 Web 客户端来源白名单 |
 | `TRUST_PROXY_HOPS` | `0` | 可信反向代理层数；生产 Caddy 部署为 `1` |
 

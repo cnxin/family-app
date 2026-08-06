@@ -22,6 +22,7 @@ const testEnvironment = {
   CORS_ORIGINS: 'http://localhost:8081,http://192.168.1.20:8081',
   JWT_EXPIRES_SECONDS: '900',
   JWT_SECRET: 'family-app-api-test-secret',
+  AGENT_PURGE_POLL_INTERVAL_MS: '100',
   REFRESH_TOKEN_EXPIRES_SECONDS: '2592000',
   REMINDER_POLL_INTERVAL_MS: '200',
   NOTIFICATION_DELIVERY_POLL_INTERVAL_MS: '100',
@@ -256,6 +257,7 @@ try {
   await runScript('scripts/knowledge.mjs');
   await runScript('scripts/memories.mjs');
   await runScript('scripts/agent.mjs');
+  await runScript('scripts/agent-retention.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');

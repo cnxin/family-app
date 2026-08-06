@@ -30,6 +30,7 @@ import { AgentService } from './agent.service';
 import { AgentToolsService } from './agent-tools.service';
 import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
+import { AgentRetentionService } from './agent-retention.service';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { AgentChannelsService } from './agent-channels.service';
     HermesAgentRuntime,
     AgentProposalsService,
     AgentChannelsService,
+    AgentRetentionService,
   ],
 })
 export class AgentModule {}
