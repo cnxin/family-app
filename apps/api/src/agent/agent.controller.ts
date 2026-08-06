@@ -22,13 +22,20 @@ import {
   Patch,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { AGENT_PROPOSAL_TOOLS, AGENT_READ_TOOLS } from './agent.types';
+import {
+  AGENT_MEMORY_KEYS,
+  AGENT_PROPOSAL_TOOLS,
+  AGENT_READ_TOOLS,
+  AgentMemoryKey,
+} from './agent.types';
 import { AgentService } from './agent.service';
 import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
+import { AgentMemoryService } from './agent-memory.service';
 
 class CreateConversationDto {
   @IsOptional()
@@ -130,6 +137,59 @@ class UpdateAgentProfileDto {
   expectedVersion: number;
 }
 
+class ListAgentMemoriesDto {
+  @IsOptional()
+  @IsIn(['candidate', 'active', 'revoked', 'forgotten', 'expired'])
+  status?: 'candidate' | 'active' | 'revoked' | 'forgotten' | 'expired';
+
+  @IsOptional()
+  @IsIn(['member_private', 'household'])
+  scope?: 'member_private' | 'household';
+}
+
+class CreateAgentMemoryCandidateDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  content: string;
+
+  @IsIn([...AGENT_MEMORY_KEYS])
+  memoryKey: AgentMemoryKey;
+
+  @IsOptional()
+  @IsIn([...AGENT_MEMORY_KEYS])
+  category?: AgentMemoryKey;
+
+  @IsOptional()
+  @IsIn(['preference', 'fact', 'episodic_summary', 'routine_context'])
+  kind?: 'preference' | 'fact' | 'episodic_summary' | 'routine_context';
+}
+
+class AgentMemoryVersionDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
+class CorrectAgentMemoryDto extends AgentMemoryVersionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  content: string;
+
+  @IsOptional()
+  @IsIn([...AGENT_MEMORY_KEYS])
+  memoryKey?: AgentMemoryKey;
+
+  @IsOptional()
+  @IsIn([...AGENT_MEMORY_KEYS])
+  category?: AgentMemoryKey;
+
+  @IsOptional()
+  @IsIn(['preference', 'fact', 'episodic_summary', 'routine_context'])
+  kind?: 'preference' | 'fact' | 'episodic_summary' | 'routine_context';
+}
+
 class ConfirmAgentProposalDto {
   @IsInt()
   @Min(1)
@@ -181,6 +241,7 @@ export class AgentController {
     private readonly service: AgentService,
     private readonly proposals: AgentProposalsService,
     private readonly channels: AgentChannelsService,
+    private readonly memory: AgentMemoryService,
   ) {}
 
   @Get('status')
@@ -213,6 +274,73 @@ export class AgentController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.updateProfile(dto, user);
+  }
+
+  @Get('memories')
+  memories(
+    @Query() query: ListAgentMemoriesDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.memory.list(query, user);
+  }
+
+  @Post('memories/candidates')
+  createMemoryCandidate(
+    @Body() dto: CreateAgentMemoryCandidateDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.memory.createCandidate(
+      {
+        content: dto.content,
+        memoryKey: dto.memoryKey,
+        category: dto.category,
+        kind: dto.kind,
+        sourceType: 'user_explicit',
+        confidenceSource: 'explicit',
+      },
+      user,
+    );
+  }
+
+  @Post('memories/:id/confirm')
+  confirmMemory(
+    @Param('id') id: string,
+    @Body() dto: AgentMemoryVersionDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.memory.confirm(id, dto.expectedVersion, user);
+  }
+
+  @Post('memories/:id/share')
+  shareMemory(
+    @Param('id') id: string,
+    @Body() dto: AgentMemoryVersionDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.memory.share(id, dto.expectedVersion, user);
+  }
+
+  @Patch('memories/:id')
+  correctMemory(
+    @Param('id') id: string,
+    @Body() dto: CorrectAgentMemoryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.memory.correct(id, dto, dto.expectedVersion, user);
+  }
+
+  @Delete('memories')
+  clearMemories(@CurrentUser() user: JwtUser) {
+    return this.memory.clearAll(user);
+  }
+
+  @Delete('memories/:id')
+  forgetMemory(
+    @Param('id') id: string,
+    @Body() dto: AgentMemoryVersionDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.memory.forget(id, dto.expectedVersion, user);
   }
 
   @Get('conversations')

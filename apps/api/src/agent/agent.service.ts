@@ -25,6 +25,7 @@ import {
 import { decryptAgentContent, encryptAgentContent } from './agent.crypto';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
 import {
+  AGENT_MEMORY_TOOLS,
   AGENT_PROPOSAL_TOOLS,
   AGENT_READ_TOOLS,
   AgentRuntime,
@@ -434,6 +435,7 @@ export class AgentService {
             allowedTools: [
               ...setting.readToolsEnabled,
               ...setting.proposalToolsEnabled,
+              ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
             ],
             authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
             startedAt: null,
@@ -777,6 +779,7 @@ export class AgentService {
           allowedTools: [
             ...setting.readToolsEnabled,
             ...setting.proposalToolsEnabled,
+            ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
           ],
           authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
           startedAt: null,

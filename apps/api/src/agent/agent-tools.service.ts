@@ -22,15 +22,19 @@ import { ShoppingService } from '../shopping/shopping.module';
 import { TasksService } from '../tasks/tasks.module';
 import { TravelService } from '../travel/travel.module';
 import {
+  AGENT_MEMORY_KEYS,
   AGENT_READ_TOOLS,
+  AgentMemoryKey,
   AgentReadToolName,
   AgentToolName,
+  isAgentMemoryTool,
 } from './agent.types';
 import {
   AgentProposalsService,
   isAgentProposalTool,
 } from './agent-proposals.service';
 import { encryptAgentContent } from './agent.crypto';
+import { AgentMemoryService } from './agent-memory.service';
 
 const MAX_RESULT_ITEMS = 20;
 const MAX_RESPONSE_BYTES = 48_000;
@@ -169,6 +173,7 @@ export class AgentToolsService {
     private readonly shopping: ShoppingService,
     private readonly tasks: TasksService,
     private readonly proposals: AgentProposalsService,
+    private readonly agentMemory: AgentMemoryService,
   ) {}
 
   async execute(
@@ -177,7 +182,8 @@ export class AgentToolsService {
   ): Promise<unknown> {
     if (
       !AGENT_READ_TOOLS.includes(toolName as AgentReadToolName) &&
-      !isAgentProposalTool(toolName)
+      !isAgentProposalTool(toolName) &&
+      !isAgentMemoryTool(toolName)
     ) {
       throw new BadRequestException('未开放的智能体工具');
     }
@@ -224,6 +230,38 @@ export class AgentToolsService {
   ) {
     if (isAgentProposalTool(toolName)) {
       return this.proposals.createFromRun(toolName, input, run, user);
+    }
+    if (isAgentMemoryTool(toolName)) {
+      if (toolName === 'recall_preferences') {
+        const memoryKey =
+          typeof input.memoryKey === 'string' &&
+          AGENT_MEMORY_KEYS.includes(input.memoryKey as AgentMemoryKey)
+            ? (input.memoryKey as AgentMemoryKey)
+            : undefined;
+        if (input.memoryKey != null && !memoryKey) {
+          throw new BadRequestException('不支持的记忆分类键');
+        }
+        return this.agentMemory.search(
+          {
+            scope:
+              input.scope === 'household' ? 'household' : 'member_private',
+            memoryKey,
+            limit: limited(input.limit),
+          },
+          user,
+        );
+      }
+      return this.agentMemory.createCandidate(
+        {
+          content: typeof input.content === 'string' ? input.content : '',
+          memoryKey: input.memoryKey as AgentMemoryKey,
+          sourceType: 'agent_tool',
+          sourceId: run.id,
+          sourceConversationId: run.conversationId,
+          confidenceSource: 'summary_candidate',
+        },
+        user,
+      );
     }
     if (toolName === 'get_today_summary') {
       const date = today();
@@ -446,6 +484,8 @@ export class AgentToolsService {
       get_travel_checklist: 'travel',
       get_watch_candidates: 'media',
       get_recent_memories: 'memory',
+      recall_preferences: 'agent_memory',
+      remember_preference: 'agent_memory',
       propose_task: 'task',
       propose_reminder: 'reminder',
       propose_poll: 'poll',

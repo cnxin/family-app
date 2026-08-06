@@ -4,7 +4,12 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
-import { AgentMessage, AgentToolEvent } from '../entities';
+import {
+  AgentMemoryEvent,
+  AgentMemoryItem,
+  AgentMessage,
+  AgentToolEvent,
+} from '../entities';
 
 const PURGE_BATCH_SIZE = 200;
 const DEFAULT_RETENTION_DAYS = 7;
@@ -103,6 +108,64 @@ export class AgentRetentionService
             },
           );
         }
+
+        const memoryBudget = remaining - dueEvents.length;
+        if (memoryBudget <= 0) return;
+
+        const memoryItems = manager.getRepository(AgentMemoryItem);
+        const dueMemories = await memoryItems
+          .createQueryBuilder('memory')
+          .where('memory.contentCiphertext IS NOT NULL')
+          .andWhere(
+            `(
+              memory.status IN (:...purgeStatuses)
+              OR memory.expiresAt <= CURRENT_TIMESTAMP
+              OR (
+                memory.status = :candidateStatus
+                AND memory.createdAt <= CURRENT_TIMESTAMP - INTERVAL '14 days'
+              )
+            )`,
+            {
+              purgeStatuses: ['expired', 'revoked'],
+              candidateStatus: 'candidate',
+            },
+          )
+          .orderBy('memory.updatedAt', 'ASC')
+          .take(memoryBudget)
+          .setLock('pessimistic_write')
+          .setOnLocked('skip_locked')
+          .getMany();
+
+        if (!dueMemories.length) return;
+
+        await memoryItems
+          .createQueryBuilder()
+          .update()
+          .set({
+            status: 'expired',
+            contentCiphertext: null,
+            contentNonce: null,
+            contentVersion: null,
+            version: () => '"version" + 1',
+          })
+          .whereInIds(dueMemories.map((memory) => memory.id))
+          .execute();
+
+        const memoryEvents = manager.getRepository(AgentMemoryEvent);
+        await memoryEvents.save(
+          dueMemories.map((memory) =>
+            memoryEvents.create({
+              householdId: memory.householdId,
+              memoryItemId: memory.id,
+              actorMemberId: memory.ownerMemberId,
+              operation: 'expired',
+              fromScope: memory.scope,
+              toScope: memory.scope,
+              sourceType: memory.sourceType,
+              sourceId: memory.sourceId,
+            }),
+          ),
+        );
       });
     } catch (error) {
       console.error(

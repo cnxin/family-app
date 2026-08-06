@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { Public } from '../auth/jwt.guard';
 import { agentMcpKey } from '../common/config';
 import { AgentToolsService } from './agent-tools.service';
+import { AGENT_MEMORY_KEYS } from './agent.types';
 
 function authorized(request: Request) {
   const configured = agentMcpKey();
@@ -133,6 +134,17 @@ export class AgentMcpController {
     register('get_recent_memories', '读取最近家庭回忆的非敏感摘要', {
       runId,
       limit: z.number().int().min(1).max(20).optional(),
+    });
+    register('recall_preferences', '读取当前成员可见且已确认的小管家偏好', {
+      runId,
+      scope: z.enum(['member_private', 'household']).optional(),
+      memoryKey: z.enum(AGENT_MEMORY_KEYS).optional(),
+      limit: z.number().int().min(1).max(20).optional(),
+    });
+    register('remember_preference', '创建一条等待用户确认的个人偏好候选', {
+      runId,
+      memoryKey: z.enum(AGENT_MEMORY_KEYS),
+      content: z.string().min(1).max(2000),
     });
     register('propose_task', '生成家庭任务提案，等待成员在 Family App 内确认', {
       runId,

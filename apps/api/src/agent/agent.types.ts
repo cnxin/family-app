@@ -22,7 +22,32 @@ export const AGENT_PROPOSAL_TOOLS = [
 ] as const;
 
 export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];
-export type AgentToolName = AgentReadToolName | AgentProposalToolName;
+
+export const AGENT_MEMORY_TOOLS = [
+  'recall_preferences',
+  'remember_preference',
+] as const;
+
+export type AgentMemoryToolName = (typeof AGENT_MEMORY_TOOLS)[number];
+export type AgentToolName =
+  | AgentReadToolName
+  | AgentProposalToolName
+  | AgentMemoryToolName;
+
+export const AGENT_MEMORY_KEYS = [
+  'diet_restriction',
+  'spice_level',
+  'cooking_skill',
+  'schedule_preference',
+  'reply_style',
+  'other',
+] as const;
+
+export type AgentMemoryKey = (typeof AGENT_MEMORY_KEYS)[number];
+
+export function isAgentMemoryTool(value: string): value is AgentMemoryToolName {
+  return AGENT_MEMORY_TOOLS.includes(value as AgentMemoryToolName);
+}
 
 export interface AgentChatInput {
   runId: string;

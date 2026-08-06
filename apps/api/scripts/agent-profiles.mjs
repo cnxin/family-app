@@ -51,8 +51,16 @@ async function runMigrationPhase() {
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
     assert(
-      latest[0]?.name === 'AddAgentMemberProfiles1785231600000',
-      '专项演练从 A7.1 最新迁移开始',
+      latest[0]?.name === 'AddAgentMemory1785231700000',
+      '专项演练从 A7.2 最新迁移开始',
+    );
+    await AppDataSource.undoLastMigration();
+    const profileMigration = await AppDataSource.query(
+      `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+    );
+    assert(
+      profileMigration[0]?.name === 'AddAgentMemberProfiles1785231600000',
+      '回退 A7.2 后仍可单独演练 A7.1 回填',
     );
     await AppDataSource.undoLastMigration();
 
@@ -213,7 +221,7 @@ async function runMigrationPhase() {
     await AppDataSource.query(`DELETE FROM members WHERE id = $1`, [
       disabledMemberId,
     ]);
-    console.log('A7.1 迁移回退、历史构造和重新迁移专项通过');
+    console.log('A7.1/A7.2 迁移回退、历史构造和重新迁移专项通过');
   } finally {
     await AppDataSource.destroy();
   }

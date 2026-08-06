@@ -7,6 +7,8 @@ import {
   AgentChannelPairing,
   AgentMemberChannel,
   AgentMemberProfile,
+  AgentMemoryEvent,
+  AgentMemoryItem,
   AgentMessage,
   AgentRun,
   AgentSetting,
@@ -32,6 +34,7 @@ import { AgentToolsService } from './agent-tools.service';
 import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
 import { AgentRetentionService } from './agent-retention.service';
+import { AgentMemoryService } from './agent-memory.service';
 
 @Module({
   imports: [
@@ -41,6 +44,8 @@ import { AgentRetentionService } from './agent-retention.service';
       AgentChannelPairing,
       AgentMemberChannel,
       AgentMemberProfile,
+      AgentMemoryItem,
+      AgentMemoryEvent,
       AgentConversation,
       AgentMessage,
       AgentRun,
@@ -72,6 +77,7 @@ import { AgentRetentionService } from './agent-retention.service';
     AgentProposalsService,
     AgentChannelsService,
     AgentRetentionService,
+    AgentMemoryService,
   ],
 })
 export class AgentModule {}

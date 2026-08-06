@@ -260,6 +260,7 @@ try {
   await runScript('scripts/agent.mjs');
   await runScript('scripts/agent-retention.mjs');
   await runScript('scripts/agent-profiles.mjs');
+  await runScript('scripts/agent-memory.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');
