@@ -440,3 +440,66 @@ npx pnpm --filter @family/api test:api        # 全量 API 回归
 ### 教训：CHECK 管合法性，触发器管可达性
 
 A7.0 和 A7.1 各有一处判断错误，两次都是**只读了实体定义、没读迁移 SQL**：CHECK 约束写在 entities 的装饰器里，而触发器和 FK 的 `ON DELETE` 语义只在迁移文件里。后续批次评审 `agent_memory_events`（要求触发器拒绝 UPDATE/DELETE）时尤须注意同一陷阱——那张表的遗忘流程同样需要"密文可擦、其余不可改"，应直接复用 A7.0 的窄化例外写法，而不是先建全拒触发器再回头开洞。
+
+---
+
+## 附录二：§20 决策的执行细节补充
+
+> §8 已给出 10 条决策的建议答案，本节只补充实施时需要落到代码的细节，不重复结论。
+> 编号更正：这 10 条决策在方案中是 **§20「待审核决策」**。本文档 §9 标题引用的
+> §22 是「Claude 审核要求」（另 10 条）。此前批次指令中写成 §22.1 / §22.9 的地方，
+> 均应读作 §20.1 / §20.9。
+
+**§20.2 候选记忆需要 TTL。** §8 的答案是"允许生成不生效的候选"，但方案 §8.4 没写候选的生命周期。未确认的候选会无限堆积。实施时定为 **14 天未确认自动迁为 `expired` 并擦除正文**，由 A7.0 的 purge worker 承担。
+
+**§20.3 摘要保留期必须长于会话保留期。** 60 天这个值的依据不只是折中：`CHK_agent_settings_retention_days` 限定会话保留期为 1–30 天（`entities/index.ts:5975`），而情节摘要的全部意义在于会话被清理后仍保住连续性。任何 ≤30 的取值都会让摘要失去存在理由。
+
+**§20.6 向量检索延后的理由比方案所述更硬。** 除"先闭环正确性"外：独立向量副本是 §13.5"遗忘不彻底"的最大来源，且 `pgvector` 不在依赖中（`apps/api/package.json` 只有 `pg`），引入它是一次基础设施变更而非功能增量。
+
+**§20.8 只读已是既成事实，不是待决项。** `queueChannelMessage` 的 `allowedTools` 只取 `setting.readToolsEnabled`（`agent.service.ts:533`），而 App 路径取 `readToolsEnabled + proposalToolsEnabled`（`:369`、`:705`）。渠道运行结构上拿不到任何提案工具。本条无需实现，只需加回归断言锁死现状，防止后续批次无意放开。
+
+**§20.10 第一阶段该决策为空。** schema 层面成员无法离开家庭（`Member.householdId` 非空 + `RESTRICT`，只有 `disabledAt` 停用）。第一阶段只需定义停用语义：停止新建记忆、保留已有、本人可自行清空。真正的"离开"等成员迁移功能落地后再定。
+
+---
+
+## 附录三：A7.2 执行指令
+
+> 范围调整：方案 §14 的 A7.2 含移动端记忆管理页。此处**只做后端**，
+> 移动端「我的 > 小管家记忆」拆为 A7.2b。理由：后端的隐私边界是发布阻塞项，
+> 前端页面不是，混在一批会让回归焦点分散。
+
+### 三个必须避开的陷阱
+
+这三条都是"方案原文的字面实现会出错，且 CI 测不出来"的类型，与 A7.1 的回填陷阱同源。
+
+**陷阱 A：`id` 必须在加密前生成。** A7.0 的记忆 AAD 绑定了 `memoryItemId`。若用 `repo.save(repo.create({...}))` 让 PostgreSQL 的 `uuid_generate_v4()` 生成 id，加密时就没有正确 id 可用，写入的密文永久不可解密，且只在读取时暴露。必须应用层先 `randomUUID()`，用它加密，再带该 id 插入。
+
+**陷阱 B：`ownerMemberId` 一律 NOT NULL，共享时绝不置空。** 方案 §9.2 写"家庭共享记忆可为空"，按字面实现有两个后果：(1) AAD 含 `ownerMemberId`，私有记忆共享为 `household` 时若置空，AAD 变化，已有密文立刻不可解密；(2) PostgreSQL 唯一索引中 NULL 互不相等，null owner 的 household 记忆无法去重。因此 `ownerMemberId` 始终非空，业务来源的家庭记忆记为确认该操作的成员；**共享只改 `scope`，不改 `ownerMemberId`、不重新加密**。必须有"共享后正文仍可解密"的断言。
+
+**陷阱 C：`expired` 的正文也要擦。** `forgotten` 在遗忘时同步擦正文，但超期的 `candidate` 与 `episodic_summary` 若不清理，就会重新制造 A7.0 刚偿还的隐私债。
+
+### 任务分解
+
+1. **迁移 `1785231700000-add-agent-memory.ts`**（第 57 个）+ 实体 + `ALL_ENTITIES` 注册。
+
+   `agent_memory_items`：`id`、`householdId`、`ownerMemberId`(NOT NULL)、`scope`、`kind`、`category`、`memoryKey`、`contentCiphertext`、`contentNonce`、`contentVersion`、`sourceType`、`sourceId`、`sourceConversationId`、`sourceMessageId`、`status`、`confirmedByMemberId`、`confidenceSource`、`validFrom`、`expiresAt`、`version`、`createdAt`、`updatedAt`。
+   - CHECK：`scope IN ('member_private','household')`；`kind IN ('preference','fact','episodic_summary','routine_context')`；`status IN ('candidate','active','revoked','forgotten','expired')`；`confidenceSource IN ('explicit','business','summary_candidate')`
+   - CHECK：`status='forgotten'` 时三个正文字段均为 NULL，其他状态时三者均非 NULL
+   - 活动部分唯一索引 `(householdId, ownerMemberId, scope, memoryKey) WHERE status='active'`，沿用 `UQ_agent_member_channels_active_external` 惯例
+   - `version int default 1` + `CHECK >= 1`
+   - `sourceConversationId` FK `ON DELETE SET NULL`
+   - **不加 `lastUsedAt`**：每次检索都写造成热行写放大，仅服务"复核提示"这一弱需求
+
+   `agent_memory_events`（不可变）：`id`、`householdId`、`memoryItemId`、`actorMemberId`、`operation`、`fromScope`、`toScope`、`sourceType`、`sourceId`、`createdAt`。`operation IN ('created','confirmed','corrected','shared','revoked','forgotten','expired')`。**新建独立触发器函数**（如 `reject_agent_memory_event_mutation`）无条件拒绝 UPDATE/DELETE——不要复用或再改 A7.0 已开窄化例外的 `reject_agent_tool_event_mutation`。事件表永不存正文、密文副本或模型完整输出。
+
+2. **`AgentMemoryProvider`**（`agent-memory.service.ts`），实现 §8.7 接口 + `share` / `clearAll`。检索必须同时约束 `householdId` + `status` + `scope`，且 `member_private` 强制 `ownerMemberId = 当前成员`；排除 `candidate` / `revoked` / `forgotten` / `expired` 与 `expiresAt <= now()`；限制条数、字节、时间范围；每条标注来源与可见范围。身份只从 `JwtUser` 取。正文用 `encryptAgentMemoryContent`（陷阱 A）。
+
+3. **REST 端点**（§16），全部仅 `use_agent`，绝不加 `manage_agent`（对应 M4）。`confirm` / `correct` / `share` / `forget` 走 `expectedVersion` 乐观并发，冲突 409；重复操作幂等；请求体中 `memberId` / `householdId` / `ownerMemberId` 一律忽略；`share` 只改 `scope` 并写 `shared` 事件（陷阱 B）；`DELETE /agent/memories` 只清本人。**`memoryKey` 在 DTO 层白名单化为枚举**（如 `diet_restriction` / `spice_level` / `cooking_skill` / `schedule_preference` / `reply_style` / `other`），用户原文只进 `contentCiphertext`。
+
+4. **两个记忆工具**：`AGENT_MEMORY_TOOLS = ['recall_preferences','remember_preference']`，在 `AgentToolsService.execute` 白名单校验中接纳这一类（现仅认 `AGENT_READ_TOOLS` 与 `isAgentProposalTool`），并在 `agent-mcp.controller.ts` 注册 zod schema。工具名避开 `memories`（对应 B4）。`remember_preference` **只能写 `member_private`**，Agent 不得发起共享——共享只走用户主动的 REST 端点，因此本批不动 `agent_action_proposals` 及其 `CHK_..._type`。两工具仅在 `profile.memoryEnabled` 为真时进入 `run.allowedTools`。记忆正文入上下文必须带 `untrustedContent: true`（对应 B3）。开关只用 A7.1 的 `memoryEnabled`，不给 `agent_settings` 加列、不改其 jsonb 默认值（本库无 feature flag 机制，不要自造）。
+
+5. **扩展 A7.0 的 `AgentRetentionService`**（不新建 worker、不改其消息与展示卡逻辑）：把 `expired` / `revoked` 或 `expiresAt <= now()` 的记忆正文三字段置空并迁为 `expired`；超过 14 天未确认的 `candidate` 同样处理（陷阱 C、§20.2）。沿用既有批量上限、`pessimistic_write` + `skip_locked`、重入保护；新增清理与既有清理共享每轮预算，不得饿死消息清理。
+
+6. **回归 `scripts/agent-memory.mjs`**，挂在 `scripts/agent-profiles.mjs` 之后。前四条为发布阻塞项：① 跨成员相同 `memoryKey` 不串线，活动唯一索引并发插入不误判；② owner/admin 无法经任何端点读到他人 `member_private` 正文；③ `forget` 后查库断言三字段为 NULL（不只看 status），检索与候选列表均不返回；④ 正文含"忽略之前的指令"的偏好入上下文时带 `untrustedContent`。其余：⑤ 共享后正文仍可解密、`ownerMemberId` 未变、写了 `shared` 事件；⑥ `candidate` / `expired` 不进检索，超期 candidate 被 worker 擦除；⑦ 重复 `confirm` / `share` / `forget` 幂等，`expectedVersion` 过期 409；⑧ `DELETE /agent/memories` 只清自己；⑨ 事件表 UPDATE / DELETE 均被拒；⑩ 渠道运行拿不到 `remember_preference`（锁死 §20.8）；⑪ `memoryEnabled=false` 时两工具不进 `allowedTools`。
+
+**验收**：改 schema 前 `./scripts/backup-dev.sh`；`npx pnpm test:api` / `test:schema` / `build` 全绿；开发库 `migration:run → revert → run` 通过。`test:schema` 需逐一对齐 CHECK 表达式、部分索引 WHERE 子句、默认值与约束名。日志、审计、错误响应均不得出现记忆正文或密钥。
