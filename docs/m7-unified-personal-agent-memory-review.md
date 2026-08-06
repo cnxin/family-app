@@ -503,3 +503,63 @@ A7.0 和 A7.1 各有一处判断错误，两次都是**只读了实体定义、�
 6. **回归 `scripts/agent-memory.mjs`**，挂在 `scripts/agent-profiles.mjs` 之后。前四条为发布阻塞项：① 跨成员相同 `memoryKey` 不串线，活动唯一索引并发插入不误判；② owner/admin 无法经任何端点读到他人 `member_private` 正文；③ `forget` 后查库断言三字段为 NULL（不只看 status），检索与候选列表均不返回；④ 正文含"忽略之前的指令"的偏好入上下文时带 `untrustedContent`。其余：⑤ 共享后正文仍可解密、`ownerMemberId` 未变、写了 `shared` 事件；⑥ `candidate` / `expired` 不进检索，超期 candidate 被 worker 擦除；⑦ 重复 `confirm` / `share` / `forget` 幂等，`expectedVersion` 过期 409；⑧ `DELETE /agent/memories` 只清自己；⑨ 事件表 UPDATE / DELETE 均被拒；⑩ 渠道运行拿不到 `remember_preference`（锁死 §20.8）；⑪ `memoryEnabled=false` 时两工具不进 `allowedTools`。
 
 **验收**：改 schema 前 `./scripts/backup-dev.sh`；`npx pnpm test:api` / `test:schema` / `build` 全绿；开发库 `migration:run → revert → run` 通过。`test:schema` 需逐一对齐 CHECK 表达式、部分索引 WHERE 子句、默认值与约束名。日志、审计、错误响应均不得出现记忆正文或密钥。
+
+---
+
+## 附录四：A7.2 落地记录与勘误（2026-08-06）
+
+### 已完成
+
+| 批次 | 提交 | 内容 |
+| --- | --- | --- |
+| A7.2 受控长期记忆（后端） | `682aa90` | `agent_memory_items` + `agent_memory_events` 实体与迁移 `1785231700000`（含独立不可变触发器 `reject_agent_memory_event_mutation`、活动状态部分唯一索引）；`agent-memory.service.ts`（search / createCandidate / confirm / correct / share / forget / clearAll）；7 个 REST 端点；`recall_preferences` / `remember_preference` 两个工具 + MCP zod 注册；retention worker 扩展记忆正文清理；`scripts/agent-memory.mjs` 回归（11 项，含 4 项发布阻塞） |
+
+移动端「我的 > 小管家记忆」管理页拆为 **A7.2b**，尚未实施。
+
+### 本文档被 A7.2 实施推翻的判断
+
+| 位置 | 初版判断 | 实际情况 |
+| --- | --- | --- |
+| 附录三 任务 1 / 任务 5 / 陷阱 C | 任务 1 要求「`status='forgotten'` 时正文三字段为 NULL，**其他状态**时三者非 NULL」，任务 5 与陷阱 C 又要求 worker 把过期记忆迁为 `expired` 并擦正文 | **两条自相矛盾**，worker 一执行就违反 CHECK。正确约束是 `forgotten` 与 `expired` **都**允许三字段全空。实施采用此解法，并额外加了 `contentVersion >= 1`（本文档未要求，防住 `contentVersion = 0` 这种合法但无意义的状态） |
+
+落地的约束（迁移 `1785231700000` 第 36-40 行）：
+
+```sql
+CONSTRAINT "CHK_agent_memory_items_content" CHECK (
+  ("status" IN ('forgotten', 'expired') AND "contentCiphertext" IS NULL
+    AND "contentNonce" IS NULL AND "contentVersion" IS NULL)
+  OR
+  ("status" NOT IN ('forgotten', 'expired') AND "contentCiphertext" IS NOT NULL
+    AND "contentNonce" IS NOT NULL AND "contentVersion" IS NOT NULL
+    AND "contentVersion" >= 1)
+)
+```
+
+后续若新增「正文可为空」的状态（如 `archived`），必须同步改这条 CHECK，否则状态迁移会被拒。
+
+### 三个陷阱的落地确认
+
+均按原始文件核对，非 diff 渲染输出。
+
+- **陷阱 A（id 先于加密生成）**：`agent-memory.service.ts:209` 先 `randomUUID()`，再以该 id 参与 AAD 加密，`items.create({ id, ... })` 显式传入。`correct()`（318-323 行）复用 `current.id` / `current.householdId` / `current.ownerMemberId`，AAD 与首次写入一致。
+- **陷阱 B（`ownerMemberId` 不置空）**：迁移中为 `NOT NULL`。`share()` 的 `update()` 仅 set `{ scope: 'household', version: +1 }`，未触碰 `ownerMemberId`、未重新加密。回归第 ⑤ 项断言共享后正文仍可解密。
+- **陷阱 C（过期正文也清理）**：worker 三字段同时置空并迁 `expired`，同时写 `expired` 事件。
+
+### 隔离与门控确认
+
+- `requireOwned()` 用 `id + householdId + ownerMemberId` 三重约束，所有写路径（confirm / correct / share / forget）均经它，管理员无法借 `manage_agent` 绕过。
+- `search()` 在 `scope='member_private'` 时强制 `ownerMemberId = :memberId`，`household` 时按家庭范围，两条路径互斥；同时排除 `candidate` / `revoked` / `forgotten` / `expired` 与 `expiresAt <= now()`，并有条数、字节、回溯天数三重上限。
+- 记忆工具门控：App 路径按 `profile.memoryEnabled` 决定是否加入 `AGENT_MEMORY_TOOLS`（`agent.service.ts:438`、`:782`）；渠道路径（`:604`）仍只有 `readToolsEnabled`，拿不到记忆工具，§20.8 只读现状已被回归锁死。
+- `remember_preference` 经 `createCandidate` 硬编码 `scope: 'member_private'`，Agent 不能发起共享；共享只走用户主动调用的 REST 端点。
+- `recall_preferences` 输出带 `untrustedContent: true`，沿用 `get_recent_memories` 先例（B3）。
+- retention worker 预算共享：`memoryBudget = remaining - dueEvents.length`，记忆清理不会饿死消息与展示卡清理。
+
+### 遗留待办（不阻塞，A7.2b 前确认）
+
+`correct()`（`agent-memory.service.ts:334-339`）在修改 `active` 且 `kind !== 'episodic_summary'` 的记忆时，把 `expiresAt` 重置为 `null`。当前 API 未暴露自定义 `expiresAt`，故无实际影响；但方案 §8.3 提到「个人事实可设置有效期」，A7.2b 若加入该能力，修改正文会静默清掉用户设定的有效期。届时需改为保留原 `expiresAt`，或显式让用户重设。
+
+`preference` 类记忆 `expiresAt` 为 `null`、永不进入 worker 清理条件，与方案 §8.3「个人偏好无固定到期，但可撤销和复核」一致，属预期行为。
+
+### 教训（累计第三次）
+
+A7.0 是「只读实体没读迁移，漏了触发器」；A7.1 是「照方案原文写回填范围，漏了 RESTRICT FK」；A7.2 是「同一份指令内两处要求互相矛盾，未自检」。前两次是核查不足，这次是**指令内部一致性**问题——给出 CHECK 约束和状态机迁移要求时，应把两者放在一起推演一遍状态转换是否都合法。后续批次（尤其 A7.3 的 `contextFingerprint`、A7.4 的 `agent_routines` 状态机）交付前需做此自检。
