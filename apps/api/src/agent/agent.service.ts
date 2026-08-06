@@ -18,6 +18,8 @@ import {
   AgentRuntimeKind,
   AgentSetting,
   AgentMemberChannel,
+  AgentMemberProfile,
+  AgentResponseStyle,
   AgentToolEvent,
 } from '../entities';
 import { decryptAgentContent, encryptAgentContent } from './agent.crypto';
@@ -40,6 +42,16 @@ interface UpdateAgentSettingsInput {
   expectedVersion: number;
 }
 
+interface UpdateAgentProfileInput {
+  enabled?: boolean;
+  assistantName?: string;
+  responseStyle?: AgentResponseStyle;
+  memoryEnabled?: boolean;
+  memorySuggestionEnabled?: boolean;
+  proactiveRoutinesEnabled?: boolean;
+  expectedVersion: number;
+}
+
 function isUniqueViolation(error: unknown) {
   return (
     typeof error === 'object' &&
@@ -51,6 +63,10 @@ function isUniqueViolation(error: unknown) {
 
 function trimmed(value: string, fallback: string) {
   return value.trim() || fallback;
+}
+
+function sanitizeAssistantName(value: string) {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
 }
 
 @Injectable()
@@ -67,6 +83,8 @@ export class AgentService {
     private readonly toolEvents: Repository<AgentToolEvent>,
     @InjectRepository(AgentMemberChannel)
     private readonly channels: Repository<AgentMemberChannel>,
+    @InjectRepository(AgentMemberProfile)
+    private readonly profiles: Repository<AgentMemberProfile>,
     private readonly dataSource: DataSource,
     private readonly fakeRuntime: FakeAgentRuntime,
     private readonly hermesRuntime: HermesAgentRuntime,
@@ -157,6 +175,47 @@ export class AgentService {
     return this.presentSettings((await this.settings.findOneBy({ id: current.id }))!);
   }
 
+  async getProfile(user: JwtUser) {
+    return this.presentProfile(await this.ensureProfile(user));
+  }
+
+  async updateProfile(input: UpdateAgentProfileInput, user: JwtUser) {
+    const current = await this.ensureProfile(user);
+    if (current.version !== input.expectedVersion) {
+      throw new ConflictException('小管家档案已被其他操作更新，请刷新后重试');
+    }
+    const assistantName =
+      input.assistantName == null
+        ? current.assistantName
+        : sanitizeAssistantName(input.assistantName);
+    if (!assistantName) throw new BadRequestException('小管家称呼不能为空');
+    const result = await this.profiles.update(
+      {
+        id: current.id,
+        householdId: user.householdId,
+        memberId: user.memberId,
+        version: input.expectedVersion,
+      },
+      {
+        enabled: input.enabled ?? current.enabled,
+        assistantName,
+        responseStyle: input.responseStyle ?? current.responseStyle,
+        memoryEnabled: input.memoryEnabled ?? current.memoryEnabled,
+        memorySuggestionEnabled:
+          input.memorySuggestionEnabled ?? current.memorySuggestionEnabled,
+        proactiveRoutinesEnabled:
+          input.proactiveRoutinesEnabled ?? current.proactiveRoutinesEnabled,
+        version: current.version + 1,
+      },
+    );
+    if (!result.affected) {
+      throw new ConflictException('小管家档案已被其他操作更新，请刷新后重试');
+    }
+    return this.presentProfile(
+      (await this.profiles.findOneBy({ id: current.id }))!,
+    );
+  }
+
   async listConversations(user: JwtUser) {
     await this.expireOldConversations(user);
     const rows = await this.conversations.find({
@@ -173,7 +232,9 @@ export class AgentService {
 
   async createConversation(title: string | undefined, user: JwtUser) {
     const setting = await this.ensureSettings(user);
+    const profile = await this.ensureProfile(user);
     if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
     }
@@ -182,6 +243,7 @@ export class AgentService {
       this.conversations.create({
         householdId: user.householdId,
         createdByMemberId: user.memberId,
+        agentProfileId: profile.id,
         source: 'app',
         title: title ? trimmed(title, '新对话').slice(0, 120) : '新对话',
         status: 'active',
@@ -328,7 +390,9 @@ export class AgentService {
     const content = message.trim();
     const key = clientRequestId.trim();
     const setting = await this.ensureSettings(user);
+    const profile = await this.ensureProfile(user);
     if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
     }
@@ -358,6 +422,7 @@ export class AgentService {
             householdId: user.householdId,
             conversationId: conversation.id,
             requestedByMemberId: user.memberId,
+            agentProfileId: profile.id,
             clientRequestId: key,
             runtimeKind: setting.runtimeKind,
             runtimeVersion:
@@ -448,7 +513,9 @@ export class AgentService {
       role: member.role,
     };
     const setting = await this.ensureSettings(user);
+    const profile = await this.ensureProfile(user);
     if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
     }
@@ -468,6 +535,7 @@ export class AgentService {
           this.conversations.create({
             householdId: channel.householdId,
             createdByMemberId: member.id,
+            agentProfileId: profile.id,
             source: 'channel',
             channelId: channel.id,
             externalThreadRefHash,
@@ -522,6 +590,7 @@ export class AgentService {
             householdId: channel.householdId,
             conversationId: conversation!.id,
             requestedByMemberId: member.id,
+            agentProfileId: profile.id,
             clientRequestId: key,
             runtimeKind: setting.runtimeKind,
             runtimeVersion:
@@ -658,7 +727,9 @@ export class AgentService {
       true,
     );
     const setting = await this.ensureSettings(user);
+    const profile = await this.ensureProfile(user);
     if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
     }
@@ -693,6 +764,7 @@ export class AgentService {
           householdId: user.householdId,
           conversationId: conversation.id,
           requestedByMemberId: user.memberId,
+          agentProfileId: profile.id,
           clientRequestId: key,
           retryOfRunId: original.id,
           runtimeKind: setting.runtimeKind,
@@ -931,6 +1003,38 @@ export class AgentService {
     }
   }
 
+  private async ensureProfile(user: JwtUser) {
+    const existing = await this.profiles.findOneBy({
+      householdId: user.householdId,
+      memberId: user.memberId,
+    });
+    if (existing) return existing;
+    try {
+      return await this.profiles.save(
+        this.profiles.create({
+          householdId: user.householdId,
+          memberId: user.memberId,
+          enabled: true,
+          assistantName: '小管家',
+          responseStyle: 'balanced',
+          memoryEnabled: true,
+          memorySuggestionEnabled: false,
+          proactiveRoutinesEnabled: false,
+          version: 1,
+        }),
+      );
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const raced = await this.profiles.findOneBy({
+          householdId: user.householdId,
+          memberId: user.memberId,
+        });
+        if (raced) return raced;
+      }
+      throw error;
+    }
+  }
+
   private async requireConversation(
     id: string,
     user: JwtUser,
@@ -993,6 +1097,22 @@ export class AgentService {
       proposalToolsEnabled: setting.proposalToolsEnabled,
       version: setting.version,
       updatedAt: setting.updatedAt,
+    };
+  }
+
+  private presentProfile(profile: AgentMemberProfile) {
+    return {
+      id: profile.id,
+      memberId: profile.memberId,
+      enabled: profile.enabled,
+      assistantName: profile.assistantName,
+      responseStyle: profile.responseStyle,
+      memoryEnabled: profile.memoryEnabled,
+      memorySuggestionEnabled: profile.memorySuggestionEnabled,
+      proactiveRoutinesEnabled: profile.proactiveRoutinesEnabled,
+      version: profile.version,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
     };
   }
 

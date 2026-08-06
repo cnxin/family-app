@@ -214,6 +214,7 @@ export type BackupRunStatus =
 export type BackupRunTrigger = 'manual' | 'scheduled';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
 export type AgentRuntimeKind = 'fake' | 'hermes';
+export type AgentResponseStyle = 'concise' | 'balanced' | 'detailed';
 export type AgentConversationStatus = 'active' | 'archived' | 'expired';
 export type AgentConversationSource = 'app' | 'channel';
 export type AgentChannelPlatform = string;
@@ -6051,6 +6052,68 @@ export class AgentSetting {
   updatedAt: Date;
 }
 
+@Entity('agent_member_profiles')
+@Unique('UQ_agent_member_profiles_household_member', [
+  'householdId',
+  'memberId',
+])
+@Check(
+  'CHK_agent_member_profiles_response_style',
+  `"responseStyle" IN ('concise', 'balanced', 'detailed')`,
+)
+@Check('CHK_agent_member_profiles_version', `"version" >= 1`)
+export class AgentMemberProfile {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_member_profiles_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_agent_member_profiles_member',
+  })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @Column({ default: true })
+  enabled: boolean;
+
+  @Column({ type: 'varchar', length: 32, default: '小管家' })
+  assistantName: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'balanced' })
+  responseStyle: AgentResponseStyle;
+
+  @Column({ default: true })
+  memoryEnabled: boolean;
+
+  @Column({ default: false })
+  memorySuggestionEnabled: boolean;
+
+  @Column({ default: false })
+  proactiveRoutinesEnabled: boolean;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('agent_conversations')
 @Check(
   'CHK_agent_conversations_status',
@@ -6090,6 +6153,16 @@ export class AgentConversation {
 
   @Column('uuid')
   createdByMemberId: string;
+
+  @ManyToOne(() => AgentMemberProfile, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'agentProfileId',
+    foreignKeyConstraintName: 'FK_agent_conversations_profile',
+  })
+  agentProfile: AgentMemberProfile;
+
+  @Column('uuid')
+  agentProfileId: string;
 
   @Column({ type: 'varchar', length: 16, default: 'app' })
   source: AgentConversationSource;
@@ -6241,6 +6314,16 @@ export class AgentRun {
 
   @Column('uuid')
   requestedByMemberId: string;
+
+  @ManyToOne(() => AgentMemberProfile, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'agentProfileId',
+    foreignKeyConstraintName: 'FK_agent_runs_profile',
+  })
+  agentProfile: AgentMemberProfile;
+
+  @Column('uuid')
+  agentProfileId: string;
 
   @Column({ type: 'varchar', length: 180 })
   clientRequestId: string;
@@ -6781,6 +6864,7 @@ export const ALL_ENTITIES = [
   BackupPolicy,
   BackupRun,
   AgentSetting,
+  AgentMemberProfile,
   AgentMemberChannel,
   AgentChannelPairing,
   AgentConversation,

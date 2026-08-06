@@ -79,8 +79,8 @@ async function runProcess(command, args) {
   if (code !== 0) throw new Error(`${command} 执行失败，状态码 ${code}`);
 }
 
-function runScript(path) {
-  return runProcess(process.execPath, [path]);
+function runScript(path, ...args) {
+  return runProcess(process.execPath, [path, ...args]);
 }
 
 function startApi() {
@@ -235,6 +235,7 @@ try {
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
   await runScript('scripts/verify-legacy-pin-migration.mjs');
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+  await runScript('scripts/agent-profiles.mjs', '--migration');
   await runProcess(process.execPath, [
     '-r',
     'ts-node/register',
@@ -258,6 +259,7 @@ try {
   await runScript('scripts/memories.mjs');
   await runScript('scripts/agent.mjs');
   await runScript('scripts/agent-retention.mjs');
+  await runScript('scripts/agent-profiles.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');

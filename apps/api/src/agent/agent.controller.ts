@@ -19,6 +19,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Put,
 } from '@nestjs/common';
@@ -97,6 +98,38 @@ class UpdateAgentSettingsDto {
   expectedVersion: number;
 }
 
+class UpdateAgentProfileDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  assistantName?: string;
+
+  @IsOptional()
+  @IsIn(['concise', 'balanced', 'detailed'])
+  responseStyle?: 'concise' | 'balanced' | 'detailed';
+
+  @IsOptional()
+  @IsBoolean()
+  memoryEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  memorySuggestionEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  proactiveRoutinesEnabled?: boolean;
+
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
 class ConfirmAgentProposalDto {
   @IsInt()
   @Min(1)
@@ -167,6 +200,19 @@ export class AgentController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.updateSettings(dto, user);
+  }
+
+  @Get('profile')
+  profile(@CurrentUser() user: JwtUser) {
+    return this.service.getProfile(user);
+  }
+
+  @Patch('profile')
+  updateProfile(
+    @Body() dto: UpdateAgentProfileDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.updateProfile(dto, user);
   }
 
   @Get('conversations')

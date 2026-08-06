@@ -190,11 +190,21 @@ try {
      VALUES ($1, $2, '隔离成员', 'A', 'owner')`,
     [foreignMemberId, foreignHouseholdId],
   );
+  const foreignProfile = await db.query(
+    `INSERT INTO agent_member_profiles ("householdId", "memberId")
+     VALUES ($1, $2) RETURNING id`,
+    [foreignHouseholdId, foreignMemberId],
+  );
   await db.query(
     `INSERT INTO agent_conversations
-       (id, "householdId", "createdByMemberId", title, "expiresAt")
-     VALUES ($1, $2, $3, '其他家庭对话', now() + interval '1 day')`,
-    [foreignConversationId, foreignHouseholdId, foreignMemberId],
+       (id, "householdId", "createdByMemberId", "agentProfileId", title, "expiresAt")
+     VALUES ($1, $2, $3, $4, '其他家庭对话', now() + interval '1 day')`,
+    [
+      foreignConversationId,
+      foreignHouseholdId,
+      foreignMemberId,
+      foreignProfile.rows[0].id,
+    ],
   );
   const crossHousehold = await request(
     `/agent/conversations/${foreignConversationId}`,
@@ -221,6 +231,11 @@ try {
   const runConversation = await request('/agent/conversations', owner.accessToken, 'POST', {
     title: 'MCP 回归',
   });
+  const ownerProfile = await db.query(
+    `SELECT id FROM agent_member_profiles
+     WHERE "householdId" = $1 AND "memberId" = $2`,
+    [owner.member.householdId, owner.member.id],
+  );
   const validRunId = randomUUID();
   const expiredRunId = randomUUID();
   const whitelistRunId = randomUUID();
@@ -235,15 +250,16 @@ try {
   ]) {
     await db.query(
       `INSERT INTO agent_runs (
-         id, "householdId", "conversationId", "requestedByMemberId", "clientRequestId",
+         id, "householdId", "conversationId", "requestedByMemberId", "agentProfileId", "clientRequestId",
          "runtimeKind", "runtimeVersion", "modelAlias", status, "allowedTools",
          "authorizationExpiresAt", "startedAt"
-       ) VALUES ($1, $2, $3, $4, $5, 'fake', 'contract', 'hermes-agent', 'running', $6, ${expires}, now())`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, 'fake', 'contract', 'hermes-agent', 'running', $7, ${expires}, now())`,
       [
         runId,
         ownerMember.rows[0].householdId,
         runConversation.data.id,
         owner.member.id,
+        ownerProfile.rows[0].id,
         `mcp:${runId}`,
         JSON.stringify(tools),
       ],
@@ -504,18 +520,24 @@ try {
     'propose_menu',
     'propose_shopping_items',
   ];
+  const memberProfile = await db.query(
+    `SELECT id FROM agent_member_profiles
+     WHERE "householdId" = $1 AND "memberId" = $2`,
+    [member.member.householdId, member.member.id],
+  );
   await db.query(
     `INSERT INTO agent_runs (
-       id, "householdId", "conversationId", "requestedByMemberId", "clientRequestId",
+       id, "householdId", "conversationId", "requestedByMemberId", "agentProfileId", "clientRequestId",
        "runtimeKind", "runtimeVersion", "modelAlias", status, "allowedTools",
        "authorizationExpiresAt", "startedAt"
-     ) VALUES ($1, $2, $3, $4, $5, 'fake', 'proposal-contract', 'hermes-agent',
-       'running', $6, now() + interval '5 minutes', now())`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, 'fake', 'proposal-contract', 'hermes-agent',
+       'running', $7, now() + interval '5 minutes', now())`,
     [
       proposalRunId,
       member.member.householdId,
       proposalConversation.data.id,
       member.member.id,
+      memberProfile.rows[0].id,
       `proposal:${proposalRunId}`,
       JSON.stringify(proposalTools),
     ],
