@@ -51,7 +51,11 @@
 
 **要求**：新增真实的 purge worker，并处理既有历史数据。这必须是 A7.2 的**前置**批次，不能作为 A7.2 的一部分交付。详见 §7 的 A7.0。
 
-一个有利条件：`AgentToolEvent` 已有 CHECK 约束 `CHK_agent_tool_events_presentation`（三字段全空或全在），所以 purge 可以直接把 `presentationCiphertext` / `presentationNonce` / `presentationVersion` 三者置 NULL 而不违反约束，无需改表。方案 §9.2 给 `agent_memory_items` 设计的同类约束（`forgotten` 要求三者为空）与此惯例一致，是好设计，用 CHECK 落地即可。
+**勘误（A7.0 实施后修正，2026-08-06）**：本节初版称"`AgentToolEvent` 已有 CHECK 约束允许三字段置 NULL，所以 purge 无需改表"——**这个判断是错的**。CHECK 约束（`CHK_agent_tool_events_presentation`）确实允许三字段全空的状态，但 `1785230700000-add-family-agent.ts:141-150` 还建了一个不可变触发器：函数体只有一行 `RAISE EXCEPTION`，触发器绑定 `BEFORE UPDATE OR DELETE`，无条件拒绝一切 UPDATE。CHECK 允许的目标状态，触发器不让你迁移过去。仅靠 worker 直接 update 会在运行时抛 `55000`。
+
+正确做法（A7.0 已落地，见 `1785231500000-allow-agent-tool-event-presentation-purge.ts`）：用 `CREATE OR REPLACE FUNCTION` 为"密文擦除且其余列完全不变"开一个窄化例外，条件为三字段由非空变全空，且 `to_jsonb(NEW) - 三字段 = to_jsonb(OLD) - 三字段`，其余 UPDATE 与所有 DELETE 继续被拒。这比单纯放开 UPDATE 更严，能挡住"借擦除之名顺手改 status / outputSummary"。触发器绑的是函数名，替换函数体即生效，无需重建触发器，因此不新增表/列/索引——但也意味着 `test:schema` 的漂移检查覆盖不到函数体变更。
+
+方案 §9.2 给 `agent_memory_items` 设计的同类约束（`forgotten` 要求三者为空）仍是好设计，但落地时要记住：**CHECK 管状态合法性，触发器管状态可达性，两者都要看。**
 
 ### B2（严重）记忆项与现有加密原语不兼容
 
@@ -303,9 +307,22 @@ npx pnpm --filter @family/api test:api        # 全量 API 回归
 ### A7.1 成员 Agent 档案与范围基础
 
 1. 迁移 `1785231600000-add-agent-member-profiles.ts`：建 `agent_member_profiles`，唯一 `(householdId, memberId)`，`responseStyle` 为枚举 + CHECK（按第 4 节），`version int default 1` + `CHECK >= 1`。
-2. 迁移 `1785231700000-link-agent-runs-to-profiles.ts`：给 `agent_conversations` 加 `agentProfileId`、`privacyScope`（第一阶段 CHECK 固定 `member_private`）；给 `agent_runs` 加 `agentProfileId`、`contextFingerprint`、`memoryItemCount`。
-3. 回填：每个 `disabledAt IS NULL` 的成员建一条默认档案；现有会话按 `createdByMemberId` 绑定对应档案。**不解密、不重写历史消息，不改保留期**。注意 `Member.accountId` 是 `select: false`，回填查询需显式 `addSelect` 或避开该列。
-4. `AgentService` 与 `AgentToolsService` 在 run 上带 `agentProfileId`；扩展短时委托声明加入 `allowedMemoryScopes`（此批次先落字段与校验骨架，值恒为 `['member_private']`）。
+2. 给 `agent_conversations` 和 `agent_runs` 各加 `agentProfileId`（uuid，FK → `agent_member_profiles`，`ON DELETE RESTRICT`）。同一迁移内三步：加可空列 → 按 `createdByMemberId`（会话）/ `requestedByMemberId`（运行）回填 → `SET NOT NULL`。回填用原生 SQL，避开 `Member.accountId` 的 `select: false`。
+
+   **勘误（A7.1 实施后修正，2026-08-06）**：本条初版还要求在此批加 `privacyScope`、`contextFingerprint`、`memoryItemCount`，并拆成独立迁移 `1785231700000`。实施时已收敛为**单个迁移 `1785231600000`**，且这三个字段**推迟**：
+   - `privacyScope` — 第一阶段只有 `member_private` 一个取值，且会话已由 `(householdId, createdByMemberId)` 隔离，现在加没有信息量，将来放开取值还要改 CHECK。
+   - `contextFingerprint` — 属于 A7.3（页面上下文）。
+   - `memoryItemCount`、`allowedMemoryScopes` — 属于 A7.2（记忆）。
+
+   理由：本库 55 个迁移中 `link-agent-messages-to-runs`、`add-agent-daily-read-tools`、`agent-run-retry-presentations` 三个都是对 agent 表的增量小改，惯例明显偏好按需增量而非预留字段。提前加即死列。
+3. 回填：为该家庭**全部**成员建一条默认档案（**含已停用成员**），已停用成员（`disabledAt IS NOT NULL`）的档案 `enabled = false`；现有会话按 `createdByMemberId` 绑定对应档案。**不解密、不重写历史消息，不改保留期**。注意 `Member.accountId` 是 `select: false`，回填查询需显式 `addSelect` 或避开该列。
+
+   **勘误（A7.1 实施后修正，2026-08-06）**：本条初版写的是"每个 `disabledAt IS NULL` 的成员建一条默认档案"，沿用了方案 §15.2 的"每个活动成员"——**这个判断是错的，照它实现迁移会失败**。`agent_conversations.createdByMemberId` 是 `ON DELETE RESTRICT` 的非空 FK（`1785230700000-add-family-agent.ts:45`），已停用成员的历史会话永久存在，其 `agentProfileId` 需要对应档案存在，否则 `SET NOT NULL` 直接报错。
+
+   更麻烦的是这个错误**测不出来**：`seed.ts:104` 把所有成员建成 `disabledAt: null`，`scripts/agent.mjs:203-205` 只是把 `disabledAt` 瞬时置为 `now()` 断言 401 后立刻改回 `NULL`。所以"停用成员持有历史会话"这个状态在空库和测试库里从不持久存在，迁移在 CI 里必然通过、只在真实开发库/生产库上炸。验收必须显式构造该状态（A7.1 已补 `scripts/agent-profiles.mjs` 专项断言）。
+4. 所有运行创建路径在 run 上带 `agentProfileId`。**勘误（A7.1 实施后修正）**：本条初版说要改 `AgentToolsService` 并预埋 `allowedMemoryScopes` 骨架，两点都调整了。`AgentToolsService` 无需改动——它由 `runId` 反查 `AgentRun`（`agent-tools.service.ts:185`），新列自动可见；真正需要覆盖的是**四条运行创建路径**：`createConversation`、`queueMessage`、`queueChannelMessage`、`retry`。`allowedMemoryScopes` 推迟到 A7.2 与记忆检索一起落，避免死列。
+
+   另需注意：`agentProfileId` 加到 run 上有审计与档案策略价值，但**它不构成新的安全边界**——身份本来就来自服务端 run 记录而非客户端。第一阶段真正的新边界是 A7.2 的记忆按 `ownerMemberId` 过滤。
 5. 新增 `GET/PATCH /agent/profile`，仅需 `use_agent`，只能读写调用者自己那一行（对应 M4）。
 
 **验收**：扩展 `apps/api/scripts/agent.mjs`。含第 6 节验收项 4 的三向权限测试；停用成员不能产生新运行；伪造 `agentProfileId` 被拒。
@@ -393,3 +410,33 @@ npx pnpm --filter @family/api test:api        # 全量 API 回归
 边界清晰，且现有实现已经守住：Hermes 只能通过 MCP + `runId` 取数据，`AgentRuntime` 接口（`agent.types.ts:48-54`）只暴露 `health` / `chat` / `cancel`，无任何持久化能力；MCP 端点用 `timingSafeEqual` 校验共享密钥（`agent-mcp.controller.ts:18-25`）。
 
 唯一风险不在设计而在运维配置，见 M6。
+
+---
+
+## 附录：实施进度与勘误索引
+
+> 本节随批次推进更新，记录已落地内容与本文档被实施推翻的判断。
+
+### 已完成
+
+| 批次 | 提交 | 内容 |
+| --- | --- | --- |
+| A7.0 保留期与删除真实化 | `497028e` | `agent-retention.service.ts` purge worker（批 200、行锁 + `skip_locked`）；`encryptAgentMemoryContent` / `decryptAgentMemoryContent` 记忆专用 AAD；迁移 `1785231500000` 窄化触发器例外；`scripts/agent-retention.mjs` 回归 |
+| A7.1 成员档案与范围基础 | `b675703` | `agent_member_profiles` 实体 + 迁移 `1785231600000`（含全部成员回填、`agentProfileId` 三步置非空）；`GET/PATCH /agent/profile`（仅 `use_agent`）；四条运行创建路径绑定档案；`scripts/agent-profiles.mjs` 回归（含停用成员专项） |
+
+### 本文档被实施推翻的判断
+
+| 位置 | 初版判断 | 实际情况 |
+| --- | --- | --- |
+| B1 | `AgentToolEvent` 有 CHECK 允许三字段置空，purge 无需改表 | 错。同表还有 `BEFORE UPDATE OR DELETE` 不可变触发器无条件拒绝 UPDATE，必须用 `CREATE OR REPLACE FUNCTION` 开窄化例外 |
+| §7 A7.1-3 | 只为 `disabledAt IS NULL` 的活动成员建档案 | 错。停用成员的历史会话有 `RESTRICT` 非空 FK，必须为全部成员建档案，否则 `SET NOT NULL` 失败；且该错误在空库与现有测试中测不出来 |
+| §7 A7.1-2 | 拆两个迁移，并预埋 `privacyScope` / `contextFingerprint` / `memoryItemCount` | 收敛为单迁移，三字段推迟至各自批次，避免死列 |
+| §7 A7.1-4 | 需改 `AgentToolsService`，预埋 `allowedMemoryScopes` 骨架 | `AgentToolsService` 由 `runId` 反查 run，无需改动；真正要覆盖的是四条运行创建路径 |
+
+### 关于测试环境密钥
+
+`AGENT_DATA_KEY` 未在 `run-api-tests.mjs` 的 `testEnvironment` 中配置，但 agent 套件仍可运行：`config.ts:91-98` 的 `agentDataKey()` 在非生产环境回退为 `sha256('family-app-local-agent-data-key')`，生产环境返回 `null`。生产密钥校验没有被放宽。`agentMcpKey()`（`:100-107`）同理。
+
+### 教训：CHECK 管合法性，触发器管可达性
+
+A7.0 和 A7.1 各有一处判断错误，两次都是**只读了实体定义、没读迁移 SQL**：CHECK 约束写在 entities 的装饰器里，而触发器和 FK 的 `ON DELETE` 语义只在迁移文件里。后续批次评审 `agent_memory_events`（要求触发器拒绝 UPDATE/DELETE）时尤须注意同一陷阱——那张表的遗忘流程同样需要"密文可擦、其余不可改"，应直接复用 A7.0 的窄化例外写法，而不是先建全拒触发器再回头开洞。
