@@ -119,6 +119,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="agent-memory"
+        options={{
+          title: '小管家记忆',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="agent-memory/[id]"
+        options={{
+          title: '记忆详情',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="order"
         options={{
           title: '点菜',

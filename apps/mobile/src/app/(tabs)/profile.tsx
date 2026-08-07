@@ -9,6 +9,7 @@ import {
   KeyRound,
   ShieldCheck,
   Share2,
+  Sparkles,
   Trash2,
   UserPlus,
   UsersRound,
@@ -201,6 +202,27 @@ export default function ProfileScreen() {
                 value={member?.prefersCooking ?? false}
               />
             </View>
+          </Card>
+
+          <SectionHeader title="小管家" />
+          <Card>
+            <PressableScale
+              accessibilityLabel="管理小管家记忆"
+              accessibilityRole="link"
+              haptic={false}
+              onPress={() => router.push('/agent-memory')}
+              style={styles.recipeRow}
+              testID="agent-memory-entry"
+            >
+              <View style={[styles.recipeIcon, { backgroundColor: c.tintSoft }]}>
+                <Sparkles color={c.tint} size={20} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>我的记忆</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>管理个人偏好与共享知识</Text>
+              </View>
+              <ChevronRight color={c.tertiaryLabel} size={19} />
+            </PressableScale>
           </Card>
 
           <SectionHeader title="账号安全" />
