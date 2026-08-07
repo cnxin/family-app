@@ -186,6 +186,7 @@ export function useUpdateAgentProfile() {
 export function useAgentMemories(
   status?: AgentMemoryStatus,
   scope?: AgentMemoryScope,
+  enabled = true,
 ) {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
@@ -195,6 +196,7 @@ export function useAgentMemories(
     queryKey: ['agent', 'memories', { status, scope }],
     queryFn: () =>
       api<AgentMemoryItem[]>(`/agent/memories${query ? `?${query}` : ''}`),
+    enabled,
   });
 }
 
