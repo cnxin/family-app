@@ -77,6 +77,15 @@ const CONFIDENCE_LABEL: Record<AgentMemoryConfidenceSource, string> = {
   summary_candidate: '对话推测',
 };
 
+const MEMORY_KEY_LABEL: Record<AgentMemoryKey, string> = {
+  diet_restriction: '饮食限制',
+  spice_level: '口味偏好',
+  cooking_skill: '厨艺能力',
+  schedule_preference: '日程偏好',
+  reply_style: '回复方式',
+  other: '其他信息',
+};
+
 export default function AgentMemoryScreen() {
   const c = useTheme();
   const router = useRouter();
@@ -86,6 +95,7 @@ export default function AgentMemoryScreen() {
   const [kind, setKind] = React.useState<VisibleMemoryKind>('preference');
   const [clearVisible, setClearVisible] = React.useState(false);
   const [filterTransitioning, setFilterTransitioning] = React.useState(false);
+  const [announcement, setAnnouncement] = React.useState('');
   const transitionTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeQuery = useAgentMemories('active', scope);
   const profileQuery = useAgentProfile();
@@ -141,6 +151,11 @@ export default function AgentMemoryScreen() {
     clearMemories.mutate(undefined, {
       onSuccess: (result) => {
         setClearVisible(false);
+        setAnnouncement(
+          result.forgottenCount > 0
+            ? `已遗忘 ${result.forgottenCount} 条个人记忆`
+            : '当前没有需要清空的个人记忆',
+        );
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(
           '已清空',
@@ -191,14 +206,16 @@ export default function AgentMemoryScreen() {
 
           {profileQuery.data?.memoryEnabled === false ? (
             <Card style={[styles.disabledNotice, { backgroundColor: c.orangeSoft }]}>
-              <View style={[styles.disabledIcon, { backgroundColor: c.card }]}>
-                <Sparkles color={c.orange} size={19} />
-              </View>
-              <View style={styles.disabledCopy}>
-                <Text style={[t.headline, { color: c.label }]}>记忆功能未启用</Text>
-                <Text style={[t.footnote, styles.disabledMessage, { color: c.secondaryLabel }]}>
-                  小管家不会记录您的偏好，也无法生成个性化建议。
-                </Text>
+              <View style={styles.disabledMain}>
+                <View style={[styles.disabledIcon, { backgroundColor: c.card }]}>
+                  <Sparkles color={c.orange} size={19} />
+                </View>
+                <View style={styles.disabledCopy}>
+                  <Text style={[t.headline, { color: c.label }]}>记忆功能未启用</Text>
+                  <Text style={[t.footnote, styles.disabledMessage, { color: c.secondaryLabel }]}>
+                    小管家不会记录您的偏好，也无法生成个性化建议。
+                  </Text>
+                </View>
               </View>
               <PressableScale
                 accessibilityLabel="前往设置小管家记忆"
@@ -271,6 +288,14 @@ export default function AgentMemoryScreen() {
               <Text style={[t.headline, { color: c.red }]}>清空我的记忆</Text>
             </PressableScale>
           ) : null}
+          {announcement ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[t.footnote, styles.announcement, { color: c.green }]}
+            >
+              {announcement}
+            </Text>
+          ) : null}
         </ScrollView>
       </PageContainer>
 
@@ -294,7 +319,7 @@ function MemoryCard({ item, onPress }: { item: AgentMemoryItem; onPress: () => v
   const timestamp = item.validFrom ?? item.createdAt;
   return (
     <PressableScale
-      accessibilityLabel={`${candidate ? '待确认，' : ''}${item.category}，${item.content ?? '暂无正文'}`}
+      accessibilityLabel={`${candidate ? '待确认，' : ''}${readableCategory(item.category)}，${item.content ?? '暂无正文'}`}
       accessibilityRole="button"
       onPress={onPress}
     >
@@ -309,8 +334,8 @@ function MemoryCard({ item, onPress }: { item: AgentMemoryItem; onPress: () => v
         </View>
         <View style={styles.memoryBody}>
           <View style={styles.memoryTitleRow}>
-            <Text numberOfLines={1} style={[t.subhead, styles.memoryTitle, { color: c.label }]}>
-              {item.category}
+            <Text numberOfLines={2} style={[t.subhead, styles.memoryTitle, { color: c.label }]}>
+              {readableCategory(item.category)}
             </Text>
             {candidate ? (
               <View style={[styles.statusPill, { backgroundColor: c.orange }]}>
@@ -340,6 +365,10 @@ function formatMemoryDate(value: string) {
   });
 }
 
+function readableCategory(category: string) {
+  return MEMORY_KEY_LABEL[category as AgentMemoryKey] ?? category;
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   page: { flex: 1, paddingTop: 12 },
@@ -348,12 +377,11 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 104 },
   filters: { gap: 10, marginBottom: 16 },
   disabledNotice: {
-    alignItems: 'center',
-    flexDirection: 'row',
     gap: 12,
     marginBottom: 14,
     padding: 14,
   },
+  disabledMain: { alignItems: 'center', flexDirection: 'row', gap: 12 },
   disabledIcon: {
     alignItems: 'center',
     borderRadius: radius.sm,
@@ -369,6 +397,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
     paddingHorizontal: 12,
+    width: '100%',
   },
   settingsButtonText: { fontWeight: '600' },
   loadingCard: { paddingVertical: 6 },
@@ -419,4 +448,5 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 16,
   },
+  announcement: { marginTop: 12, textAlign: 'center' },
 });

@@ -286,6 +286,7 @@ export function Segmented<T extends string>({
         return (
           <PressSurface
             key={opt.value}
+            accessibilityLabel={opt.label}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             hitSlop={0}
@@ -340,6 +341,8 @@ export function PrimaryButton({
   const bg = destructive ? c.red : c.tint;
   return (
     <PressableScale
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading }}
       disabled={disabled || loading}
       onPress={onPress}
       style={[
@@ -349,11 +352,11 @@ export function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color="#FFF" />
+        <ActivityIndicator color={c.bg} />
       ) : (
         <View style={styles.buttonContent}>
           {icon}
-          <Text style={[t.headline, { color: '#FFF' }]}>{title}</Text>
+          <Text style={[t.headline, { color: c.bg }]}>{title}</Text>
         </View>
       )}
     </PressableScale>
@@ -819,7 +822,9 @@ export function ConfirmDialog({
         </Text>
         <View style={styles.dialogActions}>
           <Pressable
+            accessibilityLabel="取消"
             accessibilityRole="button"
+            accessibilityState={{ disabled: loading }}
             disabled={loading}
             onPress={onCancel}
             style={[styles.dialogButton, { backgroundColor: c.fill }]}
@@ -827,7 +832,9 @@ export function ConfirmDialog({
             <Text style={[t.headline, { color: c.label }]}>取消</Text>
           </Pressable>
           <Pressable
+            accessibilityLabel={confirmLabel}
             accessibilityRole="button"
+            accessibilityState={{ disabled: loading }}
             disabled={loading}
             onPress={onConfirm}
             style={[
@@ -836,9 +843,9 @@ export function ConfirmDialog({
             ]}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={c.bg} />
             ) : (
-              <Text style={[t.headline, { color: '#FFFFFF' }]}>{confirmLabel}</Text>
+              <Text style={[t.headline, { color: c.bg }]}>{confirmLabel}</Text>
             )}
           </Pressable>
         </View>
