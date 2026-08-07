@@ -36,6 +36,7 @@ import {
 } from '../../components/ui';
 import {
   useAgentMemories,
+  useAgentProfile,
   useClearAgentMemories,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -87,6 +88,7 @@ export default function AgentMemoryScreen() {
   const [filterTransitioning, setFilterTransitioning] = React.useState(false);
   const transitionTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeQuery = useAgentMemories('active', scope);
+  const profileQuery = useAgentProfile();
   const candidateQuery = useAgentMemories(
     'candidate',
     'member_private',
@@ -186,6 +188,27 @@ export default function AgentMemoryScreen() {
               value={kind}
             />
           </View>
+
+          {profileQuery.data?.memoryEnabled === false ? (
+            <Card style={[styles.disabledNotice, { backgroundColor: c.orangeSoft }]}>
+              <View style={[styles.disabledIcon, { backgroundColor: c.card }]}>
+                <Sparkles color={c.orange} size={19} />
+              </View>
+              <View style={styles.disabledCopy}>
+                <Text style={[t.headline, { color: c.label }]}>记忆功能未启用</Text>
+                <Text style={[t.footnote, styles.disabledMessage, { color: c.secondaryLabel }]}>
+                  小管家不会记录您的偏好，也无法生成个性化建议。
+                </Text>
+              </View>
+              <PressableScale
+                accessibilityLabel="前往设置小管家记忆"
+                onPress={() => router.push('/profile')}
+                style={[styles.settingsButton, { backgroundColor: c.card }]}
+              >
+                <Text style={[t.subhead, styles.settingsButtonText, { color: c.tint }]}>前往设置</Text>
+              </PressableScale>
+            </Card>
+          ) : null}
 
           {loading ? (
             <Card style={styles.loadingCard}>
@@ -324,6 +347,30 @@ const styles = StyleSheet.create({
   subtitle: { lineHeight: 22, marginTop: 5 },
   scrollContent: { paddingBottom: 104 },
   filters: { gap: 10, marginBottom: 16 },
+  disabledNotice: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
+    padding: 14,
+  },
+  disabledIcon: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  disabledCopy: { flex: 1, minWidth: 0 },
+  disabledMessage: { lineHeight: 19, marginTop: 3 },
+  settingsButton: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  settingsButtonText: { fontWeight: '600' },
   loadingCard: { paddingVertical: 6 },
   errorCard: { alignItems: 'center', padding: 24 },
   errorMessage: { lineHeight: 22, marginTop: 6, textAlign: 'center' },

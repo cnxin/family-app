@@ -176,8 +176,8 @@ export function useUpdateAgentProfile() {
         >
       > & { expectedVersion: number },
     ) => api<AgentMemberProfile>('/agent/profile', { method: 'PATCH', body: input }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['agent', 'profile'] });
+    onSuccess: (profile) => {
+      qc.setQueryData(['agent', 'profile'], profile);
       void qc.invalidateQueries({ queryKey: ['agent', 'memories'] });
     },
   });

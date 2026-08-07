@@ -38,9 +38,11 @@ import {
 import { memberSubtitle } from '../../lib/member';
 import {
   useCreateHouseholdInvitation,
+  useAgentProfile,
   useHouseholdInvitations,
   useRevokeHouseholdInvitation,
   useUpdateCookingPreference,
+  useUpdateAgentProfile,
   useUpdatePassword,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -55,6 +57,8 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { account, member, logout, updateAccount, updateMember } = useSession();
   const updatePreference = useUpdateCookingPreference();
+  const agentProfile = useAgentProfile(Boolean(member));
+  const updateAgentProfile = useUpdateAgentProfile();
   const updatePassword = useUpdatePassword();
   const canManageMembers = member?.role === 'owner' || member?.role === 'admin';
   const consumer = member?.role === 'member';
@@ -223,6 +227,40 @@ export default function ProfileScreen() {
               </View>
               <ChevronRight color={c.tertiaryLabel} size={19} />
             </PressableScale>
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+            <View style={styles.preferenceRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[t.body, { color: c.label }]}>启用记忆</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+                  {agentProfile.error
+                    ? '状态暂时无法读取'
+                    : agentProfile.data?.memoryEnabled === false
+                      ? '小管家不会记录或使用个人偏好'
+                      : '让小管家记住确认过的个人偏好'}
+                </Text>
+              </View>
+              <Switch
+                accessibilityLabel="启用小管家记忆"
+                disabled={!agentProfile.data || updateAgentProfile.isPending}
+                onValueChange={(memoryEnabled) => {
+                  const profile = agentProfile.data;
+                  if (!profile) return;
+                  updateAgentProfile.mutate(
+                    { memoryEnabled, expectedVersion: profile.version },
+                    {
+                      onError: (error) =>
+                        Alert.alert(
+                          '更新失败',
+                          error instanceof Error ? error.message : '请稍后再试',
+                        ),
+                    },
+                  );
+                }}
+                trackColor={{ false: c.fillStrong, true: c.tintSoft }}
+                thumbColor={agentProfile.data?.memoryEnabled ? c.tint : c.tertiaryLabel}
+                value={agentProfile.data?.memoryEnabled ?? true}
+              />
+            </View>
           </Card>
 
           <SectionHeader title="账号安全" />
