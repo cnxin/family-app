@@ -9,6 +9,13 @@ export const AGENT_READ_TOOLS = [
   'get_travel_checklist',
   'get_watch_candidates',
   'get_recent_memories',
+  'get_member_tasks',
+  'get_family_schedule',
+  'get_inventory_summary',
+  'search_recipes',
+  'get_dish_plan',
+  'get_weather',
+  'get_member_profile',
 ] as const;
 
 export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];

@@ -114,6 +114,17 @@ export function agentRuntimeUrl() {
   return (process.env.AGENT_RUNTIME_URL || 'http://hermes:8642').replace(/\/+$/, '');
 }
 
+export function openweatherApiKey() {
+  return readOptionalSecret('OPENWEATHER_API_KEY');
+}
+
+export function openweatherBaseUrl() {
+  return (
+    process.env.OPENWEATHER_BASE_URL ||
+    'https://api.openweathermap.org/data/2.5'
+  ).replace(/\/+$/, '');
+}
+
 export function trustProxyHops() {
   const rawValue = process.env.TRUST_PROXY_HOPS?.trim();
   if (!rawValue) return 0;

@@ -40,6 +40,8 @@ const testEnvironment = {
   MOVIEPILOT_BASE_URL: '',
   MOVIEPILOT_API_KEY: '',
   MOVIEPILOT_RECONCILE_ENABLED: 'false',
+  OPENWEATHER_API_KEY: '',
+  OPENWEATHER_BASE_URL: 'http://127.0.0.1:1',
   TMDB_API_TOKEN: '',
   TMDB_API_KEY: '',
   DOUBAN_API_BASE_URL: '',
@@ -261,6 +263,7 @@ try {
   await runScript('scripts/agent-retention.mjs');
   await runScript('scripts/agent-profiles.mjs');
   await runScript('scripts/agent-memory.mjs');
+  await runScript('scripts/agent-tools.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');

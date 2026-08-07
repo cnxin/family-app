@@ -8,9 +8,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import { CalendarService } from '../calendar/calendar.module';
+import { openweatherApiKey, openweatherBaseUrl } from '../common/config';
 import {
+  AgentMemberProfile,
   AgentRun,
   AgentToolEvent,
+  Dish,
   InventoryItem,
   Member,
 } from '../entities';
@@ -37,12 +40,20 @@ import { encryptAgentContent } from './agent.crypto';
 import { AgentMemoryService } from './agent-memory.service';
 
 const MAX_RESULT_ITEMS = 20;
+const MAX_EXTENDED_RESULT_ITEMS = 50;
 const MAX_RESPONSE_BYTES = 48_000;
 
 function dateOnly(value: unknown, fallback: string) {
   const normalized = typeof value === 'string' ? value : fallback;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
     throw new BadRequestException('日期必须使用 YYYY-MM-DD 格式');
+  }
+  const parsed = new Date(`${normalized}T00:00:00.000Z`);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== normalized
+  ) {
+    throw new BadRequestException('日期不是有效的日历日期');
   }
   return normalized;
 }
@@ -51,6 +62,28 @@ function limited(value: unknown, fallback = 10) {
   const parsed = Number(value ?? fallback);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, MAX_RESULT_ITEMS);
+}
+
+function boundedInteger(
+  value: unknown,
+  fallback: number,
+  maximum: number,
+  label: string,
+) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum) {
+    throw new BadRequestException(`${label}必须是 1 到 ${maximum} 之间的整数`);
+  }
+  return parsed;
+}
+
+function normalizedTerms(value: unknown, maximum: number) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim().toLocaleLowerCase('zh-CN'))
+    .filter(Boolean)
+    .slice(0, maximum);
 }
 
 function today() {
@@ -81,32 +114,52 @@ function userFor(run: AgentRun, member: Member): JwtUser {
 }
 
 function resultPresentation(toolName: string, output: unknown) {
-  if (!Array.isArray(output)) return null;
-  if (toolName === 'get_tasks') {
+  const record =
+    output && typeof output === 'object' && !Array.isArray(output)
+      ? (output as Record<string, unknown>)
+      : null;
+  const rowsFor = (key: string) =>
+    Array.isArray(output)
+      ? output
+      : record && Array.isArray(record[key])
+        ? record[key]
+        : [];
+
+  if (toolName === 'get_tasks' || toolName === 'get_member_tasks') {
+    const rows = rowsFor('tasks');
     return {
       kind: 'tasks',
-      title: '家庭任务',
+      title: toolName === 'get_member_tasks' ? '成员任务' : '家庭任务',
       emptyText: '这段时间没有待办任务',
       targetPath: '/tasks',
-      items: output.slice(0, 8).map((entry) => {
+      items: rows.slice(0, 8).map((entry) => {
         const item = entry as Record<string, unknown>;
         return {
           id: String(item.id ?? ''),
           title: String(item.title ?? '未命名任务'),
-          detail: [item.dueDate, item.assigneeName].filter(Boolean).join(' · '),
-          status: item.status === 'completed' ? '已完成' : '待完成',
-          targetPath: typeof item.targetPath === 'string' ? item.targetPath : '/tasks',
+          detail: [item.dueDate, item.assigneeName ?? item.assignedMemberName]
+            .filter(Boolean)
+            .join(' · '),
+          status:
+            item.status === 'completed' || item.status === 'done'
+              ? '已完成'
+              : item.status === 'skipped'
+                ? '已跳过'
+                : '待完成',
+          targetPath:
+            typeof item.targetPath === 'string' ? item.targetPath : '/tasks',
         };
       }),
     };
   }
   if (toolName === 'get_shopping_list') {
+    const rows = rowsFor('items');
     return {
       kind: 'shopping',
       title: '购物清单',
       emptyText: '购物清单已经处理完了',
       targetPath: '/shopping',
-      items: output.slice(0, 8).map((entry) => {
+      items: rows.slice(0, 8).map((entry) => {
         const item = entry as Record<string, unknown>;
         return {
           id: String(item.id ?? ''),
@@ -123,6 +176,7 @@ function resultPresentation(toolName: string, output: unknown) {
     };
   }
   if (toolName === 'get_meal_plan') {
+    const rows = rowsFor('items');
     const mealLabels: Record<string, string> = {
       breakfast: '早餐',
       lunch: '午餐',
@@ -133,7 +187,7 @@ function resultPresentation(toolName: string, output: unknown) {
       title: '今日菜单',
       emptyText: '这一天还没有安排菜单',
       targetPath: '/kitchen',
-      items: output.slice(0, 3).map((entry) => {
+      items: rows.slice(0, 3).map((entry) => {
         const item = entry as Record<string, unknown>;
         const dishes = Array.isArray(item.items)
           ? item.items
@@ -152,7 +206,168 @@ function resultPresentation(toolName: string, output: unknown) {
       }),
     };
   }
+  if (toolName === 'get_family_schedule') {
+    const rows = rowsFor('events');
+    return {
+      kind: 'schedule',
+      title: '家庭日程',
+      emptyText: '这段时间没有家庭安排',
+      targetPath: '/calendar',
+      items: rows.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.title ?? '未命名日程'),
+          detail: [
+            item.date,
+            ...(Array.isArray(item.participants) ? item.participants : []),
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          status: String(item.status ?? '已安排'),
+          targetPath:
+            typeof item.targetPath === 'string' ? item.targetPath : '/calendar',
+        };
+      }),
+    };
+  }
+  if (toolName === 'get_inventory_summary') {
+    const rows = rowsFor('items');
+    return {
+      kind: 'inventory',
+      title: '库存摘要',
+      emptyText: '当前没有需要关注的库存',
+      targetPath: '/shopping',
+      items: rows.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.name ?? '未命名库存'),
+          detail:
+            `${String(item.quantity ?? 0)} ${String(item.unit ?? '')}`.trim(),
+          status:
+            item.alert === 'low_stock_and_expiring'
+              ? '缺货且临期'
+              : item.alert === 'expiring_soon'
+                ? '临期'
+                : item.alert === 'low_stock'
+                  ? '库存偏低'
+                  : '正常',
+          targetPath: '/shopping',
+        };
+      }),
+    };
+  }
+  if (toolName === 'search_recipes') {
+    const rows = rowsFor('recipes');
+    return {
+      kind: 'recipes',
+      title: '菜谱搜索',
+      emptyText: '没有找到匹配的家庭菜谱',
+      targetPath: '/kitchen',
+      items: rows.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.name ?? '未命名菜谱'),
+          detail: [
+            item.category,
+            item.cookingTime ? `${String(item.cookingTime)} 分钟` : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          status: `难度 ${String(item.difficulty ?? '-')}`,
+          targetPath:
+            typeof item.targetPath === 'string' ? item.targetPath : '/kitchen',
+        };
+      }),
+    };
+  }
+  if (toolName === 'get_dish_plan') {
+    const rows = rowsFor('plans');
+    const mealLabels: Record<string, string> = {
+      breakfast: '早餐',
+      lunch: '午餐',
+      dinner: '晚餐',
+    };
+    return {
+      kind: 'dish-plan',
+      title: '点菜计划',
+      emptyText: '这段时间还没有点菜安排',
+      targetPath: '/kitchen',
+      items: rows.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.recipeName ?? '未命名菜品'),
+          detail: [item.date, mealLabels[String(item.mealType)] ?? item.mealType]
+            .filter(Boolean)
+            .join(' · '),
+          status: String(item.status ?? '待处理'),
+          targetPath:
+            typeof item.targetPath === 'string' ? item.targetPath : '/kitchen',
+        };
+      }),
+    };
+  }
+  if (toolName === 'get_weather') {
+    const rows = rowsFor('forecasts');
+    return {
+      kind: 'weather',
+      title: record?.city ? `${String(record.city)}天气` : '天气预报',
+      emptyText:
+        record?.error === 'weather_api_not_configured'
+          ? '天气服务尚未配置'
+          : '暂时无法取得天气预报',
+      targetPath: '/assistant',
+      items: rows.slice(0, 5).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.date ?? ''),
+          title: String(item.date ?? '天气'),
+          detail: [item.weather, item.description].filter(Boolean).join(' · '),
+          status: `${String(item.temp ?? '-')}°C`,
+          targetPath: '/assistant',
+        };
+      }),
+    };
+  }
+  if (toolName === 'get_member_profile' && record) {
+    return {
+      kind: 'member-profile',
+      title: '成员档案',
+      emptyText: '没有找到成员档案',
+      targetPath: '/profile',
+      items: [
+        {
+          id: String(record.id ?? ''),
+          title:
+            `${String(record.avatar ?? '')} ${String(record.name ?? '家庭成员')}`.trim(),
+          detail: [record.role, record.responseStyle].filter(Boolean).join(' · '),
+          status: record.memoryEnabled ? '记忆已开启' : '记忆未开启',
+          targetPath: '/profile',
+        },
+      ],
+    };
+  }
   return null;
+}
+
+function outputItemCount(output: unknown) {
+  if (Array.isArray(output)) return output.length;
+  if (!output || typeof output !== 'object') return output == null ? 0 : 1;
+  const record = output as Record<string, unknown>;
+  for (const key of [
+    'tasks',
+    'events',
+    'items',
+    'recipes',
+    'plans',
+    'forecasts',
+  ]) {
+    if (Array.isArray(record[key])) return record[key].length;
+  }
+  return 1;
 }
 
 @Injectable()
@@ -162,6 +377,9 @@ export class AgentToolsService {
     @InjectRepository(AgentToolEvent)
     private readonly events: Repository<AgentToolEvent>,
     @InjectRepository(Member) private readonly members: Repository<Member>,
+    @InjectRepository(AgentMemberProfile)
+    private readonly memberProfiles: Repository<AgentMemberProfile>,
+    @InjectRepository(Dish) private readonly dishes: Repository<Dish>,
     @InjectRepository(InventoryItem)
     private readonly inventory: Repository<InventoryItem>,
     private readonly calendar: CalendarService,
@@ -328,12 +546,101 @@ export class AgentToolsService {
           targetPath: `/tasks?date=${row.dueDate}&taskId=${row.taskId}`,
         }));
     }
+    if (toolName === 'get_member_tasks') {
+      const memberId =
+        typeof input.memberId === 'string' ? input.memberId : user.memberId;
+      const member = await this.requireHouseholdMember(memberId, user);
+      const status = input.status ?? 'pending';
+      if (!['pending', 'completed', 'all'].includes(String(status))) {
+        throw new BadRequestException('不支持的任务状态');
+      }
+      const limit = boundedInteger(
+        input.limit,
+        20,
+        MAX_EXTENDED_RESULT_ITEMS,
+        '返回条数',
+      );
+      const start = addDays(today(), -90);
+      const end = addDays(today(), 90);
+      const rows = await this.tasks.list(start, end, user);
+      const matched = rows.filter((row) => {
+        if (row.assigneeId !== member.id) return false;
+        if (status === 'pending') return row.status === 'pending';
+        if (status === 'completed') return row.status === 'done';
+        return true;
+      });
+      return {
+        tasks: matched.slice(0, limit).map((row) => ({
+          id: row.id,
+          taskId: row.taskId,
+          title: row.task.title,
+          dueDate: row.dueDate,
+          status: row.status === 'done' ? 'completed' : row.status,
+          priority: row.task.rewardPoints > 0 ? 'rewarded' : 'normal',
+          assignedToMemberId: member.id,
+          assignedMemberName: member.name,
+          targetPath: `/tasks?date=${row.dueDate}&taskId=${row.taskId}`,
+          untrustedContent: true,
+        })),
+        total: matched.length,
+      };
+    }
+    if (toolName === 'get_family_schedule') {
+      const startDate = dateOnly(input.startDate, today());
+      const days = boundedInteger(input.days, 7, 30, '查询天数');
+      const endDate = addDays(startDate, days - 1);
+      const entries = await this.calendar.list(startDate, endDate, user);
+      return {
+        events: entries.slice(0, MAX_EXTENDED_RESULT_ITEMS).map((entry) => {
+          const metadata = entry.metadata as Record<string, unknown>;
+          const participants = [
+            metadata.createdByName,
+            metadata.assigneeName,
+            metadata.hostMemberName,
+          ].filter(
+            (value): value is string =>
+              typeof value === 'string' && Boolean(value),
+          );
+          return {
+            id: entry.id,
+            title: entry.title,
+            eventDate: entry.date,
+            date: entry.date,
+            eventType: entry.module,
+            participants: [...new Set(participants)],
+            status: entry.status,
+            summary: entry.summary ? String(entry.summary).slice(0, 200) : null,
+            targetPath: entry.targetPath,
+            untrustedContent: true,
+          };
+        }),
+        total: entries.length,
+      };
+    }
+    if (toolName === 'get_inventory_summary') {
+      const filter = input.filter ?? 'low_stock';
+      if (!['low_stock', 'expiring_soon', 'all'].includes(String(filter))) {
+        throw new BadRequestException('不支持的库存过滤条件');
+      }
+      return this.inventorySummary(user.householdId, String(filter));
+    }
     if (toolName === 'get_shopping_list') {
       const date = dateOnly(input.date, today());
-      const includeChecked = input.includeChecked === true;
+      const status = input.status;
+      if (
+        status != null &&
+        !['pending', 'purchased', 'all'].includes(String(status))
+      ) {
+        throw new BadRequestException('不支持的购物清单状态');
+      }
+      const includeChecked = input.includeChecked === true || status === 'all';
       const rows = await this.shopping.list(user.householdId, date);
       return rows
-        .filter((row) => includeChecked || !row.checked)
+        .filter((row) => {
+          if (status === 'pending') return !row.checked;
+          if (status === 'purchased') return row.checked;
+          return includeChecked || !row.checked;
+        })
         .slice(0, limited(input.limit))
         .map((row) => ({
           id: row.id,
@@ -342,10 +649,72 @@ export class AgentToolsService {
           quantity: row.totalQty == null ? null : Number(row.totalQty),
           unit: row.unit,
           checked: row.checked,
+          status: row.checked ? 'purchased' : 'pending',
           source: row.source,
           inventoryLinked: row.inventoryItemId != null,
           targetPath: `/shopping?date=${row.date}`,
+          untrustedContent: true,
         }));
+    }
+    if (toolName === 'search_recipes') {
+      return this.searchRecipes(input, user);
+    }
+    if (toolName === 'get_dish_plan') {
+      const startDate = dateOnly(input.startDate, today());
+      const days = boundedInteger(input.days, 7, 30, '查询天数');
+      const dates = Array.from({ length: days }, (_, index) =>
+        addDays(startDate, index),
+      );
+      const menuGroups = await Promise.all(
+        dates.map((date) =>
+          this.menus.listExistingByDate(user.householdId, date),
+        ),
+      );
+      const plans = menuGroups
+        .flat()
+        .flatMap((menu) =>
+          menu.items
+            .filter((item) => item.status !== 'rejected')
+            .map((item) => ({
+              id: item.id,
+              date: menu.date,
+              mealType: menu.mealType,
+              recipeName: item.dish.name,
+              recipeId: item.dishId,
+              recipeVariantId: item.recipeVariantId,
+              status: item.status,
+              requestedByMemberId: item.requestedById,
+              targetPath: `/kitchen?date=${menu.date}&mealType=${menu.mealType}`,
+              untrustedContent: true,
+            })),
+        );
+      return {
+        plans: plans.slice(0, MAX_EXTENDED_RESULT_ITEMS),
+        total: plans.length,
+      };
+    }
+    if (toolName === 'get_weather') {
+      return this.weatherForecast(input);
+    }
+    if (toolName === 'get_member_profile') {
+      const memberId =
+        typeof input.memberId === 'string' ? input.memberId : user.memberId;
+      const member = await this.requireHouseholdMember(memberId, user);
+      const profile = await this.memberProfiles.findOneBy({
+        householdId: user.householdId,
+        memberId: member.id,
+      });
+      return {
+        id: member.id,
+        name: member.name,
+        role: member.role,
+        avatar: member.avatarEmoji,
+        prefersCooking: member.prefersCooking,
+        assistantName: profile?.assistantName ?? null,
+        memoryEnabled: profile?.memoryEnabled ?? null,
+        responseStyle: profile?.responseStyle ?? null,
+        untrustedContent: true,
+      };
     }
     if (toolName === 'get_meal_plan') {
       const date = dateOnly(input.date, today());
@@ -446,6 +815,256 @@ export class AgentToolsService {
     }));
   }
 
+  private async requireHouseholdMember(memberId: string, user: JwtUser) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        memberId,
+      )
+    ) {
+      throw new BadRequestException('成员 ID 格式无效');
+    }
+    const member = await this.members.findOneBy({
+      id: memberId,
+      householdId: user.householdId,
+    });
+    if (!member || member.disabledAt) {
+      throw new NotFoundException('家庭成员不存在');
+    }
+    return member;
+  }
+
+  private async inventorySummary(householdId: string, filter: string) {
+    const rows = await this.inventory
+      .createQueryBuilder('item')
+      .leftJoinAndSelect('item.batches', 'batch', 'batch.quantity > 0')
+      .where('item.householdId = :householdId', { householdId })
+      .orderBy('item.name', 'ASC')
+      .getMany();
+    const expiryBoundary = addDays(today(), 7);
+    const matched = rows
+      .map((item) => {
+        const expiryDates = (item.batches ?? [])
+          .filter((batch) => Number(batch.quantity) > 0 && batch.expiresOn)
+          .map((batch) => batch.expiresOn as string)
+          .sort();
+        const expiresAt = expiryDates[0] ?? null;
+        const lowStock = Number(item.quantity) <= Number(item.lowStockThreshold);
+        const expiringSoon = expiresAt != null && expiresAt <= expiryBoundary;
+        return {
+          id: item.id,
+          name: item.name,
+          quantity: Number(item.quantity),
+          unit: item.unit,
+          lowStockThreshold: Number(item.lowStockThreshold),
+          expiresAt,
+          alert:
+            lowStock && expiringSoon
+              ? 'low_stock_and_expiring'
+              : lowStock
+                ? 'low_stock'
+                : expiringSoon
+                  ? 'expiring_soon'
+                  : 'normal',
+          targetPath: '/shopping',
+          lowStock,
+          expiringSoon,
+        };
+      })
+      .filter((item) => {
+        if (filter === 'low_stock') return item.lowStock;
+        if (filter === 'expiring_soon') return item.expiringSoon;
+        return true;
+      });
+    return {
+      items: matched
+        .slice(0, MAX_EXTENDED_RESULT_ITEMS)
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          lowStockThreshold: item.lowStockThreshold,
+          expiresAt: item.expiresAt,
+          alert: item.alert,
+          targetPath: item.targetPath,
+          untrustedContent: true,
+        })),
+      total: matched.length,
+    };
+  }
+
+  private async searchRecipes(
+    input: Record<string, unknown>,
+    user: JwtUser,
+  ) {
+    const query =
+      typeof input.query === 'string'
+        ? input.query.trim().toLocaleLowerCase('zh-CN').slice(0, 80)
+        : '';
+    const ingredients = normalizedTerms(input.ingredients, 10);
+    const tags = normalizedTerms(input.tags, 10);
+    const limit = boundedInteger(
+      input.limit,
+      10,
+      MAX_EXTENDED_RESULT_ITEMS,
+      '返回条数',
+    );
+    const dishes = await this.dishes
+      .createQueryBuilder('dish')
+      .leftJoinAndSelect('dish.ingredients', 'dishIngredient')
+      .leftJoinAndSelect('dishIngredient.ingredient', 'dishIngredientEntity')
+      .leftJoinAndSelect('dish.recipeVariants', 'recipeVariant')
+      .leftJoinAndSelect('recipeVariant.ingredients', 'variantIngredient')
+      .leftJoinAndSelect('variantIngredient.ingredient', 'variantIngredientEntity')
+      .where('dish.householdId = :householdId', {
+        householdId: user.householdId,
+      })
+      .andWhere('dish.isActive = true')
+      .orderBy('dish.createdAt', 'DESC')
+      .getMany();
+    const matches = dishes
+      .map((dish) => {
+        const variants = (dish.recipeVariants ?? []).filter(
+          (variant) => !variant.isArchived,
+        );
+        const ingredientNames = [
+          ...(dish.ingredients ?? []).map((entry) => entry.ingredient.name),
+          ...variants.flatMap((variant) =>
+            (variant.ingredients ?? []).map((entry) => entry.ingredient.name),
+          ),
+        ];
+        const normalizedIngredientNames = ingredientNames.map((name) =>
+          name.toLocaleLowerCase('zh-CN'),
+        );
+        const haystack = [
+          dish.name,
+          dish.category,
+          ...variants.map((variant) => variant.name),
+          ...ingredientNames,
+        ]
+          .join('\n')
+          .toLocaleLowerCase('zh-CN');
+        if (query && !haystack.includes(query)) return null;
+        if (
+          ingredients.some(
+            (term) =>
+              !normalizedIngredientNames.some((name) => name.includes(term)),
+          )
+        ) {
+          return null;
+        }
+        const category = dish.category.toLocaleLowerCase('zh-CN');
+        if (tags.some((tag) => !category.includes(tag))) return null;
+        const preferredVariant =
+          variants.find((variant) => variant.isDefault) ?? variants[0];
+        return {
+          id: dish.id,
+          name: dish.name,
+          category: dish.category,
+          cookingTime: preferredVariant?.estMinutes ?? dish.estMinutes,
+          difficulty: dish.difficulty,
+          tags: [dish.category],
+          ingredients: [...new Set(ingredientNames)].slice(0, 20),
+          defaultRecipeVariantId: preferredVariant?.id ?? null,
+          targetPath: `/kitchen?dishId=${dish.id}`,
+          untrustedContent: true,
+        };
+      })
+      .filter((dish): dish is NonNullable<typeof dish> => dish != null);
+    return { recipes: matches.slice(0, limit), total: matches.length };
+  }
+
+  private async weatherForecast(input: Record<string, unknown>) {
+    const city =
+      typeof input.city === 'string' && input.city.trim()
+        ? input.city.trim().slice(0, 80)
+        : '深圳';
+    const days = boundedInteger(input.days, 3, 5, '预报天数');
+    const apiKey = openweatherApiKey();
+    if (!apiKey) return { error: 'weather_api_not_configured' };
+
+    try {
+      const url = new URL(`${openweatherBaseUrl()}/forecast`);
+      url.searchParams.set('q', city);
+      url.searchParams.set('cnt', String(days * 8));
+      url.searchParams.set('appid', apiKey);
+      url.searchParams.set('units', 'metric');
+      url.searchParams.set('lang', 'zh_cn');
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      if (!response.ok) return { error: 'weather_api_unavailable' };
+      const payload = (await response.json()) as Record<string, unknown>;
+      const rawEntries = Array.isArray(payload.list) ? payload.list : [];
+      const groups = new Map<
+        string,
+        { temperatures: number[]; weather: string; description: string }
+      >();
+      for (const rawEntry of rawEntries) {
+        if (!rawEntry || typeof rawEntry !== 'object') continue;
+        const entry = rawEntry as Record<string, unknown>;
+        const date =
+          typeof entry.dt_txt === 'string' ? entry.dt_txt.slice(0, 10) : '';
+        const main =
+          entry.main && typeof entry.main === 'object'
+            ? (entry.main as Record<string, unknown>)
+            : null;
+        const temperature = Number(main?.temp);
+        const weatherEntry =
+          Array.isArray(entry.weather) &&
+          entry.weather[0] &&
+          typeof entry.weather[0] === 'object'
+            ? (entry.weather[0] as Record<string, unknown>)
+            : null;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(temperature)) {
+          continue;
+        }
+        const current = groups.get(date) ?? {
+          temperatures: [],
+          weather: '',
+          description: '',
+        };
+        current.temperatures.push(temperature);
+        if (!current.weather && typeof weatherEntry?.main === 'string') {
+          current.weather = weatherEntry.main.slice(0, 80);
+        }
+        if (!current.description && typeof weatherEntry?.description === 'string') {
+          current.description = weatherEntry.description.slice(0, 120);
+        }
+        groups.set(date, current);
+      }
+      const forecasts = [...groups.entries()]
+        .slice(0, days)
+        .map(([date, group]) => ({
+          date,
+          temp: Number(
+            (
+              group.temperatures.reduce((sum, value) => sum + value, 0) /
+              group.temperatures.length
+            ).toFixed(1),
+          ),
+          minTemp: Number(Math.min(...group.temperatures).toFixed(1)),
+          maxTemp: Number(Math.max(...group.temperatures).toFixed(1)),
+          weather: group.weather,
+          description: group.description,
+          untrustedContent: true,
+        }));
+      if (!forecasts.length) return { error: 'weather_api_unavailable' };
+      const payloadCity =
+        payload.city && typeof payload.city === 'object'
+          ? (payload.city as Record<string, unknown>).name
+          : null;
+      return {
+        city:
+          typeof payloadCity === 'string' && payloadCity.trim()
+            ? payloadCity.trim().slice(0, 80)
+            : city,
+        forecasts,
+        untrustedContent: true,
+      };
+    } catch {
+      return { error: 'weather_api_unavailable' };
+    }
+  }
+
   private async inventoryAlerts(householdId: string, limit: number) {
     const rows = await this.inventory
       .createQueryBuilder('item')
@@ -484,6 +1103,13 @@ export class AgentToolsService {
       get_travel_checklist: 'travel',
       get_watch_candidates: 'media',
       get_recent_memories: 'memory',
+      get_member_tasks: 'task',
+      get_family_schedule: 'calendar',
+      get_inventory_summary: 'inventory',
+      search_recipes: 'recipe',
+      get_dish_plan: 'menu',
+      get_weather: 'weather',
+      get_member_profile: 'member',
       recall_preferences: 'agent_memory',
       remember_preference: 'agent_memory',
       propose_task: 'task',
@@ -514,10 +1140,12 @@ export class AgentToolsService {
           hasQuery: Boolean(input.query),
           start: typeof input.start === 'string' ? input.start : null,
           end: typeof input.end === 'string' ? input.end : null,
+          startDate:
+            typeof input.startDate === 'string' ? input.startDate : null,
           limit: typeof input.limit === 'number' ? input.limit : null,
         },
         outputSummary: {
-          itemCount: Array.isArray(output) ? output.length : output ? 1 : 0,
+          itemCount: outputItemCount(output),
           ok: status === 'completed',
         },
         presentationCiphertext:

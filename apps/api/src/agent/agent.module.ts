@@ -13,6 +13,7 @@ import {
   AgentRun,
   AgentSetting,
   AgentToolEvent,
+  Dish,
   InventoryItem,
   Member,
 } from '../entities';
@@ -50,6 +51,7 @@ import { AgentMemoryService } from './agent-memory.service';
       AgentMessage,
       AgentRun,
       AgentToolEvent,
+      Dish,
       InventoryItem,
       Member,
     ]),

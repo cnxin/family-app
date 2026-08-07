@@ -108,6 +108,7 @@ export class AgentMcpController {
       runId,
       date: z.string().optional(),
       includeChecked: z.boolean().optional(),
+      status: z.enum(['pending', 'purchased', 'all']).optional(),
       limit: z.number().int().min(1).max(20).optional(),
     });
     register('get_meal_plan', '读取指定日期已有的家庭三餐菜单', {
@@ -134,6 +135,42 @@ export class AgentMcpController {
     register('get_recent_memories', '读取最近家庭回忆的非敏感摘要', {
       runId,
       limit: z.number().int().min(1).max(20).optional(),
+    });
+    register('get_member_tasks', '查询家庭成员的待办或已完成任务', {
+      runId,
+      memberId: z.string().uuid().optional(),
+      status: z.enum(['pending', 'completed', 'all']).optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+    });
+    register('get_family_schedule', '查询未来最多 30 天的家庭日程', {
+      runId,
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      days: z.number().int().min(1).max(30).optional(),
+    });
+    register('get_inventory_summary', '查询家庭低库存和临期库存摘要', {
+      runId,
+      filter: z.enum(['low_stock', 'expiring_soon', 'all']).optional(),
+    });
+    register('search_recipes', '按关键词、食材或分类搜索家庭菜谱', {
+      runId,
+      query: z.string().max(80).optional(),
+      ingredients: z.array(z.string().min(1).max(64)).max(10).optional(),
+      tags: z.array(z.string().min(1).max(32)).max(10).optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+    });
+    register('get_dish_plan', '查询未来最多 30 天的点菜计划', {
+      runId,
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      days: z.number().int().min(1).max(30).optional(),
+    });
+    register('get_weather', '查询指定城市未来最多 5 天的天气预报', {
+      runId,
+      city: z.string().min(1).max(80).optional(),
+      days: z.number().int().min(1).max(5).optional(),
+    });
+    register('get_member_profile', '查询同一家庭成员的非敏感档案', {
+      runId,
+      memberId: z.string().uuid().optional(),
     });
     register('recall_preferences', '读取当前成员可见且已确认的小管家偏好', {
       runId,
