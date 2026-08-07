@@ -23,6 +23,15 @@ mcp_servers:
         - get_travel_checklist
         - get_watch_candidates
         - get_recent_memories
+        - get_member_tasks
+        - get_family_schedule
+        - get_inventory_summary
+        - search_recipes
+        - get_dish_plan
+        - get_weather
+        - get_member_profile
+        - recall_preferences
+        - remember_preference
         - propose_task
         - propose_reminder
         - propose_poll

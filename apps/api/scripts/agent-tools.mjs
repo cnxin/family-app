@@ -1,3 +1,5 @@
+// 本套件直接调用工具 service，不经过 Hermes -> MCP 链路，不能证明工具对模型可见。
+// MCP 目录由 agent.mjs 校验，Hermes 白名单由 hermes-config-contract.mjs 校验。
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 

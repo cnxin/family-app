@@ -6,33 +6,54 @@
 
 测试账号：家庭管理员（手动登录，未读取或重置密码）
 
-代码版本：`35cce56`（A7.4-A 功能提交：`5623004`）
+代码基线：`6968970`，叠加本次 Hermes 白名单与契约校验修复
 
-Agent 配置：`runtimeKind=hermes`，设置版本 17，已启用 17 个只读工具
+Agent 配置：`runtimeKind=hermes`，API 设置已启用 17 个只读工具，Hermes `familyapp` profile 已加载 24 项工具白名单
+
+测试会话：`6a24ce0b-0d9e-42b6-a011-6a701e6fe49a`
 
 ## 测试结果
 
-| 场景 | 输入 | 预期工具 | 实际工具 | 运行状态 | 卡片 | 截图 | 结果 |
-|---|---|---|---|---|---|---|---|
-| 1 | 查看我的待办任务 | `get_member_tasks` | 无 | completed | 无 | `01-tasks.png` | 失败 |
-| 2 | 这周家里有什么安排 | `get_family_schedule` | 无 | completed | 无 | `02-schedule.png` | 失败 |
-| 3 | 家里还有哪些菜快过期了 | `get_inventory_summary` | 无 | completed | 无 | `03-inventory.png` | 失败 |
-| 4 | 购物清单里有什么 | `get_shopping_list` | 无 | completed | 无 | `04-shopping.png` | 失败 |
-| 5 | 搜索不辣的家常菜 | `search_recipes` | 无 | completed | 无 | `05-recipes.png` | 失败 |
-| 6 | 下周点了什么菜 | `get_dish_plan` | `get_today_summary` | completed | 无 | `06-dish-plan.png` | 失败，选错旧工具 |
-| 7 | 深圳这几天天气怎么样 | `get_weather` | 无 | completed | 无 | `07-weather.png` | 失败 |
-| 8 | 我的个人档案 | `get_member_profile` | 无 | completed | 无 | `08-profile.png` | 失败 |
-| 9 | 我明天有什么安排，需要准备什么食材 | 多工具 | 无 | completed | 无 | `09-multi-tool.png` | 失败 |
+| 场景 | 输入 | 预期工具 | 实际工具 | 卡片 | 耗时 | 结果 |
+|---|---|---|---|---|---:|---|
+| 1 | 查看我的待办任务 | `get_member_tasks` | `get_tasks` | 家庭任务 | 21.8s | 失败，选择了旧工具 |
+| 2 | 这周家里有什么安排 | `get_family_schedule` | `get_family_schedule`, `get_calendar`, `get_tasks` | 家庭日程、家庭任务 | 25.8s | 通过 |
+| 3 | 家里还有哪些菜快过期了 | `get_inventory_summary` | `get_inventory_summary` | 库存摘要 | 19.8s | 通过 |
+| 4 | 购物清单里有什么 | `get_shopping_list` | `get_shopping_list` | 购物清单 | 15.8s | 通过 |
+| 5 | 搜索不辣的家常菜 | `search_recipes` | `search_recipes`（2 次） | 菜谱搜索（2 张） | 27.8s | 通过 |
+| 6 | 下周点了什么菜 | `get_dish_plan` | `get_dish_plan`, `get_meal_plan` | 点菜计划、今日菜单 | 23.8s | 通过 |
+| 7 | 深圳这几天天气怎么样 | `get_weather` | 无 | 无 | 39.8s | 失败，未触发工具 |
+| 8 | 我的个人档案 | `get_member_profile` | `get_member_profile` | 成员档案 | 47.8s | 通过 |
+| 9 | 我明天有什么安排，需要准备什么食材 | 多工具 | 7 条事件，涉及 6 种工具 | 5 张卡片 | 91.8s | 通过，但发生本地回退 |
 
 ## 结论
 
-- 通过率：**0/9**
-- 正确工具选择：**0/9**
-- 结果卡片渲染：**0/9**
-- 多工具联动：失败
-- 平均响应时间：约 **53.2 秒**
-- 9 个运行均为 `completed`，没有 API 500、页面崩溃或数据泄露迹象。
-- 9 个运行全部绑定到干净会话 `34f3fb00-e008-473d-8ea0-e601f44adc85`；逐个 `runId` 与数据库核对结果见 `E2E-RESULTS.json`。
+- 通过率：**7/9**，达到本批最低验收线。
+- 预期工具选择：**7/9**；有工具事件的场景为 **8/9**。
+- 有结果卡片的场景为 **8/9**；与预期工具一致且有卡片的场景为 **7/9**。
+- 多工具联动成功：场景 9 产生家庭日程、家庭任务、今日菜单、点菜计划、购物清单 5 张卡片；该 run 的 `errorCode=HERMES_UNAVAILABLE_FALLBACK`，最终由本地回退补全，不应视为 Hermes 稳定性验收通过。
+- 平均响应时间：约 **34.9 秒**。
+- 9 个场景均为 `completed`，没有 API 500、页面崩溃或数据泄露迹象。
+
+## RunId 证据
+
+数据库按 `runId` 关联 `agent_runs` 与 `agent_tool_events` 核对，所有表格中的工具事件均属于本轮会话，不使用全表聚合推断。
+
+- 场景 1：`ccf7637b-0ec5-4931-b757-490262f18aa5`
+- 场景 2：`65c9b436-71dd-4a6a-9b6f-74cb04bf71c3`
+- 场景 3：`15e3212a-9afc-4f17-8fe9-eab9c6335ac6`
+- 场景 4：`211b29f4-a895-493a-9e3b-3473ecc66811`
+- 场景 5：`aa278083-4383-4513-a99d-089c9b6ccc27`
+- 场景 6：`cfd95a58-6ee3-4333-a684-a44dd2a46c8d`
+- 场景 7：`96091a15-2904-45ac-8e92-40ffbf546c69`
+- 场景 8：`5a07674c-c014-4d15-843e-c27833ae54b8`
+- 场景 9：`d9264b87-5be4-4d20-b2a3-634772a01e10`
+
+另有独立可见性闸门 run `8590c921-fc73-46c0-a54d-9b88356d34cc`，同时成功调用 `get_member_tasks` 与 `get_tasks`。这直接证明补全并重启后的 Hermes 能看到 A7.4-A 新工具；正式场景 1 只选旧工具属于模型选择结果，不是白名单仍缺失。
+
+## 记忆验证
+
+额外输入“记住我不吃辣”，run `46e77228-4c6e-41fa-822e-29716ab46089` 未调用 `remember_preference`，而是在约 91.9 秒后以 `HERMES_UNAVAILABLE_FALLBACK` 完成并调用了 `get_today_summary`。A7.2 记忆工具已进入 Hermes 24 项目录，但本轮仍未完成真实调用验收。
 
 ## 发现的问题
 
@@ -40,37 +61,29 @@ Agent 配置：`runtimeKind=hermes`，设置版本 17，已启用 17 个只读�
 
 - 无。
 
-### P1（阻塞 A7.4-A 验收）
+### P1（功能与可信度）
 
-1. Hermes 页头显示“已连接”，但新工具没有进入实际可调用工具集。8 个单工具场景中，7 个完全没有 `agent_tool_events`；唯一一次调用发生在场景 6，且错误选择了旧工具 `get_today_summary`。
-2. 小管家多次回复 Family App 数据服务或 MCP 不可用。数据库中对应运行仍标记为 `completed`，导致运行状态看似成功，但用户拿不到家庭实时数据。
-3. 由于没有正确工具事件，8 种新卡片及多工具卡片全部未渲染，A7.4-A 端到端能力当前不可用。
+1. 天气场景没有 `get_weather` 工具事件或卡片，Hermes 却直接回复了具体日期、温度和降雨信息。`OPENWEATHER_API_KEY` 未配置，这段天气内容没有家庭工具数据来源，存在把模型生成内容当实时天气展示的风险。
+2. 复杂多工具场景和记忆场景均触发 `HERMES_UNAVAILABLE_FALLBACK`，单次耗时约 92 秒。回退保证了页面有结果，但不能证明 Hermes 完成了多工具编排或长期记忆写入。
+3. `get_tasks` 与 `get_member_tasks` 意图重叠。新工具已可见，但相同提示在独立闸门中调用过新旧两个工具，在正式干净会话中只调用旧工具，选择结果不稳定。
 
-### P2（体验与文档）
+### P2（体验）
 
-1. 失败回答反复建议等待一到两分钟或重新连接，但 API、Web 和数据库均健康，且运行已经结束；提示无法帮助用户定位 Hermes MCP 工具目录或桥接配置问题。
-2. 新工具尚未加入前端 `TOOL_LABELS`，即使后续成功调用，处理中状态也只会显示笼统的“家庭资料查询”。
-3. 原测试指令中的数据库示例已漂移：实际表为 `household_tasks`、`calendar_events`、`shopping_items`，库存到期日位于 `inventory_batches.expiresOn`，`readToolsEnabled` 为 `jsonb`。本次未执行过时 SQL。
+1. 卡片仍直接显示 `scheduled`、`pending`、`open`、`accepted`、`owner`、`balanced` 等内部枚举，中文界面缺少本地化映射。
+2. 部分较长的 Hermes 文本在 390px 视口右侧被裁切；结果卡片本身未发现水平溢出。
+3. Expo 开发工具按钮覆盖截图左下角导航区域，这是开发模式测试伪影，不代表发布构建 UI。
 
-## 测试数据
+## 配置与自动回归
 
-使用固定 UUID 幂等补充了以下带“端到端测试”标记的数据，没有删除或覆盖现有数据：
+- 仓库 `deploy/hermes/config.yaml` 与 `config.local.yaml` 均为 24 项，顺序为 17 个读工具、2 个记忆工具、5 个提案工具。
+- 本机 `familyapp` profile 同步为 24 项并重启 LaunchAgent；重启后 PID 为 `69196`，监听 `127.0.0.1:8642`。
+- `node scripts/hermes-config-contract.mjs` 通过。
+- 故障注入删除 `get_weather` 后，契约脚本以非零退出并打印 `缺失: get_weather` 及两份配置差集；恢复后再次通过。
+- `npx pnpm test:api` 全量通过。
+- `npx pnpm build` 通过。
 
-- 爸爸的两项未来待办
-- 明天和后天的两项家庭日程
-- 低库存且 7 天内到期的牛奶库存及批次
-- 当天待购的西红柿购物项
-- 可匹配“不辣”查询的家庭菜谱
-- 明天和下周的菜单及点菜项
+## 截图
 
-## 视觉检查
-
-- 9 张截图均为 390 × 844。
-- 鼠标/触控的新对话、输入和发送操作可执行。
-- 页头、消息区、输入区和底部导航未发现相互遮挡或水平溢出。
-- 因工具链失败，本轮无法验收结果卡片的真实内容与跳转。
-
-## 配置说明
-
-- `OPENWEATHER_API_KEY` 未配置；正常情况下场景 7 应由 `get_weather` 返回友好的“天气服务尚未配置”卡片。
-- 本轮 `get_weather` 未被调用，因此该降级路径未能完成端到端验证。
+- 9 张主场景截图与额外 `10-memory.png` 均为 390 × 844。
+- 鼠标/触控的新对话、输入、发送和卡片显示可执行。
+- 场景结果的结构化明细见 `E2E-RESULTS.json`。

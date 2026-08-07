@@ -197,6 +197,7 @@ let databaseCreated = false;
 let activeApiOutput = '';
 
 try {
+  await runScript('scripts/hermes-config-contract.mjs');
   await admin.connect();
   await runProcess(process.execPath, [
     '-r',
