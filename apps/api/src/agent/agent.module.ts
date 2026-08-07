@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AssetsModule } from '../assets/assets.module';
 import { CalendarModule } from '../calendar/calendar.module';
 import {
   AgentConversation,
@@ -36,6 +37,7 @@ import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
 import { AgentRetentionService } from './agent-retention.service';
 import { AgentMemoryService } from './agent-memory.service';
+import { AgentPageContextService } from './agent-page-context.service';
 
 @Module({
   imports: [
@@ -55,6 +57,7 @@ import { AgentMemoryService } from './agent-memory.service';
       InventoryItem,
       Member,
     ]),
+    AssetsModule,
     CalendarModule,
     KnowledgeModule,
     TravelModule,
@@ -80,6 +83,7 @@ import { AgentMemoryService } from './agent-memory.service';
     AgentChannelsService,
     AgentRetentionService,
     AgentMemoryService,
+    AgentPageContextService,
   ],
 })
 export class AgentModule {}

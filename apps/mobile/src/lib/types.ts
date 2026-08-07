@@ -1671,6 +1671,20 @@ export interface HouseholdReminder {
 }
 
 export type AgentRuntimeKind = 'fake' | 'hermes';
+export type AgentPageEntityType =
+  | 'dish'
+  | 'asset'
+  | 'knowledge'
+  | 'travel'
+  | 'poll';
+
+export interface AgentPageContext {
+  route: string;
+  entityType?: AgentPageEntityType;
+  entityId?: string;
+  selectedDate?: string;
+}
+
 export type AgentRunStatus =
   | 'queued'
   | 'running'

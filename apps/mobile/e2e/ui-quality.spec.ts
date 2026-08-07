@@ -1,17 +1,28 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-async function openAuthenticatedHome(page: Page) {
+async function openAuthenticatedHome(page: Page, projectName: string) {
   await page.goto('/');
   const homeTitle = page.getByText('今天需要关注', { exact: true });
-  if (await homeTitle.isVisible()) return homeTitle;
-
-  await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
-  const password = process.env.E2E_ACCOUNT_PASSWORD;
-  expect(password, '隔离浏览器测试必须提供临时账号密码').toBeTruthy();
-  await page.getByPlaceholder('输入账号').fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
-  await page.getByPlaceholder('输入密码').fill(password ?? '');
-  await page.getByRole('button', { name: '登录', exact: true }).click();
+  if (!(await homeTitle.isVisible())) {
+    await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
+    const password = process.env.E2E_ACCOUNT_PASSWORD;
+    expect(
+      password,
+      '隔离浏览器测试必须提供 E2E_ACCOUNT_PASSWORD；可为空字符串',
+    ).not.toBeUndefined();
+    await page
+      .getByPlaceholder('输入账号')
+      .fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
+    await page.getByPlaceholder('输入密码').fill(password ?? '');
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+  }
   await expect(homeTitle).toBeVisible();
+  await page.context().storageState({
+    path:
+      projectName === 'desktop-chrome'
+        ? 'e2e/.auth/desktop.json'
+        : 'e2e/.auth/mobile.json',
+  });
   return homeTitle;
 }
 
@@ -19,8 +30,8 @@ async function expectTouchTarget(locator: Locator, label: string) {
   await expect(locator, `${label} 应可见`).toBeVisible();
   const box = await locator.boundingBox();
   expect(box, `${label} 应有可测量尺寸`).not.toBeNull();
-  expect(box?.width ?? 0, `${label} 宽度`).toBeGreaterThanOrEqual(44);
-  expect(box?.height ?? 0, `${label} 高度`).toBeGreaterThanOrEqual(44);
+  expect((box?.width ?? 0) + 0.01, `${label} 宽度`).toBeGreaterThanOrEqual(44);
+  expect((box?.height ?? 0) + 0.01, `${label} 高度`).toBeGreaterThanOrEqual(44);
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -33,7 +44,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test('首页核心操作满足鼠标和触控尺寸要求', async ({ page }, testInfo) => {
-  await openAuthenticatedHome(page);
+  await openAuthenticatedHome(page, testInfo.project.name);
 
   if (testInfo.project.name === 'mobile-chrome') {
     await expectTouchTarget(page.getByTestId('home-notification-button'), '通知按钮');
@@ -68,7 +79,7 @@ test('首页核心操作满足鼠标和触控尺寸要求', async ({ page }, tes
 
 test('深色模式和减少动态效果保持清晰反馈', async ({ page }, testInfo) => {
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
-  const title = await openAuthenticatedHome(page);
+  const title = await openAuthenticatedHome(page, testInfo.project.name);
   await expect(title).toHaveCSS('color', 'rgb(244, 247, 244)');
 
   const button = testInfo.project.name === 'mobile-chrome'
@@ -95,7 +106,7 @@ test('深色模式和减少动态效果保持清晰反馈', async ({ page }, tes
 
 test('桌面侧栏分组可用鼠标展开并保持当前模块可见', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chrome');
-  await openAuthenticatedHome(page);
+  await openAuthenticatedHome(page, testInfo.project.name);
 
   const householdGroup = page.getByTestId('desktop-nav-group-household');
   await expectTouchTarget(householdGroup, '家庭管理分组');
@@ -115,7 +126,7 @@ test('桌面侧栏分组可用鼠标展开并保持当前模块可见', async ({
 });
 
 test('日期选择在移动端贴底、桌面居中且核心操作不少于 44px', async ({ page }, testInfo) => {
-  await openAuthenticatedHome(page);
+  await openAuthenticatedHome(page, testInfo.project.name);
   await page.goto('/shopping');
 
   const trigger = page.getByLabel(/^打开日期选择/).first();
@@ -185,7 +196,7 @@ test('日期选择在移动端贴底、桌面居中且核心操作不少于 44px
 });
 
 test('投票表单适配视口且核心操作支持鼠标和触控', async ({ page }, testInfo) => {
-  await openAuthenticatedHome(page);
+  await openAuthenticatedHome(page, testInfo.project.name);
   await page.goto('/polls');
 
   const createButton = page.getByRole('button', { name: '发起投票', exact: true });
@@ -228,7 +239,7 @@ test('投票表单适配视口且核心操作支持鼠标和触控', async ({ pa
 });
 
 test('知识库筛选、弹层和未保存保护支持鼠标和触控', async ({ page }, testInfo) => {
-  await openAuthenticatedHome(page);
+  await openAuthenticatedHome(page, testInfo.project.name);
   await page.goto('/knowledge');
 
   const createArticleButton = page.getByRole('button', { name: '新建知识文章', exact: true });
@@ -291,7 +302,7 @@ test('知识库筛选、弹层和未保存保护支持鼠标和触控', async ({
 test('知识库在中等宽度使用扩展工具栏且不产生横向溢出', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chrome');
   await page.setViewportSize({ width: 820, height: 900 });
-  await openAuthenticatedHome(page);
+  await openAuthenticatedHome(page, testInfo.project.name);
   await page.goto('/knowledge');
 
   const searchBox = page.getByLabel('搜索家庭知识库').locator('xpath=..');

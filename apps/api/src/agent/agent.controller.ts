@@ -4,14 +4,18 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import {
   Body,
   Controller,
@@ -28,9 +32,11 @@ import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   AGENT_MEMORY_KEYS,
+  AGENT_PAGE_ENTITY_TYPES,
   AGENT_PROPOSAL_TOOLS,
   AGENT_READ_TOOLS,
   AgentMemoryKey,
+  AgentPageEntityType,
 } from './agent.types';
 import { AgentService } from './agent.service';
 import { AgentProposalsService } from './agent-proposals.service';
@@ -44,6 +50,29 @@ class CreateConversationDto {
   title?: string;
 }
 
+class AgentPageContextDto {
+  @IsString()
+  @MaxLength(120)
+  route: string;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    AGENT_PAGE_ENTITY_TYPES.includes(value as AgentPageEntityType)
+      ? value
+      : undefined,
+  )
+  @IsIn([...AGENT_PAGE_ENTITY_TYPES])
+  entityType?: AgentPageEntityType;
+
+  @IsOptional()
+  @IsUUID()
+  entityId?: string;
+
+  @IsOptional()
+  @Matches(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/)
+  selectedDate?: string;
+}
+
 class SendAgentMessageDto {
   @IsString()
   @MinLength(1)
@@ -54,6 +83,12 @@ class SendAgentMessageDto {
   @MinLength(1)
   @MaxLength(180)
   clientRequestId: string;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => AgentPageContextDto)
+  pageContext?: AgentPageContextDto;
 }
 
 class RetryAgentRunDto {
@@ -373,7 +408,13 @@ export class AgentController {
     @Body() dto: SendAgentMessageDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.queueMessage(id, dto.message, dto.clientRequestId, user);
+    return this.service.queueMessage(
+      id,
+      dto.message,
+      dto.clientRequestId,
+      user,
+      dto.pageContext,
+    );
   }
 
   @Post('runs/:id/cancel')

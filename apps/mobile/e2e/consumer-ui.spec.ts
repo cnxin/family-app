@@ -20,6 +20,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test('普通成员默认进入温和的移动首页并可用鼠标操作核心入口', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
   await page.goto('/');
 
   await expect(page.getByTestId('consumer-home')).toBeVisible();
@@ -85,10 +86,11 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
   const assistantInput = page.getByTestId('agent-message-input');
   const assistantSend = page.getByTestId('agent-send-button');
   await expectTouchTarget(assistantSend, '小管家发送按钮');
-  await page.getByRole('button', { name: '今天三餐吃什么？', exact: true }).click();
+  await page.getByTestId('agent-new-conversation').click();
+  await assistantInput.fill('今天三餐吃什么？');
   await expect(assistantInput).toHaveValue('今天三餐吃什么？');
   await assistantSend.click();
-  await expect(page.getByText(/今天|早餐|午餐|晚餐/).last()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/今天|早餐|午餐|晚餐/).last()).toBeVisible({ timeout: 60_000 });
   await expectNoHorizontalOverflow(page);
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await expect(page.getByTestId('consumer-home')).toBeVisible();

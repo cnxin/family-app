@@ -52,7 +52,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test:web": "playwright test"
+    "test:web": "playwright test",
+    "test:hermes-live": "node e2e/run-hermes-live.mjs"
   },
   "private": true
 }

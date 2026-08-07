@@ -3,9 +3,11 @@ import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   BookOpenText,
   Check,
+  ChevronRight,
   ExternalLink,
   Pencil,
   Plus,
+  Sparkles,
   UserRoundCheck,
   X,
 } from 'lucide-react-native';
@@ -155,7 +157,9 @@ export default function DishDetailSheet() {
         )}
 
         <View style={styles.content}>
-          <Text style={[t.title2, { color: c.label }]}>{dish.name}</Text>
+          <Text style={[t.title2, { color: c.label }]} testID="dish-detail-name">
+            {dish.name}
+          </Text>
           <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 6 }]}>
             {dish.category} · 难度 {'🔥'.repeat(dish.difficulty)}
           </Text>
@@ -165,6 +169,31 @@ export default function DishDetailSheet() {
               <Text style={[t.subhead, { color: c.label, marginTop: 3 }]}>{dish.note}</Text>
             </View>
           ) : null}
+
+          <PressableScale
+            accessibilityLabel={`向小管家询问${dish.name}`}
+            haptic={false}
+            onPress={() =>
+              router.push({
+                pathname: '/assistant',
+                params: {
+                  route: `/dish/${dish.id}`,
+                  entityType: 'dish',
+                  entityId: dish.id,
+                },
+              })
+            }
+            style={[styles.assistantEntry, { backgroundColor: c.tintSoft }]}
+            testID="dish-ask-assistant"
+          >
+            <View style={[styles.assistantEntryIcon, { backgroundColor: c.card }]}>
+              <Sparkles color={c.tint} size={18} />
+            </View>
+            <Text style={[t.subhead, styles.assistantEntryText, { color: c.tint }]}>
+              问小管家这道菜
+            </Text>
+            <ChevronRight color={c.tint} size={18} />
+          </PressableScale>
 
           <SectionHeader
             title={`做法版本（${variants.length}）`}
@@ -459,6 +488,23 @@ const styles = StyleSheet.create({
   photo: { width: '100%', height: 220 },
   center: { alignItems: 'center', justifyContent: 'center' },
   content: { padding: 20 },
+  assistantEntry: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    minHeight: 52,
+    paddingHorizontal: 10,
+  },
+  assistantEntryIcon: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  assistantEntryText: { flex: 1, fontWeight: '700' },
   flavor: { borderRadius: radius.sm, padding: 11, marginTop: 12 },
   inlineAction: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   variantTabs: { gap: 8, paddingRight: 4 },

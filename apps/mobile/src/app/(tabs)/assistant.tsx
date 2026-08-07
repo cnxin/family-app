@@ -18,7 +18,7 @@ import {
   Unlink,
   X,
 } from 'lucide-react-native';
-import { type Href, useRouter } from 'expo-router';
+import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -37,6 +37,7 @@ import {
   AdaptiveDialog,
   Card,
   IconButton,
+  PressableScale,
   PressSurface,
   Segmented,
   SkeletonRows,
@@ -60,6 +61,7 @@ import {
   useRevokeAgentChannel,
   useRevokeAgentChannelPairing,
   useMembers,
+  useRecipe,
   useUpdateAgentSettings,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -68,6 +70,7 @@ import type {
   AgentActionProposal,
   AgentConversation,
   AgentMessage,
+  AgentPageContext,
   AgentRuntimeKind,
   AgentToolEvent,
   AgentToolPresentation,
@@ -768,6 +771,12 @@ function ConversationHistorySheet({
 export default function AssistantScreen() {
   const c = useTheme();
   const layout = useLayoutMode();
+  const params = useLocalSearchParams<{
+    route?: string;
+    entityType?: AgentPageContext['entityType'];
+    entityId?: string;
+    selectedDate?: string;
+  }>();
   const { member } = useSession();
   const manager = isHouseholdManager(member);
   const { data: status, isLoading: statusLoading } = useAgentStatus();
@@ -785,6 +794,29 @@ export default function AssistantScreen() {
   const [localError, setLocalError] = React.useState<string | null>(null);
   const [settingsVisible, setSettingsVisible] = React.useState(false);
   const [historyVisible, setHistoryVisible] = React.useState(false);
+  const pageContext = React.useMemo<AgentPageContext | undefined>(() => {
+    if (!params.route) return undefined;
+    return {
+      route: params.route,
+      ...(params.entityType ? { entityType: params.entityType } : {}),
+      ...(params.entityId ? { entityId: params.entityId } : {}),
+      ...(params.selectedDate ? { selectedDate: params.selectedDate } : {}),
+    };
+  }, [params.entityId, params.entityType, params.route, params.selectedDate]);
+  const pageContextKey = pageContext
+    ? `${pageContext.route}|${pageContext.entityType ?? ''}|${pageContext.entityId ?? ''}|${pageContext.selectedDate ?? ''}`
+    : '';
+  const [dismissedPageContextKey, setDismissedPageContextKey] =
+    React.useState<string | null>(null);
+  const activePageContext =
+    pageContext && dismissedPageContextKey !== pageContextKey
+      ? pageContext
+      : undefined;
+  const { data: contextDish } = useRecipe(
+    activePageContext?.entityType === 'dish'
+      ? activePageContext.entityId
+      : undefined,
+  );
   const scrollRef = React.useRef<ScrollView>(null);
   const messageCount = conversation?.messages.length ?? 0;
   const latestRunStatus = conversation?.runs[0]?.status;
@@ -830,7 +862,11 @@ export default function AssistantScreen() {
         targetId = created.id;
         setConversationId(targetId);
       }
-      await sendMessage.mutateAsync({ conversationId: targetId, message });
+      await sendMessage.mutateAsync({
+        conversationId: targetId,
+        message,
+        ...(activePageContext ? { pageContext: activePageContext } : {}),
+      });
       setDraft('');
     } catch (error) {
       setLocalError(errorMessage(error));
@@ -909,12 +945,47 @@ export default function AssistantScreen() {
               </View>
             </View>
 
+            {activePageContext ? (
+              <View
+                accessibilityLiveRegion="polite"
+                style={[
+                  styles.pageContext,
+                  {
+                    backgroundColor: c.tintSoft,
+                    borderBottomColor: c.separator,
+                  },
+                ]}
+                testID="agent-page-context"
+              >
+                <Sparkles color={c.tint} size={17} />
+                <Text
+                  numberOfLines={2}
+                  style={[t.footnote, styles.pageContextText, { color: c.label }]}
+                >
+                  正在参考：{contextDish?.name ?? '当前页面'}
+                </Text>
+                <PressableScale
+                  accessibilityLabel="清除当前页面上下文"
+                  haptic={false}
+                  onPress={() => setDismissedPageContextKey(pageContextKey)}
+                  style={styles.pageContextClear}
+                  testID="agent-page-context-clear"
+                >
+                  <X color={c.secondaryLabel} size={18} />
+                </PressableScale>
+              </View>
+            ) : null}
+
             <ScrollView
               contentContainerStyle={styles.messages}
               keyboardShouldPersistTaps="handled"
               ref={scrollRef}
               showsVerticalScrollIndicator={false}
-              testID="agent-message-list"
+              testID={
+                conversationId
+                  ? `agent-message-list-${conversationId}`
+                  : 'agent-message-list'
+              }
             >
               {!statusLoading && (!status?.enabled || !status.persistenceEncrypted) ? (
                 <View style={[styles.notice, { backgroundColor: c.orangeSoft }]}>
@@ -1219,6 +1290,22 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     width: 40,
+  },
+  pageContext: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 52,
+    paddingLeft: 14,
+    paddingRight: 6,
+  },
+  pageContextText: { flex: 1, lineHeight: 19 },
+  pageContextClear: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
   messages: { flex: 1, flexGrow: 1, minHeight: 0, gap: 14, padding: 16 },
   messageRow: { alignItems: 'flex-end', flexDirection: 'row', gap: 8, maxWidth: '88%' },

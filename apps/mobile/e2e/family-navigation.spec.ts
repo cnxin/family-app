@@ -74,19 +74,27 @@ async function expectNoHorizontalOverflow(page: Page) {
   );
 }
 
-async function ensureIsolatedManagerLogin(page: Page) {
+async function ensureIsolatedManagerLogin(page: Page, projectName: string) {
   await page.goto('/');
-  if (!/\/login\/?$/.test(new URL(page.url()).pathname)) return;
-
-  const testPassword = process.env.E2E_ACCOUNT_PASSWORD;
-  expect(
-    testPassword,
-    '隔离浏览器回归缺少 E2E_ACCOUNT_PASSWORD，拒绝猜测或修改开发账号密码',
-  ).toBeTruthy();
-  await page.getByPlaceholder('输入账号').fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
-  await page.getByPlaceholder('输入密码').fill(testPassword!);
-  await page.getByRole('button', { name: '登录', exact: true }).click();
-  await expect(page).not.toHaveURL(/\/login\/?$/);
+  if (/\/login\/?$/.test(new URL(page.url()).pathname)) {
+    const testPassword = process.env.E2E_ACCOUNT_PASSWORD;
+    expect(
+      testPassword,
+      '隔离浏览器回归缺少 E2E_ACCOUNT_PASSWORD，拒绝猜测或修改开发账号密码',
+    ).not.toBeUndefined();
+    await page
+      .getByPlaceholder('输入账号')
+      .fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
+    await page.getByPlaceholder('输入密码').fill(testPassword ?? '');
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page).not.toHaveURL(/\/login\/?$/);
+  }
+  await page.context().storageState({
+    path:
+      projectName === 'desktop-chrome'
+        ? 'e2e/.auth/desktop.json'
+        : 'e2e/.auth/mobile.json',
+  });
 }
 
 test('家庭成员可浏览核心页面且布局不横向溢出', async (
@@ -94,6 +102,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   testInfo,
 ) => {
   test.setTimeout(180_000);
+  const fixtureSuffix = `${testInfo.project.name}-${Date.now().toString(36)}`;
   const runtimeErrors: string[] = [];
   let expectedUnauthorizedConsoleErrors = 0;
   let acceptingInitialRefreshUnauthorized = true;
@@ -119,7 +128,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     runtimeErrors.push(message.text());
   });
 
-  await ensureIsolatedManagerLogin(page);
+  await ensureIsolatedManagerLogin(page, testInfo.project.name);
   acceptingInitialRefreshUnauthorized = false;
   await expect(
     page.getByText('家庭工作台', { exact: true }),
@@ -1273,7 +1282,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('button', { name: '添加任务', exact: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  const taskTitle = `任务回归-${testInfo.project.name}`;
+  const taskTitle = `任务回归-${fixtureSuffix}`;
   await page.getByRole('button', { name: '添加任务', exact: true }).first().click();
   await expect(page.getByText('新建家庭任务', { exact: true })).toBeVisible();
   await page.getByLabel('任务名称').fill(taskTitle);
@@ -1306,7 +1315,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
-  const knowledgeTitle = `浏览器知识文章-${testInfo.project.name}`;
+  const knowledgeTitle = `浏览器知识文章-${fixtureSuffix}`;
   await page.goto('/knowledge');
   await expect(page.getByText('家庭知识库', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '已归档', exact: true }).click();
@@ -1321,7 +1330,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  const memoryTitle = `浏览器家庭回忆-${testInfo.project.name}`;
+  const memoryTitle = `浏览器家庭回忆-${fixtureSuffix}`;
   await page.goto('/memories');
   await expect(page.getByRole('heading', { name: '家庭回忆', exact: true })).toBeVisible();
   const memoryCreate = page.getByRole('button', { name: '新建家庭回忆', exact: true });
@@ -1360,8 +1369,8 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('button', { name: `打开回忆${memoryTitle}`, exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  const travelTitle = `浏览器出行-${testInfo.project.name}`;
-  const checklistTitle = `证件袋-${testInfo.project.name}`;
+  const travelTitle = `浏览器出行-${fixtureSuffix}`;
+  const checklistTitle = `证件袋-${fixtureSuffix}`;
   await page.goto('/travel');
   await expect(page.getByText('家庭出行', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '打包模板', exact: true }).click();

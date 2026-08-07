@@ -55,6 +55,31 @@ export const AGENT_MEMORY_KEYS = [
 
 export type AgentMemoryKey = (typeof AGENT_MEMORY_KEYS)[number];
 
+export const AGENT_PAGE_ENTITY_TYPES = [
+  'dish',
+  'asset',
+  'knowledge',
+  'travel',
+  'poll',
+] as const;
+
+export type AgentPageEntityType = (typeof AGENT_PAGE_ENTITY_TYPES)[number];
+
+export interface AgentPageContextCandidate {
+  route: string;
+  entityType?: AgentPageEntityType;
+  entityId?: string;
+  selectedDate?: string;
+}
+
+export interface AgentResolvedPageContext {
+  route: string;
+  entityType?: AgentPageEntityType;
+  name?: string;
+  date?: string;
+  untrustedContent: true;
+}
+
 export function isAgentMemoryTool(value: string): value is AgentMemoryToolName {
   return AGENT_MEMORY_TOOLS.includes(value as AgentMemoryToolName);
 }
@@ -65,6 +90,7 @@ export interface AgentChatInput {
   message: string;
   allowedTools: string[];
   history: { role: 'user' | 'assistant'; content: string }[];
+  pageContext?: AgentResolvedPageContext | null;
 }
 
 export interface AgentChatResult {

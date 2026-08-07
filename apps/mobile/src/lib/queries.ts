@@ -14,6 +14,7 @@ import type {
   AgentMemoryScope,
   AgentMemoryStatus,
   AgentMemberProfile,
+  AgentPageContext,
   AgentRun,
   AgentSettings,
   AgentStatus,
@@ -312,20 +313,32 @@ export function useCreateAgentConversation() {
         method: 'POST',
         body: title ? { title } : {},
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-conversations'] }),
+    onSuccess: (created) => {
+      qc.setQueryData<AgentConversation[]>(['agent-conversations'], (current) => [
+        created,
+        ...(current ?? []).filter((item) => item.id !== created.id),
+      ]);
+      void qc.invalidateQueries({ queryKey: ['agent-conversations'] });
+    },
   });
 }
 
 export function useSendAgentMessage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { conversationId: string; message: string; clientRequestId?: string }) =>
+    mutationFn: (input: {
+      conversationId: string;
+      message: string;
+      clientRequestId?: string;
+      pageContext?: AgentPageContext;
+    }) =>
       api<AgentRun>(`/agent/conversations/${input.conversationId}/messages`, {
         method: 'POST',
         body: {
           message: input.message,
           clientRequestId:
             input.clientRequestId ?? operationKey(`agent:message:${input.conversationId}`),
+          ...(input.pageContext ? { pageContext: input.pageContext } : {}),
         },
       }),
     onSuccess: (_run, input) => {

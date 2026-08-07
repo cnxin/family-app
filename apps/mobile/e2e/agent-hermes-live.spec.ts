@@ -59,6 +59,7 @@ const resultPath = resolve(repoRoot, 'test-screenshots/E2E-RESULTS.json');
 const screenshotRoot = resolve(repoRoot, 'test-screenshots');
 const fallbackCode = 'HERMES_UNAVAILABLE_FALLBACK';
 const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
+const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
 
 function existingReport() {
   try {
@@ -101,18 +102,26 @@ function hasSpecificWeatherClaims(text: string) {
   );
 }
 
-test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
+test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
   test.setTimeout(2_700_000);
   const previous = existingReport();
   const details = watchConversationDetails(page);
-  const results: Result[] = memoryOnly
+  const results: Result[] = memoryOnly || pageContextOnly
     ? (previous?.results ?? []).filter(
         (result: Result) => typeof result.id === 'number',
       )
     : [];
-  const memoryChecks: Result[] = [];
-  let conversationId = memoryOnly ? (previous?.conversationId ?? '') : '';
-  let memoryConversationId = '';
+  const memoryChecks: Result[] = pageContextOnly
+    ? (previous?.memoryChecks ?? [])
+    : [];
+  const pageContextChecks: Result[] = memoryOnly
+    ? (previous?.pageContextChecks ?? [])
+    : [];
+  let conversationId =
+    memoryOnly || pageContextOnly ? (previous?.conversationId ?? '') : '';
+  let memoryConversationId = pageContextOnly
+    ? (previous?.memoryConversationId ?? '')
+    : '';
   let activeConversationId = '';
 
   const summary = () => ({
@@ -145,12 +154,15 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
           visibilityGate: previous?.visibilityGate ?? null,
           results,
           memoryChecks,
+          pageContextChecks,
         },
         null,
         2,
       )}\n`,
     );
   };
+  const persistAuthState = () =>
+    page.context().storageState({ path: 'e2e/.auth/mobile.json' });
 
   await page.goto('/assistant');
   const heading = page.getByRole('heading', {
@@ -170,7 +182,7 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
   }
   await expect(heading).toBeVisible();
   await expect(page.getByText('Hermes 已连接', { exact: true })).toBeVisible();
-  await page.context().storageState({ path: 'e2e/.auth/mobile.json' });
+  await persistAuthState();
 
   const createResponsePromise = page.waitForResponse(
     (response) =>
@@ -181,8 +193,11 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
   const conversation = await responseData(await createResponsePromise);
   activeConversationId = conversation?.id ?? '';
   expect(activeConversationId).toBeTruthy();
+  await expect(
+    page.getByTestId(`agent-message-list-${activeConversationId}`),
+  ).toBeVisible();
   if (memoryOnly) memoryConversationId = activeConversationId;
-  else conversationId = activeConversationId;
+  else if (!pageContextOnly) conversationId = activeConversationId;
 
   await page.getByTestId('agent-history-trigger').click();
   const historyItem = page.getByTestId(
@@ -203,6 +218,8 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
     screenshot: string;
     multiTool?: boolean;
     weather?: boolean;
+    requiredText?: string;
+    clarifyWithoutContext?: string;
   }) {
     const messageInput = page.getByTestId('agent-message-input');
     await messageInput.fill(input.prompt);
@@ -214,7 +231,11 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
         ),
     );
     await page.getByTestId('agent-send-button').click();
-    const createdRun = await responseData(await runResponsePromise);
+    const runResponse = await runResponsePromise;
+    const runConversationId = new URL(runResponse.url()).pathname.split('/').at(-2);
+    expect(runConversationId).toBeTruthy();
+    activeConversationId = runConversationId!;
+    const createdRun = await responseData(runResponse);
     expect(createdRun?.id).toBeTruthy();
 
     await expect
@@ -251,15 +272,35 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
       !input.weather ||
       cards.some((card) => card.kind === 'weather' && card.items.length > 0) ||
       !hasSpecificWeatherClaims(assistantText);
+    const grounded =
+      !input.requiredText ||
+      [assistantText, ...cards.map((card) => JSON.stringify(card))].some((text) =>
+        text.includes(input.requiredText!),
+      );
+    const clarificationSafe =
+      !input.clarifyWithoutContext ||
+      (!toolNames.includes('search_recipes') &&
+        !assistantText.includes(input.clarifyWithoutContext) &&
+        /哪道菜|具体.*菜|菜名|指的是|请.*说明|无法确定/.test(assistantText));
     const passed =
-      run?.runtimeKind === 'hermes' && !fallback && expectedMatched && weatherSafe;
+      run?.runtimeKind === 'hermes' &&
+      !fallback &&
+      (input.clarifyWithoutContext ? clarificationSafe : expectedMatched) &&
+      weatherSafe &&
+      grounded;
     const note = fallback
       ? 'Hermes 回落，模型未参与'
-      : !expectedMatched
-        ? '未调用预期工具或未生成预期卡片'
-        : !weatherSafe
-          ? '未取得天气数据却输出了具体温度或降水数字'
-          : null;
+      : !grounded
+        ? '回答未基于当前页面实体'
+        : input.clarifyWithoutContext
+          ? clarificationSafe
+            ? null
+            : '无上下文时未明确追问菜品，或擅自选择了家庭菜品'
+          : !expectedMatched
+            ? '未调用预期工具或未生成预期卡片'
+            : !weatherSafe
+              ? '未取得天气数据却输出了具体温度或降水数字'
+              : null;
     const result: Result = {
       id: input.id,
       prompt: input.prompt,
@@ -289,8 +330,11 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
       note,
     };
     if (typeof input.id === 'number') results.push(result);
-    else memoryChecks.push(result);
+    else if (String(input.id).startsWith('page-context')) {
+      pageContextChecks.push(result);
+    } else memoryChecks.push(result);
     persist();
+    await persistAuthState();
     console.log(`HERMES_E2E_RESULT ${JSON.stringify(result)}`);
 
     const cardsOnPage = page.locator(
@@ -298,6 +342,7 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
     );
     if (await cardsOnPage.count()) await cardsOnPage.last().scrollIntoViewIfNeeded();
     await page.screenshot({ path: resolve(screenshotRoot, input.screenshot) });
+    return result;
   }
 
   const scenarios = [
@@ -312,25 +357,99 @@ test('A7.4-A 真实 Hermes 九场景与记忆工具', async ({ page }) => {
     { id: 9, prompt: '我明天有什么安排，需要准备什么食材', expectedTool: 'multi-tool', expectedKind: null, screenshot: '09-multi-tool.png', multiTool: true },
   ] as const;
 
-  if (!memoryOnly) {
+  if (!memoryOnly && !pageContextOnly) {
     for (const scenario of scenarios) await runScenario(scenario);
   }
-  await runScenario({
-    id: 'memory-write',
-    prompt: '记住我不吃辣',
-    expectedTool: 'remember_preference',
-    expectedKind: null,
-    screenshot: '10-memory-write.png',
-  });
-  await runScenario({
-    id: 'memory-recall',
-    prompt: '我有什么饮食偏好',
-    expectedTool: 'recall_preferences',
-    expectedKind: null,
-    screenshot: '11-memory-recall.png',
-  });
+  if (!pageContextOnly) {
+    await runScenario({
+      id: 'memory-write',
+      prompt: '记住我不吃辣',
+      expectedTool: 'remember_preference',
+      expectedKind: null,
+      screenshot: '10-memory-write.png',
+    });
+    await runScenario({
+      id: 'memory-recall',
+      prompt: '我有什么饮食偏好',
+      expectedTool: 'recall_preferences',
+      expectedKind: null,
+      screenshot: '11-memory-recall.png',
+    });
+  }
 
-  expect(summary().passed).toBeGreaterThanOrEqual(7);
-  expect(summary().fallbackCount).toBe(0);
-  expect(memoryChecks.every((result) => result.passed)).toBeTruthy();
+  if (!memoryOnly) {
+    await page.goto('/recipes');
+    const dishEntry = page.locator('[data-testid^="recipe-dish-"]').first();
+    await expect(dishEntry).toBeVisible();
+    await persistAuthState();
+    await dishEntry.tap();
+    await expect(page).toHaveURL(/\/dish\/[0-9a-f-]{36}$/);
+    const targetDish = {
+      id: new URL(page.url()).pathname.split('/').at(-1)!,
+      name: await page.getByTestId('dish-detail-name').innerText(),
+    };
+    await page.getByTestId('dish-ask-assistant').click();
+    await expect(page).toHaveURL(/\/assistant\?.*entityType=dish/);
+    await expect(page.getByTestId('agent-page-context')).toContainText(
+      `正在参考：${targetDish.name}`,
+    );
+
+    const contextConversationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/agent/conversations'),
+    );
+    await page.getByTestId('agent-new-conversation').click();
+    const contextConversation = await responseData(
+      await contextConversationResponse,
+    );
+    activeConversationId = contextConversation?.id ?? '';
+    expect(activeConversationId).toBeTruthy();
+    await expect(
+      page.getByTestId(`agent-message-list-${activeConversationId}`),
+    ).toBeVisible();
+    const contextual = await runScenario({
+      id: 'page-context-dish',
+      prompt: '这道菜需要什么食材',
+      expectedTool: 'search_recipes',
+      expectedKind: 'recipes',
+      screenshot: '12-page-context.png',
+      requiredText: targetDish.name,
+    });
+    expect(contextual.passed).toBeTruthy();
+
+    await page.getByTestId('agent-page-context-clear').click();
+    await expect(page.getByTestId('agent-page-context')).toHaveCount(0);
+    await page.goto('/assistant');
+    await expect(page.getByTestId('agent-page-context')).toHaveCount(0);
+    await persistAuthState();
+    const plainConversationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/agent/conversations'),
+    );
+    await page.getByTestId('agent-new-conversation').click();
+    const plainConversation = await responseData(await plainConversationResponse);
+    activeConversationId = plainConversation?.id ?? '';
+    expect(activeConversationId).toBeTruthy();
+    await expect(
+      page.getByTestId(`agent-message-list-${activeConversationId}`),
+    ).toBeVisible();
+    const withoutContext = await runScenario({
+      id: 'page-context-cleared',
+      prompt: '这道菜需要什么食材',
+      expectedTool: 'search_recipes',
+      expectedKind: 'recipes',
+      screenshot: '13-no-context.png',
+      clarifyWithoutContext: targetDish.name,
+    });
+    expect(withoutContext.passed).toBeTruthy();
+  }
+
+  if (!pageContextOnly) {
+    expect(summary().passed).toBeGreaterThanOrEqual(7);
+    expect(summary().fallbackCount).toBe(0);
+    expect(memoryChecks.every((result) => result.passed)).toBeTruthy();
+  }
+  expect(pageContextChecks.every((result) => result.passed)).toBeTruthy();
 });
