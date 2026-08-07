@@ -1,4 +1,4 @@
-// 本套件直接调用工具 service，不经过 Hermes -> MCP 链路，不能证明工具对模型可见。
+// 本套件直接调用 Family App MCP，不经过 Hermes，不能证明工具对模型可见。
 // MCP 目录由 agent.mjs 校验，Hermes 白名单由 hermes-config-contract.mjs 校验。
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -275,10 +275,22 @@ try {
 
   console.log('2. MCP 注册和 8 个工具冒烟');
   const listed = await mcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
-  const registeredNames = listed.body?.result?.tools?.map((tool) => tool.name) ?? [];
+  const registeredTools = listed.body?.result?.tools ?? [];
+  const registeredNames = registeredTools.map((tool) => tool.name);
   assert(
     TOOL_NAMES.every((name) => registeredNames.includes(name)),
     '8 个只读工具均已注册 MCP schema',
+  );
+  const descriptionFor = (name) =>
+    registeredTools.find((tool) => tool.name === name)?.description ?? '';
+  assert(
+    descriptionFor('get_weather').includes('唯一数据来源') &&
+      descriptionFor('get_weather').includes('不得依据模型自身知识') &&
+      descriptionFor('get_member_tasks').includes('我的任务') &&
+      descriptionFor('get_tasks').includes('全家') &&
+      descriptionFor('remember_preference').includes('必须立即调用') &&
+      descriptionFor('remember_preference').includes('不得追问'),
+    '天气来源、任务边界和个人记忆直写候选语义已进入 MCP 工具描述',
   );
 
   const memberTasks = await mcp(

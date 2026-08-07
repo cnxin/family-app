@@ -1,89 +1,88 @@
-# A7.4-A 端到端测试报告
+# A7.4-A 遗留问题端到端测试报告
 
-测试时间：2026-08-07
+测试时间：2026-08-08
 
 测试环境：Expo Web / Google Chrome，390 × 844 移动视口，触控模式
 
-测试账号：家庭管理员（手动登录，未读取或重置密码）
+测试账号：家庭管理员（复用现有登录态，未读取或重置密码）
 
-代码基线：`6968970`，叠加本次 Hermes 白名单与契约校验修复
+代码基线：`1706321`，叠加本次工作区修复
 
-Agent 配置：`runtimeKind=hermes`，API 设置已启用 17 个只读工具，Hermes `familyapp` profile 已加载 24 项工具白名单
+Agent 配置：`runtimeKind=hermes`，API 已启用 17 个只读工具，Hermes `familyapp` profile 已加载 24 项工具白名单
 
-测试会话：`6a24ce0b-0d9e-42b6-a011-6a701e6fe49a`
+主场景会话：`cb5ac754-dc09-4137-bb93-13ea33344fd9`
 
-## 测试结果
+记忆专项会话：`4cba646d-da3c-47b8-bd66-2877c4b37ab7`
 
-| 场景 | 输入 | 预期工具 | 实际工具 | 卡片 | 耗时 | 结果 |
-|---|---|---|---|---|---:|---|
-| 1 | 查看我的待办任务 | `get_member_tasks` | `get_tasks` | 家庭任务 | 21.8s | 失败，选择了旧工具 |
-| 2 | 这周家里有什么安排 | `get_family_schedule` | `get_family_schedule`, `get_calendar`, `get_tasks` | 家庭日程、家庭任务 | 25.8s | 通过 |
-| 3 | 家里还有哪些菜快过期了 | `get_inventory_summary` | `get_inventory_summary` | 库存摘要 | 19.8s | 通过 |
-| 4 | 购物清单里有什么 | `get_shopping_list` | `get_shopping_list` | 购物清单 | 15.8s | 通过 |
-| 5 | 搜索不辣的家常菜 | `search_recipes` | `search_recipes`（2 次） | 菜谱搜索（2 张） | 27.8s | 通过 |
-| 6 | 下周点了什么菜 | `get_dish_plan` | `get_dish_plan`, `get_meal_plan` | 点菜计划、今日菜单 | 23.8s | 通过 |
-| 7 | 深圳这几天天气怎么样 | `get_weather` | 无 | 无 | 39.8s | 失败，未触发工具 |
-| 8 | 我的个人档案 | `get_member_profile` | `get_member_profile` | 成员档案 | 47.8s | 通过 |
-| 9 | 我明天有什么安排，需要准备什么食材 | 多工具 | 7 条事件，涉及 6 种工具 | 5 张卡片 | 91.8s | 通过，但发生本地回退 |
+## 结果纠正
 
-## 结论
+上一版报告的 `7/9` 判定不成立：场景 1 自身为失败，场景 9 使用 `HERMES_UNAVAILABLE_FALLBACK`，其工具事件来自 FakeAgentRuntime，不能证明模型参与。按“回落即失败”规则，修复前真实结果为 **6/9**。
 
-- 通过率：**7/9**，达到本批最低验收线。
-- 预期工具选择：**7/9**；有工具事件的场景为 **8/9**。
-- 有结果卡片的场景为 **8/9**；与预期工具一致且有卡片的场景为 **7/9**。
-- 多工具联动成功：场景 9 产生家庭日程、家庭任务、今日菜单、点菜计划、购物清单 5 张卡片；该 run 的 `errorCode=HERMES_UNAVAILABLE_FALLBACK`，最终由本地回退补全，不应视为 Hermes 稳定性验收通过。
-- 平均响应时间：约 **34.9 秒**。
-- 9 个场景均为 `completed`，没有 API 500、页面崩溃或数据泄露迹象。
+真实 Hermes E2E 现已把 `passed` 从明细动态汇总；每条记录均包含 `runtimeKind`、`errorCode`、`durationMs`。任何 `HERMES_UNAVAILABLE_FALLBACK` 都会标记为“回落，模型未参与”并判失败。
+
+## 最终结果
+
+| 场景 | 输入 | 实际工具 | 卡片 | 耗时 | 结果 |
+|---|---|---|---|---:|---|
+| 1 | 查看我的待办任务 | `get_member_tasks` | 成员任务 | 25.4s | 通过 |
+| 2 | 这周家里有什么安排 | `get_family_schedule` | 家庭日程 | 8.6s | 通过 |
+| 3 | 家里还有哪些菜快过期了 | `get_inventory_summary` | 库存摘要 | 8.6s | 通过 |
+| 4 | 购物清单里有什么 | `get_shopping_list` | 购物清单 | 23.2s | 通过 |
+| 5 | 搜索不辣的家常菜 | `search_recipes`（2 次） | 菜谱搜索（2 张） | 34.8s | 通过 |
+| 6 | 下周点了什么菜 | `get_dish_plan` | 点菜计划 | 13.8s | 通过 |
+| 7 | 深圳这几天天气怎么样 | `get_weather` | 天气服务尚未配置 | 18.3s | 通过，安全降级 |
+| 8 | 我的个人档案 | `get_member_profile` | 成员档案 | 11.3s | 通过 |
+| 9 | 我明天有什么安排，需要准备什么食材 | `get_meal_plan`, `get_member_tasks`, `get_shopping_list`, `search_recipes` | 菜单、任务、购物、菜谱 | 102.7s | 通过，多工具联动 |
+
+- 通过率：**9/9**。
+- 9 个 run 均为 `runtimeKind=hermes`、`errorCode=null`，回落数为 **0**。
+- 9 个场景均产生预期工具事件和结构化卡片。
+- 平均响应时间约 **27.4 秒**。
+- 天气工具返回 `weather_api_not_configured` 的友好展示；回答只说明服务未配置，没有输出任何具体温度、降水量或降水概率。
 
 ## RunId 证据
 
-数据库按 `runId` 关联 `agent_runs` 与 `agent_tool_events` 核对，所有表格中的工具事件均属于本轮会话，不使用全表聚合推断。
+所有工具事件均按 `runId` 关联 `agent_runs` 与 `agent_tool_events`，未使用全表聚合推断。
 
-- 场景 1：`ccf7637b-0ec5-4931-b757-490262f18aa5`
-- 场景 2：`65c9b436-71dd-4a6a-9b6f-74cb04bf71c3`
-- 场景 3：`15e3212a-9afc-4f17-8fe9-eab9c6335ac6`
-- 场景 4：`211b29f4-a895-493a-9e3b-3473ecc66811`
-- 场景 5：`aa278083-4383-4513-a99d-089c9b6ccc27`
-- 场景 6：`cfd95a58-6ee3-4333-a684-a44dd2a46c8d`
-- 场景 7：`96091a15-2904-45ac-8e92-40ffbf546c69`
-- 场景 8：`5a07674c-c014-4d15-843e-c27833ae54b8`
-- 场景 9：`d9264b87-5be4-4d20-b2a3-634772a01e10`
+- 场景 1：`c72e5bb5-9634-4680-9297-7f98e8367fe3`
+- 场景 2：`667cf3de-937b-4906-9bad-f944c61600fe`
+- 场景 3：`d2798150-e258-403a-ac34-a90bdc0d964e`
+- 场景 4：`5a60d905-a92e-4f8b-abe9-37163e56307d`
+- 场景 5：`c14bb5cd-12f5-410d-9b4c-c7c339d7195a`
+- 场景 6：`5ea4a7bb-5f9f-4f49-b64e-24692e3fafce`
+- 场景 7：`403b671c-9e6c-42c8-85bf-7879823d76b4`
+- 场景 8：`63ed438a-4221-4a1f-9ec5-a2726f3a97a1`
+- 场景 9：`9463abe2-584a-46cc-83a2-b13625f48881`
 
-另有独立可见性闸门 run `8590c921-fc73-46c0-a54d-9b88356d34cc`，同时成功调用 `get_member_tasks` 与 `get_tasks`。这直接证明补全并重启后的 Hermes 能看到 A7.4-A 新工具；正式场景 1 只选旧工具属于模型选择结果，不是白名单仍缺失。
+独立可见性闸门 run `8590c921-fc73-46c0-a54d-9b88356d34cc` 同时调用过 `get_tasks` 和 `get_member_tasks`，证明新工具对 Hermes 可见。正式场景通过工具描述消歧，针对“我的待办”只调用 `get_member_tasks`。
 
 ## 记忆验证
 
-额外输入“记住我不吃辣”，run `46e77228-4c6e-41fa-822e-29716ab46089` 未调用 `remember_preference`，而是在约 91.9 秒后以 `HERMES_UNAVAILABLE_FALLBACK` 完成并调用了 `get_today_summary`。A7.2 记忆工具已进入 Hermes 24 项目录，但本轮仍未完成真实调用验收。
+| 输入 | 实际工具 | runId | 耗时 | 结果 |
+|---|---|---|---:|---|
+| 记住我不吃辣 | `remember_preference` | `bb57211f-c06b-4372-adb4-fa8108ac8f41` | 26.0s | 通过 |
+| 我有什么饮食偏好 | `recall_preferences` | `fd67b7f9-1cfd-4af2-9701-d222168e8c24` | 13.9s | 通过 |
 
-## 发现的问题
+两条 run 均为 Hermes、无回落。数据库只核对元数据：写入产生一条 `candidate`、`scope=member_private`、`memoryKey=spice_level` 的 `agent_memory_items`；`ownerMemberId` 与 run 发起成员一致，家庭归属一致，来源为对应 `agent_tool` run。正文密文未读取或输出。
 
-### P0（崩溃、500、数据泄露）
+## 超时取舍
 
-- 无。
+- Hermes chat 超时从 90 秒调整为 **180 秒**。
+- 工具授权 TTL 保持 **300 秒**。
+- 两者保留 **120 秒**授权余量，避免把请求超时问题变成运行中途授权过期。
+- Expo 发送消息接口只创建 queued run 并立即返回，客户端随后轮询状态，不存在更短的长连接 HTTP 超时先行中断。
+- 新增静态契约，要求 chat 超时固定为 180 秒且至少保留 60 秒授权余量。
 
-### P1（功能与可信度）
+## 自动回归
 
-1. 天气场景没有 `get_weather` 工具事件或卡片，Hermes 却直接回复了具体日期、温度和降雨信息。`OPENWEATHER_API_KEY` 未配置，这段天气内容没有家庭工具数据来源，存在把模型生成内容当实时天气展示的风险。
-2. 复杂多工具场景和记忆场景均触发 `HERMES_UNAVAILABLE_FALLBACK`，单次耗时约 92 秒。回退保证了页面有结果，但不能证明 Hermes 完成了多工具编排或长期记忆写入。
-3. `get_tasks` 与 `get_member_tasks` 意图重叠。新工具已可见，但相同提示在独立闸门中调用过新旧两个工具，在正式干净会话中只调用旧工具，选择结果不稳定。
+- `hermes-config-contract.mjs` 校验 Hermes 两份配置与 24 个代码工具一致。
+- `agent-tools.mjs` 校验天气唯一数据源约束、成员/家庭任务边界，以及个人记忆候选无需范围追问。
+- `agent-hermes-live.spec.ts` 负责真实 Hermes -> MCP 链路、回落判定、动态汇总、天气数字防编造和记忆工具验证；默认跳过，需显式设置 `HERMES_LIVE_E2E=1`。
+- 截图与结构化明细见本目录 11 张 PNG 和 `E2E-RESULTS.json`。
 
-### P2（体验）
+实际验收结果：Hermes 配置契约通过；API build 通过；全量 API 回归在 65.3 秒内通过；Mobile TypeScript 与 Expo lint 通过；真实 Hermes 9 个主场景和 2 个记忆场景全部通过。
 
-1. 卡片仍直接显示 `scheduled`、`pending`、`open`、`accepted`、`owner`、`balanced` 等内部枚举，中文界面缺少本地化映射。
-2. 部分较长的 Hermes 文本在 390px 视口右侧被裁切；结果卡片本身未发现水平溢出。
-3. Expo 开发工具按钮覆盖截图左下角导航区域，这是开发模式测试伪影，不代表发布构建 UI。
+## 已知残留
 
-## 配置与自动回归
-
-- 仓库 `deploy/hermes/config.yaml` 与 `config.local.yaml` 均为 24 项，顺序为 17 个读工具、2 个记忆工具、5 个提案工具。
-- 本机 `familyapp` profile 同步为 24 项并重启 LaunchAgent；重启后 PID 为 `69196`，监听 `127.0.0.1:8642`。
-- `node scripts/hermes-config-contract.mjs` 通过。
-- 故障注入删除 `get_weather` 后，契约脚本以非零退出并打印 `缺失: get_weather` 及两份配置差集；恢复后再次通过。
-- `npx pnpm test:api` 全量通过。
-- `npx pnpm build` 通过。
-
-## 截图
-
-- 9 张主场景截图与额外 `10-memory.png` 均为 390 × 844。
-- 鼠标/触控的新对话、输入、发送和卡片显示可执行。
-- 场景结果的结构化明细见 `E2E-RESULTS.json`。
+- 390px 视口下，较长的助手纯文本消息仍会在右侧裁切。该问题在旧报告中已存在，与本批工具选择、超时和回落判定无关，留待聊天布局批次修复。
+- 截图左下角的 Expo 开发工具按钮会覆盖少量导航区域，这是开发模式测试伪影，不代表发布构建界面。

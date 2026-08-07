@@ -28,6 +28,7 @@ import {
   AGENT_MEMORY_TOOLS,
   AGENT_PROPOSAL_TOOLS,
   AGENT_READ_TOOLS,
+  AGENT_TOOL_AUTHORIZATION_TTL_MS,
   AgentRuntime,
 } from './agent.types';
 import { AgentProposalsService } from './agent-proposals.service';
@@ -437,7 +438,9 @@ export class AgentService {
               ...setting.proposalToolsEnabled,
               ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
             ],
-            authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
+            authorizationExpiresAt: new Date(
+              Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
+            ),
             startedAt: null,
             finishedAt: null,
             cancelRequestedAt: null,
@@ -602,7 +605,9 @@ export class AgentService {
             modelAlias: setting.modelAlias,
             status: 'queued',
             allowedTools: [...setting.readToolsEnabled],
-            authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
+            authorizationExpiresAt: new Date(
+              Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
+            ),
             startedAt: null,
             finishedAt: null,
             cancelRequestedAt: null,
@@ -781,7 +786,9 @@ export class AgentService {
             ...setting.proposalToolsEnabled,
             ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
           ],
-          authorizationExpiresAt: new Date(Date.now() + 5 * 60_000),
+          authorizationExpiresAt: new Date(
+            Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
+          ),
           startedAt: null,
           finishedAt: null,
           cancelRequestedAt: null,

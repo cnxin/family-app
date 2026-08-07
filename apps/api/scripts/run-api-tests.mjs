@@ -198,6 +198,11 @@ let activeApiOutput = '';
 
 try {
   await runScript('scripts/hermes-config-contract.mjs');
+  await runProcess(process.execPath, [
+    '-r',
+    'ts-node/register',
+    'scripts/agent-runtime.contract.ts',
+  ]);
   await admin.connect();
   await runProcess(process.execPath, [
     '-r',

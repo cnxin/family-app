@@ -97,7 +97,7 @@ export class AgentMcpController {
       start: z.string().optional(),
       end: z.string().optional(),
     });
-    register('get_tasks', '读取最多 32 天的家庭任务和完成状态', {
+    register('get_tasks', '查询全家所有成员最多 32 天的家庭任务和完成状态；用户询问全家或家庭任务时使用，询问本人任务时应使用 get_member_tasks', {
       runId,
       start: z.string().optional(),
       end: z.string().optional(),
@@ -136,7 +136,7 @@ export class AgentMcpController {
       runId,
       limit: z.number().int().min(1).max(20).optional(),
     });
-    register('get_member_tasks', '查询家庭成员的待办或已完成任务', {
+    register('get_member_tasks', '查询当前成员本人（默认）或指定同家庭成员的待办/已完成任务；用户说“我的任务”时必须使用本工具，不应使用 get_tasks', {
       runId,
       memberId: z.string().uuid().optional(),
       status: z.enum(['pending', 'completed', 'all']).optional(),
@@ -163,7 +163,7 @@ export class AgentMcpController {
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       days: z.number().int().min(1).max(30).optional(),
     });
-    register('get_weather', '查询指定城市未来最多 5 天的天气预报', {
+    register('get_weather', '这是实时天气的唯一数据来源。回答任何城市的温度、降水或预报前必须调用本工具；不得依据模型自身知识生成天气结论，工具不可用时只能明确说明天气服务不可用', {
       runId,
       city: z.string().min(1).max(80).optional(),
       days: z.number().int().min(1).max(5).optional(),
@@ -178,7 +178,7 @@ export class AgentMcpController {
       memoryKey: z.enum(AGENT_MEMORY_KEYS).optional(),
       limit: z.number().int().min(1).max(20).optional(),
     });
-    register('remember_preference', '创建一条等待用户确认的个人偏好候选', {
+    register('remember_preference', '当当前成员说“记住我……”或要求记住自己的偏好、习惯时，必须立即调用本工具，创建归属当前成员的 member_private 候选并等待其在 Family App 内确认；无需且不得追问是否适用于全家', {
       runId,
       memoryKey: z.enum(AGENT_MEMORY_KEYS),
       content: z.string().min(1).max(2000),

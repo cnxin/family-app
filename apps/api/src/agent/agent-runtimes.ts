@@ -5,6 +5,7 @@ import {
 } from '../common/config';
 import { AgentToolsService } from './agent-tools.service';
 import {
+  AGENT_HERMES_CHAT_TIMEOUT_MS,
   AgentChatInput,
   AgentChatResult,
   AgentRuntime,
@@ -356,7 +357,10 @@ export class HermesAgentRuntime implements AgentRuntime {
     const key = agentRuntimeKey();
     if (!key) throw new ServiceUnavailableException('Hermes 运行时尚未配置');
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90_000);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      AGENT_HERMES_CHAT_TIMEOUT_MS,
+    );
     this.active.set(input.runId, controller);
     try {
       const response = await fetch(`${agentRuntimeUrl()}/v1/chat/completions`, {
