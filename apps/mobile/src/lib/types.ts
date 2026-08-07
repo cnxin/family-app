@@ -1708,6 +1708,89 @@ export interface AgentSettings {
   updatedAt: string;
 }
 
+export type AgentResponseStyle = 'concise' | 'balanced' | 'detailed';
+
+export interface AgentMemberProfile {
+  id: string;
+  memberId: string;
+  enabled: boolean;
+  assistantName: string;
+  responseStyle: AgentResponseStyle;
+  memoryEnabled: boolean;
+  memorySuggestionEnabled: boolean;
+  proactiveRoutinesEnabled: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AgentMemoryScope = 'member_private' | 'household';
+export type AgentMemoryKind =
+  | 'preference'
+  | 'fact'
+  | 'episodic_summary'
+  | 'routine_context';
+export type AgentMemoryStatus =
+  | 'candidate'
+  | 'active'
+  | 'revoked'
+  | 'forgotten'
+  | 'expired';
+export type AgentMemoryConfidenceSource =
+  | 'explicit'
+  | 'business'
+  | 'summary_candidate';
+export type AgentMemoryKey =
+  | 'diet_restriction'
+  | 'spice_level'
+  | 'cooking_skill'
+  | 'schedule_preference'
+  | 'reply_style'
+  | 'other';
+
+export interface AgentMemoryItem {
+  id: string;
+  ownerMemberId: string;
+  scope: AgentMemoryScope;
+  kind: AgentMemoryKind;
+  category: string;
+  memoryKey: AgentMemoryKey;
+  content: string | null;
+  status: AgentMemoryStatus;
+  confidenceSource: AgentMemoryConfidenceSource;
+  confirmedByMemberId: string | null;
+  validFrom: string | null;
+  expiresAt: string | null;
+  source: {
+    type: string;
+    id: string | null;
+    conversationId: string | null;
+    messageId: string | null;
+  };
+  visibility: AgentMemoryScope;
+  untrustedContent: true;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAgentMemoryCandidateDto {
+  content: string;
+  memoryKey: AgentMemoryKey;
+  category?: AgentMemoryKey;
+  kind?: AgentMemoryKind;
+}
+
+export interface AgentMemoryForgetResult {
+  id: string;
+  forgotten: true;
+  status: 'forgotten' | 'expired';
+}
+
+export interface AgentMemoryClearResult {
+  forgottenCount: number;
+}
+
 export interface AgentRun {
   id: string;
   conversationId: string;

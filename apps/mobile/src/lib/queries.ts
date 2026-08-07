@@ -8,12 +8,19 @@ import type {
   AccountProfile,
   AgentConversation,
   AgentConversationDetail,
+  AgentMemoryClearResult,
+  AgentMemoryForgetResult,
+  AgentMemoryItem,
+  AgentMemoryScope,
+  AgentMemoryStatus,
+  AgentMemberProfile,
   AgentRun,
   AgentSettings,
   AgentStatus,
   AgentActionProposal,
   AgentChannelPairing,
   AgentMemberChannel,
+  CreateAgentMemoryCandidateDto,
   AppNotification,
   AssetCategory,
   AssetDocument,
@@ -142,6 +149,134 @@ export function useUpdateAgentSettings() {
       void qc.invalidateQueries({ queryKey: ['agent-settings'] });
       void qc.invalidateQueries({ queryKey: ['agent-status'] });
     },
+  });
+}
+
+export function useAgentProfile(enabled = true) {
+  return useQuery({
+    queryKey: ['agent', 'profile'],
+    queryFn: () => api<AgentMemberProfile>('/agent/profile'),
+    enabled,
+  });
+}
+
+export function useUpdateAgentProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: Partial<
+        Pick<
+          AgentMemberProfile,
+          | 'enabled'
+          | 'assistantName'
+          | 'responseStyle'
+          | 'memoryEnabled'
+          | 'memorySuggestionEnabled'
+          | 'proactiveRoutinesEnabled'
+        >
+      > & { expectedVersion: number },
+    ) => api<AgentMemberProfile>('/agent/profile', { method: 'PATCH', body: input }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent', 'profile'] });
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] });
+    },
+  });
+}
+
+export function useAgentMemories(
+  status?: AgentMemoryStatus,
+  scope?: AgentMemoryScope,
+) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (scope) params.set('scope', scope);
+  const query = params.toString();
+  return useQuery({
+    queryKey: ['agent', 'memories', { status, scope }],
+    queryFn: () =>
+      api<AgentMemoryItem[]>(`/agent/memories${query ? `?${query}` : ''}`),
+  });
+}
+
+export function useCreateAgentMemoryCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateAgentMemoryCandidateDto) =>
+      api<AgentMemoryItem>('/agent/memories/candidates', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useConfirmAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemoryItem>(`/agent/memories/${input.id}/confirm`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useShareAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemoryItem>(`/agent/memories/${input.id}/share`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useCorrectAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      content: string;
+      expectedVersion: number;
+    }) =>
+      api<AgentMemoryItem>(`/agent/memories/${input.id}`, {
+        method: 'PATCH',
+        body: {
+          content: input.content,
+          expectedVersion: input.expectedVersion,
+        },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useForgetAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemoryForgetResult>(`/agent/memories/${input.id}`, {
+        method: 'DELETE',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useClearAgentMemories() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api<AgentMemoryClearResult>('/agent/memories', { method: 'DELETE' }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
   });
 }
 
