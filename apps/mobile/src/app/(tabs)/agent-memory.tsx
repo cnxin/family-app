@@ -95,7 +95,7 @@ export default function AgentMemoryScreen() {
   const [kind, setKind] = React.useState<VisibleMemoryKind>('preference');
   const [clearVisible, setClearVisible] = React.useState(false);
   const [filterTransitioning, setFilterTransitioning] = React.useState(false);
-  const [announcement, setAnnouncement] = React.useState('');
+  const [notice, setNotice] = React.useState<{ message: string; error: boolean } | null>(null);
   const transitionTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeQuery = useAgentMemories('active', scope);
   const profileQuery = useAgentProfile();
@@ -151,11 +151,12 @@ export default function AgentMemoryScreen() {
     clearMemories.mutate(undefined, {
       onSuccess: (result) => {
         setClearVisible(false);
-        setAnnouncement(
-          result.forgottenCount > 0
+        setNotice({
+          message: result.forgottenCount > 0
             ? `已遗忘 ${result.forgottenCount} 条个人记忆`
             : '当前没有需要清空的个人记忆',
-        );
+          error: false,
+        });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(
           '已清空',
@@ -165,9 +166,13 @@ export default function AgentMemoryScreen() {
         );
       },
       onError: (mutationError) => {
+        const message = mutationError instanceof Error
+          ? mutationError.message
+          : '请稍后再试';
+        setNotice({ message: `清空失败：${message}`, error: true });
         Alert.alert(
           '清空失败',
-          mutationError instanceof Error ? mutationError.message : '请稍后再试',
+          message,
         );
       },
     });
@@ -288,12 +293,17 @@ export default function AgentMemoryScreen() {
               <Text style={[t.headline, { color: c.red }]}>清空我的记忆</Text>
             </PressableScale>
           ) : null}
-          {announcement ? (
+          {notice ? (
             <Text
               accessibilityLiveRegion="polite"
-              style={[t.footnote, styles.announcement, { color: c.green }]}
+              role={notice.error ? 'alert' : undefined}
+              style={[
+                t.footnote,
+                styles.announcement,
+                { color: notice.error ? c.red : c.green },
+              ]}
             >
-              {announcement}
+              {notice.message}
             </Text>
           ) : null}
         </ScrollView>

@@ -24,6 +24,7 @@ import {
 import React from 'react';
 import {
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -117,7 +118,7 @@ export default function AgentMemoryDetailScreen() {
   const [draft, setDraft] = React.useState('');
   const [pendingConfirmation, setPendingConfirmation] =
     React.useState<PendingConfirmation>(null);
-  const [announcement, setAnnouncement] = React.useState('');
+  const [notice, setNotice] = React.useState<{ message: string; error: boolean } | null>(null);
 
   const queriedItem = React.useMemo(
     () => [...(candidateQuery.data ?? []), ...(activeQuery.data ?? [])]
@@ -140,6 +141,10 @@ export default function AgentMemoryDetailScreen() {
     || correctMemory.isPending
     || shareMemory.isPending
     || forgetMemory.isPending;
+  const returnToList = React.useCallback(
+    () => router.replace('/agent-memory'),
+    [router],
+  );
 
   const openEdit = () => {
     if (!item) return;
@@ -159,17 +164,10 @@ export default function AgentMemoryDetailScreen() {
       setLocalItem(updated);
       setDraft(updated.content ?? '');
       setEditVisible(false);
-      setAnnouncement('记忆内容已修改');
+      setNotice({ message: '记忆内容已修改', error: false });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      Alert.alert(
-        '修改失败',
-        error instanceof ApiError && error.status === 409
-          ? '内容已被修改，请刷新后重试'
-          : error instanceof Error
-            ? error.message
-            : '请稍后再试',
-      );
+      showError('修改失败', error);
     }
   };
 
@@ -180,13 +178,11 @@ export default function AgentMemoryDetailScreen() {
         id: item.id,
         expectedVersion: item.version,
       });
-      setAnnouncement('记忆已确认');
+      setNotice({ message: '记忆已确认', error: false });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('已确认', '小管家会在需要时使用这条记忆。', [
-        { text: '好', onPress: () => router.back() },
-      ]);
+      finishAndReturn('已确认', '小管家会在需要时使用这条记忆。');
     } catch (error) {
-      showOperationError('确认失败', error);
+      showError('确认失败', error);
     }
   };
 
@@ -198,13 +194,11 @@ export default function AgentMemoryDetailScreen() {
         expectedVersion: item.version,
       });
       setPendingConfirmation(null);
-      setAnnouncement('记忆已共享到家庭');
+      setNotice({ message: '记忆已共享到家庭', error: false });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('已共享', '家庭成员现在可以看到这条记忆。', [
-        { text: '好', onPress: () => router.back() },
-      ]);
+      finishAndReturn('已共享', '家庭成员现在可以看到这条记忆。');
     } catch (error) {
-      showOperationError('共享失败', error);
+      showError('共享失败', error);
     }
   };
 
@@ -221,14 +215,31 @@ export default function AgentMemoryDetailScreen() {
         (rows) => rows?.filter((memory) => memory.id !== item.id),
       );
       setPendingConfirmation(null);
-      setAnnouncement(ignored ? '记忆建议已忽略' : '记忆已遗忘');
+      setNotice({
+        message: ignored ? '记忆建议已忽略' : '记忆已遗忘',
+        error: false,
+      });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(ignored ? '已忽略' : '已遗忘', undefined, [
-        { text: '好', onPress: () => router.back() },
-      ]);
+      finishAndReturn(ignored ? '已忽略' : '已遗忘');
     } catch (error) {
-      showOperationError(ignored ? '忽略失败' : '遗忘失败', error);
+      showError(ignored ? '忽略失败' : '遗忘失败', error);
     }
+  };
+
+  const finishAndReturn = (title: string, message?: string) => {
+    if (Platform.OS === 'web') {
+      returnToList();
+      return;
+    }
+    Alert.alert(title, message, [
+      { text: '好', onPress: returnToList },
+    ]);
+  };
+
+  const showError = (title: string, error: unknown) => {
+    const message = operationErrorMessage(error);
+    setNotice({ message: `${title}：${message}`, error: true });
+    Alert.alert(title, message);
   };
 
   const retry = () => {
@@ -240,7 +251,7 @@ export default function AgentMemoryDetailScreen() {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: c.bg }]} edges={['top']}>
         <PageContainer maxWidth={720} style={styles.page}>
-          <DetailTopBar onBack={() => router.back()} />
+          <DetailTopBar onBack={returnToList} />
           <Card style={styles.loadingCard}><SkeletonRows count={4} /></Card>
         </PageContainer>
       </SafeAreaView>
@@ -251,7 +262,7 @@ export default function AgentMemoryDetailScreen() {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: c.bg }]} edges={['top']}>
         <PageContainer maxWidth={720} style={styles.page}>
-          <DetailTopBar onBack={() => router.back()} />
+          <DetailTopBar onBack={returnToList} />
           <Card>
             <EmptyState
               hint={queryError instanceof Error
@@ -308,7 +319,7 @@ export default function AgentMemoryDetailScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer maxWidth={member?.role === 'member' ? 720 : 1040} style={styles.page}>
         <DetailTopBar
-          onBack={() => router.back()}
+          onBack={returnToList}
           onMore={ownsItem ? () => setMenuVisible(true) : undefined}
         />
         <ScrollView
@@ -404,12 +415,17 @@ export default function AgentMemoryDetailScreen() {
             </View>
           ) : null}
 
-          {announcement ? (
+          {notice ? (
             <Text
               accessibilityLiveRegion="polite"
-              style={[t.footnote, styles.announcement, { color: c.green }]}
+              role={notice.error ? 'alert' : undefined}
+              style={[
+                t.footnote,
+                styles.announcement,
+                { color: notice.error ? c.red : c.green },
+              ]}
             >
-              {announcement}
+              {notice.message}
             </Text>
           ) : null}
         </ScrollView>
@@ -621,15 +637,12 @@ function formatDate(value: string) {
   });
 }
 
-function showOperationError(title: string, error: unknown) {
-  Alert.alert(
-    title,
-    error instanceof ApiError && error.status === 409
-      ? '内容已被修改，请刷新后重试'
-      : error instanceof Error
-        ? error.message
-        : '请稍后再试',
-  );
+function operationErrorMessage(error: unknown) {
+  return error instanceof ApiError && error.status === 409
+    ? '内容已被修改，请刷新后重试'
+    : error instanceof Error
+      ? error.message
+      : '请稍后再试';
 }
 
 const styles = StyleSheet.create({

@@ -234,9 +234,11 @@ export default function ProfileScreen() {
                 <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
                   {agentProfile.error
                     ? '状态暂时无法读取'
-                    : agentProfile.data?.memoryEnabled === false
-                      ? '小管家不会记录或使用个人偏好'
-                      : '让小管家记住确认过的个人偏好'}
+                    : updateAgentProfile.error
+                      ? '更新失败，请重试'
+                      : agentProfile.data?.memoryEnabled === false
+                        ? '小管家不会记录或使用个人偏好'
+                        : '让小管家记住确认过的个人偏好'}
                 </Text>
               </View>
               <Switch
@@ -258,6 +260,7 @@ export default function ProfileScreen() {
                 }}
                 trackColor={{ false: c.fillStrong, true: c.tintSoft }}
                 thumbColor={agentProfile.data?.memoryEnabled ? c.tint : c.tertiaryLabel}
+                style={styles.switchTarget}
                 value={agentProfile.data?.memoryEnabled ?? true}
               />
             </View>
@@ -651,6 +654,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  switchTarget: { minHeight: 44, minWidth: 44 },
   formCard: { padding: 16, gap: 14 },
   securityNotice: {
     flexDirection: 'row',
