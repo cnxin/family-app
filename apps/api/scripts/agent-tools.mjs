@@ -288,9 +288,11 @@ try {
       descriptionFor('get_weather').includes('不得依据模型自身知识') &&
       descriptionFor('get_member_tasks').includes('我的任务') &&
       descriptionFor('get_tasks').includes('全家') &&
+      descriptionFor('search_recipes').includes('这道菜') &&
+      descriptionFor('search_recipes').includes('范围查询应直接调用') &&
       descriptionFor('remember_preference').includes('必须立即调用') &&
       descriptionFor('remember_preference').includes('不得追问'),
-    '天气来源、任务边界和个人记忆直写候选语义已进入 MCP 工具描述',
+    '天气来源、任务边界、单菜品指代和个人记忆直写候选语义已进入 MCP 工具描述',
   );
 
   const memberTasks = await mcp(

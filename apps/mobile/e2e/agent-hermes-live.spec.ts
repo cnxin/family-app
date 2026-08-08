@@ -57,6 +57,9 @@ type Result = {
 const repoRoot = resolve(process.cwd(), '../..');
 const resultPath = resolve(repoRoot, 'test-screenshots/E2E-RESULTS.json');
 const screenshotRoot = resolve(repoRoot, 'test-screenshots');
+const apiBaseUrl = (
+  process.env.FAMILY_API_URL ?? 'http://localhost:3100'
+).replace(/\/+$/, '');
 const fallbackCode = 'HERMES_UNAVAILABLE_FALLBACK';
 const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
 const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
@@ -76,6 +79,32 @@ async function responseData(response: Response) {
   } catch {
     return null;
   }
+}
+
+async function agentApi<T>(
+  page: Page,
+  path: string,
+  method: 'GET' | 'POST' = 'GET',
+  body?: unknown,
+) {
+  const token = await page.evaluate(() =>
+    window.localStorage.getItem('family-app-token'),
+  );
+  expect(token, '真实 Hermes E2E 必须保有当前登录成员的访问令牌').toBeTruthy();
+  const response = await page.request.fetch(`${apiBaseUrl}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    ...(body === undefined ? {} : { data: body }),
+  });
+  const payload = await response.json();
+  expect(
+    response.ok(),
+    `${method} ${path} 应成功，实际为 ${response.status()}`,
+  ).toBeTruthy();
+  return payload.data as T;
 }
 
 function watchConversationDetails(page: Page) {
@@ -174,9 +203,19 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     .then(() => true)
     .catch(() => false);
   if (!authenticated) {
+    const password = process.env.E2E_ACCOUNT_PASSWORD;
+    expect(
+      password !== undefined,
+      '真实 Hermes E2E 缺少 E2E_ACCOUNT_PASSWORD；空字符串表示无密码账号',
+    ).toBeTruthy();
     await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
+    await page
+      .getByPlaceholder('输入账号')
+      .fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
+    await page.getByPlaceholder('输入密码').fill(password ?? '');
+    await page.getByRole('button', { name: '登录', exact: true }).click();
     await page.waitForURL((url) => !/\/login\/?$/.test(url.pathname), {
-      timeout: 600_000,
+      timeout: 20_000,
     });
     await page.goto('/assistant');
   }
@@ -361,13 +400,33 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     for (const scenario of scenarios) await runScenario(scenario);
   }
   if (!pageContextOnly) {
-    await runScenario({
+    const memoryWrite = await runScenario({
       id: 'memory-write',
       prompt: '记住我不吃辣',
       expectedTool: 'remember_preference',
       expectedKind: null,
       screenshot: '10-memory-write.png',
     });
+    expect(memoryWrite.passed).toBeTruthy();
+    const candidates = await agentApi<
+      {
+        id: string;
+        status: string;
+        version: number;
+        source: { id: string | null };
+      }[]
+    >(page, '/agent/memories?status=candidate&scope=member_private');
+    const candidate = candidates.find(
+      (memory) => memory.source.id === memoryWrite.runId,
+    );
+    expect(candidate, '记忆写入 run 必须产生对应的候选记忆').toBeTruthy();
+    const confirmed = await agentApi<{ status: string }>(
+      page,
+      `/agent/memories/${candidate!.id}/confirm`,
+      'POST',
+      { expectedVersion: candidate!.version },
+    );
+    expect(confirmed.status).toBe('active');
     await runScenario({
       id: 'memory-recall',
       prompt: '我有什么饮食偏好',
