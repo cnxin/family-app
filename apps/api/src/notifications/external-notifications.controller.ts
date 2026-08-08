@@ -41,6 +41,7 @@ const MODULES: NotificationModule[] = [
   'media',
   'guest',
   'points',
+  'agent',
   'system',
 ];
 

@@ -51,8 +51,16 @@ async function runMigrationPhase() {
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
     assert(
-      latest[0]?.name === 'AddAgentMemory1785231700000',
-      '专项演练从 A7.2 最新迁移开始',
+      latest[0]?.name === 'AddAgentRoutines1785231800000',
+      '专项演练从 A7.4-B 最新迁移开始',
+    );
+    await AppDataSource.undoLastMigration();
+    const memoryMigration = await AppDataSource.query(
+      `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+    );
+    assert(
+      memoryMigration[0]?.name === 'AddAgentMemory1785231700000',
+      '回退 A7.4-B 后仍可演练 A7.2 和 A7.1',
     );
     await AppDataSource.undoLastMigration();
     const profileMigration = await AppDataSource.query(

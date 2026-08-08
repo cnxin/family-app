@@ -42,6 +42,8 @@ interface UpdateAgentSettingsInput {
   runtimeProfile?: string;
   modelAlias?: string;
   retentionDays?: number;
+  dailyRoutineNotificationLimit?: number;
+  routineNotificationsEnabled?: boolean;
   readToolsEnabled?: string[];
   proposalToolsEnabled?: string[];
   expectedVersion: number;
@@ -169,6 +171,12 @@ export class AgentService {
             ? current.modelAlias
             : trimmed(input.modelAlias, 'hermes-agent'),
         retentionDays: input.retentionDays ?? current.retentionDays,
+        dailyRoutineNotificationLimit:
+          input.dailyRoutineNotificationLimit ??
+          current.dailyRoutineNotificationLimit,
+        routineNotificationsEnabled:
+          input.routineNotificationsEnabled ??
+          current.routineNotificationsEnabled,
         readToolsEnabled: tools,
         proposalToolsEnabled: proposalTools,
         updatedByMemberId: user.memberId,
@@ -1014,6 +1022,8 @@ export class AgentService {
           runtimeProfile: 'default',
           modelAlias: 'hermes-agent',
           retentionDays: 7,
+          dailyRoutineNotificationLimit: 3,
+          routineNotificationsEnabled: false,
           readToolsEnabled: [...AGENT_READ_TOOLS],
           proposalToolsEnabled: [...AGENT_PROPOSAL_TOOLS],
           version: 1,
@@ -1119,6 +1129,8 @@ export class AgentService {
       runtimeProfile: setting.runtimeProfile,
       modelAlias: setting.modelAlias,
       retentionDays: setting.retentionDays,
+      dailyRoutineNotificationLimit: setting.dailyRoutineNotificationLimit,
+      routineNotificationsEnabled: setting.routineNotificationsEnabled,
       readToolsEnabled: setting.readToolsEnabled,
       proposalToolsEnabled: setting.proposalToolsEnabled,
       version: setting.version,

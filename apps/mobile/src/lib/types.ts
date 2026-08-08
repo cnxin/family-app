@@ -1407,6 +1407,7 @@ export type NotificationModule =
   | 'media'
   | 'guest'
   | 'points'
+  | 'agent'
   | 'system';
 
 export type PointsLedgerType =
@@ -1716,6 +1717,8 @@ export interface AgentSettings {
   runtimeProfile: string;
   modelAlias: string;
   retentionDays: number;
+  dailyRoutineNotificationLimit: number;
+  routineNotificationsEnabled: boolean;
   readToolsEnabled: string[];
   proposalToolsEnabled: string[];
   version: number;

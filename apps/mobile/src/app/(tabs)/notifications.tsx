@@ -93,6 +93,7 @@ const MODULE_LABELS: Record<NotificationModule, string> = {
   media: '观影',
   guest: '访客',
   points: '积分',
+  agent: '小管家',
   system: '系统',
 };
 const MODULES = Object.keys(MODULE_LABELS) as NotificationModule[];

@@ -84,7 +84,7 @@ async function responseData(response: Response) {
 async function agentApi<T>(
   page: Page,
   path: string,
-  method: 'GET' | 'POST' = 'GET',
+  method: 'GET' | 'POST' | 'DELETE' = 'GET',
   body?: unknown,
 ) {
   const token = await page.evaluate(() =>
@@ -413,6 +413,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
         id: string;
         status: string;
         version: number;
+        memoryKey: string;
         source: { id: string | null };
       }[]
     >(page, '/agent/memories?status=candidate&scope=member_private');
@@ -420,13 +421,23 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       (memory) => memory.source.id === memoryWrite.runId,
     );
     expect(candidate, '记忆写入 run 必须产生对应的候选记忆').toBeTruthy();
-    const confirmed = await agentApi<{ status: string }>(
-      page,
-      `/agent/memories/${candidate!.id}/confirm`,
-      'POST',
-      { expectedVersion: candidate!.version },
+    const activeMemories = await agentApi<
+      { id: string; memoryKey: string; version: number }[]
+    >(page, '/agent/memories?status=active&scope=member_private');
+    const existingActive = activeMemories.find(
+      (memory) => memory.memoryKey === candidate!.memoryKey,
     );
-    expect(confirmed.status).toBe('active');
+    let cleanupVersion = candidate!.version;
+    if (!existingActive) {
+      const confirmed = await agentApi<{ status: string; version: number }>(
+        page,
+        `/agent/memories/${candidate!.id}/confirm`,
+        'POST',
+        { expectedVersion: candidate!.version },
+      );
+      expect(confirmed.status).toBe('active');
+      cleanupVersion = confirmed.version;
+    }
     await runScenario({
       id: 'memory-recall',
       prompt: '我有什么饮食偏好',
@@ -434,6 +445,12 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       expectedKind: null,
       screenshot: '11-memory-recall.png',
     });
+    await agentApi(
+      page,
+      `/agent/memories/${candidate!.id}`,
+      'DELETE',
+      { expectedVersion: cleanupVersion },
+    );
   }
 
   if (!memoryOnly) {

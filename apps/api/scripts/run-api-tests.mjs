@@ -23,6 +23,7 @@ const testEnvironment = {
   JWT_EXPIRES_SECONDS: '900',
   JWT_SECRET: 'family-app-api-test-secret',
   AGENT_PURGE_POLL_INTERVAL_MS: '100',
+  AGENT_ROUTINE_POLL_INTERVAL_MS: '100',
   AGENT_RUNTIME_KEY: 'family-app-api-test-runtime-key',
   AGENT_RUNTIME_URL: 'http://127.0.0.1:3200',
   REFRESH_TOKEN_EXPIRES_SECONDS: '2592000',
@@ -245,6 +246,7 @@ try {
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
   await runScript('scripts/verify-legacy-pin-migration.mjs');
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+  await runScript('scripts/agent-routines.mjs', '--migration');
   await runScript('scripts/agent-profiles.mjs', '--migration');
   await runProcess(process.execPath, [
     '-r',
@@ -273,6 +275,7 @@ try {
   await runScript('scripts/agent-memory.mjs');
   await runScript('scripts/agent-tools.mjs');
   await runScript('scripts/agent-page-context.mjs');
+  await runScript('scripts/agent-routines.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');

@@ -30,6 +30,7 @@ import {
 } from '@nestjs/common';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { AgentRoutineKind } from '../entities';
 import {
   AGENT_MEMORY_KEYS,
   AGENT_PAGE_ENTITY_TYPES,
@@ -42,6 +43,7 @@ import { AgentService } from './agent.service';
 import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
 import { AgentMemoryService } from './agent-memory.service';
+import { AgentRoutineService } from './agent-routine.service';
 
 class CreateConversationDto {
   @IsOptional()
@@ -124,6 +126,16 @@ class UpdateAgentSettingsDto {
   retentionDays?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  dailyRoutineNotificationLimit?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  routineNotificationsEnabled?: boolean;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(AGENT_READ_TOOLS.length)
   @IsString({ each: true })
@@ -134,6 +146,28 @@ class UpdateAgentSettingsDto {
   @ArrayMaxSize(AGENT_PROPOSAL_TOOLS.length)
   @IsString({ each: true })
   proposalToolsEnabled?: string[];
+
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
+class UpdateAgentRoutineDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  scheduleHour?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(59)
+  scheduleMinute?: number;
 
   @IsInt()
   @Min(1)
@@ -277,6 +311,7 @@ export class AgentController {
     private readonly proposals: AgentProposalsService,
     private readonly channels: AgentChannelsService,
     private readonly memory: AgentMemoryService,
+    private readonly routines: AgentRoutineService,
   ) {}
 
   @Get('status')
@@ -296,6 +331,31 @@ export class AgentController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.updateSettings(dto, user);
+  }
+
+  @Patch('settings')
+  @RequireCapabilities('manage_agent')
+  patchSettings(
+    @Body() dto: UpdateAgentSettingsDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.updateSettings(dto, user);
+  }
+
+  @Get('routines')
+  @RequireCapabilities('manage_agent')
+  routinesList(@CurrentUser() user: JwtUser) {
+    return this.routines.list(user);
+  }
+
+  @Patch('routines/:kind')
+  @RequireCapabilities('manage_agent')
+  updateRoutine(
+    @Param('kind') kind: AgentRoutineKind,
+    @Body() dto: UpdateAgentRoutineDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.routines.update(kind, dto, user);
   }
 
   @Get('profile')

@@ -12,6 +12,8 @@ import {
   AgentMemoryItem,
   AgentMessage,
   AgentRun,
+  AgentRoutine,
+  AgentRoutineItem,
   AgentSetting,
   AgentToolEvent,
   Dish,
@@ -38,6 +40,7 @@ import { AgentChannelsService } from './agent-channels.service';
 import { AgentRetentionService } from './agent-retention.service';
 import { AgentMemoryService } from './agent-memory.service';
 import { AgentPageContextService } from './agent-page-context.service';
+import { AgentRoutineService } from './agent-routine.service';
 
 @Module({
   imports: [
@@ -49,6 +52,8 @@ import { AgentPageContextService } from './agent-page-context.service';
       AgentMemberProfile,
       AgentMemoryItem,
       AgentMemoryEvent,
+      AgentRoutine,
+      AgentRoutineItem,
       AgentConversation,
       AgentMessage,
       AgentRun,
@@ -84,6 +89,7 @@ import { AgentPageContextService } from './agent-page-context.service';
     AgentRetentionService,
     AgentMemoryService,
     AgentPageContextService,
+    AgentRoutineService,
   ],
 })
 export class AgentModule {}

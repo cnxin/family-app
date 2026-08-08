@@ -52,6 +52,7 @@ import { AddFoodBatchesAndSmartMenus1785231400000 } from './1785231400000-add-fo
 import { AllowAgentToolEventPresentationPurge1785231500000 } from './1785231500000-allow-agent-tool-event-presentation-purge';
 import { AddAgentMemberProfiles1785231600000 } from './1785231600000-add-agent-member-profiles';
 import { AddAgentMemory1785231700000 } from './1785231700000-add-agent-memory';
+import { AddAgentRoutines1785231800000 } from './1785231800000-add-agent-routines';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -108,4 +109,5 @@ export const ALL_MIGRATIONS = [
   AllowAgentToolEventPresentationPurge1785231500000,
   AddAgentMemberProfiles1785231600000,
   AddAgentMemory1785231700000,
+  AddAgentRoutines1785231800000,
 ];

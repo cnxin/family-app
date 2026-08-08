@@ -194,6 +194,7 @@ export type NotificationModule =
   | 'media'
   | 'guest'
   | 'points'
+  | 'agent'
   | 'system';
 export type NotificationChannelKind = 'webhook' | 'ntfy';
 export type NotificationDeliveryStatus =
@@ -215,6 +216,8 @@ export type BackupRunTrigger = 'manual' | 'scheduled';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
 export type AgentRuntimeKind = 'fake' | 'hermes';
 export type AgentResponseStyle = 'concise' | 'balanced' | 'detailed';
+export type AgentRoutineKind = 'nightly_digest';
+export type AgentRoutineItemStatus = 'pending' | 'digested' | 'expired';
 export type AgentMemoryScope = 'member_private' | 'household';
 export type AgentMemoryKind =
   | 'preference'
@@ -1678,7 +1681,7 @@ export class HouseholdTaskInstance {
 @Entity('notifications')
 @Check(
   'CHK_notifications_module',
-  `"module" IN ('menu', 'task', 'poll', 'calendar', 'reminder', 'media', 'guest', 'points', 'system')`,
+  `"module" IN ('menu', 'task', 'poll', 'calendar', 'reminder', 'media', 'guest', 'points', 'agent', 'system')`,
 )
 @Index('IDX_notifications_recipient_read', ['recipientId', 'readAt', 'createdAt'])
 @Index('IDX_notifications_household_source', ['householdId', 'module', 'sourceId'])
@@ -5998,6 +6001,10 @@ export class AgentChannelPairing {
 @Unique('UQ_agent_settings_household', ['householdId'])
 @Check('CHK_agent_settings_runtime_kind', `"runtimeKind" IN ('fake', 'hermes')`)
 @Check('CHK_agent_settings_retention_days', `"retentionDays" BETWEEN 1 AND 30`)
+@Check(
+  'CHK_agent_settings_daily_routine_notification_limit',
+  `"dailyRoutineNotificationLimit" BETWEEN 0 AND 50`,
+)
 export class AgentSetting {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -6026,6 +6033,12 @@ export class AgentSetting {
 
   @Column({ type: 'int', default: 7 })
   retentionDays: number;
+
+  @Column({ type: 'int', default: 3 })
+  dailyRoutineNotificationLimit: number;
+
+  @Column({ default: false })
+  routineNotificationsEnabled: boolean;
 
   @Column({
     type: 'jsonb',
@@ -6074,6 +6087,108 @@ export class AgentSetting {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
+}
+
+@Entity('agent_routines')
+@Unique('UQ_agent_routines_household_kind', ['householdId', 'kind'])
+@Check('CHK_agent_routines_kind', `"kind" IN ('nightly_digest')`)
+@Check('CHK_agent_routines_schedule_hour', `"scheduleHour" BETWEEN 0 AND 23`)
+@Check(
+  'CHK_agent_routines_schedule_minute',
+  `"scheduleMinute" BETWEEN 0 AND 59`,
+)
+@Check('CHK_agent_routines_version', `"version" >= 1`)
+@Index('IDX_agent_routines_next_run', ['nextRunAt'])
+export class AgentRoutine {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_routines_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  kind: AgentRoutineKind;
+
+  @Column({ default: false })
+  enabled: boolean;
+
+  @Column({ type: 'int', default: 21 })
+  scheduleHour: number;
+
+  @Column({ type: 'int', default: 0 })
+  scheduleMinute: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastRunAt: Date | null;
+
+  @Column({ type: 'timestamptz' })
+  nextRunAt: Date;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_routine_items')
+@Check(
+  'CHK_agent_routine_items_kind',
+  `"routineKind" IN ('nightly_digest')`,
+)
+@Check(
+  'CHK_agent_routine_items_status',
+  `"status" IN ('pending', 'digested', 'expired')`,
+)
+@Index(
+  'IDX_agent_routine_items_pending',
+  ['householdId', 'routineKind'],
+  { where: `"status" = 'pending'` },
+)
+export class AgentRoutineItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_routine_items_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  routineKind: AgentRoutineKind;
+
+  @Column({ type: 'varchar', length: 40 })
+  sourceType: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  sourceId: string;
+
+  @Column({ type: 'varchar', length: 200 })
+  summary: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: AgentRoutineItemStatus;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  digestedAt: Date | null;
 }
 
 @Entity('agent_member_profiles')
@@ -7077,6 +7192,8 @@ export const ALL_ENTITIES = [
   BackupPolicy,
   BackupRun,
   AgentSetting,
+  AgentRoutine,
+  AgentRoutineItem,
   AgentMemberProfile,
   AgentMemberChannel,
   AgentChannelPairing,
