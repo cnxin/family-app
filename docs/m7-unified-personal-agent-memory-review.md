@@ -567,3 +567,102 @@ A7.0 是「只读实体没读迁移，漏了触发器」；A7.1 是「照方案�
 ### 移动端遗留待办（A7.3 记录）
 
 390px 视口下，较长的助手纯文本消息存在右侧裁切。该问题会影响 A7.2b 已交付的「小管家记忆」管理页关联对话体验；A7.2b 当时只验收了 375px 视口。本批仅记录，不在 A7.3 页面上下文范围内修复。
+
+---
+
+## 附录五：A7.2b / A7.3 / A7.4-A 落地记录与勘误（2026-08-07）
+
+> 本节记录三个批次的交付结果、一次 0/9 事故的完整定性过程、以及由此补出的四道回归防线。
+
+### 已完成
+
+| 批次 | 提交 | 内容 | 真机结果 |
+| --- | --- | --- | --- |
+| A7.2b 移动端记忆管理页 | `837eb51` | 列表 + 详情 + 确认/修改/共享/遗忘/清空；隔离式 Playwright 回归 | — |
+| A7.4-A 只读工具扩展 | `5623004` | 7 个新只读工具 + 增强 `get_shopping_list`；MCP schema 注册；天气配置与降级 | 初版 0/9 |
+| A7.4-A 白名单修复 | `1706321` | 补全 Hermes 白名单至 24 项；新增静态契约校验 | 6/9 |
+| A7.4-A 遗留修复 | `cd68c99` | 超时 180s；天气强约束描述；回落即失败判定 | 9/9 |
+| A7.3 页面上下文 | `772610a` `2fc9dd6` | 受控 pageContext；5 类实体服务端重取数；500 字节上限 | 2/2 |
+| A7.4-A 回归修复 | `e43e9f3` | 单实体指代约束收窄到 `search_recipes`；记忆验收补 confirm | 9/9 + 2/2 |
+| 移动端裁切修复 | `1be3a54` | 消息气泡收缩约束；提案按钮 compact 纵向；响应式 mock 回归 | 41 passed |
+
+### 事故一：A7.4-A 真机 0/9，根因在 `deploy/hermes/*.yaml`
+
+工具要能被模型调用需**四处**同时正确，而当时只有第一处有测试覆盖：
+
+| 位置 | A7.4-A 初版 | 当时测试覆盖 |
+| --- | --- | --- |
+| `agent.types.ts` 常量 | 正确（17 个） | 有 |
+| `agent-mcp.controller.ts` 注册 | 正确（24 个 `register()`） | 无 |
+| `agent_settings.readToolsEnabled` | 正确（`ensureSettings` 用 `[...AGENT_READ_TOOLS]`） | 无（既有行路径） |
+| **`deploy/hermes/*.yaml` 的 `tools.include`** | **错（只有 15 个）** | **无** |
+
+`tools.include` 是显式白名单，缺 9 个：A7.4-A 的 7 个新工具，以及 **A7.2 的 `recall_preferences` / `remember_preference`**——这意味着 A7.2 的记忆工具从交付起就从未在真机上被调用过，其验收 `agent-memory.mjs` 直接调 service、绕过了 Hermes。
+
+诊断过程中有三次判断被证伪，均因从局部证据推断整体而未先读最直接的配置文件：
+
+| 假设 | 证伪依据 |
+| --- | --- |
+| MCP 漏注册 | `createServer()` 有 24 个 `register()`，与三常量并集精确一致 |
+| 既有 `agent_settings` 未回填 | `jsonb_array_length` = 17，`allowedTools` = 24 |
+| `chat()` 缺 `tools` 参数属架构缺陷 | Hermes 自带 MCP 客户端，通过 `mcp_servers` 连 `/internal/agent/mcp`，设计如此 |
+
+另有一次连带错误：用未按 `runId` 过滤的全表 `agent_tool_events` 做推断，把历史测试数据当成本次结果，据此得出"MCP 连接是通的、只是选错工具"，误导了后续两轮。
+
+### 事故二：A7.3 的全局 prompt 改动打坏 A7.4-A
+
+A7.3 在 `HermesAgentRuntime.chat()` 的 system prompt 里加了两段，第一段是条件的（`pageContext ? ... : ''`，正确），第二段**无条件追加**：
+
+> 用户使用"这道菜"等不明确指代且没有对应页面上下文时，必须追问具体对象，不得自行选择家庭资源。
+
+它进入每一次 run，包括 A7.4-A 那 9 个不带 pageContext 的场景。而那些提问恰好都是宽泛范围查询（"我的待办任务"未指定成员、"这周家里有什么安排"未给日期），模型被要求"指代不明时追问"，于是倾向先追问而不调工具——A7.4-A 由此从 9/9 退回 6/9。
+
+**一处修复产生了跨批次副作用**，且因为各批验收只跑自己新增的场景，要到重跑旧套件才暴露。
+
+修复方式：把该约束从全局 prompt 收窄到 `search_recipes` 单个工具的 description。这比分散到多个工具更克制——反向断言的原始场景就是菜品指代，其余工具不需要该约束，加了反而可能重现同类抑制。
+
+### 一条非缺陷：记忆召回"失败"是测试用例缺一步
+
+`recall_preferences` 走 `AgentMemoryService.search()`，只查 `status='active'`；`remember_preference` 走 `createCandidate()` 写入 `candidate`，必须经 `POST /agent/memories/:id/confirm` 才变 `active`。工具描述本身也写明"已确认的偏好"。
+
+所以「记住我不吃辣」→「我有什么饮食偏好」中间缺 confirm，召回查不到是**正确行为**。已在 e2e 补齐 写入 → confirm → 召回 三步。
+
+### 补出的四道回归防线
+
+| 防线 | 覆盖的缺口 |
+| --- | --- |
+| `scripts/hermes-config-contract.mjs` | `deploy/hermes/*.yaml` 的 `tools.include` 与三常量并集双向一致；两份 yaml 彼此一致。纯静态、前置于数据库连接 |
+| `scripts/agent-runtime.contract.ts` | chat 超时 180s 与工具授权 TTL 300s 的 ≥60s 余量关系。防止"调大超时"把超时回落换成授权过期被拒 |
+| 回落即失败判定 | `errorCode='HERMES_UNAVAILABLE_FALLBACK'` 一律判该场景失败。此前回落时 run 标 `completed`、UI 有回答，验收会误判通过 |
+| 响应式 mock 回归 | 320/375/390/414 四视口横向溢出断言，覆盖聊天、结果卡片、提案、工具进度、弹层、输入区、记忆页。不依赖 Hermes |
+
+`agent-hermes-live.spec.ts` 现已同时包含 A7.3 与 A7.4-A 的场景，跨批次副作用可被捕获。它有 `HERMES_LIVE_E2E` 守卫，默认套件会 skip。
+
+### 超时与授权的取值关系（不要单独调整任一值）
+
+`agent.types.ts` 新增两个常量，`runtimes.ts` 与 `agent.service.ts` 均引用而非硬编码：
+
+```
+AGENT_HERMES_CHAT_TIMEOUT_MS   = 3 * 60_000   // 180s
+AGENT_TOOL_AUTHORIZATION_TTL_MS = 5 * 60_000  // 300s，余量 120s
+```
+
+原值 90s 不足：单工具场景耗时 15.8–47.8 秒，多工具与记忆场景精确停在 91.8 秒（顶到上限后回落）。调大 chat 超时时必须同步评估授权 TTL，否则失败模式会从"请求超时"变成"工具授权过期被拒"——换坑不是修复。`agent-runtime.contract.ts` 已锁死这个关系。
+
+### 遗留待办
+
+**A7.3 单实体指代约束只覆盖菜品。** `search_recipes` 的 description 承载了"缺页面上下文时须追问"的约束，但 A7.3 的 `entityType` 白名单有 5 类（`dish` / `asset` / `knowledge` / `travel` / `poll`）。用户在资产详情页问"这个东西保修到什么时候"、再从底部导航直接进小管家问同样的话，模型仍可能随便挑一个资产回答。当前反向断言只要求菜品场景，故不阻塞；**A6.1 把上下文入口铺到其余页面时必然撞上**，届时需为对应工具补同类约束，并为每个 entityType 各加一条反向断言。
+
+**A7.3 的 entityType 白名单缺 4 类。** `task` / `menu` / `media` / `visit` 因缺按 ID 单查的 service 方法而未纳入（`menu` 的 `get()` 是带 `@CurrentUser`/`@Query` 装饰器的控制器方法，不能内部调用）。要支持需先新写查询方法。
+
+**`DishesModule` 缺 `exports`。** 其 `@Module` 只有 `imports`/`controllers`/`providers`，此前只被 `app.module.ts` 导入所以从未暴露。A7.3 的 dish 取数选了方案 A（直接注入 `Dish` 仓库，与 `AgentToolsService` 既有做法一致）绕过了它。今后若有模块需要 `DishesService`，须先补 `exports`。
+
+### 教训：验收覆盖的边界之外必有问题
+
+本会话三次事故同源：
+
+- Hermes 白名单在 `deploy/` 目录，不属任何测试范围 → 0/9
+- 既有 `agent_settings` 行走的配置路径与测试库不同（测试每次新建家庭走 `ensureSettings`）→ 诊断绕路
+- 390px 不在 A7.2b 的验收视口内，而它恰是 iPhone 12/13/14 的逻辑宽度 → 裁切未被发现
+
+对应的方法论：新增能力时列出「要正确工作需几处同时正确」，逐处确认是否有测试覆盖；没有覆盖的位置优先补静态契约校验，成本远低于事后诊断。
