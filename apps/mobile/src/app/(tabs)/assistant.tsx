@@ -98,7 +98,10 @@ function MessageBubble({ message }: { message: AgentMessage }) {
   const c = useTheme();
   const mine = message.role === 'user';
   return (
-    <View style={[styles.messageRow, mine && styles.messageRowMine]}>
+    <View
+      style={[styles.messageRow, mine && styles.messageRowMine]}
+      testID={`agent-message-row-${mine ? 'user' : 'assistant'}`}
+    >
       {!mine ? (
         <View style={[styles.messageAvatar, { backgroundColor: c.tintSoft }]}>
           <Sparkles color={c.tint} size={17} />
@@ -112,6 +115,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
             borderColor: mine ? c.tint : c.separator,
           },
         ]}
+        testID={`agent-message-bubble-${mine ? 'user' : 'assistant'}`}
       >
         <Text style={[t.body, styles.messageText, { color: mine ? '#FFFFFF' : c.label }]}>
           {message.content}
@@ -250,6 +254,7 @@ function ProposalCard({
   conversationId: string;
 }) {
   const c = useTheme();
+  const layout = useLayoutMode();
   const confirm = useConfirmAgentProposal();
   const reject = useRejectAgentProposal();
   const [message, setMessage] = React.useState<string | null>(null);
@@ -325,8 +330,12 @@ function ProposalCard({
         {proposal.preview.summary}
       </Text>
       <View style={[styles.proposalChanges, { borderTopColor: c.separator }]}>
-        {proposal.preview.changes.map((change) => (
-          <View key={`${change.label}:${change.value}`} style={styles.proposalChange}>
+        {proposal.preview.changes.map((change, index) => (
+          <View
+            key={`${change.label}:${change.value}`}
+            style={styles.proposalChange}
+            testID={`agent-proposal-change-${index}`}
+          >
             <Text style={[t.caption, styles.proposalChangeLabel, { color: c.secondaryLabel }]}>
               {change.label}
             </Text>
@@ -352,12 +361,22 @@ function ProposalCard({
         </Text>
       ) : null}
       {proposal.status === 'pending' ? (
-        <View style={styles.proposalActions}>
+        <View
+          style={[
+            styles.proposalActions,
+            layout === 'compact' && styles.proposalActionsCompact,
+          ]}
+          testID="agent-proposal-actions"
+        >
           <PressSurface
             accessibilityRole="button"
             disabled={busy}
             onPress={() => void act('reject')}
-            style={[styles.proposalButton, { backgroundColor: c.card, borderColor: c.separator }]}
+            style={[
+              styles.proposalButton,
+              layout === 'compact' && styles.proposalButtonCompact,
+              { backgroundColor: c.card, borderColor: c.separator },
+            ]}
             testID={`agent-proposal-reject-${proposal.id}`}
           >
             <X color={c.secondaryLabel} size={18} />
@@ -367,7 +386,11 @@ function ProposalCard({
             accessibilityRole="button"
             disabled={busy}
             onPress={() => void act('confirm')}
-            style={[styles.proposalButton, { backgroundColor: c.tint, borderColor: c.tint }]}
+            style={[
+              styles.proposalButton,
+              layout === 'compact' && styles.proposalButtonCompact,
+              { backgroundColor: c.tint, borderColor: c.tint },
+            ]}
             testID={`agent-proposal-confirm-${proposal.id}`}
           >
             {confirm.isPending ? (
@@ -1145,7 +1168,10 @@ export default function AssistantScreen() {
                   {localError}
                 </Text>
               ) : null}
-              <View style={[styles.composer, { backgroundColor: c.fill, borderColor: c.separator }]}>
+              <View
+                style={[styles.composer, { backgroundColor: c.fill, borderColor: c.separator }]}
+                testID="agent-composer"
+              >
                 <TextInput
                   accessibilityLabel="向家庭小管家提问"
                   editable={Boolean(status?.enabled && status.persistenceEncrypted) && !busy}
@@ -1315,12 +1341,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     height: 32,
     justifyContent: 'center',
+    flexShrink: 0,
     width: 32,
   },
   messageBubble: {
     borderRadius: radius.md,
     borderWidth: 1,
+    flexShrink: 1,
     maxWidth: 680,
+    minWidth: 0,
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
@@ -1379,9 +1408,10 @@ const styles = StyleSheet.create({
   proposalChanges: { borderTopWidth: 1, gap: 8, paddingTop: 10 },
   proposalChange: { flexDirection: 'row', gap: 12 },
   proposalChangeLabel: { minWidth: 68, paddingTop: 1 },
-  proposalChangeValue: { flex: 1, lineHeight: 19 },
+  proposalChangeValue: { flex: 1, lineHeight: 19, minWidth: 0 },
   proposalWarning: { lineHeight: 18 },
   proposalActions: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end' },
+  proposalActionsCompact: { alignItems: 'stretch', flexDirection: 'column' },
   proposalButton: {
     alignItems: 'center',
     borderRadius: radius.md,
@@ -1393,6 +1423,7 @@ const styles = StyleSheet.create({
     minWidth: 112,
     paddingHorizontal: 14,
   },
+  proposalButtonCompact: { alignSelf: 'stretch', width: '100%' },
   welcome: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingVertical: 32 },
   welcomeIcon: {
     alignItems: 'center',
