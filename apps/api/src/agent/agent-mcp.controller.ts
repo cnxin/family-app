@@ -183,6 +183,99 @@ export class AgentMcpController {
       memoryKey: z.enum(AGENT_MEMORY_KEYS),
       content: z.string().min(1).max(2000),
     });
+    register(
+      'propose_plan',
+      '当用户的请求需要同时改动多个家庭模块（例如来客吃饭涉及菜单、任务和购物清单）时，必须只调用本工具把所有步骤打包成一组提案，不得分别调用多个 propose_* 工具。用户确认后整组生效，不支持只确认其中几步；请按实际执行依赖排列 steps。',
+      {
+        runId,
+        title: z.string().min(1).max(120),
+        summary: z.string().min(1).max(400),
+        steps: z
+          .array(
+            z.discriminatedUnion('type', [
+              z.object({
+                type: z.literal('task'),
+                title: z.string().min(1).max(120),
+                note: z.string().max(1000).nullable().optional(),
+                startsOn: z.string(),
+                recurrence: z
+                  .enum(['once', 'daily', 'weekly', 'monthly'])
+                  .optional(),
+                repeatInterval: z.number().int().min(1).max(365).optional(),
+                endsOn: z.string().nullable().optional(),
+                defaultAssigneeId: z.string().uuid().nullable().optional(),
+                rewardPoints: z.number().int().min(0).max(10_000).optional(),
+              }),
+              z.object({
+                type: z.literal('reminder'),
+                sourceModule: z.enum([
+                  'menu',
+                  'task',
+                  'calendar',
+                  'poll',
+                  'maintenance',
+                  'travel',
+                ]),
+                sourceId: z.string().uuid(),
+                occurrenceDate: z.string().nullable().optional(),
+                remindAt: z.string(),
+                recipientIds: z.array(z.string().uuid()).min(1).max(20),
+              }),
+              z.object({
+                type: z.literal('poll'),
+                title: z.string().min(1).max(120),
+                description: z.string().max(1000).nullable().optional(),
+                category: z
+                  .enum(['general', 'meal', 'activity', 'movie', 'shopping'])
+                  .optional(),
+                voteMode: z.enum(['single', 'multiple']).optional(),
+                maxChoices: z.number().int().min(1).max(12).optional(),
+                closesAt: z.string().nullable().optional(),
+                options: z
+                  .array(
+                    z.object({
+                      label: z.string().min(1).max(120),
+                      description: z.string().max(500).nullable().optional(),
+                    }),
+                  )
+                  .min(2)
+                  .max(12),
+              }),
+              z.object({
+                type: z.literal('menu'),
+                date: z.string(),
+                mealType: z.enum(['breakfast', 'lunch', 'dinner']),
+                items: z
+                  .array(
+                    z.object({
+                      dishId: z.string().uuid(),
+                      recipeVariantId: z.string().uuid().optional(),
+                      note: z.string().max(200).optional(),
+                    }),
+                  )
+                  .min(1)
+                  .max(12),
+              }),
+              z.object({
+                type: z.literal('shopping'),
+                date: z.string(),
+                items: z
+                  .array(
+                    z.object({
+                      customName: z.string().min(1).max(120),
+                      totalQty: z.number().positive().max(99_999).optional(),
+                      unit: z.string().max(32).optional(),
+                    }),
+                  )
+                  .min(1)
+                  .max(20),
+              }),
+            ]),
+          )
+          .min(1)
+          .max(8),
+      },
+    );
     register('propose_task', '生成家庭任务提案，等待成员在 Family App 内确认', {
       runId,
       title: z.string().min(1).max(120),

@@ -11,6 +11,8 @@ import {
   AgentMemoryEvent,
   AgentMemoryItem,
   AgentMessage,
+  AgentProposalGroup,
+  AgentProposalGroupEvent,
   AgentRun,
   AgentRoutine,
   AgentRoutineItem,
@@ -42,6 +44,7 @@ import { AgentRetentionService } from './agent-retention.service';
 import { AgentMemoryService } from './agent-memory.service';
 import { AgentPageContextService } from './agent-page-context.service';
 import { AgentRoutineService } from './agent-routine.service';
+import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 
 @Module({
   imports: [
@@ -53,6 +56,8 @@ import { AgentRoutineService } from './agent-routine.service';
       AgentMemberProfile,
       AgentMemoryItem,
       AgentMemoryEvent,
+      AgentProposalGroup,
+      AgentProposalGroupEvent,
       AgentRoutine,
       AgentRoutineItem,
       AgentConversation,
@@ -92,6 +97,7 @@ import { AgentRoutineService } from './agent-routine.service';
     AgentMemoryService,
     AgentPageContextService,
     AgentRoutineService,
+    AgentProposalGroupsService,
   ],
 })
 export class AgentModule {}

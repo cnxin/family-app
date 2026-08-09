@@ -49,13 +49,16 @@ import {
   useAgentChannelPairings,
   useAgentConversations,
   useAgentSettings,
+  useAgentProposalGroups,
   useAgentStatus,
   useArchiveAgentConversation,
   useCancelAgentRun,
   useConfirmAgentProposal,
+  useConfirmAgentProposalGroup,
   useCreateAgentConversation,
   useSendAgentMessage,
   useRejectAgentProposal,
+  useRejectAgentProposalGroup,
   useRetryAgentRun,
   useCreateAgentChannelPairing,
   useRevokeAgentChannel,
@@ -71,6 +74,7 @@ import type {
   AgentConversation,
   AgentMessage,
   AgentPageContext,
+  AgentProposalGroup,
   AgentRuntimeKind,
   AgentToolEvent,
   AgentToolPresentation,
@@ -402,6 +406,203 @@ function ProposalCard({
           </PressSurface>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function ProposalGroupCard({ group }: { group: AgentProposalGroup }) {
+  const c = useTheme();
+  const layout = useLayoutMode();
+  const confirm = useConfirmAgentProposalGroup();
+  const reject = useRejectAgentProposalGroup();
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [timeExpired, setTimeExpired] = React.useState(false);
+  React.useEffect(() => {
+    if (group.status !== 'pending') return undefined;
+    const expiresAt = Date.parse(group.expiresAt);
+    const delay = Math.min(Math.max(expiresAt - Date.now(), 0) + 50, 2_147_483_647);
+    const timeout = setTimeout(() => setTimeExpired(true), delay);
+    return () => clearTimeout(timeout);
+  }, [group.expiresAt, group.status]);
+  const displayStatus =
+    group.status === 'pending' && timeExpired ? 'expired' : group.status;
+  const state = {
+    pending: { label: '等待整组确认', tone: 'orange' },
+    confirmed: { label: '已全部执行', tone: 'green' },
+    rejected: { label: '已全部放弃', tone: 'secondary' },
+    expired: { label: '已过期', tone: 'secondary' },
+    failed: { label: '执行失败，已全部回滚', tone: 'red' },
+  }[displayStatus];
+  const tone =
+    state.tone === 'green'
+      ? c.green
+      : state.tone === 'orange'
+        ? c.orange
+        : state.tone === 'red'
+          ? c.red
+          : c.secondaryLabel;
+  const busy = confirm.isPending || reject.isPending;
+  const canReject = group.status === 'pending' || group.status === 'expired';
+  const canConfirm = displayStatus === 'pending';
+
+  const act = async (action: 'confirm' | 'reject') => {
+    setMessage(null);
+    try {
+      if (action === 'confirm') {
+        await confirm.mutateAsync({
+          id: group.id,
+          expectedVersion: group.version,
+        });
+      } else {
+        await reject.mutateAsync({
+          id: group.id,
+          expectedVersion: group.version,
+        });
+      }
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  };
+
+  return (
+    <View
+      accessibilityLabel={`${group.title}多步骤家庭协调提案`}
+      style={styles.proposalGroupFrame}
+      testID={`agent-proposal-group-${group.id}`}
+    >
+      <Card style={[styles.proposalGroup, { borderLeftColor: tone }]}>
+      <View style={styles.proposalHeading}>
+        <View style={[styles.proposalIcon, { backgroundColor: c.fill }]}>
+          {displayStatus === 'confirmed' ? (
+            <CheckCircle2 color={tone} size={19} />
+          ) : displayStatus === 'failed' ? (
+            <TriangleAlert color={tone} size={19} />
+          ) : displayStatus === 'pending' ? (
+            <ListChecks color={tone} size={19} />
+          ) : (
+            <Clock3 color={tone} size={19} />
+          )}
+        </View>
+        <View style={styles.flexCopy}>
+          <Text style={[t.caption, { color: tone, fontWeight: '600' }]}>协调计划 · {state.label}</Text>
+          <Text style={[t.headline, styles.groupTitle, { color: c.label }]}>{group.title}</Text>
+        </View>
+      </View>
+
+      <Text style={[t.footnote, styles.proposalSummary, { color: c.secondaryLabel }]}>
+        {group.summary}
+      </Text>
+      <View style={[styles.groupSteps, { borderTopColor: c.separator }]}>
+        <Text style={[t.caption, { color: c.secondaryLabel }]}>
+          {group.steps.length} 个步骤 · 确认后将按以下顺序全部执行
+        </Text>
+        {group.steps.map((step, index) => (
+          <View
+            key={step.id}
+            style={[styles.groupStep, { backgroundColor: c.fill }]}
+            testID={`agent-proposal-group-step-${index}`}
+          >
+            <View style={[styles.groupStepOrder, { backgroundColor: c.card }]}>
+              <Text style={[t.caption, { color: tone, fontWeight: '700' }]}>
+                {step.stepOrder}
+              </Text>
+            </View>
+            <View style={styles.flexCopy}>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>
+                {step.actionLabel}
+              </Text>
+              <Text style={[t.subhead, styles.groupStepTitle, { color: c.label }]}>
+                {step.preview.title}
+              </Text>
+              <Text style={[t.caption, styles.groupStepSummary, { color: c.secondaryLabel }]}>
+                {step.preview.summary}
+              </Text>
+              {step.preview.changes.map((change) => (
+                <Text
+                  key={`${change.label}:${change.value}`}
+                  style={[t.caption, styles.groupStepSummary, { color: c.secondaryLabel }]}
+                >
+                  {change.label}：{change.value}
+                </Text>
+              ))}
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {timeExpired || group.status === 'expired' ? (
+        <Text style={[t.footnote, styles.proposalWarning, { color: c.orange }]}>
+          这组计划已超过 24 小时，家庭状态可能已经变化，不能再确认；仍可全部放弃。
+        </Text>
+      ) : null}
+      {group.status === 'failed' ? (
+        <Text accessibilityLiveRegion="polite" style={[t.footnote, { color: c.red }]}>
+          执行没有完成，所有业务变更均已回滚，请在对话中重新调整计划。
+        </Text>
+      ) : null}
+      {message ? (
+        <Text accessibilityLiveRegion="polite" role="alert" style={[t.footnote, { color: c.red }]}>
+          {message}
+        </Text>
+      ) : null}
+
+      {canReject ? (
+        <View
+          style={[
+            styles.proposalActions,
+            layout === 'compact' && styles.proposalActionsCompact,
+          ]}
+          testID="agent-proposal-group-actions"
+        >
+          <PressableScale
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => void act('reject')}
+            style={[
+              styles.proposalButton,
+              layout === 'compact' && styles.proposalButtonCompact,
+              { backgroundColor: c.fill, borderColor: c.separator },
+            ]}
+            testID={`agent-proposal-group-reject-${group.id}`}
+          >
+            <X color={c.secondaryLabel} size={18} />
+            <Text style={[t.footnote, { color: c.label, fontWeight: '600' }]}>全部放弃</Text>
+          </PressableScale>
+          <PressableScale
+            accessibilityRole="button"
+            disabled={busy || !canConfirm}
+            onPress={() => void act('confirm')}
+            style={[
+              styles.proposalButton,
+              layout === 'compact' && styles.proposalButtonCompact,
+              {
+                backgroundColor: canConfirm ? c.tint : c.fill,
+                borderColor: canConfirm ? c.tint : c.separator,
+                opacity: canConfirm ? 1 : 0.6,
+              },
+            ]}
+            testID={`agent-proposal-group-confirm-${group.id}`}
+          >
+            {confirm.isPending ? (
+              <ActivityIndicator color={c.bg} size="small" />
+            ) : (
+              <Check color={canConfirm ? c.bg : c.secondaryLabel} size={18} />
+            )}
+            <Text
+              style={[
+                t.footnote,
+                {
+                  color: canConfirm ? c.bg : c.secondaryLabel,
+                  fontWeight: '600',
+                },
+              ]}
+            >
+              全部确认
+            </Text>
+          </PressableScale>
+        </View>
+      ) : null}
+      </Card>
     </View>
   );
 }
@@ -808,6 +1009,10 @@ export default function AssistantScreen() {
   const [conversationId, setConversationId] = React.useState<string | null>(null);
   const { data: conversation, isLoading: conversationLoading } =
     useAgentConversation(conversationId);
+  const { data: proposalGroups } = useAgentProposalGroups(
+    undefined,
+    Boolean(conversationId),
+  );
   const createConversation = useCreateAgentConversation();
   const sendMessage = useSendAgentMessage();
   const cancelRun = useCancelAgentRun();
@@ -1067,6 +1272,14 @@ export default function AssistantScreen() {
                   </ScrollView>
                 </View>
               )}
+
+              {conversationId
+                ? proposalGroups
+                    ?.filter((group) => group.conversationId === conversationId)
+                    .map((group) => (
+                      <ProposalGroupCard group={group} key={group.id} />
+                    ))
+                : null}
 
               {conversationId
                 ? conversation?.proposals.map((proposal) => (
@@ -1396,6 +1609,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
+  proposalGroup: {
+    alignSelf: 'stretch',
+    borderLeftWidth: 3,
+    gap: 11,
+    maxWidth: 680,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  proposalGroupFrame: { alignSelf: 'stretch', maxWidth: 680 },
+  groupTitle: { marginTop: 3 },
+  groupSteps: { borderTopWidth: 1, gap: 9, paddingTop: 10 },
+  groupStep: {
+    alignItems: 'flex-start',
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 10,
+  },
+  groupStepOrder: {
+    alignItems: 'center',
+    borderRadius: 12,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  groupStepTitle: { lineHeight: 19, marginTop: 2 },
+  groupStepSummary: { lineHeight: 17, marginTop: 2 },
   proposalHeading: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   proposalIcon: {
     alignItems: 'center',

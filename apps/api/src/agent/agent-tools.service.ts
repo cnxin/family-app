@@ -38,6 +38,7 @@ import {
 } from './agent-proposals.service';
 import { encryptAgentContent } from './agent.crypto';
 import { AgentMemoryService } from './agent-memory.service';
+import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 
 const MAX_RESULT_ITEMS = 20;
 const MAX_EXTENDED_RESULT_ITEMS = 50;
@@ -391,6 +392,7 @@ export class AgentToolsService {
     private readonly shopping: ShoppingService,
     private readonly tasks: TasksService,
     private readonly proposals: AgentProposalsService,
+    private readonly proposalGroups: AgentProposalGroupsService,
     private readonly agentMemory: AgentMemoryService,
   ) {}
 
@@ -446,6 +448,9 @@ export class AgentToolsService {
     user: JwtUser,
     run: AgentRun,
   ) {
+    if (toolName === 'propose_plan') {
+      return this.proposalGroups.createFromRun(input, run, user);
+    }
     if (isAgentProposalTool(toolName)) {
       return this.proposals.createFromRun(toolName, input, run, user);
     }
@@ -1117,6 +1122,7 @@ export class AgentToolsService {
       propose_poll: 'poll',
       propose_menu: 'menu',
       propose_shopping_items: 'shopping',
+      propose_plan: 'agent_plan',
     };
     const presentation =
       status === 'completed' ? resultPresentation(toolName, output) : null;

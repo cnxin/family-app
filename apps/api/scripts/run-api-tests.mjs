@@ -246,6 +246,7 @@ try {
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
   await runScript('scripts/verify-legacy-pin-migration.mjs');
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+  await runScript('scripts/agent-proposal-groups.mjs', '--migration');
   await runScript('scripts/agent-routines.mjs', '--migration');
   await runScript('scripts/agent-profiles.mjs', '--migration');
   await runProcess(process.execPath, [
@@ -276,6 +277,7 @@ try {
   await runScript('scripts/agent-tools.mjs');
   await runScript('scripts/agent-page-context.mjs');
   await runScript('scripts/agent-routines.mjs');
+  await runScript('scripts/agent-proposal-groups.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');

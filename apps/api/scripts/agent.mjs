@@ -519,6 +519,7 @@ try {
     'propose_poll',
     'propose_menu',
     'propose_shopping_items',
+    'propose_plan',
   ];
   const memberProfile = await db.query(
     `SELECT id FROM agent_member_profiles

@@ -19,6 +19,8 @@ import type {
   AgentSettings,
   AgentStatus,
   AgentActionProposal,
+  AgentProposalGroup,
+  AgentProposalGroupStatus,
   AgentChannelPairing,
   AgentMemberChannel,
   CreateAgentMemoryCandidateDto,
@@ -433,6 +435,65 @@ export function useRejectAgentProposal() {
       void qc.invalidateQueries({
         queryKey: ['agent-conversation', input.conversationId],
       }),
+  });
+}
+
+export function useAgentProposalGroups(
+  status?: AgentProposalGroupStatus,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['agent-proposal-groups', status ?? 'all'],
+    queryFn: () =>
+      api<AgentProposalGroup[]>(
+        `/agent/proposal-groups${status ? `?status=${status}` : ''}`,
+      ),
+    enabled,
+    refetchInterval: enabled ? 2_000 : false,
+  });
+}
+
+export function useAgentProposalGroup(id?: string) {
+  return useQuery({
+    queryKey: ['agent-proposal-group', id],
+    queryFn: () => api<AgentProposalGroup>(`/agent/proposal-groups/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useConfirmAgentProposalGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentProposalGroup>(`/agent/proposal-groups/${input.id}/confirm`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSettled: (_data, _error, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-proposal-groups'] });
+      void qc.invalidateQueries({
+        queryKey: ['agent-proposal-group', input.id],
+      });
+      void qc.invalidateQueries({ queryKey: ['agent-conversation'] });
+    },
+  });
+}
+
+export function useRejectAgentProposalGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentProposalGroup>(`/agent/proposal-groups/${input.id}/reject`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSettled: (_data, _error, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-proposal-groups'] });
+      void qc.invalidateQueries({
+        queryKey: ['agent-proposal-group', input.id],
+      });
+      void qc.invalidateQueries({ queryKey: ['agent-conversation'] });
+    },
   });
 }
 

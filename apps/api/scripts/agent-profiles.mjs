@@ -47,9 +47,15 @@ async function login(loginName) {
 async function runMigrationPhase() {
   await AppDataSource.initialize();
   try {
-    const latest = await AppDataSource.query(
+    let latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
+    if (latest[0]?.name === 'AddAgentProposalGroups1785232000000') {
+      await AppDataSource.undoLastMigration();
+      latest = await AppDataSource.query(
+        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+      );
+    }
     assert(
       latest[0]?.name === 'AddAgentWeeklyReport1785231900000',
       '专项演练从 A7.4-B 周报迁移开始',

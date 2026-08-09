@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { assertCapability } from '../auth/capabilities';
 import { JwtUser } from '../auth/jwt.guard';
 import {
@@ -140,8 +140,12 @@ type ProposalPayload =
   | PollPayload
   | MenuPayload
   | ShoppingPayload;
+export type SingleAgentProposalToolName = Exclude<
+  AgentProposalToolName,
+  'propose_plan'
+>;
 
-const TYPE_BY_TOOL: Record<AgentProposalToolName, AgentActionType> = {
+const TYPE_BY_TOOL: Record<SingleAgentProposalToolName, AgentActionType> = {
   propose_task: 'task',
   propose_reminder: 'reminder',
   propose_poll: 'poll',
@@ -237,7 +241,7 @@ export class AgentProposalsService {
   ) {}
 
   async createFromRun(
-    toolName: AgentProposalToolName,
+    toolName: SingleAgentProposalToolName,
     input: Record<string, unknown>,
     run: AgentRun,
     user: JwtUser,
@@ -260,6 +264,8 @@ export class AgentProposalsService {
           householdId: run.householdId,
           runId: run.id,
           createdByMemberId: run.requestedByMemberId,
+          groupId: null,
+          stepOrder: null,
           confirmedByMemberId: null,
           actionType,
           payload: payload as Record<string, unknown>,
@@ -292,6 +298,49 @@ export class AgentProposalsService {
     }
   }
 
+  async createGroupedWithinTransaction(
+    toolName: SingleAgentProposalToolName,
+    input: Record<string, unknown>,
+    run: AgentRun,
+    user: JwtUser,
+    groupId: string,
+    stepOrder: number,
+    expiresAt: Date,
+    manager: EntityManager,
+  ) {
+    const actionType = TYPE_BY_TOOL[toolName];
+    const payload = parsePayload(actionType, input);
+    const requestFingerprint = fingerprint(actionType, payload);
+    const preview = await this.buildPreview(actionType, payload, user);
+    const proposals = manager.getRepository(AgentActionProposal);
+    return proposals.save(
+      proposals.create({
+        householdId: run.householdId,
+        runId: run.id,
+        createdByMemberId: run.requestedByMemberId,
+        groupId,
+        stepOrder,
+        confirmedByMemberId: null,
+        actionType,
+        payload: payload as Record<string, unknown>,
+        preview,
+        requestFingerprint,
+        idempotencyKey: `proposal-group:${groupId}:${stepOrder}`,
+        confirmationKey: null,
+        expectedSourceVersion: null,
+        status: 'pending',
+        expiresAt,
+        confirmedAt: null,
+        executedAt: null,
+        resultModule: null,
+        resultId: null,
+        failureCode: null,
+        failureMessage: null,
+        version: 1,
+      }),
+    );
+  }
+
   async listForConversation(runIds: string[], user: JwtUser) {
     if (!runIds.length) return [];
     await this.proposals
@@ -301,6 +350,7 @@ export class AgentProposalsService {
       .where('"householdId" = :householdId', { householdId: user.householdId })
       .andWhere('"createdByMemberId" = :memberId', { memberId: user.memberId })
       .andWhere('"runId" IN (:...runIds)', { runIds })
+      .andWhere('"groupId" IS NULL')
       .andWhere('"status" = :status', { status: 'pending' })
       .andWhere('"expiresAt" <= now()')
       .execute();
@@ -309,6 +359,7 @@ export class AgentProposalsService {
         householdId: user.householdId,
         createdByMemberId: user.memberId,
         runId: In(runIds),
+        groupId: IsNull(),
       },
       order: { createdAt: 'ASC' },
     });
@@ -374,7 +425,11 @@ export class AgentProposalsService {
         proposal.version += 1;
         await manager.save(proposal);
 
-        const result = await this.execute(proposal, actingUser, manager);
+        const result = await this.executeWithinTransaction(
+          proposal,
+          actingUser,
+          manager,
+        );
         proposal.status = 'executed';
         proposal.executedAt = new Date();
         proposal.resultModule = result.module;
@@ -548,7 +603,7 @@ export class AgentProposalsService {
     };
   }
 
-  private async execute(
+  async executeWithinTransaction(
     proposal: AgentActionProposal,
     user: JwtUser,
     manager: EntityManager,
@@ -627,6 +682,7 @@ export class AgentProposalsService {
       .andWhere('proposal.createdByMemberId = :memberId', {
         memberId: user.memberId,
       })
+      .andWhere('proposal.groupId IS NULL')
       .setLock('pessimistic_write')
       .getOne();
     if (!proposal) throw new NotFoundException('操作提案不存在');

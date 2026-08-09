@@ -52,9 +52,15 @@ async function login(loginName) {
 async function runMigrationPhase() {
   await AppDataSource.initialize();
   try {
-    const latest = await AppDataSource.query(
+    let latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
+    if (latest[0]?.name === 'AddAgentProposalGroups1785232000000') {
+      await AppDataSource.undoLastMigration();
+      latest = await AppDataSource.query(
+        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+      );
+    }
     assert(
       latest[0]?.name === 'AddAgentWeeklyReport1785231900000',
       '专项演练从 A7.4-B 周报迁移开始',
@@ -456,6 +462,16 @@ async function runApiPhase() {
       [familyA.householdId, familyA.ownerId],
     );
     await service.dispatchDue();
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const delivered = await db.query(
+        `SELECT count(*)::int AS n FROM notifications
+         WHERE "householdId" = ANY($1::uuid[])
+           AND module = 'agent' AND type = 'agent_nightly_digest'`,
+        [[familyA.householdId, familyB.householdId]],
+      );
+      if (delivered[0].n === 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
     const confirmedAfter = await db.query(
       `SELECT count(*)::int AS n FROM agent_action_proposals
        WHERE status = 'confirmed'`,

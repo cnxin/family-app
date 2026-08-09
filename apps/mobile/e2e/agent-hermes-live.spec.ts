@@ -35,6 +35,13 @@ type ConversationDetail = {
   }[];
 };
 
+type ProposalGroup = {
+  id: string;
+  runId: string;
+  status: string;
+  steps: { id: string; actionType: string; stepOrder: number }[];
+};
+
 type Result = {
   id: number | string;
   prompt: string;
@@ -52,6 +59,8 @@ type Result = {
   assistantText: string;
   passed: boolean;
   note: string | null;
+  proposalGroupId?: string | null;
+  proposalStepCount?: number;
 };
 
 const repoRoot = resolve(process.cwd(), '../..');
@@ -146,6 +155,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
   const pageContextChecks: Result[] = memoryOnly
     ? (previous?.pageContextChecks ?? [])
     : [];
+  const proposalGroupChecks: Result[] =
+    memoryOnly || pageContextOnly ? (previous?.proposalGroupChecks ?? []) : [];
   let conversationId =
     memoryOnly || pageContextOnly ? (previous?.conversationId ?? '') : '';
   let memoryConversationId = pageContextOnly
@@ -184,6 +195,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           results,
           memoryChecks,
           pageContextChecks,
+          proposalGroupChecks,
         },
         null,
         2,
@@ -259,6 +271,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     weather?: boolean;
     requiredText?: string;
     clarifyWithoutContext?: string;
+    proposalGroup?: boolean;
   }) {
     const messageInput = page.getByTestId('agent-message-input');
     await messageInput.fill(input.prompt);
@@ -302,11 +315,26 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           message.runId === createdRun.id && message.role === 'assistant',
       )?.content ?? '';
     const fallback = run?.errorCode === fallbackCode;
-    const expectedMatched = input.multiTool
-      ? new Set(toolNames).size >= 2 && cards.length >= 2
-      : toolNames.includes(input.expectedTool) &&
-        (input.expectedKind === null ||
-          cards.some((card) => card.kind === input.expectedKind));
+    const groups = input.proposalGroup
+      ? await agentApi<ProposalGroup[]>(page, '/agent/proposal-groups')
+      : [];
+    const proposalGroup = groups.find((group) => group.runId === createdRun.id);
+    const individualProposalTools = [
+      'propose_task',
+      'propose_reminder',
+      'propose_poll',
+      'propose_menu',
+      'propose_shopping_items',
+    ];
+    const expectedMatched = input.proposalGroup
+      ? toolNames.includes('propose_plan') &&
+        !toolNames.some((tool) => individualProposalTools.includes(tool)) &&
+        (proposalGroup?.steps.length ?? 0) >= 2
+      : input.multiTool
+        ? new Set(toolNames).size >= 2 && cards.length >= 2
+        : toolNames.includes(input.expectedTool) &&
+          (input.expectedKind === null ||
+            cards.some((card) => card.kind === input.expectedKind));
     const weatherSafe =
       !input.weather ||
       cards.some((card) => card.kind === 'weather' && card.items.length > 0) ||
@@ -367,8 +395,17 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       assistantText,
       passed,
       note,
+      ...(input.proposalGroup
+        ? {
+            proposalGroupId: proposalGroup?.id ?? null,
+            proposalStepCount: proposalGroup?.steps.length ?? 0,
+          }
+        : {}),
     };
     if (typeof input.id === 'number') results.push(result);
+    else if (String(input.id).startsWith('proposal-group')) {
+      proposalGroupChecks.push(result);
+    }
     else if (String(input.id).startsWith('page-context')) {
       pageContextChecks.push(result);
     } else memoryChecks.push(result);
@@ -398,6 +435,15 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
 
   if (!memoryOnly && !pageContextOnly) {
     for (const scenario of scenarios) await runScenario(scenario);
+    const proposalGroup = await runScenario({
+      id: 'proposal-group-family-dinner',
+      prompt: '周六爸妈来吃饭',
+      expectedTool: 'propose_plan',
+      expectedKind: null,
+      screenshot: '14-proposal-group.png',
+      proposalGroup: true,
+    });
+    expect(proposalGroup.passed).toBeTruthy();
   }
   if (!pageContextOnly) {
     const memoryWrite = await runScenario({
@@ -526,6 +572,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     expect(summary().passed).toBeGreaterThanOrEqual(7);
     expect(summary().fallbackCount).toBe(0);
     expect(memoryChecks.every((result) => result.passed)).toBeTruthy();
+    expect(proposalGroupChecks.every((result) => result.passed)).toBeTruthy();
   }
   expect(pageContextChecks.every((result) => result.passed)).toBeTruthy();
 });

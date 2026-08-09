@@ -1901,6 +1901,45 @@ export interface AgentActionProposal {
   updatedAt: string;
 }
 
+export type AgentProposalGroupStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected'
+  | 'expired'
+  | 'failed';
+
+export interface AgentProposalGroupStep extends AgentActionProposal {
+  groupId: string;
+  stepOrder: number;
+}
+
+export interface AgentProposalGroupEvent {
+  id: string;
+  operation: 'created' | 'confirmed' | 'rejected' | 'expired' | 'failed';
+  actorMemberId: string;
+  stepCount: number;
+  createdAt: string;
+}
+
+export interface AgentProposalGroup {
+  id: string;
+  conversationId: string | null;
+  runId: string;
+  requestedByMemberId: string;
+  title: string;
+  summary: string;
+  status: AgentProposalGroupStatus;
+  confirmedByMemberId: string | null;
+  confirmedAt: string | null;
+  rejectedAt: string | null;
+  expiresAt: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  steps: AgentProposalGroupStep[];
+  events: AgentProposalGroupEvent[];
+}
+
 export interface AgentConversationDetail extends AgentConversation {
   messages: AgentMessage[];
   runs: AgentRun[];

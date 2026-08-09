@@ -26,6 +26,7 @@ export const AGENT_PROPOSAL_TOOLS = [
   'propose_poll',
   'propose_menu',
   'propose_shopping_items',
+  'propose_plan',
 ] as const;
 
 export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];

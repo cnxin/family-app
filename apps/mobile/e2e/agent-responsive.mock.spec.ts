@@ -7,6 +7,7 @@ const conversationId = '00000000-0000-4000-8000-000000000301';
 const completedRunId = '00000000-0000-4000-8000-000000000302';
 const runningRunId = '00000000-0000-4000-8000-000000000303';
 const proposalId = '00000000-0000-4000-8000-000000000304';
+const proposalGroupId = '00000000-0000-4000-8000-000000000309';
 const dishId = '00000000-0000-4000-8000-000000000305';
 const memoryId = '00000000-0000-4000-8000-000000000306';
 const createdAt = '2099-08-08T08:00:00.000Z';
@@ -24,7 +25,12 @@ const member = {
   prefersCooking: true,
 };
 
-type AgentMode = 'conversation' | 'proposal' | 'running';
+type AgentMode =
+  | 'conversation'
+  | 'proposal'
+  | 'proposal-group'
+  | 'proposal-group-expired'
+  | 'running';
 
 async function json(route: Route, data: unknown) {
   await route.fulfill({
@@ -202,6 +208,104 @@ function conversationDetail(mode: AgentMode) {
   };
 }
 
+function proposalGroups(mode: AgentMode) {
+  if (mode !== 'proposal-group' && mode !== 'proposal-group-expired') return [];
+  const expired = mode === 'proposal-group-expired';
+  return [
+    {
+      id: proposalGroupId,
+      conversationId,
+      runId: completedRunId,
+      requestedByMemberId: member.id,
+      title: '周六爸妈来吃饭的完整准备计划',
+      summary: '菜单、采购与接待任务会在确认后按顺序全部执行，任一步失败都会整体回滚。',
+      status: expired ? 'expired' : 'pending',
+      confirmedByMemberId: null,
+      confirmedAt: null,
+      rejectedAt: null,
+      expiresAt: '2099-08-09T08:00:00.000Z',
+      version: 1,
+      createdAt,
+      updatedAt: createdAt,
+      steps: [
+        {
+          id: '00000000-0000-4000-8000-000000000310',
+          groupId: proposalGroupId,
+          stepOrder: 1,
+          runId: completedRunId,
+          actionType: 'menu',
+          actionLabel: '菜单点菜',
+          preview: {
+            title: '安排周六晚餐菜单',
+            summary: '确认后向菜单加入 3 道菜',
+            changes: [{ label: '菜品与做法', value: '清蒸鱼、家常蒸蛋、蒜蓉青菜' }],
+          },
+          status: 'pending',
+          expiresAt: '2099-08-09T08:00:00.000Z',
+          confirmedAt: null,
+          executedAt: null,
+          resultModule: null,
+          resultId: null,
+          failureCode: null,
+          failureMessage: null,
+          version: 1,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000311',
+          groupId: proposalGroupId,
+          stepOrder: 2,
+          runId: completedRunId,
+          actionType: 'shopping',
+          actionLabel: '购物清单',
+          preview: {
+            title: '补齐聚餐采购清单',
+            summary: '确认后新增 6 个手动购物项，不会直接修改库存',
+            changes: [{ label: '新增项目', value: '鲈鱼、鸡蛋、青菜、葱姜、饮料和水果' }],
+          },
+          status: 'pending',
+          expiresAt: '2099-08-09T08:00:00.000Z',
+          confirmedAt: null,
+          executedAt: null,
+          resultModule: null,
+          resultId: null,
+          failureCode: null,
+          failureMessage: null,
+          version: 1,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000312',
+          groupId: proposalGroupId,
+          stepOrder: 3,
+          runId: completedRunId,
+          actionType: 'task',
+          actionLabel: '家庭任务',
+          preview: {
+            title: '周六下午整理餐桌和客厅',
+            summary: '确认后新增一项家庭任务',
+            changes: [{ label: '负责人', value: '爸爸' }],
+          },
+          status: 'pending',
+          expiresAt: '2099-08-09T08:00:00.000Z',
+          confirmedAt: null,
+          executedAt: null,
+          resultModule: null,
+          resultId: null,
+          failureCode: null,
+          failureMessage: null,
+          version: 1,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
+      events: [],
+    },
+  ];
+}
+
 async function installMocks(page: Page) {
   let mode: AgentMode = 'conversation';
   await page.addInitScript(
@@ -300,6 +404,10 @@ async function installMocks(page: Page) {
           latestRun: detail.latestRun,
         },
       ]);
+      return;
+    }
+    if (path === '/agent/proposal-groups') {
+      await json(route, proposalGroups(mode));
       return;
     }
     if (path === `/agent/conversations/${conversationId}`) {
@@ -457,6 +565,60 @@ test('小管家聊天、提案和记忆页在常见移动视口完整显示', as
   expect(Math.abs(confirmBox!.width - rejectBox!.width)).toBeLessThanOrEqual(1);
   await expectNoPageOverflow(page, '320px 提案布局');
   await page.screenshot({ path: resolve(screenshots, '20-assistant-320-proposal.png') });
+
+  mocks.setMode('proposal-group');
+  for (const width of [320, 375, 390, 414]) {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 844 });
+    await page.reload();
+    const group = page.getByTestId(`agent-proposal-group-${proposalGroupId}`);
+    const groupActions = page.getByTestId('agent-proposal-group-actions');
+    const groupReject = page.getByTestId(
+      `agent-proposal-group-reject-${proposalGroupId}`,
+    );
+    const groupConfirm = page.getByTestId(
+      `agent-proposal-group-confirm-${proposalGroupId}`,
+    );
+    await group.scrollIntoViewIfNeeded();
+    await expectContained(page, group, `${width}px 组提案卡片`);
+    await expectContained(
+      page,
+      page.getByTestId('agent-proposal-group-step-2'),
+      `${width}px 组提案最后一步`,
+    );
+    await groupActions.scrollIntoViewIfNeeded();
+    await expectContained(page, groupActions, `${width}px 组提案操作区`);
+    await expectTouchTarget(groupReject, `${width}px 全部放弃按钮`);
+    await expectTouchTarget(groupConfirm, `${width}px 全部确认按钮`);
+    await expect(groupActions).toHaveCSS('flex-direction', 'column');
+    const [groupActionsBox, composerBox] = await Promise.all([
+      groupActions.boundingBox(),
+      page.getByTestId('agent-composer').boundingBox(),
+    ]);
+    expect(
+      groupActionsBox!.y + groupActionsBox!.height,
+      `${width}px 组提案操作区不能被输入栏遮挡`,
+    ).toBeLessThanOrEqual(composerBox!.y + 1);
+    await expectNoPageOverflow(page, `${width}px 组提案布局`);
+    if (width === 320) {
+      await page.screenshot({
+        path: resolve(screenshots, '21-assistant-320-proposal-group.png'),
+      });
+    }
+  }
+
+  mocks.setMode('proposal-group-expired');
+  await page.reload();
+  const expiredReject = page.getByTestId(
+    `agent-proposal-group-reject-${proposalGroupId}`,
+  );
+  const expiredConfirm = page.getByTestId(
+    `agent-proposal-group-confirm-${proposalGroupId}`,
+  );
+  await expectTouchTarget(expiredReject, '过期组全部放弃按钮');
+  await expectTouchTarget(expiredConfirm, '过期组全部确认按钮');
+  await expect(expiredReject).toBeEnabled();
+  await expect(expiredConfirm).toBeDisabled();
+  await expectNoPageOverflow(page, '320px 过期组提案布局');
 
   mocks.setMode('running');
   await page.reload();

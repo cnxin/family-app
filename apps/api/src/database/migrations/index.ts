@@ -54,6 +54,7 @@ import { AddAgentMemberProfiles1785231600000 } from './1785231600000-add-agent-m
 import { AddAgentMemory1785231700000 } from './1785231700000-add-agent-memory';
 import { AddAgentRoutines1785231800000 } from './1785231800000-add-agent-routines';
 import { AddAgentWeeklyReport1785231900000 } from './1785231900000-add-agent-weekly-report';
+import { AddAgentProposalGroups1785232000000 } from './1785232000000-add-agent-proposal-groups';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -112,4 +113,5 @@ export const ALL_MIGRATIONS = [
   AddAgentMemory1785231700000,
   AddAgentRoutines1785231800000,
   AddAgentWeeklyReport1785231900000,
+  AddAgentProposalGroups1785232000000,
 ];

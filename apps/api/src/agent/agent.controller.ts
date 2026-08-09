@@ -31,7 +31,7 @@ import {
 } from '@nestjs/common';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { AgentRoutineKind } from '../entities';
+import { AgentProposalGroupStatus, AgentRoutineKind } from '../entities';
 import {
   AGENT_MEMORY_KEYS,
   AGENT_PAGE_ENTITY_TYPES,
@@ -45,6 +45,7 @@ import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
 import { AgentMemoryService } from './agent-memory.service';
 import { AgentRoutineService } from './agent-routine.service';
+import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 
 class CreateConversationDto {
   @IsOptional()
@@ -174,6 +175,18 @@ class UpdateAgentRoutineDto {
   @IsISO8601({ strict: true })
   nextRunAt?: string;
 
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
+class ListAgentProposalGroupsDto {
+  @IsOptional()
+  @IsIn(['pending', 'confirmed', 'rejected', 'expired', 'failed'])
+  status?: AgentProposalGroupStatus;
+}
+
+class AgentProposalGroupVersionDto {
   @IsInt()
   @Min(1)
   expectedVersion: number;
@@ -317,6 +330,7 @@ export class AgentController {
     private readonly channels: AgentChannelsService,
     private readonly memory: AgentMemoryService,
     private readonly routines: AgentRoutineService,
+    private readonly proposalGroups: AgentProposalGroupsService,
   ) {}
 
   @Get('status')
@@ -518,6 +532,40 @@ export class AgentController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.proposals.reject(id, dto.expectedVersion, user);
+  }
+
+  @Get('proposal-groups')
+  proposalGroupList(
+    @Query() query: ListAgentProposalGroupsDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.proposalGroups.list(query.status, user);
+  }
+
+  @Get('proposal-groups/:id')
+  proposalGroup(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.proposalGroups.detail(id, user);
+  }
+
+  @Post('proposal-groups/:id/confirm')
+  confirmProposalGroup(
+    @Param('id') id: string,
+    @Body() dto: AgentProposalGroupVersionDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.proposalGroups.confirm(id, dto.expectedVersion, user);
+  }
+
+  @Post('proposal-groups/:id/reject')
+  rejectProposalGroup(
+    @Param('id') id: string,
+    @Body() dto: AgentProposalGroupVersionDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.proposalGroups.reject(id, dto.expectedVersion, user);
   }
 
   @Get('channels')
