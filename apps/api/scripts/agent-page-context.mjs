@@ -175,10 +175,16 @@ try {
 
   console.log('1. 资源存在性不可探测');
   const foreignHouseholdId = randomUUID();
+  const foreignMemberId = randomUUID();
   const foreignDishId = randomUUID();
   await db.query(
     `INSERT INTO households (id, name, slug) VALUES ($1, '页面上下文隔离家庭', $2)`,
     [foreignHouseholdId, `page-context-${randomUUID()}`],
+  );
+  await db.query(
+    `INSERT INTO members (id, "householdId", name, "avatarEmoji", role, "prefersCooking")
+     VALUES ($1, $2, '页面上下文隔离成员', '隔', 'member', false)`,
+    [foreignMemberId, foreignHouseholdId],
   );
   await db.query(
     `INSERT INTO dishes (id, "householdId", name, category, difficulty, "isActive")
@@ -235,7 +241,14 @@ try {
     '实体名称带不可信标记，客户端标题、摘要和身份字段未进入模型',
   );
 
-  console.log('3. dish 与 JwtUser 服务路径、未知类型和无上下文回归');
+  console.log('3. 四类业务实体的 JwtUser 服务路径与家庭隔离');
+  const assetName = `页面资产-${randomUUID().slice(0, 8)}`;
+  const asset = await request('/assets', owner.accessToken, 'POST', {
+    name: assetName,
+    category: 'appliance',
+  });
+  assert(asset.status === 201, '资产页面上下文夹具创建成功');
+
   const knowledgeTitle = `页面知识-${randomUUID().slice(0, 8)}`;
   const knowledge = await request(
     '/knowledge-articles',
@@ -249,18 +262,92 @@ try {
     },
   );
   assert(knowledge.status === 201, '知识文章夹具创建成功');
-  const knowledgeContext = await send('当前知识是什么', {
-    route: `/knowledge?articleId=${knowledge.data.id}`,
-    entityType: 'knowledge',
-    entityId: knowledge.data.id,
-    selectedDate: '2199-12-28',
+
+  const travelTitle = `页面行程-${randomUUID().slice(0, 8)}`;
+  const travel = await request('/travel-plans', owner.accessToken, 'POST', {
+    title: travelTitle,
+    destination: '页面上下文测试地点',
+    startDate: '2199-12-28',
+    endDate: '2199-12-29',
+    idempotencyKey: `page-context-travel-${randomUUID()}`,
   });
-  assert(
-    knowledgeContext.prompt.includes(knowledgeTitle) &&
-      knowledgeContext.prompt.includes('"entityType":"knowledge"') &&
-      knowledgeContext.prompt.includes('"date":"2199-12-28"'),
-    'knowledge 通过 JwtUser 服务路径解析并保留受控日期',
+  assert(travel.status === 201, '出行页面上下文夹具创建成功');
+
+  const pollTitle = `页面投票-${randomUUID().slice(0, 8)}`;
+  const poll = await request('/polls', owner.accessToken, 'POST', {
+    title: pollTitle,
+    category: 'general',
+    options: [{ label: '选项一' }, { label: '选项二' }],
+  });
+  assert(poll.status === 201, '投票页面上下文夹具创建成功');
+
+  const foreignEntities = {
+    asset: randomUUID(),
+    knowledge: randomUUID(),
+    travel: randomUUID(),
+    poll: randomUUID(),
+  };
+  await db.query(
+    `INSERT INTO home_assets (id, "householdId", name, category, "createdById")
+     VALUES ($1, $2, '其他家庭资产', 'appliance', $3)`,
+    [foreignEntities.asset, foreignHouseholdId, foreignMemberId],
   );
+  await db.query(
+    `INSERT INTO knowledge_articles
+       (id, "householdId", title, category, content, "createdById", "updatedById")
+     VALUES ($1, $2, '其他家庭知识', 'procedure', '隔离测试', $3, $3)`,
+    [foreignEntities.knowledge, foreignHouseholdId, foreignMemberId],
+  );
+  await db.query(
+    `INSERT INTO travel_plans
+       (id, "householdId", title, "startDate", "endDate", "createdById", "updatedById")
+     VALUES ($1, $2, '其他家庭行程', '2199-12-28', '2199-12-29', $3, $3)`,
+    [foreignEntities.travel, foreignHouseholdId, foreignMemberId],
+  );
+  await db.query(
+    `INSERT INTO polls (id, "householdId", title, "createdById")
+     VALUES ($1, $2, '其他家庭投票', $3)`,
+    [foreignEntities.poll, foreignHouseholdId, foreignMemberId],
+  );
+
+  async function assertEntityContext(entityType, route, entityId, entityName) {
+    const resolved = await send(`解析 ${entityType} 页面上下文`, {
+      route,
+      entityType,
+      entityId,
+    });
+    assert(
+      resolved.prompt.includes(entityName) &&
+        resolved.prompt.includes(`"entityType":"${entityType}"`) &&
+        resolved.prompt.includes('"untrustedContent":true'),
+      `${entityType} 通过 JwtUser 服务路径解析实体名称`,
+    );
+
+    const missingEntity = await send(`探测 ${entityType} 页面资源`, {
+      route,
+      entityType,
+      entityId: randomUUID(),
+    });
+    const foreignEntity = await send(`探测 ${entityType} 页面资源`, {
+      route,
+      entityType,
+      entityId: foreignEntities[entityType],
+    });
+    assert(
+      !contextJson(missingEntity.prompt) &&
+        !contextJson(foreignEntity.prompt) &&
+        normalizeSystemPrompt(missingEntity.prompt) ===
+          normalizeSystemPrompt(foreignEntity.prompt),
+      `${entityType} 的跨家庭 ID 与不存在 ID 生成一致的无上下文提示`,
+    );
+  }
+
+  await assertEntityContext('asset', '/home-assets', asset.data.id, assetName);
+  await assertEntityContext('knowledge', '/knowledge', knowledge.data.id, knowledgeTitle);
+  await assertEntityContext('travel', '/travel', travel.data.id, travelTitle);
+  await assertEntityContext('poll', '/polls', poll.data.id, pollTitle);
+
+  console.log('4. 未知类型、无上下文与输入预算回归');
 
   for (const entityType of ['recipe', 'task', 'menu', 'media', 'visit']) {
     const unknown = await send(`未知类型 ${entityType}`, {
@@ -279,7 +366,6 @@ try {
     '不带 pageContext 的消息保持既有运行行为',
   );
 
-  console.log('4. UTF-8 预算与外部渠道隔离');
   const longDish = await request('/dishes', owner.accessToken, 'POST', {
     name: '长'.repeat(120),
     category: '素菜',
@@ -298,6 +384,7 @@ try {
     '解析后的页面上下文不超过 500 个 UTF-8 字节',
   );
 
+  console.log('5. 外部渠道隔离');
   const pairing = await request(
     '/agent/channel-pairings',
     owner.accessToken,

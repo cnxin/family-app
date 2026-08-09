@@ -5,6 +5,7 @@ import {
   BellPlus,
   Check,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   Ellipsis,
   Film,
@@ -14,6 +15,7 @@ import {
   Plus,
   RotateCcw,
   ShoppingCart,
+  Sparkles,
   TentTree,
   TriangleAlert,
   Trash2,
@@ -1247,6 +1249,25 @@ export default function PollsScreen() {
           title={mediaScope ? '观影投票' : '家庭投票'}
         />
 
+        <PressableScale
+          accessibilityLabel="向小管家询问家庭投票"
+          haptic={false}
+          onPress={() =>
+            router.push({
+              pathname: '/assistant',
+              params: { route: '/polls' },
+            })
+          }
+          style={[styles.assistantEntry, { backgroundColor: c.tintSoft }]}
+          testID="poll-ask-assistant"
+        >
+          <View style={[styles.assistantEntryIcon, { backgroundColor: c.card }]}>
+            <Sparkles color={c.tint} size={18} />
+          </View>
+          <Text style={[t.subhead, styles.assistantEntryText, { color: c.tint }]}>问小管家家庭投票</Text>
+          <ChevronRight color={c.tint} size={18} />
+        </PressableScale>
+
         <View style={styles.filterWrap}>
           <Segmented<PollFilter>
             onChange={setFilter}
@@ -1408,6 +1429,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
+  assistantEntry: { minHeight: 52, marginTop: 16, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  assistantEntryIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  assistantEntryText: { flex: 1, minWidth: 0, fontWeight: '700' },
   filterWrap: { width: 310, maxWidth: '100%', marginTop: 20 },
   scrollContent: { paddingTop: 18, paddingBottom: 44, gap: 14 },
   loader: { marginTop: 100 },

@@ -15,6 +15,7 @@ import {
   Plus,
   RotateCcw,
   SkipForward,
+  Sparkles,
   Trash2,
   UserRound,
   X,
@@ -39,6 +40,7 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  PressableScale,
   PrimaryButton,
   Segmented,
 } from '../../components/ui';
@@ -1332,6 +1334,24 @@ export default function TravelScreen() {
                   <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>{view === 'plans' ? '新建行程' : '新建模板'}</Text>
                 </Pressable>
               </View>
+              <PressableScale
+                accessibilityLabel="向小管家询问家庭出行"
+                haptic={false}
+                onPress={() =>
+                  router.push({
+                    pathname: '/assistant',
+                    params: { route: '/travel' },
+                  })
+                }
+                style={[styles.assistantEntry, { backgroundColor: c.tintSoft }]}
+                testID="travel-ask-assistant"
+              >
+                <View style={[styles.assistantEntryIcon, { backgroundColor: c.card }]}>
+                  <Sparkles color={c.tint} size={18} />
+                </View>
+                <Text style={[t.subhead, styles.assistantEntryText, { color: c.tint }]}>问小管家家庭出行</Text>
+                <ChevronRight color={c.tint} size={18} />
+              </PressableScale>
               <View style={styles.mainSegment}>
                 <Segmented<MainView>
                   onChange={(next) => {
@@ -1532,6 +1552,9 @@ const styles = StyleSheet.create({
   pageHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 14 },
   pageHeaderDesktop: { alignItems: 'center' },
   addButtonLarge: { minHeight: 44, borderRadius: radius.md, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  assistantEntry: { minHeight: 52, marginTop: 16, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  assistantEntryIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  assistantEntryText: { flex: 1, minWidth: 0, fontWeight: '700' },
   mainSegment: { maxWidth: 440, marginTop: 24, marginBottom: 18 },
   filterWrap: { maxWidth: 720, marginBottom: 18 },
   loader: { marginVertical: 60 },

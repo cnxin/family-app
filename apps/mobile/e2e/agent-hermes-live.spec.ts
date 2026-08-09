@@ -97,18 +97,53 @@ async function agentApi<T>(
   method: 'GET' | 'POST' | 'DELETE' = 'GET',
   body?: unknown,
 ) {
-  const token = await page.evaluate(() =>
+  let token = await page.evaluate(() =>
     window.localStorage.getItem('family-app-token'),
   );
   expect(token, '真实 Hermes E2E 必须保有当前登录成员的访问令牌').toBeTruthy();
-  const response = await page.request.fetch(`${apiBaseUrl}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    ...(body === undefined ? {} : { data: body }),
-  });
+  const execute = () =>
+    page.request.fetch(`${apiBaseUrl}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      ...(body === undefined ? {} : { data: body }),
+    });
+  let response = await execute();
+  if (response.status() === 401) {
+    const refreshToken = await page.evaluate(() =>
+      window.localStorage.getItem('family-app-refresh-token'),
+    );
+    expect(refreshToken, '真实 Hermes E2E 访问令牌过期时必须保有刷新令牌').toBeTruthy();
+    const refreshed = await page.request.post(`${apiBaseUrl}/auth/refresh`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { refreshToken },
+    });
+    expect(
+      refreshed.ok(),
+      `POST /auth/refresh 应成功，实际为 ${refreshed.status()}`,
+    ).toBeTruthy();
+    const payload = await refreshed.json();
+    const session = payload.data;
+    token = session.accessToken;
+    await page.evaluate((nextSession) => {
+      window.localStorage.setItem('family-app-token', nextSession.accessToken);
+      window.localStorage.setItem(
+        'family-app-refresh-token',
+        nextSession.refreshToken,
+      );
+      window.localStorage.setItem(
+        'family-app-account',
+        JSON.stringify(nextSession.account),
+      );
+      window.localStorage.setItem(
+        'family-app-member',
+        JSON.stringify(nextSession.member),
+      );
+    }, session);
+    response = await execute();
+  }
   const payload = await response.json();
   expect(
     response.ok(),

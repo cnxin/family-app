@@ -12,8 +12,10 @@ import {
   Pin,
   RotateCcw,
   Search,
+  Sparkles,
   X,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -257,6 +259,7 @@ function Field({
 export default function KnowledgeScreen() {
   const c = useTheme();
   const layout = useLayoutMode();
+  const router = useRouter();
   const multiColumn = layout !== 'compact';
   const { member } = useSession();
   const canPin = member?.role === 'owner' || member?.role === 'admin';
@@ -440,6 +443,25 @@ export default function KnowledgeScreen() {
           subtitle="流程、说明与常用资料"
           title="家庭知识库"
         />
+
+        <PressableScale
+          accessibilityLabel="向小管家询问家庭知识库"
+          haptic={false}
+          onPress={() =>
+            router.push({
+              pathname: '/assistant',
+              params: { route: '/knowledge' },
+            })
+          }
+          style={[styles.assistantEntry, { backgroundColor: c.tintSoft }]}
+          testID="knowledge-ask-assistant"
+        >
+          <View style={[styles.assistantEntryIcon, { backgroundColor: c.card }]}>
+            <Sparkles color={c.tint} size={18} />
+          </View>
+          <Text style={[t.subhead, styles.assistantEntryText, { color: c.tint }]}>问小管家家庭知识</Text>
+          <ChevronRight color={c.tint} size={18} />
+        </PressableScale>
 
         <View style={[styles.toolbar, multiColumn && styles.toolbarExpanded]}>
           <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.separator }]}>
@@ -981,6 +1003,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
+  assistantEntry: { minHeight: 52, marginTop: 16, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  assistantEntryIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  assistantEntryText: { flex: 1, minWidth: 0, fontWeight: '700' },
   toolbar: { marginTop: 20, gap: 10 },
   toolbarExpanded: { flexDirection: 'row', alignItems: 'center' },
   searchBox: {

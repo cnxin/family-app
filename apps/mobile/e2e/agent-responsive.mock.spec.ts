@@ -330,6 +330,11 @@ async function installMocks(page: Page) {
   );
   await page.route(/\/members$/, (route) => json(route, [member]));
   await page.route(/\/notifications(?:\?.*)?$/, (route) => json(route, []));
+  await page.route(/\/assets\?status=all$/, (route) => json(route, []));
+  await page.route(/\/knowledge-articles\?status=active$/, (route) => json(route, []));
+  await page.route(/\/travel-plans\?status=active$/, (route) => json(route, []));
+  await page.route(/\/travel-templates\?status=all$/, (route) => json(route, []));
+  await page.route(/\/polls\?status=all$/, (route) => json(route, []));
   await page.route(new RegExp(`/recipes/${dishId}$`), (route) =>
     json(route, { id: dishId, name: '不辣家常蒸蛋' }),
   );
@@ -498,6 +503,34 @@ async function assertConversationLayout(page: Page, label: string) {
   await expectNoPageOverflow(page, label);
 }
 
+async function assertBusinessAssistantEntries(page: Page) {
+  const entries = [
+    { path: '/home-assets', testId: 'asset-ask-assistant', route: '/home-assets' },
+    { path: '/knowledge', testId: 'knowledge-ask-assistant', route: '/knowledge' },
+    { path: '/travel', testId: 'travel-ask-assistant', route: '/travel' },
+    { path: '/polls', testId: 'poll-ask-assistant', route: '/polls' },
+  ];
+
+  for (const entry of entries) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page, entry.path, () => page.getByTestId(entry.testId));
+    for (const width of [320, 375, 390, 414]) {
+      await page.setViewportSize({ width, height: width === 320 ? 568 : 844 });
+      const button = page.getByTestId(entry.testId);
+      await expectContained(page, button, `${entry.path} ${width}px 小管家入口`);
+      await expectTouchTarget(button, `${entry.path} ${width}px 小管家入口`);
+      await expectNoPageOverflow(page, `${entry.path} ${width}px`);
+    }
+
+    await page.getByTestId(entry.testId).click();
+    await expect(page).toHaveURL(/\/assistant\?/);
+    const url = new URL(page.url());
+    expect(url.pathname).toBe('/assistant');
+    expect([...url.searchParams.keys()]).toEqual(['route']);
+    expect(url.searchParams.get('route')).toBe(entry.route);
+  }
+}
+
 async function showConversationEvidence(page: Page, replyVisible = true) {
   const reply = page.getByText(longAssistantReply, { exact: true });
   const result = page.getByTestId('agent-result-schedule');
@@ -507,8 +540,10 @@ async function showConversationEvidence(page: Page, replyVisible = true) {
 }
 
 test('小管家聊天、提案和记忆页在常见移动视口完整显示', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   test.skip(testInfo.project.name !== 'mobile-chrome', '仅在触控移动视口执行响应式矩阵');
   const mocks = await installMocks(page);
+  await assertBusinessAssistantEntries(page);
   const contextPath =
     `/assistant?route=${encodeURIComponent(`/dish/${dishId}`)}` +
     `&entityType=dish&entityId=${dishId}`;
