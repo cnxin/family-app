@@ -56,18 +56,9 @@ async function runMigrationPhase() {
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
     assert(
-      latest[0]?.name === 'AddAgentRoutines1785231800000',
-      '专项演练从 A7.4-B 最新迁移开始',
+      latest[0]?.name === 'AddAgentWeeklyReport1785231900000',
+      '专项演练从 A7.4-B 周报迁移开始',
     );
-    await AppDataSource.undoLastMigration();
-    const previous = await AppDataSource.query(
-      `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-    );
-    assert(
-      previous[0]?.name === 'AddAgentMemory1785231700000',
-      'A7.4-B 迁移可干净回退到 A7.2',
-    );
-
     const owners = await AppDataSource.query(
       `SELECT id, "householdId" FROM members
        WHERE role = 'owner' AND "disabledAt" IS NULL
@@ -75,6 +66,35 @@ async function runMigrationPhase() {
     );
     const owner = owners[0];
     if (!owner) throw new Error('找不到迁移专项所需的家庭 owner');
+    await AppDataSource.query(
+      `INSERT INTO agent_routines (
+         "householdId", kind, enabled, "scheduleHour", "scheduleMinute",
+         "nextRunAt"
+       ) VALUES ($1, 'weekly_report', false, 20, 0, now() + interval '7 days')
+       ON CONFLICT ("householdId", kind) DO NOTHING`,
+      [owner.householdId],
+    );
+    await AppDataSource.undoLastMigration();
+    const previous = await AppDataSource.query(
+      `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+    );
+    const weeklyRows = await AppDataSource.query(
+      `SELECT count(*)::int AS n FROM agent_routines WHERE kind = 'weekly_report'`,
+    );
+    assert(
+      previous[0]?.name === 'AddAgentRoutines1785231800000' &&
+        weeklyRows[0].n === 0,
+      '存在 weekly_report 行时周报迁移仍可先删数据再干净回退',
+    );
+    await AppDataSource.undoLastMigration();
+    const memoryMigration = await AppDataSource.query(
+      `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+    );
+    assert(
+      memoryMigration[0]?.name === 'AddAgentMemory1785231700000',
+      '继续回退后仍可演练 A7.4-B 第一批迁移',
+    );
+
     const insertedSettings = await AppDataSource.query(
       `INSERT INTO agent_settings (
          "householdId", enabled, "updatedByMemberId"
@@ -113,7 +133,7 @@ async function runMigrationPhase() {
         insertedSettings[0].id,
       ]);
     }
-    console.log('A7.4-B 迁移回退、既有行构造和重新迁移专项通过');
+    console.log('A7.4-B 周报与第一批迁移回退、既有行和重新迁移专项通过');
   } finally {
     await AppDataSource.destroy();
   }
@@ -127,6 +147,8 @@ async function createHouseholdFixture(
     limit = 3,
     ownerDisabled = false,
     withAdmin = false,
+    kind = 'nightly_digest',
+    enabled = true,
   } = {},
 ) {
   const householdId = randomUUID();
@@ -162,8 +184,8 @@ async function createHouseholdFixture(
     `INSERT INTO agent_routines (
        id, "householdId", kind, enabled, "scheduleHour", "scheduleMinute",
        "nextRunAt"
-     ) VALUES ($1, $2, 'nightly_digest', true, 21, 0, now() + interval '1 day')`,
-    [routineId, householdId],
+     ) VALUES ($1, $2, $3, $4, $5, 0, now() + interval '1 day')`,
+    [routineId, householdId, kind, enabled, kind === 'weekly_report' ? 20 : 21],
   );
   return { householdId, ownerId, adminId, routineId };
 }
@@ -184,14 +206,28 @@ function notificationInput(fixture, label, summary = `${label}待处理事项`) 
 async function runApiPhase() {
   await AppDataSource.initialize();
   const db = AppDataSource;
+  const weeklyMetrics = new Map();
   const calendar = {
-    list: async () => [],
+    list: async (_start, _end, user) =>
+      weeklyMetrics.get(user.householdId)?.calendar ?? [],
+  };
+  const shopping = {
+    list: async (householdId, date) =>
+      (weeklyMetrics.get(householdId)?.shopping ?? []).filter(
+        (item) => item.date === date,
+      ),
+  };
+  const inventory = {
+    list: async (householdId) =>
+      weeklyMetrics.get(householdId)?.inventory ?? [],
   };
   const service = new AgentRoutineService(
     db.getRepository(AgentRoutine),
     db.getRepository(AgentRoutineItem),
     db.getRepository(AgentSetting),
     calendar,
+    shopping,
+    inventory,
     db,
   );
   try {
@@ -203,6 +239,9 @@ async function runApiPhase() {
     const memberRoutines = await request('/agent/routines', member.accessToken);
     const current = routines.data.find(
       (routine) => routine.kind === 'nightly_digest',
+    );
+    const currentWeekly = routines.data.find(
+      (routine) => routine.kind === 'weekly_report',
     );
     const updated = await request(
       '/agent/routines/nightly_digest',
@@ -223,6 +262,21 @@ async function runApiPhase() {
       'PATCH',
       { enabled: false, expectedVersion: current.version },
     );
+    const nextWeeklyRun = new Date(
+      new Date(currentWeekly.nextRunAt).getTime() + 7 * 86_400_000,
+    ).toISOString();
+    const weeklyUpdated = await request(
+      '/agent/routines/weekly_report',
+      owner.accessToken,
+      'PATCH',
+      {
+        enabled: true,
+        nextRunAt: nextWeeklyRun,
+        householdId: randomUUID(),
+        memberId: randomUUID(),
+        expectedVersion: currentWeekly.version,
+      },
+    );
     const settings = await request('/agent/settings', owner.accessToken);
     const settingsUpdated = await request(
       '/agent/settings',
@@ -238,7 +292,18 @@ async function runApiPhase() {
     );
     assert(
       routines.status === 200 &&
+        routines.data.length === 2 &&
         memberRoutines.status === 403 &&
+        currentWeekly.enabled === false &&
+        currentWeekly.scheduleHour === 20 &&
+        currentWeekly.scheduleMinute === 0 &&
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Shanghai',
+          weekday: 'short',
+        }).format(new Date(currentWeekly.nextRunAt)) === 'Sun' &&
+        weeklyUpdated.status === 200 &&
+        weeklyUpdated.data.enabled === true &&
+        weeklyUpdated.data.nextRunAt === nextWeeklyRun &&
         updated.status === 200 &&
         updated.data.scheduleHour === 22 &&
         updated.data.scheduleMinute === 15 &&
@@ -246,7 +311,7 @@ async function runApiPhase() {
         settingsUpdated.status === 200 &&
         settingsUpdated.data.dailyRoutineNotificationLimit === 4 &&
         settingsUpdated.data.routineNotificationsEnabled === true,
-      '仅 manage_agent 可管理家庭例行任务，设置支持 PATCH 且版本冲突返回 409',
+      '仅 manage_agent 可管理两种例行任务，周报默认周日 20:00 关闭且 PATCH 支持 nextRunAt',
     );
 
     console.log('2. 每日通知上限、limit=0 与关闭时仍积压');
@@ -480,7 +545,209 @@ async function runApiPhase() {
       '通知正文不包含密钥、对话正文、记忆正文且不超过 500 字',
     );
 
-    console.log('A7.4-B 例行任务与通知上限回归通过');
+    console.log('5. 家庭周报聚合、家庭隔离、owner-only 与停用 owner 容错');
+    const weeklyA = await createHouseholdFixture(db, '周报A', {
+      kind: 'weekly_report',
+      withAdmin: true,
+    });
+    const weeklyB = await createHouseholdFixture(db, '周报B', {
+      kind: 'weekly_report',
+    });
+    const weeklyNoOwner = await createHouseholdFixture(db, '周报停用Owner', {
+      kind: 'weekly_report',
+      ownerDisabled: true,
+    });
+    const weeklyHealthy = await createHouseholdFixture(db, '周报健康家庭', {
+      kind: 'weekly_report',
+    });
+    const reportDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    weeklyMetrics.set(weeklyA.householdId, {
+      calendar: [
+        { module: 'task', status: 'done' },
+        { module: 'task', status: 'done' },
+        { module: 'menu', status: 'done' },
+      ],
+      shopping: [
+        { date: reportDate, checked: true },
+        { date: reportDate, checked: false },
+      ],
+      inventory: [
+        {
+          quantity: '0',
+          lowStockThreshold: '1',
+          batchSummary: { expiringCount: 0, expiredCount: 0 },
+        },
+      ],
+    });
+    weeklyMetrics.set(weeklyB.householdId, {
+      calendar: [
+        ...Array.from({ length: 5 }, () => ({
+          module: 'task',
+          status: 'done',
+        })),
+        { module: 'menu', status: 'open' },
+      ],
+      shopping: [],
+      inventory: [],
+    });
+    await db.query(
+      `INSERT INTO agent_routine_items (
+         "householdId", "routineKind", "sourceType", "sourceId", summary
+       ) VALUES
+         ($1, 'nightly_digest', 'test_fact', $2, '周报A被拦截事项一'),
+         ($1, 'nightly_digest', 'test_fact', $3, '周报A被拦截事项二'),
+         ($4, 'nightly_digest', 'test_fact', $5, '周报B被拦截事项')`,
+      [
+        weeklyA.householdId,
+        randomUUID(),
+        randomUUID(),
+        weeklyB.householdId,
+        randomUUID(),
+      ],
+    );
+    await db.query(
+      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
+       WHERE id = ANY($1::uuid[])`,
+      [[
+        weeklyA.routineId,
+        weeklyB.routineId,
+        weeklyNoOwner.routineId,
+        weeklyHealthy.routineId,
+      ]],
+    );
+    const weeklyConfirmedBefore = await db.query(
+      `SELECT count(*)::int AS n FROM agent_action_proposals
+       WHERE status = 'confirmed'`,
+    );
+    await service.dispatchDue();
+    const weeklyConfirmedAfter = await db.query(
+      `SELECT count(*)::int AS n FROM agent_action_proposals
+       WHERE status = 'confirmed'`,
+    );
+    const weeklyNotifications = await db.query(
+      `SELECT "householdId", "recipientId", body
+       FROM notifications
+       WHERE "householdId" = ANY($1::uuid[])
+         AND module = 'agent' AND type = 'agent_weekly_report'`,
+      [[
+        weeklyA.householdId,
+        weeklyB.householdId,
+        weeklyNoOwner.householdId,
+        weeklyHealthy.householdId,
+      ]],
+    );
+    const reportA = weeklyNotifications.find(
+      (entry) => entry.householdId === weeklyA.householdId,
+    );
+    const reportB = weeklyNotifications.find(
+      (entry) => entry.householdId === weeklyB.householdId,
+    );
+    assert(
+      reportA?.recipientId === weeklyA.ownerId &&
+        reportA.body.includes('完成任务 2 项') &&
+        reportA.body.includes('菜单执行 1/1 餐') &&
+        reportA.body.includes('购物清单完成 1/2 项') &&
+        reportA.body.includes('当前库存告警 1 项') &&
+        reportA.body.includes('进入汇总 2 项') &&
+        !reportA.body.includes('完成任务 5 项') &&
+        reportB?.recipientId === weeklyB.ownerId &&
+        reportB.body.includes('完成任务 5 项') &&
+        !reportB.body.includes('完成任务 2 项'),
+      '周报只含本家庭聚合数据，含 admin 的家庭也只向 owner 发送',
+    );
+    assert(
+      !weeklyNotifications.some(
+        (entry) => entry.householdId === weeklyNoOwner.householdId,
+      ) &&
+        weeklyNotifications.some(
+          (entry) => entry.householdId === weeklyHealthy.householdId,
+        ),
+      '停用 owner 的周报被跳过，worker 继续处理其他周报行',
+    );
+    assert(
+      weeklyConfirmedBefore[0].n === weeklyConfirmedAfter[0].n,
+      '周报 worker 不新增 confirmed 操作提案',
+    );
+
+    console.log('6. 周级幂等、两种 kind 互不干扰与正文隔离');
+    await db.query(
+      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
+       WHERE id = $1`,
+      [weeklyA.routineId],
+    );
+    await service.dispatchDue();
+    const weeklyIdempotent = await db.query(
+      `SELECT count(*)::int AS n FROM notifications
+       WHERE "householdId" = $1 AND module = 'agent'
+         AND type = 'agent_weekly_report'`,
+      [weeklyA.householdId],
+    );
+    const weeklyOnly = await createHouseholdFixture(db, '仅周报', {
+      kind: 'weekly_report',
+    });
+    await db.query(
+      `INSERT INTO agent_routines (
+         "householdId", kind, enabled, "scheduleHour", "scheduleMinute",
+         "nextRunAt"
+       ) VALUES ($1, 'nightly_digest', false, 21, 0, now() - interval '1 minute')`,
+      [weeklyOnly.householdId],
+    );
+    const nightlyOnly = await createHouseholdFixture(db, '仅夜间', {
+      kind: 'nightly_digest',
+    });
+    await db.query(
+      `INSERT INTO agent_routines (
+         "householdId", kind, enabled, "scheduleHour", "scheduleMinute",
+         "nextRunAt"
+       ) VALUES ($1, 'weekly_report', false, 20, 0, now() - interval '1 minute')`,
+      [nightlyOnly.householdId],
+    );
+    await db.query(
+      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
+       WHERE id = ANY($1::uuid[])`,
+      [[weeklyOnly.routineId, nightlyOnly.routineId]],
+    );
+    await service.dispatchDue();
+    const separatedKinds = await db.query(
+      `SELECT "householdId", type FROM notifications
+       WHERE "householdId" = ANY($1::uuid[]) AND module = 'agent'`,
+      [[weeklyOnly.householdId, nightlyOnly.householdId]],
+    );
+    const weeklyLeaks = await db.query(
+      `SELECT count(*)::int AS n FROM notifications
+       WHERE type = 'agent_weekly_report'
+         AND coalesce(body, '') ~ '(routine-test-secret|AGENT_DATA_KEY|conversation-secret|memory-secret)'`,
+    );
+    assert(
+      weeklyIdempotent[0].n === 1,
+      '同一周内重复触发只产生一条周报通知',
+    );
+    assert(
+      separatedKinds.length === 2 &&
+        separatedKinds.some(
+          (entry) =>
+            entry.householdId === weeklyOnly.householdId &&
+            entry.type === 'agent_weekly_report',
+        ) &&
+        separatedKinds.some(
+          (entry) =>
+            entry.householdId === nightlyOnly.householdId &&
+            entry.type === 'agent_nightly_digest',
+        ),
+      '只启用一种 kind 时不会触发另一种例行任务',
+    );
+    assert(
+      weeklyLeaks[0].n === 0 &&
+        weeklyNotifications.every((entry) => entry.body.length <= 500),
+      '周报正文不包含密钥、对话或记忆正文且不超过 500 字',
+    );
+
+    console.log('A7.4-B 每晚汇总、家庭周报与通知上限回归通过');
   } finally {
     await AppDataSource.destroy();
   }

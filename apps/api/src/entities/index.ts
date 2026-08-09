@@ -216,7 +216,7 @@ export type BackupRunTrigger = 'manual' | 'scheduled';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
 export type AgentRuntimeKind = 'fake' | 'hermes';
 export type AgentResponseStyle = 'concise' | 'balanced' | 'detailed';
-export type AgentRoutineKind = 'nightly_digest';
+export type AgentRoutineKind = 'nightly_digest' | 'weekly_report';
 export type AgentRoutineItemStatus = 'pending' | 'digested' | 'expired';
 export type AgentMemoryScope = 'member_private' | 'household';
 export type AgentMemoryKind =
@@ -6091,7 +6091,10 @@ export class AgentSetting {
 
 @Entity('agent_routines')
 @Unique('UQ_agent_routines_household_kind', ['householdId', 'kind'])
-@Check('CHK_agent_routines_kind', `"kind" IN ('nightly_digest')`)
+@Check(
+  'CHK_agent_routines_kind',
+  `"kind" IN ('nightly_digest', 'weekly_report')`,
+)
 @Check('CHK_agent_routines_schedule_hour', `"scheduleHour" BETWEEN 0 AND 23`)
 @Check(
   'CHK_agent_routines_schedule_minute',

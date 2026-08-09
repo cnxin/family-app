@@ -624,6 +624,10 @@ export class InventoryController {
     InventoryBatchesService,
     InventoryTransactionsService,
   ],
-  exports: [InventoryBatchesService, InventoryTransactionsService],
+  exports: [
+    InventoryService,
+    InventoryBatchesService,
+    InventoryTransactionsService,
+  ],
 })
 export class InventoryModule {}

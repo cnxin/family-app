@@ -53,6 +53,7 @@ import { AllowAgentToolEventPresentationPurge1785231500000 } from './17852315000
 import { AddAgentMemberProfiles1785231600000 } from './1785231600000-add-agent-member-profiles';
 import { AddAgentMemory1785231700000 } from './1785231700000-add-agent-memory';
 import { AddAgentRoutines1785231800000 } from './1785231800000-add-agent-routines';
+import { AddAgentWeeklyReport1785231900000 } from './1785231900000-add-agent-weekly-report';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -110,4 +111,5 @@ export const ALL_MIGRATIONS = [
   AddAgentMemberProfiles1785231600000,
   AddAgentMemory1785231700000,
   AddAgentRoutines1785231800000,
+  AddAgentWeeklyReport1785231900000,
 ];

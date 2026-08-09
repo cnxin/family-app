@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsISO8601,
   IsObject,
   IsOptional,
   IsString,
@@ -168,6 +169,10 @@ class UpdateAgentRoutineDto {
   @Min(0)
   @Max(59)
   scheduleMinute?: number;
+
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  nextRunAt?: string;
 
   @IsInt()
   @Min(1)

@@ -21,6 +21,7 @@ import {
   Member,
 } from '../entities';
 import { KnowledgeModule } from '../knowledge/knowledge.module';
+import { InventoryModule } from '../inventory/inventory.module';
 import { MediaModule } from '../media/media.module';
 import { MemoriesModule } from '../memories/memories.module';
 import { MenusModule } from '../menus/menus.module';
@@ -64,6 +65,7 @@ import { AgentRoutineService } from './agent-routine.service';
     ]),
     AssetsModule,
     CalendarModule,
+    InventoryModule,
     KnowledgeModule,
     TravelModule,
     MediaModule,
