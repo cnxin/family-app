@@ -13,6 +13,12 @@ const NAVIGATION = {
 
 type NavigationKey = keyof typeof NAVIGATION;
 
+function managerAuthFile(projectName: string) {
+  return projectName === 'desktop-chrome'
+    ? 'e2e/.auth/desktop.json'
+    : 'e2e/.auth/mobile.json';
+}
+
 async function openSection(
   page: Page,
   projectName: string,
@@ -90,102 +96,28 @@ async function ensureIsolatedManagerLogin(page: Page, projectName: string) {
     await expect(page).not.toHaveURL(/\/login\/?$/);
   }
   await page.context().storageState({
-    path:
-      projectName === 'desktop-chrome'
-        ? 'e2e/.auth/desktop.json'
-        : 'e2e/.auth/mobile.json',
+    path: managerAuthFile(projectName),
   });
 }
 
 test('家庭成员可浏览核心页面且布局不横向溢出', async (
-  { page, request },
+  { page },
   testInfo,
 ) => {
   test.setTimeout(180_000);
   const fixtureSuffix = `${testInfo.project.name}-${Date.now().toString(36)}`;
   const runtimeErrors: string[] = [];
-  let expectedUnauthorizedConsoleErrors = 0;
-  let acceptingInitialRefreshUnauthorized = true;
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
-    const locationUrl = message.location().url;
-    if (
-      acceptingInitialRefreshUnauthorized &&
-      message.text().includes('status of 401') &&
-      locationUrl &&
-      new URL(locationUrl).pathname === '/auth/refresh'
-    ) {
-      return;
-    }
-    if (
-      expectedUnauthorizedConsoleErrors > 0 &&
-      message.text().includes('status of 401')
-    ) {
-      expectedUnauthorizedConsoleErrors -= 1;
-      return;
-    }
     runtimeErrors.push(message.text());
   });
 
   await ensureIsolatedManagerLogin(page, testInfo.project.name);
-  acceptingInitialRefreshUnauthorized = false;
   await expect(
     page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
-
-  let forcedUnauthorized = 0;
-  let refreshRequests = 0;
-  const presentedRefreshTokens: string[] = [];
-  let rejectedAuthorization: string | undefined;
-  const staleAccessRoute =
-    /\/(dishes|menus|shopping-list|tasks|polls|reminders|notifications)(\?|$)/;
-  page.on('request', (request) => {
-    if (new URL(request.url()).pathname === '/auth/refresh') {
-      refreshRequests += 1;
-      const body = request.postDataJSON() as { refreshToken?: string } | null;
-      if (body?.refreshToken) presentedRefreshTokens.push(body.refreshToken);
-    }
-  });
-  await page.route(staleAccessRoute, async (route) => {
-    const request = route.request();
-    if (request.resourceType() === 'document') {
-      await route.continue();
-      return;
-    }
-    const authorization = request.headers().authorization;
-    if (!rejectedAuthorization) rejectedAuthorization = authorization;
-    if (
-      request.method() === 'GET' &&
-      authorization === rejectedAuthorization &&
-      forcedUnauthorized < 1
-    ) {
-      forcedUnauthorized += 1;
-      expectedUnauthorizedConsoleErrors += 1;
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          error: { code: 'UNAUTHORIZED', message: '测试访问令牌失效' },
-        }),
-      });
-      return;
-    }
-    await route.continue();
-  });
-  await page.goto(`/?authRecovery=${Date.now()}`);
-  await expect(
-    page.getByText('家庭工作台', { exact: true }),
-  ).toBeVisible();
-  expect(forcedUnauthorized).toBe(1);
-  expect(refreshRequests).toBeGreaterThanOrEqual(1);
-  expect(refreshRequests).toBeLessThanOrEqual(2);
-  expect(new Set(presentedRefreshTokens).size).toBe(
-    presentedRefreshTokens.length,
-  );
-  await page.waitForLoadState('networkidle');
-  await page.unroute(staleAccessRoute);
   expect(runtimeErrors).toEqual([]);
   await page.screenshot({
     path: testInfo.outputPath('platform-home.png'),
@@ -1645,19 +1577,114 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await openSection(page, testInfo.project.name, 'home');
   await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
   expect(runtimeErrors).toEqual([]);
-
-  const accessToken = await page.evaluate(() =>
-    window.localStorage.getItem('family-app-token'),
-  );
-  expect(accessToken).toBeTruthy();
-  await openSection(page, testInfo.project.name, 'profile');
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(page.getByText(/退出账号「爸爸」/)).toBeVisible();
-  await page.getByRole('button', { name: '退出', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
-  const revoked = await request.get(`${API_URL}/members`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  await page.context().storageState({
+    path: managerAuthFile(testInfo.project.name),
   });
-  expect(revoked.status()).toBe(401);
+});
+
+test('访问令牌失效后可刷新会话并在退出后撤销访问', async (
+  { browser, request },
+  testInfo,
+) => {
+  test.skip(testInfo.project.name !== 'mobile-chrome');
+
+  const context = await browser.newContext({
+    baseURL: process.env.FAMILY_WEB_URL ?? 'http://localhost:8081',
+    deviceScaleFactor: 1,
+    hasTouch: true,
+    isMobile: true,
+    storageState: 'e2e/.auth/recovery-mobile.json',
+    viewport: { width: 390, height: 844 },
+  });
+  const page = await context.newPage();
+  const runtimeErrors: string[] = [];
+  let expectedUnauthorizedConsoleErrors = 0;
+  let forcedUnauthorized = 0;
+  let refreshRequests = 0;
+  const presentedRefreshTokens: string[] = [];
+  let rejectedAuthorization: string | undefined;
+  const staleAccessRoute =
+    /\/(dishes|menus|shopping-list|tasks|polls|reminders|notifications)(\?|$)/;
+
+  page.on('pageerror', (error) => runtimeErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return;
+    if (
+      expectedUnauthorizedConsoleErrors > 0 &&
+      message.text().includes('status of 401')
+    ) {
+      expectedUnauthorizedConsoleErrors -= 1;
+      return;
+    }
+    runtimeErrors.push(message.text());
+  });
+  page.on('request', (browserRequest) => {
+    if (new URL(browserRequest.url()).pathname === '/auth/refresh') {
+      refreshRequests += 1;
+      const body = browserRequest.postDataJSON() as {
+        refreshToken?: string;
+      } | null;
+      if (body?.refreshToken) presentedRefreshTokens.push(body.refreshToken);
+    }
+  });
+
+  try {
+    await page.goto('/');
+    await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
+    await page.route(staleAccessRoute, async (route) => {
+      const browserRequest = route.request();
+      if (browserRequest.resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+      const authorization = browserRequest.headers().authorization;
+      if (!rejectedAuthorization) rejectedAuthorization = authorization;
+      if (
+        browserRequest.method() === 'GET' &&
+        authorization === rejectedAuthorization &&
+        forcedUnauthorized < 1
+      ) {
+        forcedUnauthorized += 1;
+        expectedUnauthorizedConsoleErrors += 1;
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'UNAUTHORIZED', message: '测试访问令牌失效' },
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto(`/?authRecovery=${Date.now()}`);
+    await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
+    expect(forcedUnauthorized).toBe(1);
+    expect(refreshRequests).toBeGreaterThanOrEqual(1);
+    expect(refreshRequests).toBeLessThanOrEqual(2);
+    expect(new Set(presentedRefreshTokens).size).toBe(
+      presentedRefreshTokens.length,
+    );
+    await page.waitForLoadState('networkidle');
+    await page.unroute(staleAccessRoute);
+    expect(runtimeErrors).toEqual([]);
+
+    const accessToken = await page.evaluate(() =>
+      window.localStorage.getItem('family-app-token'),
+    );
+    expect(accessToken).toBeTruthy();
+    await openSection(page, testInfo.project.name, 'profile');
+    await page.getByRole('button', { name: '退出登录', exact: true }).click();
+    await expect(page.getByText(/退出账号「爸爸」/)).toBeVisible();
+    await page.getByRole('button', { name: '退出', exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
+    const revoked = await request.get(`${API_URL}/members`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(revoked.status()).toBe(401);
+  } finally {
+    await context.close();
+  }
 });

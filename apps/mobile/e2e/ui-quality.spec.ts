@@ -1,4 +1,42 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import {
+  expect,
+  test as base,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from '@playwright/test';
+
+type UiQualityWorkerFixtures = {
+  authenticatedContext: BrowserContext;
+};
+
+const test = base.extend<{ page: Page }, UiQualityWorkerFixtures>({
+  authenticatedContext: [
+    async ({ browser }, use, workerInfo) => {
+      const mobile = workerInfo.project.name === 'mobile-chrome';
+      const context = await browser.newContext({
+        baseURL: process.env.FAMILY_WEB_URL ?? 'http://localhost:8081',
+        deviceScaleFactor: 1,
+        hasTouch: mobile,
+        isMobile: mobile,
+        storageState: mobile
+          ? 'e2e/.auth/mobile.json'
+          : 'e2e/.auth/desktop.json',
+        viewport: mobile
+          ? { width: 390, height: 844 }
+          : { width: 1440, height: 900 },
+      });
+      await use(context);
+      await context.close();
+    },
+    { scope: 'worker' },
+  ],
+  page: async ({ authenticatedContext }, use) => {
+    const page = await authenticatedContext.newPage();
+    await use(page);
+    await page.close();
+  },
+});
 
 async function openAuthenticatedHome(page: Page, projectName: string) {
   await page.goto('/');
