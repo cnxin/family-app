@@ -666,3 +666,47 @@ AGENT_TOOL_AUTHORIZATION_TTL_MS = 5 * 60_000  // 300s，余量 120s
 - 390px 不在 A7.2b 的验收视口内，而它恰是 iPhone 12/13/14 的逻辑宽度 → 裁切未被发现
 
 对应的方法论：新增能力时列出「要正确工作需几处同时正确」，逐处确认是否有测试覆盖；没有覆盖的位置优先补静态契约校验，成本远低于事后诊断。
+
+## 附录六：A7.4-B 例行任务落地记录（2026-08-09）
+
+### 已完成
+
+| 批次 | 提交 | 交付内容 |
+| --- | --- | --- |
+| A7.4-B 第一批 | `a765c8d` | `agent_routines` / `agent_routine_items`、每日通知上限、默认关闭的每晚汇总、owner-only 收件、家庭隔离、日级幂等和通知正文脱敏 |
+| A7.4-B 第二批 | `1e978c1` | 默认关闭的家庭周报、过去 7 天确定性聚合、周级幂等、周日 20:00 调度、两种 kind 共用 worker、API 与迁移回归 |
+
+移动端第一批已把 `agent` 接入通知模块并显示为「小管家」。当前没有例行任务管理界面，因此第二批没有新增独立设置页；`GET /agent/routines` 和 `PATCH /agent/routines/:kind` 已同时支持 `nightly_digest` 与 `weekly_report`。
+
+### 三层提案防护
+
+1. **机制层**：`AgentRoutineService` 不 import、注入或持有 `AgentProposalsService`，依赖图上无法调用 `confirm()`。
+2. **审计层**：例行任务只写 `Notification` 和自身调度元数据，不创建或确认操作提案。
+3. **测试层**：回归在每晚汇总和家庭周报触发前后统计 `agent_action_proposals`，断言没有新增 `status='confirmed'` 的行。
+
+### 一条判断修正
+
+重复 active 记忆导致 confirm 返回 409 是 A7.2 活动唯一部分索引 `(householdId, ownerMemberId, scope, memoryKey) WHERE status='active'` 的正确约束，不是产品缺陷。第一批已把真机 E2E 调整为可重复运行，没有放宽产品校验。这与附录五记录的「记忆召回缺 confirm」属于同一类问题：测试步骤或清理逻辑有误，应修测试，不应破坏产品约束。
+
+### 确定性执行
+
+每晚汇总和家庭周报都不调用 Hermes。模型存在 180 秒超时、网络故障和 Fake Runtime 回落路径；例行任务的核心价值是按时、可预测，不能让模型超时导致应到通知丢失。worker 直接调用现有 Calendar、Shopping 和 Inventory service，并只输出聚合数字或短摘要。
+
+### 周报调度选择
+
+采用思路 A，不新增 `scheduleWeekday` 列。`nextRunAt` 承载下一次执行的完整日期和时间，默认值是 Asia/Shanghai 的下一个周日 20:00；成功、重复、关闭或 owner 不可用后按周报 kind 推进 7 天。PATCH 可显式更新周报 `nextRunAt`，修改小时或分钟时保留原本的上海本地星期。
+
+选择这一方式是因为现有行已经有明确的 `nextRunAt`，周报只需要一种周频率；新增 nullable weekday 会给 `nightly_digest` 引入无意义状态和额外迁移回填。若以后出现工作日组合、双周或月度规则，应再引入明确的结构化调度表达，而不是继续编码进 `nextRunAt`。
+
+### 开发库实值
+
+迁移 `run -> revert -> run` 已在存在 `weekly_report` 行的情况下通过。开发库核对结果：
+
+- `dailyRoutineNotificationLimit = 3`
+- `routineNotificationsEnabled = false`
+- `nightly_digest`：`enabled = false`，21:00
+- `weekly_report`：`enabled = false`，周日 20:00（Asia/Shanghai）
+
+### 遗留待办
+
+A7.5 多步骤提案开工前必须先确定「部分确认」语义：组合计划是全有或全无，还是允许逐项确认。这个决定直接影响是否需要 `parent_proposal_id`、组合状态机、失败补偿和 UI 交互；未确定前不应先建字段或实现组合确认，以免形成返工。
