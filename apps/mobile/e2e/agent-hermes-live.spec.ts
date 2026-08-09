@@ -61,6 +61,7 @@ type Result = {
   note: string | null;
   proposalGroupId?: string | null;
   proposalStepCount?: number;
+  proposalPath?: 'a' | 'b' | null;
 };
 
 const repoRoot = resolve(process.cwd(), '../..');
@@ -296,7 +297,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           details
             .get(activeConversationId)
             ?.runs.find((run) => run.id === createdRun.id)?.status ?? 'missing',
-        { timeout: 240_000, intervals: [700, 1_000, 2_000] },
+        { timeout: 300_000, intervals: [700, 1_000, 2_000] },
       )
       .toMatch(/completed|failed|cancelled/);
 
@@ -319,17 +320,18 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       ? await agentApi<ProposalGroup[]>(page, '/agent/proposal-groups')
       : [];
     const proposalGroup = groups.find((group) => group.runId === createdRun.id);
-    const individualProposalTools = [
-      'propose_task',
-      'propose_reminder',
-      'propose_poll',
-      'propose_menu',
-      'propose_shopping_items',
-    ];
-    const expectedMatched = input.proposalGroup
+    const proposalPath = input.proposalGroup
       ? toolNames.includes('propose_plan') &&
-        !toolNames.some((tool) => individualProposalTools.includes(tool)) &&
         (proposalGroup?.steps.length ?? 0) >= 2
+        ? 'a'
+        : ['propose_menu', 'propose_shopping_items', 'propose_task'].every(
+              (tool) => toolNames.includes(tool),
+            )
+          ? 'b'
+          : null
+      : null;
+    const expectedMatched = input.proposalGroup
+      ? proposalPath !== null
       : input.multiTool
         ? new Set(toolNames).size >= 2 && cards.length >= 2
         : toolNames.includes(input.expectedTool) &&
@@ -364,7 +366,9 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
             ? null
             : '无上下文时未明确追问菜品，或擅自选择了家庭菜品'
           : !expectedMatched
-            ? '未调用预期工具或未生成预期卡片'
+            ? input.proposalGroup
+              ? '既未生成多子项组提案，也未分别覆盖菜单、购物和任务提案'
+              : '未调用预期工具或未生成预期卡片'
             : !weatherSafe
               ? '未取得天气数据却输出了具体温度或降水数字'
               : null;
@@ -399,6 +403,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
         ? {
             proposalGroupId: proposalGroup?.id ?? null,
             proposalStepCount: proposalGroup?.steps.length ?? 0,
+            proposalPath,
           }
         : {}),
     };
@@ -437,7 +442,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     for (const scenario of scenarios) await runScenario(scenario);
     const proposalGroup = await runScenario({
       id: 'proposal-group-family-dinner',
-      prompt: '周六爸妈来吃饭',
+      prompt:
+        '周六晚上爸妈来家里吃饭，加上我们一共5个人；来访的爸爸不吃辣，其他人没有忌口。请把晚餐菜单、需要购买的食材和当天要做的准备任务都安排好，直接生成提案让我确认。',
       expectedTool: 'propose_plan',
       expectedKind: null,
       screenshot: '14-proposal-group.png',

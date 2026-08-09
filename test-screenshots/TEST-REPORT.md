@@ -113,7 +113,9 @@ A7.3 专项结果为 **2/2**。两条 run 均为 Hermes、无回落；范围查�
 - API 全量回归、结构漂移检查、API build、Mobile TypeScript、Expo lint 均通过。
 - 响应式专项通过，覆盖 320/375/390/414px 的组提案卡片、纵向 44pt 操作按钮、过期后禁用确认且保留全部放弃。
 - 开发库在存在 group、事件和子项数据时完成 `migration:run -> migration:revert -> migration:run`；迁移后既有 10 条独立提案的新列均为 `NULL`。
-- 完整 Mobile Web 回归受既有“妈妈”账号登录失败阻塞，结果为 2 passed、1 failed、45 not run；未修改密码或重新 seed。独立响应式回归为 1 passed。
+- 完整 Mobile Web 回归恢复为 43 passed、8 skipped、0 failed，51 项全部调度，没有 `not run`；未修改密码或重新 seed。
+- “妈妈”登录阻塞不是 A7.4-B/A7.5 产品回归：`dcaa85b` 增加第三个登录 setup 后，与 `5ba76d4` 遗留的默认密码优先候选顺序叠加，6 次请求超过 `LOGIN_RATE_LIMIT=5`；A7.3 `772610a` 的鉴权恢复 fixture 还会轮换公共 refresh token。当前改为无密码优先、复用已成功候选，并用独立会话验证刷新与退出撤销；UI 质量文件在同一 worker 上下文内保留轮换后的会话。
+- A7.5 组提案会连续调用多类家庭查询，旧 180 秒 chat 上限两次在 5 至 7 次工具调用后精确回落。现调整为 chat 240 秒、工具授权 300 秒，保留契约要求的 60 秒余量；移动端没有更短的 HTTP/Abort 超时。
 
 ### 真实 Hermes 回归
 
@@ -122,6 +124,6 @@ A7.3 专项结果为 **2/2**。两条 run 均为 Hermes、无回落；范围查�
 | A7.4-A 主场景 | 9/9 | 全部 `runtimeKind=hermes`，回落数 0，多工具场景通过 |
 | A7.2 记忆 | 2/2 | `remember_preference` 写入候选，`recall_preferences` 召回已确认的同键偏好 |
 | A7.3 页面上下文 | 2/2 | 有上下文按当前菜品回答；清除后明确追问 |
-| A7.5 组提案 | 0/1 | 未调用 `propose_plan`，也未调用旧单提案工具 |
+| A7.5 组提案 | 1/1 | 走路径 (a)：`propose_plan` 生成 5 个组内子项，无回落 |
 
-组提案场景输入“周六爸妈来吃饭”后，Hermes 真实运行 104.2 秒，无回落；模型调用日程、点菜、菜单、成员档案、库存、偏好和菜谱共 7 类只读工具，随后追问具体餐次、人数和忌口，没有创建组提案。该结果不是工具不可见，也不是拆分调用旧 `propose_*`，而是模型在信息不足时选择先澄清。按照本批约定，没有继续试探工具描述或改 system prompt。结构化明细见 `E2E-RESULTS.json`，页面证据见 `14-proposal-group.png`。
+组提案输入改为明确周六晚餐、总计 5 人、来访爸爸不吃辣且其他人无忌口，并明确要求菜单、购物和准备任务。Hermes 真实运行 222.8 秒，先查询点菜、购物、库存和菜谱，再调用 `propose_plan` 创建 5 个子项，结构化结果记录 `proposalPath="a"`。本轮完整真实回归的 9 个主场景、2 个记忆场景、2 个页面上下文场景和 1 个组提案场景全部为 Hermes、回落数 0；没有修改工具 description、system prompt 或 Fake runtime。结构化明细见 `E2E-RESULTS.json`，页面证据见 `14-proposal-group.png`。
