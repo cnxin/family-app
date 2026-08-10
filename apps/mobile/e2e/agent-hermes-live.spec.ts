@@ -53,6 +53,10 @@ type Result = {
   runStatus: string;
   errorCode: string | null;
   durationMs: number;
+  attempts: number;
+  attemptDurationsMs: number[];
+  attemptRunIds: string[];
+  attemptErrorCodes: (string | null)[];
   toolNames: string[];
   cardKinds: string[];
   cardTexts: string[];
@@ -71,6 +75,21 @@ type ClarificationExpectation = {
   responsePattern: RegExp;
 };
 
+type ScenarioInput = {
+  id: number | string;
+  prompt: string;
+  expectedTool: string;
+  expectedKind: string | null;
+  screenshot: string;
+  multiTool?: boolean;
+  weather?: boolean;
+  requiredText?: string;
+  textOnly?: boolean;
+  honestUnavailable?: boolean;
+  clarifyWithoutContext?: ClarificationExpectation;
+  proposalGroup?: boolean;
+};
+
 const repoRoot = resolve(process.cwd(), '../..');
 const resultPath = resolve(repoRoot, 'test-screenshots/E2E-RESULTS.json');
 const screenshotRoot = resolve(repoRoot, 'test-screenshots');
@@ -78,6 +97,8 @@ const apiBaseUrl = (
   process.env.FAMILY_API_URL ?? 'http://localhost:3100'
 ).replace(/\/+$/, '');
 const fallbackCode = 'HERMES_UNAVAILABLE_FALLBACK';
+const maxScenarioAttempts = 3;
+const retryDelayMs = 30_000;
 const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
 const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
 const readToolsOnly = process.env.HERMES_E2E_READ_TOOLS_ONLY === '1';
@@ -193,7 +214,7 @@ function claimsFamilyDataWithoutEvidence(text: string) {
 }
 
 test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
-  test.setTimeout(2_700_000);
+  test.setTimeout(14_400_000);
   const previous = existingReport();
   const details = watchConversationDetails(page);
   const results: Result[] = memoryOnly || pageContextOnly
@@ -216,22 +237,49 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     : '';
   let activeConversationId = '';
 
-  const summary = () => ({
-    passed: results.filter((result) => result.passed).length,
-    total: results.length,
-    averageDurationMs: results.length
-      ? Math.round(
-          results.reduce((sum, result) => sum + result.durationMs, 0) /
-            results.length,
-        )
-      : 0,
-    runsWithToolEvents: results.filter((result) => result.toolNames.length > 0)
-      .length,
-    runsWithCards: results.filter((result) => result.cardKinds.length > 0).length,
-    multiToolPassed: results.find((result) => result.id === 9)?.passed ?? false,
-    fallbackCount: results.filter((result) => result.errorCode === fallbackCode)
-      .length,
-  });
+  const recordedResults = () => [
+    ...results,
+    ...memoryChecks,
+    ...pageContextChecks,
+    ...proposalGroupChecks,
+  ];
+  const summary = () => {
+    const recorded = recordedResults();
+    return {
+      passed: results.filter((result) => result.passed).length,
+      total: results.length,
+      averageDurationMs: results.length
+        ? Math.round(
+            results.reduce((sum, result) => sum + result.durationMs, 0) /
+              results.length,
+          )
+        : 0,
+      runsWithToolEvents: results.filter((result) => result.toolNames.length > 0)
+        .length,
+      runsWithCards: results.filter((result) => result.cardKinds.length > 0)
+        .length,
+      multiToolPassed: results.find((result) => result.id === 9)?.passed ?? false,
+      fallbackCount: recorded.filter(
+        (result) => result.errorCode === fallbackCode,
+      ).length,
+      totalAttempts: recorded.reduce(
+        (sum, result) => sum + (result.attempts ?? 1),
+        0,
+      ),
+      totalRetries: recorded.reduce(
+        (sum, result) => sum + Math.max(0, (result.attempts ?? 1) - 1),
+        0,
+      ),
+      fallbackAttemptCount: recorded.reduce(
+        (sum, result) =>
+          sum +
+          (result.attemptErrorCodes ?? [result.errorCode]).filter(
+            (code) => code === fallbackCode,
+          ).length,
+        0,
+      ),
+    };
+  };
   const persist = () => {
     writeFileSync(
       resultPath,
@@ -313,20 +361,13 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     .poll(() => details.has(activeConversationId), { timeout: 20_000 })
     .toBeTruthy();
 
-  async function runScenario(input: {
-    id: number | string;
-    prompt: string;
-    expectedTool: string;
-    expectedKind: string | null;
-    screenshot: string;
-    multiTool?: boolean;
-    weather?: boolean;
-    requiredText?: string;
-    textOnly?: boolean;
-    honestUnavailable?: boolean;
-    clarifyWithoutContext?: ClarificationExpectation;
-    proposalGroup?: boolean;
-  }) {
+  async function executeScenarioAttempt(
+    input: ScenarioInput,
+    attempt: number,
+    attemptDurationsMs: number[],
+    attemptRunIds: string[],
+    attemptErrorCodes: (string | null)[],
+  ) {
     const messageInput = page.getByTestId('agent-message-input');
     await messageInput.fill(input.prompt);
     const runResponsePromise = page.waitForResponse(
@@ -357,6 +398,10 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     const detail = details.get(activeConversationId);
     const run = detail?.runs.find((entry) => entry.id === createdRun.id);
     expect(run).toBeTruthy();
+    const durationMs = run ? runDurationMs(run) : 0;
+    attemptDurationsMs.push(durationMs);
+    attemptRunIds.push(createdRun.id);
+    attemptErrorCodes.push(run?.errorCode ?? null);
     const events =
       detail?.toolEvents.filter((event) => event.runId === createdRun.id) ?? [];
     const cards = events.flatMap((event) =>
@@ -452,7 +497,11 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       runtimeKind: run?.runtimeKind ?? 'fake',
       runStatus: run?.status ?? 'unknown',
       errorCode: run?.errorCode ?? null,
-      durationMs: run ? runDurationMs(run) : 0,
+      durationMs,
+      attempts: attempt,
+      attemptDurationsMs: [...attemptDurationsMs],
+      attemptRunIds: [...attemptRunIds],
+      attemptErrorCodes: [...attemptErrorCodes],
       toolNames,
       cardKinds: cards.map((card) => card.kind),
       cardTexts: cards.map((card) =>
@@ -477,23 +526,76 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           }
         : {}),
     };
-    if (typeof input.id === 'number') results.push(result);
-    else if (String(input.id).startsWith('proposal-group')) {
-      proposalGroupChecks.push(result);
-    }
-    else if (String(input.id).startsWith('page-context')) {
-      pageContextChecks.push(result);
-    } else memoryChecks.push(result);
-    persist();
-    await persistAuthState();
-    console.log(`HERMES_E2E_RESULT ${JSON.stringify(result)}`);
+    return { result, fallback };
+  }
 
-    const cardsOnPage = page.locator(
-      '[data-testid^="agent-result-"]:not([data-testid^="agent-result-open-"])',
+  async function startRetryConversation() {
+    await page.waitForTimeout(retryDelayMs);
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/agent/conversations'),
     );
-    if (await cardsOnPage.count()) await cardsOnPage.last().scrollIntoViewIfNeeded();
-    await page.screenshot({ path: resolve(screenshotRoot, input.screenshot) });
-    return result;
+    await page.getByTestId('agent-new-conversation').click();
+    const conversation = await responseData(await responsePromise);
+    activeConversationId = conversation?.id ?? '';
+    expect(activeConversationId).toBeTruthy();
+    await expect(
+      page.getByTestId(`agent-message-list-${activeConversationId}`),
+    ).toBeVisible();
+  }
+
+  async function runScenario(input: ScenarioInput) {
+    const attemptDurationsMs: number[] = [];
+    const attemptRunIds: string[] = [];
+    const attemptErrorCodes: (string | null)[] = [];
+
+    for (let attempt = 1; attempt <= maxScenarioAttempts; attempt += 1) {
+      const { result, fallback } = await executeScenarioAttempt(
+        input,
+        attempt,
+        attemptDurationsMs,
+        attemptRunIds,
+        attemptErrorCodes,
+      );
+      console.log(
+        `HERMES_E2E_ATTEMPT ${JSON.stringify({
+          id: input.id,
+          attempt,
+          runId: result.runId,
+          durationMs: result.durationMs,
+          errorCode: result.errorCode,
+          toolNames: result.toolNames,
+          passed: result.passed,
+          note: result.note,
+        })}`,
+      );
+
+      if (fallback && attempt < maxScenarioAttempts) {
+        await startRetryConversation();
+        continue;
+      }
+
+      if (typeof input.id === 'number') results.push(result);
+      else if (String(input.id).startsWith('proposal-group')) {
+        proposalGroupChecks.push(result);
+      } else if (String(input.id).startsWith('page-context')) {
+        pageContextChecks.push(result);
+      } else memoryChecks.push(result);
+      persist();
+      await persistAuthState();
+      console.log(`HERMES_E2E_RESULT ${JSON.stringify(result)}`);
+
+      const cardsOnPage = page.locator(
+        '[data-testid^="agent-result-"]:not([data-testid^="agent-result-open-"])',
+      );
+      if (await cardsOnPage.count()) {
+        await cardsOnPage.last().scrollIntoViewIfNeeded();
+      }
+      await page.screenshot({ path: resolve(screenshotRoot, input.screenshot) });
+      return result;
+    }
+    throw new Error(`场景 ${input.id} 未产生最终结果`);
   }
 
   const scenarios = [
@@ -541,7 +643,10 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
         source: { id: string | null };
       }[]
     >(page, '/agent/memories?status=candidate&scope=member_private');
-    const candidate = candidates.find(
+    const attemptCandidates = candidates.filter((memory) =>
+      memoryWrite.attemptRunIds.includes(memory.source.id ?? ''),
+    );
+    const candidate = attemptCandidates.find(
       (memory) => memory.source.id === memoryWrite.runId,
     );
     expect(candidate, '记忆写入 run 必须产生对应的候选记忆').toBeTruthy();
@@ -569,12 +674,19 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       expectedKind: null,
       screenshot: '11-memory-recall.png',
     });
-    await agentApi(
-      page,
-      `/agent/memories/${candidate!.id}`,
-      'DELETE',
-      { expectedVersion: cleanupVersion },
-    );
+    for (const attemptCandidate of attemptCandidates) {
+      await agentApi(
+        page,
+        `/agent/memories/${attemptCandidate.id}`,
+        'DELETE',
+        {
+          expectedVersion:
+            attemptCandidate.id === candidate!.id
+              ? cleanupVersion
+              : attemptCandidate.version,
+        },
+      );
+    }
   }
 
   if (!memoryOnly && !readToolsOnly) {
