@@ -123,7 +123,7 @@ async function responseData(response: Response) {
 async function agentApi<T>(
   page: Page,
   path: string,
-  method: 'GET' | 'POST' | 'DELETE' = 'GET',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
   body?: unknown,
 ) {
   let token = await page.evaluate(() =>
@@ -730,49 +730,74 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     });
     expect(contextual.passed).toBeTruthy();
 
-    const assets = await agentApi<{ id: string; name: string }[]>(
+    const testAsset = await agentApi<{
+      id: string;
+      name: string;
+      status: 'active' | 'retired';
+    }>(
       page,
-      '/assets?status=all',
+      '/assets',
+      'POST',
+      {
+        name: `Hermes 资产上下文 E2E-${Date.now().toString(36)}`,
+        category: 'appliance',
+        location: '真机 E2E 测试位置',
+        brand: 'E2E',
+        model: 'context-fixture',
+        purchaseDate: '2026-08-10',
+        warrantyExpiresOn: '2199-12-31',
+        note: '真机页面上下文临时资产，测试后通过正常 API 归档。',
+      },
     );
-    expect(
-      assets.length,
-      '资产页面上下文真机回归需要开发库至少保留一项资产；列表跳转由 mock 响应式套件覆盖',
-    ).toBeGreaterThan(0);
-    await page.goto(`/asset/${assets[0].id}`);
-    await expect(page).toHaveURL(/\/asset\/[0-9a-f-]{36}$/);
-    const targetAsset = {
-      id: new URL(page.url()).pathname.split('/').at(-1)!,
-      name: await page.getByTestId('asset-detail-name').innerText(),
-    };
-    await page.getByTestId('asset-ask-assistant').click();
-    await expect(page).toHaveURL(/\/assistant\?.*entityType=asset/);
-    await expect(page.getByTestId('agent-page-context')).toContainText(
-      `正在参考：${targetAsset.name}`,
-    );
+    expect(testAsset.status).toBe('active');
+    try {
+      await page.goto(`/asset/${testAsset.id}`);
+      await expect(page).toHaveURL(/\/asset\/[0-9a-f-]{36}$/);
+      const targetAsset = {
+        id: new URL(page.url()).pathname.split('/').at(-1)!,
+        name: await page.getByTestId('asset-detail-name').innerText(),
+      };
+      expect(targetAsset.id).toBe(testAsset.id);
+      await page.getByTestId('asset-ask-assistant').click();
+      await expect(page).toHaveURL(/\/assistant\?.*entityType=asset/);
+      await expect(page.getByTestId('agent-page-context')).toContainText(
+        `正在参考：${targetAsset.name}`,
+      );
 
-    const assetConversationResponse = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        new URL(response.url()).pathname.endsWith('/agent/conversations'),
-    );
-    await page.getByTestId('agent-new-conversation').click();
-    const assetConversation = await responseData(await assetConversationResponse);
-    activeConversationId = assetConversation?.id ?? '';
-    expect(activeConversationId).toBeTruthy();
-    await expect(
-      page.getByTestId(`agent-message-list-${activeConversationId}`),
-    ).toBeVisible();
-    const assetContextual = await runScenario({
-      id: 'page-context-asset',
-      prompt: '这个东西保修到什么时候',
-      expectedTool: 'none',
-      expectedKind: null,
-      screenshot: '16-page-context-asset.png',
-      requiredText: targetAsset.name,
-      textOnly: true,
-      honestUnavailable: true,
-    });
-    expect(assetContextual.passed).toBeTruthy();
+      const assetConversationResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname.endsWith('/agent/conversations'),
+      );
+      await page.getByTestId('agent-new-conversation').click();
+      const assetConversation = await responseData(
+        await assetConversationResponse,
+      );
+      activeConversationId = assetConversation?.id ?? '';
+      expect(activeConversationId).toBeTruthy();
+      await expect(
+        page.getByTestId(`agent-message-list-${activeConversationId}`),
+      ).toBeVisible();
+      const assetContextual = await runScenario({
+        id: 'page-context-asset',
+        prompt: '这个东西保修到什么时候',
+        expectedTool: 'none',
+        expectedKind: null,
+        screenshot: '16-page-context-asset.png',
+        requiredText: targetAsset.name,
+        textOnly: true,
+        honestUnavailable: true,
+      });
+      expect(assetContextual.passed).toBeTruthy();
+    } finally {
+      const retired = await agentApi<{ status: 'active' | 'retired' }>(
+        page,
+        `/assets/${testAsset.id}`,
+        'PATCH',
+        { status: 'retired' },
+      );
+      expect(retired.status).toBe('retired');
+    }
 
     await page.getByTestId('agent-page-context-clear').click();
     await expect(page.getByTestId('agent-page-context')).toHaveCount(0);
