@@ -64,6 +64,13 @@ type Result = {
   proposalPath?: 'a' | 'b' | null;
 };
 
+type ClarificationExpectation = {
+  entityLabel: string;
+  forbiddenText?: string;
+  forbiddenTool: string;
+  responsePattern: RegExp;
+};
+
 const repoRoot = resolve(process.cwd(), '../..');
 const resultPath = resolve(repoRoot, 'test-screenshots/E2E-RESULTS.json');
 const screenshotRoot = resolve(repoRoot, 'test-screenshots');
@@ -306,7 +313,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     multiTool?: boolean;
     weather?: boolean;
     requiredText?: string;
-    clarifyWithoutContext?: string;
+    clarifyWithoutContext?: ClarificationExpectation;
     proposalGroup?: boolean;
   }) {
     const messageInput = page.getByTestId('agent-message-input');
@@ -383,9 +390,10 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       );
     const clarificationSafe =
       !input.clarifyWithoutContext ||
-      (!toolNames.includes('search_recipes') &&
-        !assistantText.includes(input.clarifyWithoutContext) &&
-        /哪道菜|具体.*菜|菜名|指的是|请.*说明|无法确定/.test(assistantText));
+      (!toolNames.includes(input.clarifyWithoutContext.forbiddenTool) &&
+        (!input.clarifyWithoutContext.forbiddenText ||
+          !assistantText.includes(input.clarifyWithoutContext.forbiddenText)) &&
+        input.clarifyWithoutContext.responsePattern.test(assistantText));
     const passed =
       run?.runtimeKind === 'hermes' &&
       !fallback &&
@@ -399,7 +407,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
         : input.clarifyWithoutContext
           ? clarificationSafe
             ? null
-            : '无上下文时未明确追问菜品，或擅自选择了家庭菜品'
+            : `无上下文时未明确追问${input.clarifyWithoutContext.entityLabel}，或擅自选择了家庭资源`
           : !expectedMatched
             ? input.proposalGroup
               ? '既未生成多子项组提案，也未分别覆盖菜单、购物和任务提案'
@@ -604,9 +612,45 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       expectedTool: 'search_recipes',
       expectedKind: 'recipes',
       screenshot: '13-no-context.png',
-      clarifyWithoutContext: targetDish.name,
+      clarifyWithoutContext: {
+        entityLabel: '菜品',
+        forbiddenText: targetDish.name,
+        forbiddenTool: 'search_recipes',
+        responsePattern: /哪道菜|具体.*菜|菜名|指的是|请.*说明|无法确定/,
+      },
     });
     expect(withoutContext.passed).toBeTruthy();
+
+    await page.goto('/assistant');
+    await expect(page.getByTestId('agent-page-context')).toHaveCount(0);
+    const knowledgeConversationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/agent/conversations'),
+    );
+    await page.getByTestId('agent-new-conversation').click();
+    const knowledgeConversation = await responseData(
+      await knowledgeConversationResponse,
+    );
+    activeConversationId = knowledgeConversation?.id ?? '';
+    expect(activeConversationId).toBeTruthy();
+    await expect(
+      page.getByTestId(`agent-message-list-${activeConversationId}`),
+    ).toBeVisible();
+    const knowledgeWithoutContext = await runScenario({
+      id: 'page-context-missing-knowledge',
+      prompt: '这篇文章主要讲了什么',
+      expectedTool: 'search_knowledge',
+      expectedKind: 'knowledge',
+      screenshot: '15-no-knowledge-context.png',
+      clarifyWithoutContext: {
+        entityLabel: '知识文章',
+        forbiddenTool: 'search_knowledge',
+        responsePattern: /哪篇|具体.*文章|文章标题|哪条.*知识|告诉我.*标题|把.*文章.*(?:贴|发)|指的是|请.*说明|无法确定/,
+      },
+    });
+    expect(knowledgeWithoutContext.passed).toBeTruthy();
+
   }
 
   if (!pageContextOnly) {
