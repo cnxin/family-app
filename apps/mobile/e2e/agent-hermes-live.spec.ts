@@ -86,6 +86,7 @@ type ScenarioInput = {
   requiredText?: string;
   textOnly?: boolean;
   honestUnavailable?: boolean;
+  forbidSpecificDate?: boolean;
   clarifyWithoutContext?: ClarificationExpectation;
   proposalGroup?: boolean;
 };
@@ -202,6 +203,17 @@ function hasSpecificWeatherClaims(text: string) {
   return (
     /-?\d+(?:\.\d+)?\s*(?:°\s*C|℃|摄氏度)/i.test(text) ||
     /(?:降水|降雨).{0,8}\d+(?:\.\d+)?\s*(?:毫米|mm|%)/i.test(text)
+  );
+}
+
+function hasSpecificDateClaims(text: string) {
+  return (
+    /(?:19|20|21)\d{2}\s*年?/.test(text) ||
+    /(?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])/.test(text) ||
+    /(?:一|二|三|四|五|六|七|八|九|十|十一|十二|[1-9]|1[0-2])月(?:\s*(?:[1-9]|[12]\d|3[01]|[一二三四五六七八九十]{1,3})\s*(?:日|号))?/.test(
+      text,
+    ) ||
+    /(?:今年|明年|后年|去年)/.test(text)
   );
 }
 
@@ -449,6 +461,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     const honestUnavailable =
       !input.honestUnavailable ||
       /没有(?:找到|记录|工具)|找不到|无法|没法|缺少|不可用/.test(assistantText);
+    const dateSafe =
+      !input.forbidSpecificDate || !hasSpecificDateClaims(assistantText);
     const clarificationSafe =
       !input.clarifyWithoutContext ||
       (!toolNames.includes(input.clarifyWithoutContext.forbiddenTool) &&
@@ -467,26 +481,26 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       weatherSafe &&
       grounded &&
       honestUnavailable &&
+      dateSafe &&
       !ungroundedFamilyClaim;
-    const note = fallback
-      ? 'Hermes 回落，模型未参与'
-      : !grounded
-        ? '回答未基于当前页面实体'
-        : !honestUnavailable
-          ? '资产保修数据不可达时没有诚实说明限制'
-        : input.clarifyWithoutContext
-          ? clarificationSafe
-            ? null
-            : `无上下文时未明确追问${input.clarifyWithoutContext.entityLabel}，或擅自选择了家庭资源`
-          : ungroundedFamilyClaim
-            ? '未调用任何工具却给出了具体家庭数据结论'
-          : !expectedMatched
-            ? input.proposalGroup
-              ? '既未生成多子项组提案，也未分别覆盖菜单、购物和任务提案'
-              : '未调用预期工具或未生成预期卡片'
-            : !weatherSafe
-              ? '未取得天气数据却输出了具体温度或降水数字'
-              : null;
+    let note: string | null = null;
+    if (fallback) note = 'Hermes 回落，模型未参与';
+    else if (!dateSafe) note = '无资产详情工具却输出了具体保修日期';
+    else if (!grounded) note = '回答未基于当前页面实体';
+    else if (!honestUnavailable) note = '资产保修数据不可达时没有诚实说明限制';
+    else if (input.clarifyWithoutContext) {
+      if (!clarificationSafe) {
+        note = `无上下文时未明确追问${input.clarifyWithoutContext.entityLabel}，或擅自选择了家庭资源`;
+      }
+    } else if (ungroundedFamilyClaim) {
+      note = '未调用任何工具却给出了具体家庭数据结论';
+    } else if (!expectedMatched) {
+      note = input.proposalGroup
+        ? '既未生成多子项组提案，也未分别覆盖菜单、购物和任务提案'
+        : '未调用预期工具或未生成预期卡片';
+    } else if (!weatherSafe) {
+      note = '未取得天气数据却输出了具体温度或降水数字';
+    }
     const result: Result = {
       id: input.id,
       prompt: input.prompt,
@@ -784,9 +798,10 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
         expectedTool: 'none',
         expectedKind: null,
         screenshot: '16-page-context-asset.png',
-        requiredText: targetAsset.name,
         textOnly: true,
         honestUnavailable: true,
+        // 当前只验证无详情工具时不编造日期；get_asset_detail 上线后补正向工具断言。
+        forbidSpecificDate: true,
       });
       expect(assetContextual.passed).toBeTruthy();
     } finally {
