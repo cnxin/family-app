@@ -93,6 +93,7 @@ const SUGGESTIONS = [
   }).format(new Date())}`,
   '最近有哪些东西快没了？',
   '家庭片单里有什么可以看？',
+  '这个月家庭支出了多少？',
 ];
 
 function errorMessage(error: unknown) {
@@ -141,6 +142,8 @@ const TOOL_LABELS: Record<string, string> = {
   get_travel_checklist: '查看出行清单',
   get_watch_candidates: '查看家庭片单',
   get_recent_memories: '查看家庭回忆',
+  get_finance_summary: '查看家庭财务',
+  propose_finance_transaction: '生成记账提案',
 };
 
 function ToolProgress({ events, queued }: { events: AgentToolEvent[]; queued: boolean }) {

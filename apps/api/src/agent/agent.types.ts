@@ -16,6 +16,7 @@ export const AGENT_READ_TOOLS = [
   'get_dish_plan',
   'get_weather',
   'get_member_profile',
+  'get_finance_summary',
 ] as const;
 
 export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];
@@ -27,6 +28,7 @@ export const AGENT_PROPOSAL_TOOLS = [
   'propose_menu',
   'propose_shopping_items',
   'propose_plan',
+  'propose_finance_transaction',
 ] as const;
 
 export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];

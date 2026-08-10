@@ -280,6 +280,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="finance"
+        options={{
+          title: '财务',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="knowledge"
         options={{
           title: '知识库',

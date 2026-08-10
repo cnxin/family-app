@@ -21,7 +21,7 @@ import {
 } from '../entities';
 import {
   AgentProposalsService,
-  SingleAgentProposalToolName,
+  GroupedAgentProposalToolName,
 } from './agent-proposals.service';
 
 const groupInputSchema = z
@@ -41,7 +41,9 @@ const groupInputSchema = z
   })
   .passthrough();
 
-const TOOL_BY_TYPE: Record<AgentActionType, SingleAgentProposalToolName> = {
+type GroupAgentActionType = Exclude<AgentActionType, 'finance'>;
+
+const TOOL_BY_TYPE: Record<GroupAgentActionType, GroupedAgentProposalToolName> = {
   task: 'propose_task',
   reminder: 'propose_reminder',
   poll: 'propose_poll',
@@ -127,7 +129,7 @@ export class AgentProposalGroupsService {
         } = rawStep;
         steps.push(
           await this.proposals.createGroupedWithinTransaction(
-            TOOL_BY_TYPE[type],
+            TOOL_BY_TYPE[type as GroupAgentActionType],
             payload,
             run,
             user,
@@ -203,7 +205,9 @@ export class AgentProposalGroupsService {
         });
         const requiredTools = [
           'propose_plan',
-          ...steps.map((step) => TOOL_BY_TYPE[step.actionType]),
+          ...steps.map(
+            (step) => TOOL_BY_TYPE[step.actionType as GroupAgentActionType],
+          ),
         ];
         if (
           !setting?.enabled ||

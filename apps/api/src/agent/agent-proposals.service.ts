@@ -31,6 +31,10 @@ import {
 import { ManualItemDto, ShoppingService } from '../shopping/shopping.module';
 import { CreateTaskDto, TasksService } from '../tasks/tasks.module';
 import {
+  CreateFinanceTransactionDto,
+  FinanceService,
+} from '../finance/finance.module';
+import {
   AGENT_PROPOSAL_TOOLS,
   AgentProposalToolName,
 } from './agent.types';
@@ -129,20 +133,39 @@ const shoppingSchema = z
   })
   .strict();
 
+const financeSchema = z
+  .object({
+    type: z.enum(['expense', 'income', 'transfer']),
+    amount: z.number().positive().max(999_999_999_999.99),
+    accountId: z.string().uuid(),
+    toAccountId: z.string().uuid().optional().nullable(),
+    categoryId: z.string().uuid().optional().nullable(),
+    title: z.string().trim().min(1).max(120),
+    note: optionalText(1000).nullable(),
+    occurredOn: dateOnly,
+  })
+  .strict();
+
 type TaskPayload = z.infer<typeof taskSchema>;
 type ReminderPayload = z.infer<typeof reminderSchema>;
 type PollPayload = z.infer<typeof pollSchema>;
 type MenuPayload = z.infer<typeof menuSchema>;
 type ShoppingPayload = z.infer<typeof shoppingSchema>;
+type FinancePayload = z.infer<typeof financeSchema>;
 type ProposalPayload =
   | TaskPayload
   | ReminderPayload
   | PollPayload
   | MenuPayload
-  | ShoppingPayload;
+  | ShoppingPayload
+  | FinancePayload;
 export type SingleAgentProposalToolName = Exclude<
   AgentProposalToolName,
   'propose_plan'
+>;
+export type GroupedAgentProposalToolName = Exclude<
+  SingleAgentProposalToolName,
+  'propose_finance_transaction'
 >;
 
 const TYPE_BY_TOOL: Record<SingleAgentProposalToolName, AgentActionType> = {
@@ -151,6 +174,7 @@ const TYPE_BY_TOOL: Record<SingleAgentProposalToolName, AgentActionType> = {
   propose_poll: 'poll',
   propose_menu: 'menu',
   propose_shopping_items: 'shopping',
+  propose_finance_transaction: 'finance',
 };
 
 const TOOL_BY_TYPE: Record<AgentActionType, AgentProposalToolName> = {
@@ -159,6 +183,7 @@ const TOOL_BY_TYPE: Record<AgentActionType, AgentProposalToolName> = {
   poll: 'propose_poll',
   menu: 'propose_menu',
   shopping: 'propose_shopping_items',
+  finance: 'propose_finance_transaction',
 };
 
 const ACTION_LABELS: Record<AgentActionType, string> = {
@@ -167,6 +192,7 @@ const ACTION_LABELS: Record<AgentActionType, string> = {
   poll: '家庭投票',
   menu: '菜单点菜',
   shopping: '购物清单',
+  finance: '家庭记账',
 };
 
 const MEAL_LABELS = {
@@ -209,6 +235,7 @@ function parsePayload(actionType: AgentActionType, value: unknown) {
     poll: pollSchema,
     menu: menuSchema,
     shopping: shoppingSchema,
+    finance: financeSchema,
   }[actionType];
   const result = schema.safeParse(value);
   if (!result.success) {
@@ -238,6 +265,7 @@ export class AgentProposalsService {
     private readonly polls: PollsService,
     private readonly menus: MenusService,
     private readonly shopping: ShoppingService,
+    private readonly finance: FinanceService,
   ) {}
 
   async createFromRun(
@@ -299,7 +327,7 @@ export class AgentProposalsService {
   }
 
   async createGroupedWithinTransaction(
-    toolName: SingleAgentProposalToolName,
+    toolName: GroupedAgentProposalToolName,
     input: Record<string, unknown>,
     run: AgentRun,
     user: JwtUser,
@@ -583,6 +611,30 @@ export class AgentProposalsService {
         targetPath: `/menu?date=${menu.date}`,
       };
     }
+    if (actionType === 'finance') {
+      const finance = payload as FinancePayload;
+      const preview = await this.finance.previewTransaction(
+        { ...finance, idempotencyKey: 'agent-preview' } as CreateFinanceTransactionDto,
+        user,
+      );
+      const typeLabel = {
+        expense: '支出',
+        income: '收入',
+        transfer: '转账',
+      }[finance.type];
+      return {
+        title: `${typeLabel}：${finance.title}`,
+        summary: '确认后写入家庭共享账本；财务流水不能编辑，只能通过反向流水撤销',
+        changes: [
+          { label: '金额', value: `¥${finance.amount.toFixed(2)}` },
+          { label: '日期', value: finance.occurredOn },
+          { label: '账户', value: preview.toAccount ? `${preview.account.name} → ${preview.toAccount.name}` : preview.account.name },
+          { label: '分类', value: preview.category?.name ?? '账户间转账' },
+        ],
+        targetPath: '/finance',
+        warning: '这是家庭共享账本，确认后所有有财务权限的家庭成员均可查看。',
+      };
+    }
     const shopping = payload as ShoppingPayload;
     return {
       title: `${shopping.date} 购物清单`,
@@ -651,6 +703,19 @@ export class AgentProposalsService {
           manager,
         ),
       };
+    }
+    if (proposal.actionType === 'finance') {
+      const finance = payload as FinancePayload;
+      const saved = await this.finance.createWithinTransaction(
+        {
+          ...finance,
+          idempotencyKey: `agent-proposal:${proposal.id}`,
+        } as CreateFinanceTransactionDto,
+        user,
+        manager,
+        { sourceType: 'agent', sourceId: proposal.id },
+      );
+      return { module: 'finance', id: saved.id };
     }
     assertCapability(user, 'manage_shopping');
     const shopping = payload as ShoppingPayload;

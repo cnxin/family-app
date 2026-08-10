@@ -20,6 +20,10 @@ const TEST_UPLOAD_DIR = join(
 const TEST_PASSWORD = `web-${randomUUID()}`;
 const apiRoot = process.cwd();
 const repoRoot = resolve(apiRoot, '../..');
+const rawPlaywrightArgs = process.argv.slice(2);
+const playwrightArgs = rawPlaywrightArgs[0] === '--'
+  ? rawPlaywrightArgs.slice(1)
+  : rawPlaywrightArgs;
 
 if (!/^family_app_web_test_[a-f0-9]+$/.test(TEST_DATABASE)) {
   throw new Error('拒绝使用不安全的浏览器测试数据库名称');
@@ -163,12 +167,9 @@ try {
   api = startApi();
   await waitForApi();
 
-  await runProcess(
-    'corepack',
-    ['pnpm', '--filter', 'mobile', 'test:web'],
-    repoRoot,
-    browserEnvironment,
-  );
+  const browserCommand = ['pnpm', '--filter', 'mobile', 'test:web'];
+  if (playwrightArgs.length) browserCommand.push(...playwrightArgs);
+  await runProcess('corepack', browserCommand, repoRoot, browserEnvironment);
 } finally {
   await stopApi();
   if (databaseCreated) {

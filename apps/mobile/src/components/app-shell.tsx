@@ -20,6 +20,7 @@ import {
   UserRound,
   UsersRound,
   Vote,
+  WalletCards,
   Wrench,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -203,6 +204,7 @@ const NAV_ITEMS: NavItem[] = [
   { group: 'daily', label: '家庭投票', href: '/polls', icon: Vote, matches: (pathname) => pathname === '/polls' },
   { group: 'daily', label: '采购与库存', href: '/shopping', icon: ShoppingCart, matches: (pathname) => pathname === '/shopping' },
   { group: 'household', label: '家庭资产', href: '/home-assets', icon: Wrench, matches: (pathname) => pathname === '/home-assets' },
+  { group: 'household', label: '家庭财务', href: '/finance', icon: WalletCards, matches: (pathname) => pathname === '/finance' },
   { group: 'household', label: '积分奖励', href: '/points', icon: Gift, matches: (pathname) => pathname === '/points' },
   { group: 'household', label: '家庭知识库', href: '/knowledge', icon: BookOpenText, matches: (pathname) => pathname === '/knowledge' },
   { group: 'household', label: '家庭回忆', href: '/memories', icon: Images, matches: (pathname) => pathname === '/memories' },

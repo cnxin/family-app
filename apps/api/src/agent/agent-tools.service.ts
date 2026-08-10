@@ -24,6 +24,7 @@ import { MenusService } from '../menus/menus.module';
 import { ShoppingService } from '../shopping/shopping.module';
 import { TasksService } from '../tasks/tasks.module';
 import { TravelService } from '../travel/travel.module';
+import { FinanceService } from '../finance/finance.module';
 import {
   AGENT_MEMORY_KEYS,
   AGENT_READ_TOOLS,
@@ -351,6 +352,25 @@ function resultPresentation(toolName: string, output: unknown) {
       ],
     };
   }
+  if (toolName === 'get_finance_summary' && record) {
+    const rows = rowsFor('accounts');
+    return {
+      kind: 'finance',
+      title: `${String(record.month ?? '本月')}家庭财务`,
+      emptyText: '还没有建立家庭财务账户',
+      targetPath: '/finance',
+      items: rows.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.name ?? '未命名账户'),
+          detail: `余额 ¥${Number(item.balance ?? 0).toFixed(2)}`,
+          status: item.isActive === false ? '已停用' : '使用中',
+          targetPath: '/finance',
+        };
+      }),
+    };
+  }
   return null;
 }
 
@@ -394,6 +414,7 @@ export class AgentToolsService {
     private readonly proposals: AgentProposalsService,
     private readonly proposalGroups: AgentProposalGroupsService,
     private readonly agentMemory: AgentMemoryService,
+    private readonly finance: FinanceService,
   ) {}
 
   async execute(
@@ -720,6 +741,10 @@ export class AgentToolsService {
         responseStyle: profile?.responseStyle ?? null,
         untrustedContent: true,
       };
+    }
+    if (toolName === 'get_finance_summary') {
+      const month = typeof input.month === 'string' ? input.month : undefined;
+      return this.finance.summary(month, user);
     }
     if (toolName === 'get_meal_plan') {
       const date = dateOnly(input.date, today());

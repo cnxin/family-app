@@ -264,6 +264,7 @@ try {
   await runScript('scripts/guests.mjs');
   await runScript('scripts/tasks.mjs');
   await runScript('scripts/points.mjs');
+  await runScript('scripts/finance.mjs');
   await runScript('scripts/polls.mjs');
   await runScript('scripts/reminders.mjs');
   await runScript('scripts/external-notifications.mjs');

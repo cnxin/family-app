@@ -32,6 +32,7 @@ import { RemindersModule } from '../reminders/reminders.module';
 import { ShoppingModule } from '../shopping/shopping.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { TravelModule } from '../travel/travel.module';
+import { FinanceModule } from '../finance/finance.module';
 import { AgentController } from './agent.controller';
 import { AgentChannelInternalController } from './agent-channel-internal.controller';
 import { AgentMcpController } from './agent-mcp.controller';
@@ -71,6 +72,7 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
     AssetsModule,
     CalendarModule,
     InventoryModule,
+    FinanceModule,
     KnowledgeModule,
     TravelModule,
     MediaModule,

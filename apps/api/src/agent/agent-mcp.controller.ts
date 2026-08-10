@@ -172,6 +172,14 @@ export class AgentMcpController {
       runId,
       memberId: z.string().uuid().optional(),
     });
+    register(
+      'get_finance_summary',
+      '这是家庭共享账本的余额、收支、预算、账户 ID 和分类 ID 的唯一数据来源。回答家庭财务事实或生成记账提案前必须先调用本工具；不得依据对话历史猜测金额、账户或分类。',
+      {
+        runId,
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      },
+    );
     register('recall_preferences', '这是回顾当前成员已记录偏好的唯一数据来源。用户询问自己有哪些已记录偏好时必须调用本工具；不得仅凭对话历史声称某项偏好存在或不存在', {
       runId,
       scope: z.enum(['member_private', 'household']).optional(),
@@ -185,7 +193,7 @@ export class AgentMcpController {
     });
     register(
       'propose_plan',
-      '当用户的请求需要同时改动多个家庭模块（例如来客吃饭涉及菜单、任务和购物清单）时，必须只调用本工具把所有步骤打包成一组提案，不得分别调用多个 propose_* 工具。用户确认后整组生效，不支持只确认其中几步；请按实际执行依赖排列 steps。',
+      '当用户的请求需要同时改动多个家庭模块（例如来客吃饭涉及菜单、任务和购物清单）时，必须只调用本工具把所有步骤打包成一组提案，不得分别调用多个 propose_* 工具。用户确认后整组生效，不支持只确认其中几步；请按实际执行依赖排列 steps。财务记账不能放入本工具，必须单独调用 propose_finance_transaction 并独立确认。',
       {
         runId,
         title: z.string().min(1).max(120),
@@ -351,6 +359,21 @@ export class AgentMcpController {
         .min(1)
         .max(20),
     });
+    register(
+      'propose_finance_transaction',
+      '为家庭共享账本生成单笔收入、支出或账户间转账提案，只有成员在 Family App 内明确确认后才会写入。调用前必须先用 get_finance_summary 取得真实账户和分类 ID；金额、类型、账户、分类或日期不明确时必须先追问，不得猜测。财务提案不能放入 propose_plan。',
+      {
+        runId,
+        type: z.enum(['expense', 'income', 'transfer']),
+        amount: z.number().positive().max(999_999_999_999.99),
+        accountId: z.string().uuid(),
+        toAccountId: z.string().uuid().nullable().optional(),
+        categoryId: z.string().uuid().nullable().optional(),
+        title: z.string().min(1).max(120),
+        note: z.string().max(1000).nullable().optional(),
+        occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      },
+    );
     return server;
   }
 }

@@ -91,8 +91,14 @@ async function runMigrationPhase() {
     const latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
+    if (latest[0]?.name === 'AddFamilyFinance1785232100000') {
+      await AppDataSource.undoLastMigration();
+    }
+    const proposalGroupLatest = await AppDataSource.query(
+      `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+    );
     assert(
-      latest[0]?.name === 'AddAgentProposalGroups1785232000000',
+      proposalGroupLatest[0]?.name === 'AddAgentProposalGroups1785232000000',
       'A7.5 专项演练从组提案迁移开始',
     );
     const members = await AppDataSource.query(
@@ -277,7 +283,6 @@ async function runApiPhase() {
       'propose_task',
     ]);
 
-    console.log('1. MCP 目录、描述和 25 工具契约');
     const listed = await mcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
     const actualNames = (listed.body?.result?.tools ?? [])
       .map((tool) => tool.name)
@@ -287,15 +292,17 @@ async function runApiPhase() {
       ...AGENT_PROPOSAL_TOOLS,
       ...AGENT_MEMORY_TOOLS,
     ].sort();
+    console.log(`1. MCP 目录、描述和 ${expectedNames.length} 工具契约`);
     const planDescription = listed.body?.result?.tools?.find(
       (tool) => tool.name === 'propose_plan',
     )?.description;
     assert(
       JSON.stringify(actualNames) === JSON.stringify(expectedNames) &&
-        actualNames.length === 25 &&
+        actualNames.length === expectedNames.length &&
         planDescription?.includes('必须只调用本工具') &&
-        planDescription?.includes('不支持只确认其中几步'),
-      'MCP 精确注册 25 个工具，propose_plan 明确多模块整组确认语义',
+        planDescription?.includes('不支持只确认其中几步') &&
+        planDescription?.includes('财务记账不能放入本工具'),
+      `MCP 精确注册 ${expectedNames.length} 个工具，propose_plan 明确多模块整组确认和财务隔离语义`,
     );
 
     console.log('2. 创建、注入字段忽略、上限和成员范围');

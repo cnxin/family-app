@@ -18,6 +18,7 @@ import {
   Sparkles,
   UsersRound,
   Vote,
+  WalletCards,
   Wrench,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -46,6 +47,7 @@ import {
   useAssets,
   useActivities,
   useAgentStatus,
+  useFinanceSummary,
   useKnowledgeArticles,
   useMemories,
   useMedia,
@@ -111,6 +113,12 @@ function reminderTime(value: string) {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(value));
+}
+
+function currencyForHome(value: number) {
+  return `¥${value.toLocaleString('zh-CN', {
+    maximumFractionDigits: 0,
+  })}`;
 }
 
 function ModuleCard({
@@ -785,6 +793,7 @@ export default function HomeScreen() {
   const { data: travelPlans } = useTravelPlans('active');
   const { data: memories, isLoading: memoriesLoading } = useMemories('active', 'all', '', 3);
   const { data: agentStatus } = useAgentStatus();
+  const { data: financeSummary } = useFinanceSummary(today.slice(0, 7));
 
   const menuItems =
     menus?.reduce(
@@ -946,6 +955,16 @@ export default function HomeScreen() {
       status: dueMaintenance
         ? `${dueMaintenance} 项维护将到期`
         : `${assets?.length ?? 0} 件在用`,
+    },
+    {
+      background: c.blueSoft,
+      color: c.blue,
+      href: '/finance',
+      icon: WalletCards,
+      label: '家庭财务',
+      status: financeSummary?.accounts.length
+        ? `本月支出 ${currencyForHome(financeSummary.expense)}`
+        : '建立家庭共享账本',
     },
     {
       background: c.accentSoft,

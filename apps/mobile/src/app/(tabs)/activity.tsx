@@ -13,6 +13,7 @@ import {
   UserRoundCog,
   UtensilsCrossed,
   Wrench,
+  WalletCards,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -183,6 +184,9 @@ function activityVisual(module: ActivityModule, c: ReturnType<typeof useTheme>) 
   }
   if (module === 'points') {
     return { icon: Gift, color: c.orange, backgroundColor: c.orangeSoft };
+  }
+  if (module === 'finance') {
+    return { icon: WalletCards, color: c.blue, backgroundColor: c.blueSoft };
   }
   if (module === 'knowledge') {
     return { icon: BookOpenText, color: c.tint, backgroundColor: c.tintSoft };
