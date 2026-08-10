@@ -15,6 +15,7 @@ import {
   ReceiptText,
   RotateCcw,
   ShoppingCart,
+  Sparkles,
   Trash2,
   Upload,
   Wrench,
@@ -39,6 +40,7 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  PressableScale,
   PrimaryButton,
   Segmented,
 } from '../../components/ui';
@@ -1585,6 +1587,7 @@ function AssetCard({ asset, onOpen }: { asset: HomeAsset; onOpen: () => void }) 
 export default function AssetsScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const router = useRouter();
   const params = useLocalSearchParams<{ assetId?: string }>();
   const parameterAssetId = firstParam(params.assetId);
   const { data: assets, isLoading, error } = useAssets('all');
@@ -1630,6 +1633,25 @@ export default function AssetsScreen() {
             <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新增资产</Text>
           </Pressable>
         </View>
+
+        <PressableScale
+          accessibilityLabel="向小管家询问家庭资产"
+          haptic={false}
+          onPress={() =>
+            router.push({
+              pathname: '/assistant',
+              params: { route: '/home-assets' },
+            })
+          }
+          style={[styles.assistantEntry, { backgroundColor: c.tintSoft }]}
+          testID="asset-ask-assistant"
+        >
+          <View style={[styles.assistantEntryIcon, { backgroundColor: c.card }]}>
+            <Sparkles color={c.tint} size={18} />
+          </View>
+          <Text style={[t.subhead, styles.assistantEntryText, { color: c.tint }]}>问小管家家庭资产</Text>
+          <ChevronRight color={c.tint} size={18} />
+        </PressableScale>
 
         <View style={[styles.summaryBand, { borderColor: c.separator }]}>
           <View style={styles.summaryItem}>
@@ -1730,6 +1752,9 @@ const styles = StyleSheet.create({
   pageDesktop: { paddingTop: 26 },
   pageHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   addButton: { minHeight: 44, borderRadius: radius.sm, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  assistantEntry: { minHeight: 52, marginTop: 16, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  assistantEntryIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  assistantEntryText: { flex: 1, minWidth: 0, fontWeight: '700' },
   summaryBand: { marginTop: 18, minHeight: 82, borderTopWidth: 1, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center' },
   summaryItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   summaryDivider: { width: 1, height: 38 },

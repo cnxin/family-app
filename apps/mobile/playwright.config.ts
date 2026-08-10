@@ -5,6 +5,7 @@ const webPort = new URL(baseURL).port || '8081';
 const authState = {
   mobile: 'e2e/.auth/mobile.json',
   desktop: 'e2e/.auth/desktop.json',
+  memberMobile: 'e2e/.auth/member-mobile.json',
 };
 
 export default defineConfig({
@@ -37,6 +38,7 @@ export default defineConfig({
       name: 'mobile-chrome',
       dependencies: ['setup'],
       testMatch: /.*\.spec\.ts/,
+      testIgnore: /consumer-ui\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         deviceScaleFactor: 1,
@@ -50,10 +52,24 @@ export default defineConfig({
       name: 'desktop-chrome',
       dependencies: ['setup'],
       testMatch: /.*\.spec\.ts/,
+      testIgnore: /consumer-ui\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         storageState: authState.desktop,
         viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: 'member-mobile-chrome',
+      dependencies: ['setup'],
+      testMatch: /consumer-ui\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        deviceScaleFactor: 1,
+        hasTouch: true,
+        isMobile: true,
+        storageState: authState.memberMobile,
+        viewport: { width: 390, height: 844 },
       },
     },
   ],

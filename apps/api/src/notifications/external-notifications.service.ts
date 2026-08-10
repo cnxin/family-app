@@ -37,6 +37,7 @@ const ALL_NOTIFICATION_MODULES: NotificationModule[] = [
   'media',
   'guest',
   'points',
+  'agent',
   'system',
 ];
 const AUTO_ATTEMPTS = 4;

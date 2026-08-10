@@ -22,13 +22,14 @@ import {
   PageContainer,
   useDesktopLayout,
 } from '../../../components/app-shell';
-import { Card } from '../../../components/ui';
+import { Card, PressableScale } from '../../../components/ui';
 import { mealLabel, todayStr } from '../../../lib/date';
 import {
   useDishes,
   useMenusOfDate,
   useShoppingList,
 } from '../../../lib/queries';
+import { useSession } from '../../../lib/session';
 import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../../lib/theme';
 import type { MealType, Menu } from '../../../lib/types';
 
@@ -49,14 +50,19 @@ function ActionCard({
 }) {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const { member } = useSession();
+  const consumer = member?.role === 'member';
+  const adminDesktop = desktop && !consumer;
   const router = useRouter();
   return (
-    <Pressable
+    <PressableScale
+      accessibilityLabel={`${label}，${status}`}
       accessibilityRole="link"
+      haptic
       onPress={() => router.push(href)}
-      style={({ pressed }) => [styles.actionCell, { opacity: pressed ? 0.72 : 1 }]}
+      style={styles.actionCell}
     >
-      <Card style={[styles.actionCard, desktop && styles.actionCardDesktop]}>
+      <Card style={[styles.actionCard, adminDesktop && styles.actionCardDesktop]}>
         <View style={[styles.actionIcon, { backgroundColor: background }]}>
           <Icon color={color} size={22} />
         </View>
@@ -66,7 +72,7 @@ function ActionCard({
             {status}
           </Text>
         </View>
-        {desktop ? (
+        {adminDesktop ? (
           <ArrowRight color={c.tertiaryLabel} size={17} />
         ) : (
           <View style={styles.actionArrow}>
@@ -74,7 +80,7 @@ function ActionCard({
           </View>
         )}
       </Card>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -109,6 +115,9 @@ export default function CanteenHomeScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
+  const { member } = useSession();
+  const consumer = member?.role === 'member';
+  const adminDesktop = desktop && !consumer;
   const today = todayStr();
   const { data: menus, isLoading } = useMenusOfDate(today);
   const { data: dishes } = useDishes();
@@ -123,14 +132,32 @@ export default function CanteenHomeScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <PageContainer maxWidth={1120} style={[styles.page, desktop && styles.pageDesktop]}>
-          <ModuleBackButton href="/" label="家庭首页" />
-          <View style={[styles.header, desktop && styles.headerDesktop]}>
+        <PageContainer
+          maxWidth={consumer ? 720 : 1120}
+          style={[
+            styles.page,
+            adminDesktop && styles.pageDesktop,
+            consumer && styles.pageConsumer,
+          ]}
+        >
+          {!consumer ? <ModuleBackButton href="/" label="家庭首页" /> : null}
+          <View
+            style={[
+              styles.header,
+              adminDesktop && styles.headerDesktop,
+              consumer && { backgroundColor: c.orangeSoft },
+              consumer && styles.headerConsumer,
+            ]}
+            testID={consumer ? 'consumer-canteen-header' : undefined}
+          >
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.footnote, { color: c.orange, fontWeight: '700' }]}>今天吃什么</Text>
               <Text
                 accessibilityRole="header"
-                style={[desktop ? t.largeTitle : t.title1, { color: c.label, marginTop: 5 }]}
+                style={[
+                  adminDesktop ? t.largeTitle : t.title1,
+                  { color: c.label, marginTop: 5 },
+                ]}
               >
                 家庭食堂
               </Text>
@@ -138,20 +165,19 @@ export default function CanteenHomeScreen() {
                 今日已安排 {menuItems} 道菜
               </Text>
             </View>
-            <Pressable
+            <PressableScale
+              accessibilityLabel="开始点菜"
               accessibilityRole="link"
+              haptic
               onPress={() => router.push('/order')}
-              style={({ pressed }) => [
-                styles.primaryAction,
-                { backgroundColor: pressed ? c.green : c.tint },
-              ]}
+              style={[styles.primaryAction, { backgroundColor: c.tint }]}
             >
               <UtensilsCrossed color="#FFFFFF" size={18} />
               <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>开始点菜</Text>
-            </Pressable>
+            </PressableScale>
           </View>
 
-          <View style={[styles.actionGrid, desktop && styles.actionGridDesktop]}>
+          <View style={[styles.actionGrid, adminDesktop && styles.actionGridDesktop]}>
             <ActionCard
               background={c.tintSoft}
               color={c.tint}
@@ -217,8 +243,14 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   page: { paddingTop: 10, paddingBottom: 40 },
   pageDesktop: { paddingTop: 30 },
+  pageConsumer: { paddingTop: 14, paddingBottom: 56 },
   header: { gap: 16, marginTop: 18 },
   headerDesktop: { flexDirection: 'row', alignItems: 'center', marginTop: 0 },
+  headerConsumer: {
+    borderRadius: radius.md,
+    marginTop: 0,
+    padding: 20,
+  },
   primaryAction: {
     height: 44,
     borderRadius: radius.md,

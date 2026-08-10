@@ -4,7 +4,9 @@ import {
   BellPlus,
   Check,
   Circle,
+  CircleCheckBig,
   CircleDollarSign,
+  ClipboardList,
   Pencil,
   Plus,
   Repeat2,
@@ -14,11 +16,10 @@ import {
   UserRound,
   X,
 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,9 +32,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import {
+  AdaptiveDialog,
   Card,
   ConfirmDialog,
   EmptyState,
+  PressableScale,
   PrimaryButton,
   Segmented,
 } from '../../components/ui';
@@ -176,27 +179,15 @@ function TaskForm({
   };
 
   return (
-    <Modal
-      animationType="fade"
-      onRequestClose={onClose}
-      transparent
+    <AdaptiveDialog
+      accessibilityLabel={entry ? '编辑家庭任务' : '新建家庭任务'}
+      maxWidth={560}
+      onClose={onClose}
+      style={styles.formSheet}
+      testID="task-form-dialog"
       visible={visible}
     >
-      <View style={styles.modalOverlay}>
-        <Pressable
-          accessibilityLabel="关闭任务编辑"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          accessibilityViewIsModal
-          style={[
-            styles.formSheet,
-            { backgroundColor: c.card, borderColor: c.separator },
-          ]}
-        >
-          <View style={styles.formHeader}>
+      <View style={styles.formHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.title2, { color: c.label }]}>
                 {entry ? '编辑家庭任务' : '新建家庭任务'}
@@ -216,13 +207,13 @@ function TaskForm({
             >
               <X color={c.secondaryLabel} size={20} />
             </Pressable>
-          </View>
+      </View>
 
-          <ScrollView
-            contentContainerStyle={styles.formContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+      <ScrollView
+        contentContainerStyle={styles.formContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
             <View style={styles.field}>
               <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>任务名称</Text>
               <TextInput
@@ -366,10 +357,8 @@ function TaskForm({
                 title={entry ? '保存修改' : '添加任务'}
               />
             </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
+      </ScrollView>
+    </AdaptiveDialog>
   );
 }
 
@@ -579,22 +568,42 @@ export default function TasksScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string; taskId?: string }>();
+  const params = useLocalSearchParams<{ create?: string; date?: string; taskId?: string }>();
+  const parameterCreate = firstParam(params.create);
   const parameterDate = validDate(firstParam(params.date));
   const parameterTaskId = firstParam(params.taskId);
   const { member } = useSession();
+  const consumer = member?.role === 'member';
+  const adminDesktop = desktop && !consumer;
   const [selectedDate, setSelectedDate] = useState(parameterDate);
   const [filter, setFilter] = useState<TaskFilter>('pending');
-  const [scope, setScope] = useState<TaskScope>('all');
+  const [scope, setScope] = useState<TaskScope>(consumer ? 'mine' : 'all');
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TaskOccurrence | null>(null);
   const [pendingArchive, setPendingArchive] = useState<TaskOccurrence | null>(null);
+  const createOpened = useRef(false);
   const { data: members } = useMembers();
   const { data: tasks, isLoading, error } = useTasks(selectedDate, selectedDate);
   const updateOccurrence = useUpdateTaskOccurrence();
   const archive = useArchiveTask();
 
   useEffect(() => setSelectedDate(parameterDate), [parameterDate]);
+
+  useEffect(() => {
+    if (parameterCreate !== '1') {
+      createOpened.current = false;
+      return;
+    }
+    if (createOpened.current) return;
+    createOpened.current = true;
+    setEditingEntry(null);
+    setFormOpen(true);
+  }, [parameterCreate]);
+
+  const closeTaskForm = () => {
+    setFormOpen(false);
+    if (parameterCreate === '1') router.replace('/tasks');
+  };
 
   const visibleTasks = useMemo(
     () =>
@@ -635,34 +644,50 @@ export default function TasksScreen() {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
-      <PageContainer maxWidth={1050} style={[styles.page, desktop && styles.pageDesktop]}>
-        <View style={styles.pageHeader}>
+      <PageContainer
+        maxWidth={consumer ? 720 : 1050}
+        style={[
+          styles.page,
+          adminDesktop && styles.pageDesktop,
+          consumer && styles.pageConsumer,
+        ]}
+      >
+        <View
+          style={[
+            styles.pageHeader,
+            consumer && styles.pageHeaderConsumer,
+            consumer && { backgroundColor: c.tintSoft },
+          ]}
+          testID={consumer ? 'consumer-tasks-header' : undefined}
+        >
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[t.largeTitle, { color: c.label }]}>家庭任务</Text>
+            {consumer ? (
+              <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>一起完成</Text>
+            ) : null}
+            <Text style={[consumer ? t.title1 : t.largeTitle, { color: c.label }]}>家庭任务</Text>
             <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
               {formatPlanDate(selectedDate)} · {pendingCount} 项待办 · {doneCount} 项完成
             </Text>
           </View>
-          <Pressable
+          <PressableScale
+            accessibilityLabel="添加任务"
             accessibilityRole="button"
+            haptic
             onPress={() => {
               setEditingEntry(null);
               setFormOpen(true);
             }}
-            style={({ pressed }) => [
-              styles.addButton,
-              { backgroundColor: pressed ? c.green : c.tint },
-            ]}
+            style={[styles.addButton, { backgroundColor: c.tint }]}
           >
             <Plus color="#FFFFFF" size={18} />
             <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>添加任务</Text>
-          </Pressable>
+          </PressableScale>
         </View>
 
-        <View style={[styles.toolbar, desktop && styles.toolbarDesktop]}>
+        <View style={[styles.toolbar, adminDesktop && styles.toolbarDesktop]}>
           <DateSelector allowPast onChange={setSelectedDate} value={selectedDate} />
-          <View style={styles.filters}>
-            <View style={styles.scopeFilter}>
+          <View style={[styles.filters, consumer && styles.filtersConsumer]}>
+            <View style={[styles.scopeFilter, consumer && styles.filterConsumer]}>
               <Segmented<TaskScope>
                 onChange={setScope}
                 options={[
@@ -672,7 +697,7 @@ export default function TasksScreen() {
                 value={scope}
               />
             </View>
-            <View style={styles.statusFilter}>
+            <View style={[styles.statusFilter, consumer && styles.filterConsumer]}>
               <Segmented<TaskFilter>
                 onChange={setFilter}
                 options={[
@@ -687,13 +712,22 @@ export default function TasksScreen() {
         </View>
 
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            consumer && styles.scrollContentConsumer,
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <Card style={styles.taskList}>
             {isLoading ? <ActivityIndicator color={c.tint} style={styles.loader} /> : null}
             {error ? (
-              <EmptyState emoji="📋" title="任务加载失败" hint="请检查 API 服务" />
+              <EmptyState
+                hint="请检查 API 服务"
+                icon={ClipboardList}
+                iconBackground={c.redSoft}
+                iconColor={c.red}
+                title="任务加载失败"
+              />
             ) : null}
             {!isLoading && !error && visibleTasks.length ? (
               visibleTasks.map((entry) => (
@@ -724,9 +758,11 @@ export default function TasksScreen() {
             ) : null}
             {!isLoading && !error && !visibleTasks.length ? (
               <EmptyState
-                emoji="✅"
-                title={filter === 'pending' ? '这天没有待办任务' : '没有匹配的任务'}
                 hint="可以提前安排家务、维护或采购准备"
+                icon={CircleCheckBig}
+                iconBackground={c.greenSoft}
+                iconColor={c.green}
+                title={filter === 'pending' ? '这天没有待办任务' : '没有匹配的任务'}
               />
             ) : null}
           </Card>
@@ -738,9 +774,9 @@ export default function TasksScreen() {
         entry={editingEntry}
         initialDate={selectedDate}
         members={members ?? []}
-        onClose={() => setFormOpen(false)}
+        onClose={closeTaskForm}
         onSaved={(date) => {
-          setFormOpen(false);
+          closeTaskForm();
           setSelectedDate(date);
         }}
         visible={formOpen}
@@ -778,6 +814,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   page: { flex: 1, paddingTop: 18 },
   pageDesktop: { paddingTop: 30 },
+  pageConsumer: { paddingTop: 14 },
   pageHeader: {
     minHeight: 58,
     flexDirection: 'row',
@@ -785,8 +822,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 14,
   },
+  pageHeaderConsumer: {
+    borderRadius: radius.md,
+    padding: 18,
+  },
+  consumerEyebrow: { fontWeight: '700', marginBottom: 5 },
   addButton: {
-    height: 42,
+    height: 44,
     borderRadius: radius.md,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -801,9 +843,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   filters: { flexDirection: 'row', gap: 10, minWidth: 0 },
+  filtersConsumer: { flexDirection: 'column' },
   scopeFilter: { width: 190 },
   statusFilter: { width: 250 },
+  filterConsumer: { width: '100%' },
   scrollContent: { paddingTop: 18, paddingBottom: 40 },
+  scrollContentConsumer: { paddingBottom: 56 },
   taskList: { overflow: 'hidden', minHeight: 280 },
   loader: { marginTop: 80 },
   taskRow: {
@@ -815,7 +860,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
   },
-  checkButton: { width: 32, height: 36, alignItems: 'center', justifyContent: 'center' },
+  checkButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   checkedCircle: {
     width: 25,
     height: 25,
@@ -834,29 +879,17 @@ const styles = StyleSheet.create({
   taskBody: { flex: 1, minWidth: 0 },
   taskTitle: { fontWeight: '600', lineHeight: 22 },
   taskMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 5 },
-  claimButton: { alignSelf: 'flex-start', minHeight: 30, justifyContent: 'center', marginTop: 4 },
-  taskActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5, maxWidth: 76 },
+  claimButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: 4 },
+  taskActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5, maxWidth: 94 },
   smallIconButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.42)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
   formSheet: {
-    width: '100%',
-    maxWidth: 560,
     maxHeight: '94%',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
   },
   formHeader: {
     minHeight: 70,
@@ -867,8 +900,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconButton: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -893,7 +926,7 @@ const styles = StyleSheet.create({
   },
   intervalInput: {
     width: 64,
-    height: 36,
+    height: 44,
     borderRadius: radius.sm,
     textAlign: 'center',
   },
@@ -908,7 +941,7 @@ const styles = StyleSheet.create({
   },
   memberOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   memberOption: {
-    minHeight: 38,
+    minHeight: 44,
     borderRadius: radius.sm,
     borderWidth: 1,
     paddingHorizontal: 11,

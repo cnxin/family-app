@@ -53,7 +53,7 @@ class PollQueryDto {
   status?: 'open' | 'closed' | 'all';
 }
 
-class PollOptionDto {
+export class PollOptionDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -69,7 +69,7 @@ class PollOptionDto {
   mediaId?: string;
 }
 
-class CreatePollDto {
+export class CreatePollDto {
   @IsString()
   @MaxLength(120)
   title: string;
@@ -232,6 +232,17 @@ export class PollsService {
   }
 
   async create(dto: CreatePollDto, user: JwtUser) {
+    const id = await this.dataSource.transaction((manager) =>
+      this.createWithinTransaction(dto, user, manager),
+    );
+    return this.get(id, user);
+  }
+
+  async createWithinTransaction(
+    dto: CreatePollDto,
+    user: JwtUser,
+    manager: EntityManager,
+  ) {
     const options = normalizeOptions(dto.options);
     const hasMediaCandidates = options.every((option) => option.mediaId);
     if (hasMediaCandidates && (dto.sourceModule || dto.sourceId)) {
@@ -250,96 +261,93 @@ export class PollsService {
     const title = dto.title.trim();
     if (!title) throw new BadRequestException('投票标题不能为空');
 
-    const id = await this.dataSource.transaction(async (manager) => {
-      const source = await this.prepareSource(dto, user, manager);
-      const mediaCandidates = hasMediaCandidates
-        ? await this.prepareMediaCandidates(
-            options.map((option) => option.mediaId as string),
-            user,
-            manager,
-          )
-        : [];
-      const polls = manager.getRepository(Poll);
-      const pollOptions = manager.getRepository(PollOption);
-      const poll = await polls.save(
-        polls.create({
-          householdId: user.householdId,
-          title,
-          description: dto.description?.trim() || null,
-          category:
-            source?.module === 'media' || mediaCandidates.length
-              ? 'movie'
-              : (dto.category ?? 'general'),
-          voteMode,
-          maxChoices,
-          closesAt,
-          status: 'open',
-          sourceModule: source?.module ?? null,
-          sourceId: source?.id ?? null,
-          createdById: user.memberId,
-        }),
-      );
-      await pollOptions.save(
-        options.map((option, sortOrder) => {
-          const media = mediaCandidates[sortOrder];
-          return pollOptions.create({
-            pollId: poll.id,
-            label: media?.mediaTitle.title.slice(0, 120) || option.label,
-            description: option.description,
-            mediaId: media?.id ?? null,
-            sortOrder,
-          });
-        }),
-      );
-      await this.notifyHousehold(
-        manager,
-        poll,
-        user,
-        'poll_created',
-        `${user.name}发起了「${poll.title}」`,
-      );
-      if (source?.module === 'media') {
-        if (source.entry.status === 'watchlist') {
-          source.entry.status = 'voting';
-          source.entry.scheduledFor = null;
-          await manager.getRepository(HouseholdMedia).save(source.entry);
-        }
-        await recordActivity(manager, user, {
-          module: 'media',
-          action: 'media_poll_started',
-          summary: `${user.name} 为「${source.entry.mediaTitle.title}」发起了家庭投票`,
-          targetPath: `/polls?pollId=${poll.id}`,
-          metadata: {
-            mediaId: source.entry.id,
-            pollId: poll.id,
-          },
+    const source = await this.prepareSource(dto, user, manager);
+    const mediaCandidates = hasMediaCandidates
+      ? await this.prepareMediaCandidates(
+          options.map((option) => option.mediaId as string),
+          user,
+          manager,
+        )
+      : [];
+    const polls = manager.getRepository(Poll);
+    const pollOptions = manager.getRepository(PollOption);
+    const poll = await polls.save(
+      polls.create({
+        householdId: user.householdId,
+        title,
+        description: dto.description?.trim() || null,
+        category:
+          source?.module === 'media' || mediaCandidates.length
+            ? 'movie'
+            : (dto.category ?? 'general'),
+        voteMode,
+        maxChoices,
+        closesAt,
+        status: 'open',
+        sourceModule: source?.module ?? null,
+        sourceId: source?.id ?? null,
+        createdById: user.memberId,
+      }),
+    );
+    await pollOptions.save(
+      options.map((option, sortOrder) => {
+        const media = mediaCandidates[sortOrder];
+        return pollOptions.create({
+          pollId: poll.id,
+          label: media?.mediaTitle.title.slice(0, 120) || option.label,
+          description: option.description,
+          mediaId: media?.id ?? null,
+          sortOrder,
         });
+      }),
+    );
+    await this.notifyHousehold(
+      manager,
+      poll,
+      user,
+      'poll_created',
+      `${user.name}发起了「${poll.title}」`,
+    );
+    if (source?.module === 'media') {
+      if (source.entry.status === 'watchlist') {
+        source.entry.status = 'voting';
+        source.entry.scheduledFor = null;
+        await manager.getRepository(HouseholdMedia).save(source.entry);
       }
-      if (mediaCandidates.length) {
-        const changed = mediaCandidates.filter(
-          (entry) => entry.status === 'watchlist',
-        );
-        for (const entry of changed) {
-          entry.status = 'voting';
-          entry.scheduledFor = null;
-        }
-        if (changed.length) {
-          await manager.getRepository(HouseholdMedia).save(changed);
-        }
-        await recordActivity(manager, user, {
-          module: 'media',
-          action: 'media_poll_started',
-          summary: `${user.name} 发起了 ${mediaCandidates.length} 部候选影视的家庭投票`,
-          targetPath: `/polls?pollId=${poll.id}`,
-          metadata: {
-            mediaIds: mediaCandidates.map((entry) => entry.id),
-            pollId: poll.id,
-          },
-        });
+      await recordActivity(manager, user, {
+        module: 'media',
+        action: 'media_poll_started',
+        summary: `${user.name} 为「${source.entry.mediaTitle.title}」发起了家庭投票`,
+        targetPath: `/polls?pollId=${poll.id}`,
+        metadata: {
+          mediaId: source.entry.id,
+          pollId: poll.id,
+        },
+      });
+    }
+    if (mediaCandidates.length) {
+      const changed = mediaCandidates.filter(
+        (entry) => entry.status === 'watchlist',
+      );
+      for (const entry of changed) {
+        entry.status = 'voting';
+        entry.scheduledFor = null;
       }
-      return poll.id;
-    });
-    return this.get(id, user);
+      if (changed.length) {
+        await manager.getRepository(HouseholdMedia).save(changed);
+      }
+      await recordActivity(manager, user, {
+        module: 'media',
+        action: 'media_poll_started',
+        summary: `${user.name} 发起了 ${mediaCandidates.length} 部候选影视的家庭投票`,
+        targetPath: `/polls?pollId=${poll.id}`,
+        metadata: {
+          mediaIds: mediaCandidates.map((entry) => entry.id),
+          pollId: poll.id,
+        },
+      });
+    }
+    return poll.id;
   }
 
   async update(id: string, dto: UpdatePollDto, user: JwtUser) {

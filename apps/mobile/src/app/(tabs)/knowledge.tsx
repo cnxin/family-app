@@ -12,15 +12,16 @@ import {
   Pin,
   RotateCcw,
   Search,
+  Sparkles,
   X,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -31,12 +32,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import {
+  PageContainer,
+  PageHeader,
+  useLayoutMode,
+} from '../../components/app-shell';
+import {
+  AdaptiveDialog,
   Card,
   ConfirmDialog,
   EmptyState,
   PrimaryButton,
+  PressableScale,
   Segmented,
 } from '../../components/ui';
 import {
@@ -119,6 +126,18 @@ function draftFromArticle(article: KnowledgeArticle): Draft {
   };
 }
 
+function draftsMatch(left: Draft, right: Draft) {
+  return (
+    left.title === right.title &&
+    left.category === right.category &&
+    left.summary === right.summary &&
+    left.content === right.content &&
+    left.referenceUrl === right.referenceUrl &&
+    left.tags === right.tags &&
+    left.isPinned === right.isPinned
+  );
+}
+
 function categoryLabel(category: KnowledgeArticleCategory) {
   return CATEGORIES.find((item) => item.value === category)?.label ?? '其他';
 }
@@ -154,11 +173,11 @@ function ArticleCard({
 }) {
   const c = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityLabel={`打开${article.title}`}
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
+      style={styles.articlePressable}
     >
       <Card style={styles.articleCard}>
         <View style={styles.cardTopRow}>
@@ -195,7 +214,7 @@ function ArticleCard({
           <ChevronRight color={c.tertiaryLabel} size={17} />
         </View>
       </Card>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -219,6 +238,7 @@ function Field({
     <View style={styles.field}>
       <Text style={[t.footnote, { color: c.secondaryLabel }]}>{label}</Text>
       <TextInput
+        accessibilityLabel={label}
         maxLength={maxLength}
         multiline={multiline}
         onChangeText={onChangeText}
@@ -238,7 +258,9 @@ function Field({
 
 export default function KnowledgeScreen() {
   const c = useTheme();
-  const desktop = useDesktopLayout();
+  const layout = useLayoutMode();
+  const router = useRouter();
+  const multiColumn = layout !== 'compact';
   const { member } = useSession();
   const canPin = member?.role === 'owner' || member?.role === 'admin';
   const [status, setStatus] = useState<'active' | 'archived'>('active');
@@ -250,6 +272,7 @@ export default function KnowledgeScreen() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [editing, setEditing] = useState<KnowledgeArticle | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
+  const [discardEditorOpen, setDiscardEditorOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
 
   const articlesQuery = useKnowledgeArticles(status, category, search);
@@ -280,6 +303,22 @@ export default function KnowledgeScreen() {
     setEditorVisible(true);
   };
 
+  const finishCloseEditor = () => {
+    setEditorVisible(false);
+    setEditing(null);
+    setDiscardEditorOpen(false);
+  };
+
+  const requestCloseEditor = () => {
+    if (busy) return;
+    const initial = editing ? draftFromArticle(editing) : emptyDraft();
+    if (draftsMatch(draft, initial)) {
+      finishCloseEditor();
+      return;
+    }
+    setDiscardEditorOpen(true);
+  };
+
   const closeDetail = () => {
     setSelected(null);
     setHistoryOpen(false);
@@ -287,8 +326,7 @@ export default function KnowledgeScreen() {
 
   const handleSaved = (article: KnowledgeArticle) => {
     setSelected(article);
-    setEditorVisible(false);
-    setEditing(null);
+    finishCloseEditor();
   };
 
   const save = () => {
@@ -390,26 +428,42 @@ export default function KnowledgeScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer style={styles.page}>
-        <View style={styles.header}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[desktop ? t.largeTitle : t.title1, { color: c.label }]}>家庭知识库</Text>
-            <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>流程、说明与常用资料</Text>
-          </View>
-          <Pressable
-            accessibilityLabel="新建知识文章"
-            accessibilityRole="button"
-            onPress={openCreate}
-            style={({ pressed }) => [
-              styles.createButton,
-              { backgroundColor: pressed ? c.green : c.tint },
-            ]}
-          >
-            <FilePlus2 color="#FFFFFF" size={18} />
-            <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新建</Text>
-          </Pressable>
-        </View>
+        <PageHeader
+          action={(
+            <PressableScale
+              accessibilityLabel="新建知识文章"
+              haptic
+              onPress={openCreate}
+              style={[styles.createButton, { backgroundColor: c.tint }]}
+            >
+              <FilePlus2 color="#FFFFFF" size={18} />
+              <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新建</Text>
+            </PressableScale>
+          )}
+          subtitle="流程、说明与常用资料"
+          title="家庭知识库"
+        />
 
-        <View style={[styles.toolbar, desktop && styles.toolbarDesktop]}>
+        <PressableScale
+          accessibilityLabel="向小管家询问家庭知识库"
+          haptic={false}
+          onPress={() =>
+            router.push({
+              pathname: '/assistant',
+              params: { route: '/knowledge' },
+            })
+          }
+          style={[styles.assistantEntry, { backgroundColor: c.tintSoft }]}
+          testID="knowledge-ask-assistant"
+        >
+          <View style={[styles.assistantEntryIcon, { backgroundColor: c.card }]}>
+            <Sparkles color={c.tint} size={18} />
+          </View>
+          <Text style={[t.subhead, styles.assistantEntryText, { color: c.tint }]}>问小管家家庭知识</Text>
+          <ChevronRight color={c.tint} size={18} />
+        </PressableScale>
+
+        <View style={[styles.toolbar, multiColumn && styles.toolbarExpanded]}>
           <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.separator }]}>
             <Search color={c.tertiaryLabel} size={18} />
             <TextInput
@@ -430,7 +484,10 @@ export default function KnowledgeScreen() {
                   setSearchInput('');
                   setSearch('');
                 }}
-                style={styles.iconHit}
+                style={({ pressed }) => [
+                  styles.iconHit,
+                  pressed && { backgroundColor: c.fill },
+                ]}
               >
                 <X color={c.secondaryLabel} size={17} />
               </Pressable>
@@ -439,7 +496,10 @@ export default function KnowledgeScreen() {
               accessibilityLabel="执行搜索"
               accessibilityRole="button"
               onPress={() => setSearch(searchInput)}
-              style={[styles.searchButton, { backgroundColor: c.fill }]}
+              style={({ pressed }) => [
+                styles.searchButton,
+                { backgroundColor: pressed ? c.tintSoft : c.fill },
+              ]}
             >
               <Search color={c.tint} size={17} />
             </Pressable>
@@ -459,11 +519,7 @@ export default function KnowledgeScreen() {
           </View>
         </View>
 
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.categoryFilters}
-          showsHorizontalScrollIndicator={false}
-        >
+        <View style={styles.categoryFilters}>
           {[{ value: 'all' as const, label: '全部' }, ...CATEGORIES].map((item) => {
             const active = category === item.value;
             return (
@@ -475,10 +531,10 @@ export default function KnowledgeScreen() {
                   setCategory(item.value);
                   closeDetail();
                 }}
-                style={[
+                style={({ pressed }) => [
                   styles.filterButton,
                   {
-                    backgroundColor: active ? c.tintSoft : c.card,
+                    backgroundColor: active ? c.tintSoft : pressed ? c.fill : c.card,
                     borderColor: active ? c.tint : c.separator,
                   },
                 ]}
@@ -489,7 +545,7 @@ export default function KnowledgeScreen() {
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
 
         <ScrollView
           contentContainerStyle={styles.listContent}
@@ -504,16 +560,24 @@ export default function KnowledgeScreen() {
               <Pressable
                 accessibilityRole="button"
                 onPress={() => void articlesQuery.refetch()}
-                style={[styles.retryButton, { backgroundColor: c.fill }]}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  { backgroundColor: pressed ? c.tintSoft : c.fill },
+                ]}
               >
                 <RotateCcw color={c.tint} size={17} />
                 <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>重试</Text>
               </Pressable>
             </View>
           ) : articlesQuery.data?.length ? (
-            <View style={[styles.articleGrid, desktop && styles.articleGridDesktop]}>
+            <View style={[styles.articleGrid, multiColumn && styles.articleGridExpanded]}>
               {articlesQuery.data.map((article) => (
-                <View key={article.id} style={desktop ? styles.articleCellDesktop : undefined}>
+                <View
+                  key={article.id}
+                  style={multiColumn
+                    ? [styles.articleCellExpanded, layout === 'wide' && styles.articleCellWide]
+                    : undefined}
+                >
                   <ArticleCard
                     article={article}
                     onPress={() => {
@@ -526,35 +590,35 @@ export default function KnowledgeScreen() {
             </View>
           ) : (
             <EmptyState
-              emoji="🗂️"
+              icon={BookOpenText}
+              iconBackground={c.tintSoft}
+              iconColor={c.tint}
               title={status === 'active' ? '还没有知识文章' : '没有已归档文章'}
             />
           )}
         </ScrollView>
       </PageContainer>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={closeDetail}
-        transparent
+      <AdaptiveDialog
+        accessibilityLabel="文章详情"
+        maxWidth={760}
+        onClose={closeDetail}
+        style={styles.detailDialog}
+        testID="knowledge-detail-dialog"
         visible={Boolean(selected)}
       >
-        <View style={styles.overlay}>
-          <Pressable
-            accessibilityLabel="关闭文章详情"
-            accessibilityRole="button"
-            onPress={closeDetail}
-            style={StyleSheet.absoluteFill}
-          />
           {selected ? (
-            <SafeAreaView style={[styles.detailPanel, { backgroundColor: c.card, borderColor: c.separator }]}>
+            <SafeAreaView edges={['bottom']} style={styles.dialogBody}>
               <View style={[styles.modalHeader, { borderBottomColor: c.separator }]}>
                 {historyOpen ? (
                   <Pressable
                     accessibilityLabel="返回文章详情"
                     accessibilityRole="button"
                     onPress={() => setHistoryOpen(false)}
-                    style={styles.modalIconButton}
+                    style={({ pressed }) => [
+                      styles.modalIconButton,
+                      pressed && { backgroundColor: c.fill },
+                    ]}
                   >
                     <ArrowLeft color={c.label} size={21} />
                   </Pressable>
@@ -564,13 +628,16 @@ export default function KnowledgeScreen() {
                   </View>
                 )}
                 <Text numberOfLines={1} style={[t.headline, { color: c.label, flex: 1 }]}>
-                  {historyOpen ? '版本历史' : selected.title}
+                  {historyOpen ? '版本历史' : '文章详情'}
                 </Text>
                 <Pressable
                   accessibilityLabel="关闭"
                   accessibilityRole="button"
                   onPress={closeDetail}
-                  style={styles.modalIconButton}
+                  style={({ pressed }) => [
+                    styles.modalIconButton,
+                    pressed && { backgroundColor: c.fill },
+                  ]}
                 >
                   <X color={c.secondaryLabel} size={21} />
                 </Pressable>
@@ -580,6 +647,21 @@ export default function KnowledgeScreen() {
                 <ScrollView contentContainerStyle={styles.historyContent}>
                   {revisionsQuery.isLoading ? (
                     <ActivityIndicator color={c.tint} style={styles.loader} />
+                  ) : revisionsQuery.isError ? (
+                    <View style={styles.errorState}>
+                      <Text style={[t.headline, { color: c.label }]}>版本历史加载失败</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => void revisionsQuery.refetch()}
+                        style={({ pressed }) => [
+                          styles.retryButton,
+                          { backgroundColor: pressed ? c.tintSoft : c.fill },
+                        ]}
+                      >
+                        <RotateCcw color={c.tint} size={17} />
+                        <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>重新加载</Text>
+                      </Pressable>
+                    </View>
                   ) : (
                     revisionsQuery.data?.map((revision) => (
                       <View
@@ -611,7 +693,10 @@ export default function KnowledgeScreen() {
                                 revision,
                               })
                             }
-                            style={[styles.restoreVersionButton, { backgroundColor: c.fill }]}
+                            style={({ pressed }) => [
+                              styles.restoreVersionButton,
+                              { backgroundColor: pressed ? c.tintSoft : c.fill },
+                            ]}
                           >
                             <RotateCcw color={c.tint} size={16} />
                             <Text style={[t.caption, { color: c.tint, fontWeight: '700' }]}>还原</Text>
@@ -668,7 +753,10 @@ export default function KnowledgeScreen() {
                             Alert.alert('无法打开链接'),
                           )
                         }
-                        style={[styles.referenceButton, { backgroundColor: c.blueSoft }]}
+                        style={({ pressed }) => [
+                          styles.referenceButton,
+                          { backgroundColor: pressed ? c.tintSoft : c.blueSoft },
+                        ]}
                       >
                         <ExternalLink color={c.blue} size={17} />
                         <Text numberOfLines={1} style={[t.subhead, { color: c.blue, fontWeight: '700', flex: 1 }]}>打开参考链接</Text>
@@ -682,7 +770,10 @@ export default function KnowledgeScreen() {
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => setHistoryOpen(true)}
-                      style={[styles.actionButton, { backgroundColor: c.fill }]}
+                      style={({ pressed }) => [
+                        styles.actionButton,
+                        { backgroundColor: pressed ? c.fillStrong : c.fill },
+                      ]}
                     >
                       <Clock3 color={c.secondaryLabel} size={18} />
                       <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>历史</Text>
@@ -691,7 +782,10 @@ export default function KnowledgeScreen() {
                       <Pressable
                         accessibilityRole="button"
                         onPress={() => openEdit(selected)}
-                        style={[styles.actionButton, { backgroundColor: c.tintSoft }]}
+                        style={({ pressed }) => [
+                          styles.actionButton,
+                          { backgroundColor: pressed ? c.fillStrong : c.tintSoft },
+                        ]}
                       >
                         <Edit3 color={c.tint} size={18} />
                         <Text style={[t.subhead, { color: c.tint, fontWeight: '700' }]}>编辑</Text>
@@ -706,9 +800,15 @@ export default function KnowledgeScreen() {
                             article: selected,
                           })
                         }
-                        style={[
-                          styles.actionButton,
-                          { backgroundColor: selected.archivedAt ? c.greenSoft : c.redSoft },
+                        style={({ pressed }) => [
+                          styles.secondaryActionButton,
+                          {
+                            backgroundColor: pressed
+                              ? c.fillStrong
+                              : selected.archivedAt
+                                ? c.greenSoft
+                                : c.redSoft,
+                          },
                         ]}
                       >
                         {selected.archivedAt ? (
@@ -726,26 +826,20 @@ export default function KnowledgeScreen() {
               )}
             </SafeAreaView>
           ) : null}
-        </View>
-      </Modal>
+      </AdaptiveDialog>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setEditorVisible(false)}
-        transparent
+      <AdaptiveDialog
+        accessibilityLabel={editing ? '编辑知识文章' : '新建知识文章'}
+        maxWidth={720}
+        onClose={requestCloseEditor}
+        style={styles.editorDialog}
+        testID="knowledge-editor-dialog"
         visible={editorVisible}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.overlay}
+          style={styles.dialogBody}
         >
-          <Pressable
-            accessibilityLabel="关闭编辑窗口"
-            accessibilityRole="button"
-            onPress={() => setEditorVisible(false)}
-            style={StyleSheet.absoluteFill}
-          />
-          <SafeAreaView style={[styles.editorPanel, { backgroundColor: c.card, borderColor: c.separator }]}>
             <View style={[styles.modalHeader, { borderBottomColor: c.separator }]}>
               <View style={[styles.detailIcon, { backgroundColor: c.tintSoft }]}>
                 <FileText color={c.tint} size={20} />
@@ -757,8 +851,11 @@ export default function KnowledgeScreen() {
                 accessibilityLabel="关闭"
                 accessibilityRole="button"
                 disabled={busy}
-                onPress={() => setEditorVisible(false)}
-                style={styles.modalIconButton}
+                onPress={requestCloseEditor}
+                style={({ pressed }) => [
+                  styles.modalIconButton,
+                  pressed && { backgroundColor: c.fill },
+                ]}
               >
                 <X color={c.secondaryLabel} size={21} />
               </Pressable>
@@ -784,10 +881,14 @@ export default function KnowledgeScreen() {
                         onPress={() =>
                           setDraft((value) => ({ ...value, category: item.value }))
                         }
-                        style={[
+                        style={({ pressed }) => [
                           styles.categoryOption,
                           {
-                            backgroundColor: active ? c.tintSoft : c.fill,
+                            backgroundColor: active
+                              ? c.tintSoft
+                              : pressed
+                                ? c.fillStrong
+                                : c.fill,
                             borderColor: active ? c.tint : c.separator,
                           },
                         ]}
@@ -848,6 +949,14 @@ export default function KnowledgeScreen() {
                   />
                 </View>
               ) : null}
+            </ScrollView>
+            <SafeAreaView
+              edges={['bottom']}
+              style={[
+                styles.editorFooter,
+                { borderTopColor: c.separator, backgroundColor: c.chromeStrong },
+              ]}
+            >
               <PrimaryButton
                 disabled={!draft.title.trim() || !draft.content.trim()}
                 icon={<Check color="#FFFFFF" size={18} />}
@@ -855,10 +964,9 @@ export default function KnowledgeScreen() {
                 onPress={save}
                 title={editing ? '保存修改' : '创建文章'}
               />
-            </ScrollView>
-          </SafeAreaView>
+            </SafeAreaView>
         </KeyboardAvoidingView>
-      </Modal>
+      </AdaptiveDialog>
 
       <ConfirmDialog
         confirmLabel={confirmationCopy?.label}
@@ -870,6 +978,15 @@ export default function KnowledgeScreen() {
         title={confirmationCopy?.title ?? ''}
         visible={Boolean(confirmation)}
       />
+      <ConfirmDialog
+        confirmLabel="放弃编辑"
+        destructive
+        message="当前填写的内容还没有保存，关闭后这些修改将丢失。"
+        onCancel={() => setDiscardEditorOpen(false)}
+        onConfirm={finishCloseEditor}
+        title="放弃未保存的修改？"
+        visible={discardEditorOpen}
+      />
     </SafeAreaView>
   );
 }
@@ -877,9 +994,8 @@ export default function KnowledgeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   page: { flex: 1, paddingTop: 22 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   createButton: {
-    minHeight: 42,
+    minHeight: 44,
     paddingHorizontal: 16,
     borderRadius: radius.md,
     flexDirection: 'row',
@@ -887,8 +1003,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
+  assistantEntry: { minHeight: 52, marginTop: 16, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  assistantEntryIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  assistantEntryText: { flex: 1, minWidth: 0, fontWeight: '700' },
   toolbar: { marginTop: 20, gap: 10 },
-  toolbarDesktop: { flexDirection: 'row', alignItems: 'center' },
+  toolbarExpanded: { flexDirection: 'row', alignItems: 'center' },
   searchBox: {
     flex: 1,
     minHeight: 46,
@@ -899,27 +1018,29 @@ const styles = StyleSheet.create({
     paddingLeft: 13,
   },
   searchInput: { flex: 1, minWidth: 0, fontSize: 16, paddingHorizontal: 10, paddingVertical: 10 },
-  searchButton: { width: 42, height: 34, marginRight: 5, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  iconHit: { width: 34, height: 38, alignItems: 'center', justifyContent: 'center' },
+  searchButton: { width: 44, height: 44, marginRight: 2, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  iconHit: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   statusFilter: { width: 220 },
-  categoryFilters: { gap: 8, paddingTop: 12, paddingBottom: 14 },
-  filterButton: { minHeight: 34, paddingHorizontal: 13, borderWidth: 1, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  categoryFilters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 12, paddingBottom: 14 },
+  filterButton: { minHeight: 44, paddingHorizontal: 14, borderWidth: 1, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingBottom: 40, flexGrow: 1 },
   loader: { marginVertical: 48 },
   articleGrid: { gap: 12 },
-  articleGridDesktop: { flexDirection: 'row', flexWrap: 'wrap' },
-  articleCellDesktop: { width: '32%', minWidth: 280, flexGrow: 1 },
+  articleGridExpanded: { flexDirection: 'row', flexWrap: 'wrap' },
+  articleCellExpanded: { width: '48%', minWidth: 280, flexGrow: 1 },
+  articleCellWide: { width: '31%' },
+  articlePressable: { width: '100%' },
   articleCard: { minHeight: 174, padding: 16 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   categoryBadge: { minHeight: 25, borderRadius: radius.sm, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },
   cardFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 'auto', paddingTop: 15 },
   errorState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 72, gap: 16 },
-  retryButton: { minHeight: 40, borderRadius: radius.md, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 7 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  detailPanel: { width: '100%', maxWidth: 760, height: '90%', borderRadius: radius.md, borderWidth: 1, overflow: 'hidden' },
-  editorPanel: { width: '100%', maxWidth: 720, maxHeight: '94%', borderRadius: radius.md, borderWidth: 1, overflow: 'hidden' },
+  retryButton: { minHeight: 44, borderRadius: radius.md, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  detailDialog: { height: '90%' },
+  editorDialog: { height: '90%' },
+  dialogBody: { flex: 1, minHeight: 0 },
   modalHeader: { minHeight: 58, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  modalIconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  modalIconButton: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   detailIcon: { width: 36, height: 36, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   detailContent: { padding: 22, paddingBottom: 34 },
   detailMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
@@ -930,16 +1051,18 @@ const styles = StyleSheet.create({
   articleContent: { lineHeight: 28 },
   referenceButton: { minHeight: 44, borderRadius: radius.md, paddingHorizontal: 13, marginTop: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailActions: { borderTopWidth: StyleSheet.hairlineWidth, padding: 12, flexDirection: 'row', gap: 8 },
-  actionButton: { minHeight: 42, borderRadius: radius.md, paddingHorizontal: 14, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  actionButton: { minHeight: 44, borderRadius: radius.md, paddingHorizontal: 14, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  secondaryActionButton: { minWidth: 92, minHeight: 44, borderRadius: radius.md, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   historyContent: { padding: 18, paddingBottom: 36 },
   historyRow: { minHeight: 92, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'flex-start', gap: 11, paddingVertical: 14 },
   versionBadge: { minWidth: 44, height: 30, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  restoreVersionButton: { minHeight: 34, borderRadius: radius.sm, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  formContent: { padding: 20, gap: 17, paddingBottom: 34 },
+  restoreVersionButton: { minHeight: 44, borderRadius: radius.sm, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  formContent: { padding: 20, gap: 17, paddingBottom: 24 },
+  editorFooter: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
   field: { gap: 7 },
   input: { minHeight: 44, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 12, fontSize: 16 },
   multiline: { minHeight: 92, paddingTop: 11, lineHeight: 22 },
   categoryPicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  categoryOption: { minHeight: 36, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  categoryOption: { minHeight: 44, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 5 },
   pinRow: { minHeight: 58, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

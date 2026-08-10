@@ -38,6 +38,21 @@ export type InventoryTransactionSourceType =
   | 'inventory_item'
   | 'manual_adjustment'
   | 'inventory_transaction';
+export type InventoryBatchSourceType = 'manual' | 'shopping_item';
+export type InventoryBatchMovementType =
+  | 'allocation'
+  | 'receipt'
+  | 'consumption'
+  | 'adjustment'
+  | 'reversal';
+export type InventoryBatchMovementSourceType =
+  | 'batch_registration'
+  | 'shopping_item'
+  | 'menu'
+  | 'maintenance_record'
+  | 'manual_adjustment'
+  | 'inventory_transaction';
+export type SmartMenuPlanStatus = 'draft' | 'voting' | 'adopted';
 export type PointsLedgerType =
   | 'award'
   | 'adjustment'
@@ -66,6 +81,25 @@ export type KnowledgeRevisionChangeType =
   | 'archive'
   | 'restore'
   | 'restore_revision';
+export type FamilyMemoryCategory =
+  | 'daily'
+  | 'celebration'
+  | 'travel'
+  | 'meal'
+  | 'visit'
+  | 'milestone'
+  | 'other';
+export type FamilyMemorySourceModule =
+  | 'calendar'
+  | 'travel'
+  | 'menu'
+  | 'media'
+  | 'visit';
+export type FamilyMemoryOperationType =
+  | 'create'
+  | 'update'
+  | 'archive'
+  | 'restore';
 export type TravelPlanStatus = 'planned' | 'completed' | 'cancelled';
 export type TravelChecklistStatus = 'pending' | 'completed' | 'skipped';
 export type TravelChecklistCategory =
@@ -148,6 +182,7 @@ export type ActivityModule =
   | 'asset'
   | 'points'
   | 'knowledge'
+  | 'memory'
   | 'travel'
   | 'system';
 export type NotificationModule =
@@ -159,6 +194,7 @@ export type NotificationModule =
   | 'media'
   | 'guest'
   | 'points'
+  | 'agent'
   | 'system';
 export type NotificationChannelKind = 'webhook' | 'ntfy';
 export type NotificationDeliveryStatus =
@@ -178,6 +214,65 @@ export type BackupRunStatus =
   | 'cancelled';
 export type BackupRunTrigger = 'manual' | 'scheduled';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
+export type AgentRuntimeKind = 'fake' | 'hermes';
+export type AgentResponseStyle = 'concise' | 'balanced' | 'detailed';
+export type AgentRoutineKind = 'nightly_digest' | 'weekly_report';
+export type AgentRoutineItemStatus = 'pending' | 'digested' | 'expired';
+export type AgentMemoryScope = 'member_private' | 'household';
+export type AgentMemoryKind =
+  | 'preference'
+  | 'fact'
+  | 'episodic_summary'
+  | 'routine_context';
+export type AgentMemoryStatus =
+  | 'candidate'
+  | 'active'
+  | 'revoked'
+  | 'forgotten'
+  | 'expired';
+export type AgentMemoryConfidenceSource =
+  | 'explicit'
+  | 'business'
+  | 'summary_candidate';
+export type AgentMemoryEventOperation =
+  | 'created'
+  | 'confirmed'
+  | 'corrected'
+  | 'shared'
+  | 'revoked'
+  | 'forgotten'
+  | 'expired';
+export type AgentConversationStatus = 'active' | 'archived' | 'expired';
+export type AgentConversationSource = 'app' | 'channel';
+export type AgentChannelPlatform = string;
+export type AgentMessageRole = 'user' | 'assistant';
+export type AgentRunStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+export type AgentToolEventStatus = 'running' | 'completed' | 'failed';
+export type AgentActionType = 'task' | 'reminder' | 'poll' | 'menu' | 'shopping';
+export type AgentActionProposalStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'executed'
+  | 'rejected'
+  | 'expired'
+  | 'failed';
+export type AgentProposalGroupStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected'
+  | 'expired'
+  | 'failed';
+export type AgentProposalGroupEventOperation =
+  | 'created'
+  | 'confirmed'
+  | 'rejected'
+  | 'expired'
+  | 'failed';
 
 export interface DishRecipeStep {
   text: string;
@@ -1598,7 +1693,7 @@ export class HouseholdTaskInstance {
 @Entity('notifications')
 @Check(
   'CHK_notifications_module',
-  `"module" IN ('menu', 'task', 'poll', 'calendar', 'reminder', 'media', 'guest', 'points', 'system')`,
+  `"module" IN ('menu', 'task', 'poll', 'calendar', 'reminder', 'media', 'guest', 'points', 'agent', 'system')`,
 )
 @Index('IDX_notifications_recipient_read', ['recipientId', 'readAt', 'createdAt'])
 @Index('IDX_notifications_household_source', ['householdId', 'module', 'sourceId'])
@@ -3866,10 +3961,111 @@ export class InventoryItem {
   @Column({ type: 'numeric', precision: 10, scale: 2, default: 1 })
   restockQuantity: string;
 
+  @OneToMany(() => InventoryBatch, (batch) => batch.inventoryItem)
+  batches: InventoryBatch[];
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+@Entity('inventory_batches')
+@Check(
+  'CHK_inventory_batches_quantity',
+  `"quantity" >= 0 AND "quantity" <= 99999999.99`,
+)
+@Check(
+  'CHK_inventory_batches_source',
+  `"sourceType" IN ('manual', 'shopping_item')`,
+)
+@Check('CHK_inventory_batches_version', `"version" > 0`)
+@Check(
+  'CHK_inventory_batches_dates',
+  `"productionDate" IS NULL OR "expiresOn" IS NULL OR "expiresOn" >= "productionDate"`,
+)
+@Index(
+  'UQ_inventory_batches_household_source',
+  ['householdId', 'sourceType', 'sourceId'],
+  { unique: true },
+)
+@Index('IDX_inventory_batches_household_expiry', ['householdId', 'expiresOn'], {
+  where: '"quantity" > 0',
+})
+@Index('IDX_inventory_batches_item_received', [
+  'inventoryItemId',
+  'receivedOn',
+  'createdAt',
+])
+export class InventoryBatch {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_inventory_batches_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => InventoryItem, (item) => item.batches, {
+    eager: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'inventoryItemId',
+    foreignKeyConstraintName: 'FK_inventory_batches_item',
+  })
+  inventoryItem: InventoryItem;
+
+  @Column('uuid')
+  inventoryItemId: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantity: string;
+
+  @Column({ type: 'date' })
+  receivedOn: string;
+
+  @Column({ type: 'date', nullable: true })
+  productionDate: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  expiresOn: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  openedOn: string | null;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: InventoryBatchSourceType;
+
+  @Column('uuid')
+  sourceId: string;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_inventory_batches_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @OneToMany(() => InventoryBatchMovement, (movement) => movement.batch)
+  movements: InventoryBatchMovement[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }
 
@@ -4057,6 +4253,142 @@ export class InventoryTransaction {
 
   @Column({ type: 'uuid', nullable: true })
   reversesTransactionId: string | null;
+
+  @OneToMany(
+    () => InventoryBatchMovement,
+    (movement) => movement.inventoryTransaction,
+  )
+  batchMovements: InventoryBatchMovement[];
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  createdAt: Date;
+}
+
+@Entity('inventory_batch_movements')
+@Check(
+  'CHK_inventory_batch_movements_type',
+  `"type" IN ('allocation', 'receipt', 'consumption', 'adjustment', 'reversal')`,
+)
+@Check(
+  'CHK_inventory_batch_movements_source',
+  `"sourceType" IN ('batch_registration', 'shopping_item', 'menu', 'maintenance_record', 'manual_adjustment', 'inventory_transaction')`,
+)
+@Check(
+  'CHK_inventory_batch_movements_quantities',
+  `"quantityBefore" >= 0 AND "quantityAfter" >= 0 AND "delta" <> 0 AND "quantityAfter" = "quantityBefore" + "delta"`,
+)
+@Check(
+  'CHK_inventory_batch_movements_reversal',
+  `("type" = 'reversal' AND "reversesMovementId" IS NOT NULL) OR ("type" <> 'reversal' AND "reversesMovementId" IS NULL)`,
+)
+@Index(
+  'UQ_inventory_batch_movements_household_idempotency',
+  ['householdId', 'idempotencyKey'],
+  { unique: true },
+)
+@Index('IDX_inventory_batch_movements_batch_created', [
+  'batchId',
+  'createdAt',
+])
+@Index(
+  'IDX_inventory_batch_movements_transaction',
+  ['inventoryTransactionId'],
+  { where: '"inventoryTransactionId" IS NOT NULL' },
+)
+@Index('UQ_inventory_batch_movements_reversal', ['reversesMovementId'], {
+  unique: true,
+  where: '"reversesMovementId" IS NOT NULL',
+})
+export class InventoryBatchMovement {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => InventoryBatch, (batch) => batch.movements, {
+    eager: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'batchId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_batch',
+  })
+  batch: InventoryBatch;
+
+  @Column('uuid')
+  batchId: string;
+
+  @ManyToOne(
+    () => InventoryTransaction,
+    (transaction) => transaction.batchMovements,
+    { nullable: true, onDelete: 'RESTRICT' },
+  )
+  @JoinColumn({
+    name: 'inventoryTransactionId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_transaction',
+  })
+  inventoryTransaction: InventoryTransaction | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  inventoryTransactionId: string | null;
+
+  @Column('uuid')
+  operationId: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  type: InventoryBatchMovementType;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantityBefore: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  delta: string;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2 })
+  quantityAfter: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_actor',
+  })
+  actor: Member;
+
+  @Column('uuid')
+  actorId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  actorName: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: InventoryBatchMovementSourceType;
+
+  @Column('uuid')
+  sourceId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @ManyToOne(() => InventoryBatchMovement, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'reversesMovementId',
+    foreignKeyConstraintName: 'FK_inventory_batch_movements_reverses',
+  })
+  reversesMovement: InventoryBatchMovement | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reversesMovementId: string | null;
 
   @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
   createdAt: Date;
@@ -5045,6 +5377,230 @@ export class KnowledgeArticleRevision {
   createdAt: Date;
 }
 
+@Entity('family_memories')
+@Check(
+  'CHK_family_memories_category',
+  `"category" IN ('daily', 'celebration', 'travel', 'meal', 'visit', 'milestone', 'other')`,
+)
+@Check('CHK_family_memories_version', `"version" >= 1`)
+@Check('CHK_family_memories_tags', `jsonb_typeof("tags") = 'array'`)
+@Check(
+  'CHK_family_memories_source',
+  `("sourceModule" IS NULL AND "sourceId" IS NULL) OR ("sourceModule" IN ('calendar', 'travel', 'menu', 'media', 'visit') AND "sourceId" IS NOT NULL)`,
+)
+@Index('IDX_family_memories_household_date', [
+  'householdId',
+  'archivedAt',
+  'happenedOn',
+])
+@Index('IDX_family_memories_household_category', [
+  'householdId',
+  'category',
+  'happenedOn',
+])
+export class FamilyMemory {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_family_memories_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'date' })
+  happenedOn: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  category: FamilyMemoryCategory;
+
+  @Column({ type: 'text', nullable: true })
+  story: string | null;
+
+  @Column({ type: 'jsonb', default: [] })
+  tags: string[];
+
+  @Column({ type: 'varchar', length: 24, nullable: true })
+  sourceModule: FamilyMemorySourceModule | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  sourceId: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_family_memories_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedById',
+    foreignKeyConstraintName: 'FK_family_memories_updated_by',
+  })
+  updatedBy: Member;
+
+  @Column('uuid')
+  updatedById: string;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  archivedAt: Date | null;
+
+  @OneToMany(() => FamilyMemoryPhoto, (photo) => photo.memory)
+  photos: FamilyMemoryPhoto[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('family_memory_photos')
+@Unique('UQ_family_memory_photos_household_idempotency', [
+  'householdId',
+  'idempotencyKey',
+])
+@Check('CHK_family_memory_photos_size', `"sizeBytes" BETWEEN 1 AND 10485760`)
+@Index('IDX_family_memory_photos_memory_created', ['memoryId', 'createdAt'])
+export class FamilyMemoryPhoto {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_family_memory_photos_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => FamilyMemory, (memory) => memory.photos, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'memoryId',
+    foreignKeyConstraintName: 'FK_family_memory_photos_memory',
+  })
+  memory: FamilyMemory;
+
+  @Column('uuid')
+  memoryId: string;
+
+  @Column({ type: 'varchar', length: 240, nullable: true })
+  caption: string | null;
+
+  @Column({ type: 'varchar', length: 180 })
+  storageKey: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  mimeType: string;
+
+  @Column({ type: 'int' })
+  sizeBytes: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_family_memory_photos_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  requestFingerprint: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('family_memory_operations')
+@Unique('UQ_family_memory_operations_household_idempotency', [
+  'householdId',
+  'idempotencyKey',
+])
+@Check(
+  'CHK_family_memory_operations_type',
+  `"operation" IN ('create', 'update', 'archive', 'restore')`,
+)
+@Check('CHK_family_memory_operations_version', `"resultVersion" >= 1`)
+@Index('IDX_family_memory_operations_memory_created', [
+  'memoryId',
+  'createdAt',
+])
+export class FamilyMemoryOperation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_family_memory_operations_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => FamilyMemory, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'memoryId',
+    foreignKeyConstraintName: 'FK_family_memory_operations_memory',
+  })
+  memory: FamilyMemory;
+
+  @Column('uuid')
+  memoryId: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  operation: FamilyMemoryOperationType;
+
+  @Column({ type: 'int' })
+  resultVersion: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_family_memory_operations_actor',
+  })
+  actor: Member;
+
+  @Column('uuid')
+  actorId: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  actorName: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  requestFingerprint: string;
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  createdAt: Date;
+}
+
 @Entity('backup_policies')
 @Unique('UQ_backup_policies_household', ['householdId'])
 @Check(
@@ -5292,6 +5848,1443 @@ export class BackupRun {
   updatedAt: Date;
 }
 
+@Entity('agent_member_channels')
+@Check(
+  'CHK_agent_member_channels_platform',
+  `"platform" ~ '^[a-z0-9][a-z0-9._-]{1,31}$'`,
+)
+@Check('CHK_agent_member_channels_version', `"version" >= 1`)
+@Index('UQ_agent_member_channels_active_external', [
+  'householdId',
+  'platform',
+  'externalAccountRefHash',
+], { unique: true, where: '"revokedAt" IS NULL' })
+@Index('IDX_agent_member_channels_household_member', [
+  'householdId',
+  'memberId',
+  'revokedAt',
+])
+export class AgentMemberChannel {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_member_channels_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_agent_member_channels_member',
+  })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  platform: AgentChannelPlatform;
+
+  @Column({ type: 'varchar', length: 64 })
+  externalAccountRefHash: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  externalAccountLabel: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  externalAccountHint: string | null;
+
+  @Column({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  pairedAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastUsedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  revokedAt: Date | null;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_channel_pairings')
+@Check(
+  'CHK_agent_channel_pairings_platform',
+  `"platform" ~ '^[a-z0-9][a-z0-9._-]{1,31}$'`,
+)
+@Check('CHK_agent_channel_pairings_version', `"version" >= 1`)
+@Index('UQ_agent_channel_pairings_code', ['codeHash'], { unique: true })
+@Index('UQ_agent_channel_pairings_household_idempotency', [
+  'householdId',
+  'idempotencyKey',
+], { unique: true })
+@Index('IDX_agent_channel_pairings_household_status', [
+  'householdId',
+  'memberId',
+  'revokedAt',
+  'usedAt',
+  'expiresAt',
+])
+export class AgentChannelPairing {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_channel_pairings_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_agent_channel_pairings_member',
+  })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdByMemberId',
+    foreignKeyConstraintName: 'FK_agent_channel_pairings_created_by',
+  })
+  createdByMember: Member;
+
+  @Column('uuid')
+  createdByMemberId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  platform: AgentChannelPlatform;
+
+  @Column({ type: 'varchar', length: 64, select: false })
+  codeHash: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  usedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  revokedAt: Date | null;
+
+  @ManyToOne(() => AgentMemberChannel, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'channelId',
+    foreignKeyConstraintName: 'FK_agent_channel_pairings_channel',
+  })
+  channel: AgentMemberChannel | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  channelId: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_settings')
+@Unique('UQ_agent_settings_household', ['householdId'])
+@Check('CHK_agent_settings_runtime_kind', `"runtimeKind" IN ('fake', 'hermes')`)
+@Check('CHK_agent_settings_retention_days', `"retentionDays" BETWEEN 1 AND 30`)
+@Check(
+  'CHK_agent_settings_daily_routine_notification_limit',
+  `"dailyRoutineNotificationLimit" BETWEEN 0 AND 50`,
+)
+export class AgentSetting {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_settings_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ default: true })
+  enabled: boolean;
+
+  @Column({ type: 'varchar', length: 16, default: 'fake' })
+  runtimeKind: AgentRuntimeKind;
+
+  @Column({ type: 'varchar', length: 64, default: 'default' })
+  runtimeProfile: string;
+
+  @Column({ type: 'varchar', length: 120, default: 'hermes-agent' })
+  modelAlias: string;
+
+  @Column({ type: 'int', default: 7 })
+  retentionDays: number;
+
+  @Column({ type: 'int', default: 3 })
+  dailyRoutineNotificationLimit: number;
+
+  @Column({ default: false })
+  routineNotificationsEnabled: boolean;
+
+  @Column({
+    type: 'jsonb',
+    default: [
+      'get_today_summary',
+      'get_calendar',
+      'get_tasks',
+      'get_shopping_list',
+      'get_meal_plan',
+      'get_inventory_alerts',
+      'search_knowledge',
+      'get_travel_checklist',
+      'get_watch_candidates',
+      'get_recent_memories',
+    ],
+  })
+  readToolsEnabled: string[];
+
+  @Column({
+    type: 'jsonb',
+    default: [
+      'propose_task',
+      'propose_reminder',
+      'propose_poll',
+      'propose_menu',
+      'propose_shopping_items',
+      'propose_plan',
+    ],
+  })
+  proposalToolsEnabled: string[];
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_settings_updated_by',
+  })
+  updatedByMember: Member;
+
+  @Column('uuid')
+  updatedByMemberId: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_routines')
+@Unique('UQ_agent_routines_household_kind', ['householdId', 'kind'])
+@Check(
+  'CHK_agent_routines_kind',
+  `"kind" IN ('nightly_digest', 'weekly_report')`,
+)
+@Check('CHK_agent_routines_schedule_hour', `"scheduleHour" BETWEEN 0 AND 23`)
+@Check(
+  'CHK_agent_routines_schedule_minute',
+  `"scheduleMinute" BETWEEN 0 AND 59`,
+)
+@Check('CHK_agent_routines_version', `"version" >= 1`)
+@Index('IDX_agent_routines_next_run', ['nextRunAt'])
+export class AgentRoutine {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_routines_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  kind: AgentRoutineKind;
+
+  @Column({ default: false })
+  enabled: boolean;
+
+  @Column({ type: 'int', default: 21 })
+  scheduleHour: number;
+
+  @Column({ type: 'int', default: 0 })
+  scheduleMinute: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastRunAt: Date | null;
+
+  @Column({ type: 'timestamptz' })
+  nextRunAt: Date;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_routine_items')
+@Check(
+  'CHK_agent_routine_items_kind',
+  `"routineKind" IN ('nightly_digest')`,
+)
+@Check(
+  'CHK_agent_routine_items_status',
+  `"status" IN ('pending', 'digested', 'expired')`,
+)
+@Index(
+  'IDX_agent_routine_items_pending',
+  ['householdId', 'routineKind'],
+  { where: `"status" = 'pending'` },
+)
+export class AgentRoutineItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_routine_items_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  routineKind: AgentRoutineKind;
+
+  @Column({ type: 'varchar', length: 40 })
+  sourceType: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  sourceId: string;
+
+  @Column({ type: 'varchar', length: 200 })
+  summary: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: AgentRoutineItemStatus;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  digestedAt: Date | null;
+}
+
+@Entity('agent_member_profiles')
+@Unique('UQ_agent_member_profiles_household_member', [
+  'householdId',
+  'memberId',
+])
+@Check(
+  'CHK_agent_member_profiles_response_style',
+  `"responseStyle" IN ('concise', 'balanced', 'detailed')`,
+)
+@Check('CHK_agent_member_profiles_version', `"version" >= 1`)
+export class AgentMemberProfile {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_member_profiles_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_agent_member_profiles_member',
+  })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @Column({ default: true })
+  enabled: boolean;
+
+  @Column({ type: 'varchar', length: 32, default: '小管家' })
+  assistantName: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'balanced' })
+  responseStyle: AgentResponseStyle;
+
+  @Column({ default: true })
+  memoryEnabled: boolean;
+
+  @Column({ default: false })
+  memorySuggestionEnabled: boolean;
+
+  @Column({ default: false })
+  proactiveRoutinesEnabled: boolean;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_conversations')
+@Check(
+  'CHK_agent_conversations_status',
+  `"status" IN ('active', 'archived', 'expired')`,
+)
+@Check('CHK_agent_conversations_source', `"source" IN ('app', 'channel')`)
+@Index('IDX_agent_conversations_household_member', [
+  'householdId',
+  'createdByMemberId',
+  'updatedAt',
+])
+@Index('UQ_agent_conversations_channel_thread', [
+  'householdId',
+  'channelId',
+  'externalThreadRefHash',
+], { unique: true })
+export class AgentConversation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_conversations_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdByMemberId',
+    foreignKeyConstraintName: 'FK_agent_conversations_created_by',
+  })
+  createdByMember: Member;
+
+  @Column('uuid')
+  createdByMemberId: string;
+
+  @ManyToOne(() => AgentMemberProfile, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'agentProfileId',
+    foreignKeyConstraintName: 'FK_agent_conversations_profile',
+  })
+  agentProfile: AgentMemberProfile;
+
+  @Column('uuid')
+  agentProfileId: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'app' })
+  source: AgentConversationSource;
+
+  @ManyToOne(() => AgentMemberChannel, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'channelId',
+    foreignKeyConstraintName: 'FK_agent_conversations_channel',
+  })
+  channel: AgentMemberChannel | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  channelId: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  externalThreadRefHash: string | null;
+
+  @Column({ type: 'varchar', length: 120, default: '新对话' })
+  title: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'active' })
+  status: AgentConversationStatus;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_messages')
+@Check('CHK_agent_messages_role', `"role" IN ('user', 'assistant')`)
+@Check('CHK_agent_messages_content_version', `"contentVersion" >= 1`)
+@Index('IDX_agent_messages_conversation_created', ['conversationId', 'createdAt'])
+@Index('IDX_agent_messages_run_created', ['runId', 'createdAt'])
+export class AgentMessage {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_messages_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentConversation, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'conversationId',
+    foreignKeyConstraintName: 'FK_agent_messages_conversation',
+  })
+  conversation: AgentConversation;
+
+  @Column('uuid')
+  conversationId: string;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'memberId',
+    foreignKeyConstraintName: 'FK_agent_messages_member',
+  })
+  member: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  memberId: string | null;
+
+  @ManyToOne(() => AgentRun, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'runId',
+    foreignKeyConstraintName: 'FK_agent_messages_run',
+  })
+  run: AgentRun | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  runId: string | null;
+
+  @Column({ type: 'varchar', length: 16 })
+  role: AgentMessageRole;
+
+  @Column({ type: 'text' })
+  contentCiphertext: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  contentNonce: string;
+
+  @Column({ type: 'int', default: 1 })
+  contentVersion: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('agent_runs')
+@Unique('UQ_agent_runs_household_idempotency', [
+  'householdId',
+  'clientRequestId',
+])
+@Check(
+  'CHK_agent_runs_status',
+  `"status" IN ('queued', 'running', 'completed', 'failed', 'cancelled')`,
+)
+@Check('CHK_agent_runs_runtime_kind', `"runtimeKind" IN ('fake', 'hermes')`)
+@Check(
+  'CHK_agent_runs_tokens',
+  `("inputTokens" IS NULL OR "inputTokens" >= 0) AND ("outputTokens" IS NULL OR "outputTokens" >= 0)`,
+)
+@Index('IDX_agent_runs_conversation_created', ['conversationId', 'createdAt'])
+@Index('IDX_agent_runs_authorization_expiry', ['authorizationExpiresAt'])
+@Index('UQ_agent_runs_retry_of', ['retryOfRunId'], {
+  unique: true,
+  where: `"retryOfRunId" IS NOT NULL`,
+})
+export class AgentRun {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_runs_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentConversation, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'conversationId',
+    foreignKeyConstraintName: 'FK_agent_runs_conversation',
+  })
+  conversation: AgentConversation;
+
+  @Column('uuid')
+  conversationId: string;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'requestedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_runs_requested_by',
+  })
+  requestedByMember: Member;
+
+  @Column('uuid')
+  requestedByMemberId: string;
+
+  @ManyToOne(() => AgentMemberProfile, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'agentProfileId',
+    foreignKeyConstraintName: 'FK_agent_runs_profile',
+  })
+  agentProfile: AgentMemberProfile;
+
+  @Column('uuid')
+  agentProfileId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  clientRequestId: string;
+
+  @ManyToOne(() => AgentRun, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'retryOfRunId',
+    foreignKeyConstraintName: 'FK_agent_runs_retry_of',
+  })
+  retryOfRun: AgentRun | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  retryOfRunId: string | null;
+
+  @Column({ type: 'varchar', length: 16 })
+  runtimeKind: AgentRuntimeKind;
+
+  @Column({ type: 'varchar', length: 64 })
+  runtimeVersion: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  modelAlias: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'queued' })
+  status: AgentRunStatus;
+
+  @Column({ type: 'jsonb', default: [] })
+  allowedTools: string[];
+
+  @Column({ type: 'timestamptz' })
+  authorizationExpiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  startedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  finishedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  cancelRequestedAt: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  inputTokens: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  outputTokens: number | null;
+
+  @Column({ type: 'numeric', precision: 12, scale: 6, nullable: true })
+  estimatedCost: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  errorCode: string | null;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  errorMessage: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_tool_events')
+@Check(
+  'CHK_agent_tool_events_status',
+  `"status" IN ('running', 'completed', 'failed')`,
+)
+@Check(
+  'CHK_agent_tool_events_presentation',
+  `("presentationCiphertext" IS NULL AND "presentationNonce" IS NULL AND "presentationVersion" IS NULL) OR ("presentationCiphertext" IS NOT NULL AND "presentationNonce" IS NOT NULL AND "presentationVersion" >= 1)`,
+)
+@Index('IDX_agent_tool_events_run_started', ['runId', 'startedAt'])
+export class AgentToolEvent {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_tool_events_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentRun, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'runId',
+    foreignKeyConstraintName: 'FK_agent_tool_events_run',
+  })
+  run: AgentRun;
+
+  @Column('uuid')
+  runId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  toolName: string;
+
+  @Column({ type: 'varchar', length: 40 })
+  sourceModule: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  sourceId: string | null;
+
+  @Column({ type: 'varchar', length: 16 })
+  status: AgentToolEventStatus;
+
+  @Column({ type: 'jsonb', default: {} })
+  inputSummary: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', default: {} })
+  outputSummary: Record<string, unknown>;
+
+  @Column({ type: 'text', nullable: true })
+  presentationCiphertext: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  presentationNonce: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  presentationVersion: number | null;
+
+  @Column({ type: 'timestamptz' })
+  startedAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  finishedAt: Date | null;
+}
+
+@Entity('agent_memory_items')
+@Check(
+  'CHK_agent_memory_items_scope',
+  `"scope" IN ('member_private', 'household')`,
+)
+@Check(
+  'CHK_agent_memory_items_kind',
+  `"kind" IN ('preference', 'fact', 'episodic_summary', 'routine_context')`,
+)
+@Check(
+  'CHK_agent_memory_items_status',
+  `"status" IN ('candidate', 'active', 'revoked', 'forgotten', 'expired')`,
+)
+@Check(
+  'CHK_agent_memory_items_confidence_source',
+  `"confidenceSource" IN ('explicit', 'business', 'summary_candidate')`,
+)
+@Check(
+  'CHK_agent_memory_items_content',
+  `("status" IN ('forgotten', 'expired') AND "contentCiphertext" IS NULL AND "contentNonce" IS NULL AND "contentVersion" IS NULL) OR ("status" NOT IN ('forgotten', 'expired') AND "contentCiphertext" IS NOT NULL AND "contentNonce" IS NOT NULL AND "contentVersion" IS NOT NULL AND "contentVersion" >= 1)`,
+)
+@Check('CHK_agent_memory_items_version', `"version" >= 1`)
+@Index(
+  'UQ_agent_memory_items_active_key',
+  ['householdId', 'ownerMemberId', 'scope', 'memoryKey'],
+  { unique: true, where: `"status" = 'active'` },
+)
+@Index('IDX_agent_memory_items_household_owner_status', [
+  'householdId',
+  'ownerMemberId',
+  'scope',
+  'status',
+  'updatedAt',
+])
+export class AgentMemoryItem {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_memory_items_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'ownerMemberId',
+    foreignKeyConstraintName: 'FK_agent_memory_items_owner',
+  })
+  ownerMember: Member;
+
+  @Column('uuid')
+  ownerMemberId: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'member_private' })
+  scope: AgentMemoryScope;
+
+  @Column({ type: 'varchar', length: 24, default: 'preference' })
+  kind: AgentMemoryKind;
+
+  @Column({ type: 'varchar', length: 32 })
+  category: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  memoryKey: string;
+
+  @Column({ type: 'text', nullable: true })
+  contentCiphertext: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  contentNonce: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  contentVersion: number | null;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  sourceId: string | null;
+
+  @ManyToOne(() => AgentConversation, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'sourceConversationId',
+    foreignKeyConstraintName: 'FK_agent_memory_items_source_conversation',
+  })
+  sourceConversation: AgentConversation | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  sourceConversationId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  sourceMessageId: string | null;
+
+  @Column({ type: 'varchar', length: 16, default: 'candidate' })
+  status: AgentMemoryStatus;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'confirmedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_memory_items_confirmed_by',
+  })
+  confirmedByMember: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  confirmedByMemberId: string | null;
+
+  @Column({ type: 'varchar', length: 24, default: 'summary_candidate' })
+  confidenceSource: AgentMemoryConfidenceSource;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  validFrom: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  expiresAt: Date | null;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_memory_events')
+@Check(
+  'CHK_agent_memory_events_operation',
+  `"operation" IN ('created', 'confirmed', 'corrected', 'shared', 'revoked', 'forgotten', 'expired')`,
+)
+@Index('IDX_agent_memory_events_item_created', ['memoryItemId', 'createdAt'])
+export class AgentMemoryEvent {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_memory_events_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentMemoryItem, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'memoryItemId',
+    foreignKeyConstraintName: 'FK_agent_memory_events_item',
+  })
+  memoryItem: AgentMemoryItem;
+
+  @Column('uuid')
+  memoryItemId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorMemberId',
+    foreignKeyConstraintName: 'FK_agent_memory_events_actor',
+  })
+  actorMember: Member;
+
+  @Column('uuid')
+  actorMemberId: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  operation: AgentMemoryEventOperation;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  fromScope: AgentMemoryScope | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  toScope: AgentMemoryScope | null;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  sourceId: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('agent_proposal_groups')
+@Check(
+  'CHK_agent_proposal_groups_status',
+  `"status" IN ('pending', 'confirmed', 'rejected', 'expired', 'failed')`,
+)
+@Check('CHK_agent_proposal_groups_version', `"version" >= 1`)
+@Index('IDX_agent_proposal_groups_household_status_created', [
+  'householdId',
+  'status',
+  'createdAt',
+])
+export class AgentProposalGroup {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_proposal_groups_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentConversation, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'conversationId',
+    foreignKeyConstraintName: 'FK_agent_proposal_groups_conversation',
+  })
+  conversation: AgentConversation | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  conversationId: string | null;
+
+  @ManyToOne(() => AgentRun, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'runId',
+    foreignKeyConstraintName: 'FK_agent_proposal_groups_run',
+  })
+  run: AgentRun;
+
+  @Column('uuid')
+  runId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'requestedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_proposal_groups_requested_by',
+  })
+  requestedByMember: Member;
+
+  @Column('uuid')
+  requestedByMemberId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 400 })
+  summary: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: AgentProposalGroupStatus;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'confirmedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_proposal_groups_confirmed_by',
+  })
+  confirmedByMember: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  confirmedByMemberId: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  confirmedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  rejectedAt: Date | null;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('agent_proposal_group_events')
+@Check(
+  'CHK_agent_proposal_group_events_operation',
+  `"operation" IN ('created', 'confirmed', 'rejected', 'expired', 'failed')`,
+)
+@Index('IDX_agent_proposal_group_events_group_created', ['groupId', 'createdAt'])
+export class AgentProposalGroupEvent {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_proposal_group_events_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentProposalGroup, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'groupId',
+    foreignKeyConstraintName: 'FK_agent_proposal_group_events_group',
+  })
+  group: AgentProposalGroup;
+
+  @Column('uuid')
+  groupId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorMemberId',
+    foreignKeyConstraintName: 'FK_agent_proposal_group_events_actor',
+  })
+  actorMember: Member;
+
+  @Column('uuid')
+  actorMemberId: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  operation: AgentProposalGroupEventOperation;
+
+  @Column({ type: 'int' })
+  stepCount: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
+@Entity('agent_action_proposals')
+@Unique('UQ_agent_action_proposals_creation', ['householdId', 'idempotencyKey'])
+@Unique('UQ_agent_action_proposals_confirmation', [
+  'householdId',
+  'confirmationKey',
+])
+@Check(
+  'CHK_agent_action_proposals_type',
+  `"actionType" IN ('task', 'reminder', 'poll', 'menu', 'shopping')`,
+)
+@Check(
+  'CHK_agent_action_proposals_status',
+  `"status" IN ('pending', 'confirmed', 'executed', 'rejected', 'expired', 'failed')`,
+)
+@Check('CHK_agent_action_proposals_version', `"version" >= 1`)
+@Index('IDX_agent_action_proposals_member_status', [
+  'householdId',
+  'createdByMemberId',
+  'status',
+  'createdAt',
+])
+@Index('IDX_agent_action_proposals_run_created', ['runId', 'createdAt'])
+export class AgentActionProposal {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => AgentRun, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'runId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_run',
+  })
+  run: AgentRun;
+
+  @Column('uuid')
+  runId: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdByMemberId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_created_by',
+  })
+  createdByMember: Member;
+
+  @Column('uuid')
+  createdByMemberId: string;
+
+  @ManyToOne(() => AgentProposalGroup, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'groupId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_group',
+  })
+  group: AgentProposalGroup | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  groupId: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  stepOrder: number | null;
+
+  @ManyToOne(() => Member, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'confirmedByMemberId',
+    foreignKeyConstraintName: 'FK_agent_action_proposals_confirmed_by',
+  })
+  confirmedByMember: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  confirmedByMemberId: string | null;
+
+  @Column({ type: 'varchar', length: 24 })
+  actionType: AgentActionType;
+
+  @Column({ type: 'jsonb' })
+  payload: Record<string, unknown>;
+
+  @Column({ type: 'jsonb' })
+  preview: Record<string, unknown>;
+
+  @Column({ type: 'varchar', length: 64 })
+  requestFingerprint: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @Column({ type: 'varchar', length: 180, nullable: true })
+  confirmationKey: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  expectedSourceVersion: number | null;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: AgentActionProposalStatus;
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  confirmedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  executedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  resultModule: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  resultId: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  failureCode: string | null;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  failureMessage: string | null;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('smart_menu_plans')
+@Check(
+  'CHK_smart_menu_plans_status',
+  `"status" IN ('draft', 'voting', 'adopted')`,
+)
+@Check('CHK_smart_menu_plans_dates', `"endsOn" >= "startsOn"`)
+@Check(
+  'CHK_smart_menu_plans_adopted',
+  `("status" = 'adopted' AND "adoptedById" IS NOT NULL AND "adoptedAt" IS NOT NULL) OR ("status" <> 'adopted' AND "adoptedById" IS NULL AND "adoptedAt" IS NULL)`,
+)
+@Index(
+  'UQ_smart_menu_plans_household_idempotency',
+  ['householdId', 'idempotencyKey'],
+  { unique: true },
+)
+@Index('UQ_smart_menu_plans_poll', ['pollId'], {
+  unique: true,
+  where: '"pollId" IS NOT NULL',
+})
+@Index('IDX_smart_menu_plans_household_created', [
+  'householdId',
+  'createdAt',
+])
+export class SmartMenuPlan {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'date' })
+  startsOn: string;
+
+  @Column({ type: 'date' })
+  endsOn: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'draft' })
+  status: SmartMenuPlanStatus;
+
+  @ManyToOne(() => Poll, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'pollId',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_poll',
+  })
+  poll: Poll | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  pollId: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @ManyToOne(() => Member, { eager: true, nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'adoptedById',
+    foreignKeyConstraintName: 'FK_smart_menu_plans_adopted_by',
+  })
+  adoptedBy: Member | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  adoptedById: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  adoptedAt: Date | null;
+
+  @OneToMany(() => SmartMenuCandidate, (candidate) => candidate.plan)
+  candidates: SmartMenuCandidate[];
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('smart_menu_candidates')
+@Check(
+  'CHK_smart_menu_candidates_meal',
+  `"mealType" IN ('breakfast', 'lunch', 'dinner')`,
+)
+@Check(
+  'CHK_smart_menu_candidates_order',
+  `"sortOrder" >= 0 AND "sortOrder" < 12`,
+)
+@Index('UQ_smart_menu_candidates_plan_order', ['planId', 'sortOrder'], {
+  unique: true,
+})
+@Index('UQ_smart_menu_candidates_plan_dish', ['planId', 'dishId'], {
+  unique: true,
+})
+@Index('UQ_smart_menu_candidates_poll_option', ['pollOptionId'], {
+  unique: true,
+  where: '"pollOptionId" IS NOT NULL',
+})
+@Index('IDX_smart_menu_candidates_household_plan', [
+  'householdId',
+  'planId',
+  'sortOrder',
+])
+export class SmartMenuCandidate {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => SmartMenuPlan, (plan) => plan.candidates, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({
+    name: 'planId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_plan',
+  })
+  plan: SmartMenuPlan;
+
+  @Column('uuid')
+  planId: string;
+
+  @ManyToOne(() => Dish, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'dishId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_dish',
+  })
+  dish: Dish;
+
+  @Column('uuid')
+  dishId: string;
+
+  @ManyToOne(() => DishRecipeVariant, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'recipeVariantId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_variant',
+  })
+  recipeVariant: DishRecipeVariant;
+
+  @Column('uuid')
+  recipeVariantId: string;
+
+  @Column({ type: 'date' })
+  targetDate: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'dinner' })
+  mealType: MealType;
+
+  @Column({ type: 'int' })
+  score: number;
+
+  @Column({ type: 'jsonb', default: [] })
+  reasons: string[];
+
+  @Column({ type: 'jsonb', default: [] })
+  expiringIngredients: {
+    ingredientId: string;
+    name: string;
+    expiresOn: string;
+    daysRemaining: number;
+  }[];
+
+  @ManyToOne(() => PollOption, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'pollOptionId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_poll_option',
+  })
+  pollOption: PollOption | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  pollOptionId: string | null;
+
+  @ManyToOne(() => Menu, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({
+    name: 'adoptedMenuId',
+    foreignKeyConstraintName: 'FK_smart_menu_candidates_adopted_menu',
+  })
+  adoptedMenu: Menu | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  adoptedMenuId: string | null;
+
+  @Column({ type: 'int' })
+  sortOrder: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
 export const ALL_ENTITIES = [
   Account,
   Household,
@@ -5349,8 +7342,10 @@ export const ALL_ENTITIES = [
   MaintenanceRecord,
   ShoppingItem,
   InventoryItem,
+  InventoryBatch,
   MaintenanceConsumable,
   InventoryTransaction,
+  InventoryBatchMovement,
   PointsAccount,
   PointsLedger,
   Reward,
@@ -5363,6 +7358,26 @@ export const ALL_ENTITIES = [
   TravelOperation,
   KnowledgeArticle,
   KnowledgeArticleRevision,
+  FamilyMemory,
+  FamilyMemoryPhoto,
+  FamilyMemoryOperation,
   BackupPolicy,
   BackupRun,
+  AgentSetting,
+  AgentRoutine,
+  AgentRoutineItem,
+  AgentMemberProfile,
+  AgentMemberChannel,
+  AgentChannelPairing,
+  AgentConversation,
+  AgentMessage,
+  AgentRun,
+  AgentToolEvent,
+  AgentMemoryItem,
+  AgentMemoryEvent,
+  AgentProposalGroup,
+  AgentProposalGroupEvent,
+  AgentActionProposal,
+  SmartMenuPlan,
+  SmartMenuCandidate,
 ];

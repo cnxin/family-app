@@ -64,6 +64,9 @@ const db = new Client({
   database: process.env.DB_NAME || 'family_app',
 });
 const cleanupFiles = [];
+const uploadDir = process.env.UPLOAD_DIR
+  ? resolve(process.env.UPLOAD_DIR)
+  : resolve(process.cwd(), 'uploads');
 
 await db.connect();
 
@@ -193,8 +196,8 @@ try {
 
   const legacyDocumentId = randomUUID();
   const legacyFileName = `legacy-asset-${randomUUID()}.png`;
-  const legacyPath = resolve(process.cwd(), 'uploads', legacyFileName);
-  await mkdir(resolve(process.cwd(), 'uploads'), { recursive: true });
+  const legacyPath = resolve(uploadDir, legacyFileName);
+  await mkdir(uploadDir, { recursive: true });
   await writeFile(legacyPath, 'legacy-private-asset-document');
   cleanupFiles.push(legacyPath);
   await db.query(
@@ -320,6 +323,14 @@ try {
     restockQuantity: 2,
   });
   assert(filterInventory.status === 201, '可以建立资产耗材对应库存项');
+  const filterBatch = await request('/inventory-batches', token, 'POST', {
+    inventoryItemId: filterInventory.data.id,
+    quantity: 1,
+    receivedOn: performedDate,
+    expiresOn: addUtcDays(performedDate, 7),
+    idempotencyKey: `maintenance-batch-${randomUUID()}`,
+  });
+  assert(filterBatch.status === 201, '资产耗材库存可以登记为食品批次');
   const consumable = await request(
     `/maintenance-plans/${plan.data.id}/consumables`,
     token,
@@ -472,6 +483,17 @@ try {
       Number(completions[0].data.transactions[0].quantityAfter) === 0,
     '并发完成维护只追加一条记录、整组扣库一次并推进周期',
   );
+  const batchAfterMaintenance = await request(
+    `/inventory-batches?inventoryItemId=${filterInventory.data.id}`,
+    token,
+  );
+  assert(
+    Number(
+      batchAfterMaintenance.data.find((batch) => batch.id === filterBatch.data.id)
+        ?.quantity,
+    ) === 0,
+    '维护扣库同步消耗已登记的批次并保留批次流水',
+  );
 
   const reversedConsumption = await request(
     `/inventory-transactions/${completions[0].data.transactions[0].id}/reverse`,
@@ -482,6 +504,18 @@ try {
     reversedConsumption.status === 201 &&
       Number(reversedConsumption.data.transactions[0].quantityAfter) === 2,
     '维护扣库沿用最近库存流水的整组反向撤销',
+  );
+  const batchAfterMaintenanceReversal = await request(
+    `/inventory-batches?inventoryItemId=${filterInventory.data.id}`,
+    token,
+  );
+  assert(
+    Number(
+      batchAfterMaintenanceReversal.data.find(
+        (batch) => batch.id === filterBatch.data.id,
+      )?.quantity,
+    ) === 1,
+    '撤销维护扣库通过反向批次流水恢复批次余量',
   );
 
   const reminderAfterCompletion = await request('/reminders?status=all', token);

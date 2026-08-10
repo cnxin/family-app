@@ -3,9 +3,27 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { api, uploadAssetDocument } from './api';
+import { api, uploadAssetDocument, uploadMemoryPhoto } from './api';
 import type {
   AccountProfile,
+  AgentConversation,
+  AgentConversationDetail,
+  AgentMemoryClearResult,
+  AgentMemoryForgetResult,
+  AgentMemoryItem,
+  AgentMemoryScope,
+  AgentMemoryStatus,
+  AgentMemberProfile,
+  AgentPageContext,
+  AgentRun,
+  AgentSettings,
+  AgentStatus,
+  AgentActionProposal,
+  AgentProposalGroup,
+  AgentProposalGroupStatus,
+  AgentChannelPairing,
+  AgentMemberChannel,
+  CreateAgentMemoryCandidateDto,
   AppNotification,
   AssetCategory,
   AssetDocument,
@@ -50,8 +68,12 @@ import type {
   MediaSourceConfig,
   InventoryCategory,
   InventoryActionResult,
+  InventoryBatch,
   InventoryItem,
   InventoryTransaction,
+  FamilyMemory,
+  FamilyMemoryCategory,
+  FamilyMemorySourceModule,
   KnowledgeArticle,
   KnowledgeArticleCategory,
   KnowledgeArticleRevision,
@@ -89,6 +111,7 @@ import type {
   ReminderStatus,
   ShoppingItem,
   ShoppingInventoryPreview,
+  SmartMenuPlan,
   TaskInstanceStatus,
   TaskOccurrence,
   TaskRecurrence,
@@ -102,6 +125,442 @@ import type {
   VisitStatus,
 } from './types';
 
+export function useAgentStatus(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-status'],
+    queryFn: () => api<AgentStatus>('/agent/status'),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useAgentSettings(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-settings'],
+    queryFn: () => api<AgentSettings>('/agent/settings'),
+    enabled,
+  });
+}
+
+export function useUpdateAgentSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<Omit<AgentSettings, 'version' | 'updatedAt' | 'proposalToolsEnabled'>> & {
+      expectedVersion: number;
+    }) => api<AgentSettings>('/agent/settings', { method: 'PUT', body: input }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent-settings'] });
+      void qc.invalidateQueries({ queryKey: ['agent-status'] });
+    },
+  });
+}
+
+export function useAgentProfile(enabled = true) {
+  return useQuery({
+    queryKey: ['agent', 'profile'],
+    queryFn: () => api<AgentMemberProfile>('/agent/profile'),
+    enabled,
+  });
+}
+
+export function useUpdateAgentProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: Partial<
+        Pick<
+          AgentMemberProfile,
+          | 'enabled'
+          | 'assistantName'
+          | 'responseStyle'
+          | 'memoryEnabled'
+          | 'memorySuggestionEnabled'
+          | 'proactiveRoutinesEnabled'
+        >
+      > & { expectedVersion: number },
+    ) => api<AgentMemberProfile>('/agent/profile', { method: 'PATCH', body: input }),
+    onSuccess: (profile) => {
+      qc.setQueryData(['agent', 'profile'], profile);
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] });
+    },
+  });
+}
+
+export function useAgentMemories(
+  status?: AgentMemoryStatus,
+  scope?: AgentMemoryScope,
+  enabled = true,
+) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (scope) params.set('scope', scope);
+  const query = params.toString();
+  return useQuery({
+    queryKey: ['agent', 'memories', { status, scope }],
+    queryFn: () =>
+      api<AgentMemoryItem[]>(`/agent/memories${query ? `?${query}` : ''}`),
+    enabled,
+  });
+}
+
+export function useCreateAgentMemoryCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateAgentMemoryCandidateDto) =>
+      api<AgentMemoryItem>('/agent/memories/candidates', {
+        method: 'POST',
+        body: input,
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useConfirmAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemoryItem>(`/agent/memories/${input.id}/confirm`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useShareAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemoryItem>(`/agent/memories/${input.id}/share`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useCorrectAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      content: string;
+      expectedVersion: number;
+    }) =>
+      api<AgentMemoryItem>(`/agent/memories/${input.id}`, {
+        method: 'PATCH',
+        body: {
+          content: input.content,
+          expectedVersion: input.expectedVersion,
+        },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useForgetAgentMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemoryForgetResult>(`/agent/memories/${input.id}`, {
+        method: 'DELETE',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useClearAgentMemories() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api<AgentMemoryClearResult>('/agent/memories', { method: 'DELETE' }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent', 'memories'] }),
+  });
+}
+
+export function useAgentConversations(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-conversations'],
+    queryFn: () => api<AgentConversation[]>('/agent/conversations'),
+    enabled,
+  });
+}
+
+export function useAgentConversation(id: string | null) {
+  return useQuery({
+    queryKey: ['agent-conversation', id],
+    queryFn: () => api<AgentConversationDetail>(`/agent/conversations/${id}`),
+    enabled: Boolean(id),
+    refetchInterval: (query) => {
+      const detail = query.state.data as AgentConversationDetail | undefined;
+      return detail?.runs.some((run) => run.status === 'queued' || run.status === 'running')
+        ? 700
+        : false;
+    },
+  });
+}
+
+export function useCreateAgentConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (title?: string) =>
+      api<AgentConversation>('/agent/conversations', {
+        method: 'POST',
+        body: title ? { title } : {},
+      }),
+    onSuccess: (created) => {
+      qc.setQueryData<AgentConversation[]>(['agent-conversations'], (current) => [
+        created,
+        ...(current ?? []).filter((item) => item.id !== created.id),
+      ]);
+      void qc.invalidateQueries({ queryKey: ['agent-conversations'] });
+    },
+  });
+}
+
+export function useSendAgentMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      conversationId: string;
+      message: string;
+      clientRequestId?: string;
+      pageContext?: AgentPageContext;
+    }) =>
+      api<AgentRun>(`/agent/conversations/${input.conversationId}/messages`, {
+        method: 'POST',
+        body: {
+          message: input.message,
+          clientRequestId:
+            input.clientRequestId ?? operationKey(`agent:message:${input.conversationId}`),
+          ...(input.pageContext ? { pageContext: input.pageContext } : {}),
+        },
+      }),
+    onSuccess: (_run, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-conversations'] });
+      void qc.invalidateQueries({ queryKey: ['agent-conversation', input.conversationId] });
+    },
+  });
+}
+
+export function useCancelAgentRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { runId: string; conversationId: string }) =>
+      api<AgentRun>(`/agent/runs/${input.runId}/cancel`, { method: 'POST' }),
+    onSuccess: (_run, input) =>
+      void qc.invalidateQueries({ queryKey: ['agent-conversation', input.conversationId] }),
+  });
+}
+
+export function useRetryAgentRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      runId: string;
+      conversationId: string;
+      clientRequestId?: string;
+    }) =>
+      api<AgentRun>(`/agent/runs/${input.runId}/retry`, {
+        method: 'POST',
+        body: {
+          clientRequestId:
+            input.clientRequestId ?? operationKey(`agent:retry:${input.runId}`),
+        },
+      }),
+    onSuccess: (_run, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-conversations'] });
+      void qc.invalidateQueries({
+        queryKey: ['agent-conversation', input.conversationId],
+      });
+    },
+  });
+}
+
+export function useArchiveAgentConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; archived: true }>(`/agent/conversations/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-conversations'] }),
+  });
+}
+
+export function useConfirmAgentProposal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      conversationId: string;
+      expectedVersion: number;
+      clientRequestId?: string;
+    }) =>
+      api<AgentActionProposal>(`/agent/proposals/${input.id}/confirm`, {
+        method: 'POST',
+        body: {
+          expectedVersion: input.expectedVersion,
+          clientRequestId:
+            input.clientRequestId ?? operationKey(`agent:proposal:${input.id}`),
+        },
+      }),
+    onSettled: (_data, _error, input) =>
+      void qc.invalidateQueries({
+        queryKey: ['agent-conversation', input.conversationId],
+      }),
+  });
+}
+
+export function useRejectAgentProposal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      conversationId: string;
+      expectedVersion: number;
+    }) =>
+      api<AgentActionProposal>(`/agent/proposals/${input.id}/reject`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSettled: (_data, _error, input) =>
+      void qc.invalidateQueries({
+        queryKey: ['agent-conversation', input.conversationId],
+      }),
+  });
+}
+
+export function useAgentProposalGroups(
+  status?: AgentProposalGroupStatus,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['agent-proposal-groups', status ?? 'all'],
+    queryFn: () =>
+      api<AgentProposalGroup[]>(
+        `/agent/proposal-groups${status ? `?status=${status}` : ''}`,
+      ),
+    enabled,
+    refetchInterval: enabled ? 2_000 : false,
+  });
+}
+
+export function useAgentProposalGroup(id?: string) {
+  return useQuery({
+    queryKey: ['agent-proposal-group', id],
+    queryFn: () => api<AgentProposalGroup>(`/agent/proposal-groups/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useConfirmAgentProposalGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentProposalGroup>(`/agent/proposal-groups/${input.id}/confirm`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSettled: (_data, _error, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-proposal-groups'] });
+      void qc.invalidateQueries({
+        queryKey: ['agent-proposal-group', input.id],
+      });
+      void qc.invalidateQueries({ queryKey: ['agent-conversation'] });
+    },
+  });
+}
+
+export function useRejectAgentProposalGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentProposalGroup>(`/agent/proposal-groups/${input.id}/reject`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSettled: (_data, _error, input) => {
+      void qc.invalidateQueries({ queryKey: ['agent-proposal-groups'] });
+      void qc.invalidateQueries({
+        queryKey: ['agent-proposal-group', input.id],
+      });
+      void qc.invalidateQueries({ queryKey: ['agent-conversation'] });
+    },
+  });
+}
+
+export function useAgentChannels(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-channels'],
+    queryFn: () => api<AgentMemberChannel[]>('/agent/channels'),
+    enabled,
+  });
+}
+
+export function useAgentChannelPairings(enabled = true) {
+  return useQuery({
+    queryKey: ['agent-channel-pairings'],
+    queryFn: () => api<AgentChannelPairing[]>('/agent/channel-pairings'),
+    enabled,
+  });
+}
+
+export function useCreateAgentChannelPairing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      memberId: string;
+      platform: string;
+      expiresInMinutes?: number;
+      idempotencyKey?: string;
+    }) =>
+      api<AgentChannelPairing>('/agent/channel-pairings', {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey:
+            input.idempotencyKey ?? operationKey('agent:channel-pairing'),
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent-channel-pairings'] });
+    },
+  });
+}
+
+export function useRevokeAgentChannelPairing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<AgentChannelPairing>(`/agent/channel-pairings/${id}/revoke`, {
+        method: 'POST',
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent-channel-pairings'] }),
+  });
+}
+
+export function useRevokeAgentChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; expectedVersion: number }) =>
+      api<AgentMemberChannel>(`/agent/channels/${input.id}/revoke`, {
+        method: 'POST',
+        body: { expectedVersion: input.expectedVersion },
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['agent-channels'] }),
+  });
+}
+
 export interface KnowledgeArticleInput {
   title: string;
   category: KnowledgeArticleCategory;
@@ -114,6 +573,110 @@ export interface KnowledgeArticleInput {
 
 function operationKey(prefix: string) {
   return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+export interface FamilyMemoryInput {
+  title: string;
+  happenedOn: string;
+  category: FamilyMemoryCategory;
+  story?: string | null;
+  tags?: string[];
+  sourceModule?: FamilyMemorySourceModule | null;
+  sourceId?: string | null;
+}
+
+export function useMemories(
+  status: 'active' | 'archived' | 'all' = 'active',
+  category: FamilyMemoryCategory | 'all' = 'all',
+  q = '',
+  limit = 100,
+) {
+  const query = [
+    `status=${status}`,
+    ...(category === 'all' ? [] : [`category=${category}`]),
+    ...(q.trim() ? [`q=${encodeURIComponent(q.trim())}`] : []),
+    `limit=${limit}`,
+  ].join('&');
+  return useQuery({
+    queryKey: ['memories', status, category, q.trim(), limit],
+    queryFn: () => api<FamilyMemory[]>(`/memories?${query}`),
+  });
+}
+
+function invalidateMemories(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['memories'] });
+  void qc.invalidateQueries({ queryKey: ['activities'] });
+}
+
+export function useCreateMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FamilyMemoryInput) =>
+      api<FamilyMemory>('/memories', {
+        method: 'POST',
+        body: { ...input, idempotencyKey: operationKey('memory:create') },
+      }),
+    onSuccess: () => invalidateMemories(qc),
+  });
+}
+
+export function useUpdateMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedVersion, ...input }: FamilyMemoryInput & {
+      id: string;
+      expectedVersion: number;
+    }) =>
+      api<FamilyMemory>(`/memories/${id}`, {
+        method: 'PATCH',
+        body: {
+          ...input,
+          expectedVersion,
+          idempotencyKey: operationKey(`memory:update:${id}`),
+        },
+      }),
+    onSuccess: () => invalidateMemories(qc),
+  });
+}
+
+function useMemoryVersionMutation(operation: 'archive' | 'restore') {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedVersion }: { id: string; expectedVersion: number }) =>
+      api<FamilyMemory>(`/memories/${id}/${operation}`, {
+        method: 'POST',
+        body: {
+          expectedVersion,
+          idempotencyKey: operationKey(`memory:${operation}:${id}`),
+        },
+      }),
+    onSuccess: () => invalidateMemories(qc),
+  });
+}
+
+export function useArchiveMemory() {
+  return useMemoryVersionMutation('archive');
+}
+
+export function useRestoreMemory() {
+  return useMemoryVersionMutation('restore');
+}
+
+export function useUploadMemoryPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      memoryId: string;
+      caption: string;
+      asset: {
+        uri: string;
+        file?: Blob | null;
+        fileName?: string | null;
+        mimeType?: string | null;
+      };
+    }) => uploadMemoryPhoto(input.memoryId, input.caption, input.asset),
+    onSuccess: () => invalidateMemories(qc),
+  });
 }
 
 export function useKnowledgeArticles(
@@ -2608,12 +3171,19 @@ export function useShoppingInventoryPreview(
 export function useConfirmShoppingReceipt() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { shoppingItemId: string; inventoryItemId?: string }) =>
+    mutationFn: (input: {
+      shoppingItemId: string;
+      inventoryItemId?: string;
+      batch?: InventoryBatchDatesInput;
+    }) =>
       api<InventoryActionResult>(
         `/shopping-items/${input.shoppingItemId}/confirm-stock`,
         {
           method: 'POST',
-          body: { inventoryItemId: input.inventoryItemId },
+          body: {
+            inventoryItemId: input.inventoryItemId,
+            batch: input.batch,
+          },
         },
       ),
     onSuccess: (_, input) => {
@@ -2623,6 +3193,8 @@ export function useConfirmShoppingReceipt() {
       });
       void qc.invalidateQueries({ queryKey: ['inventory'] });
       void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
     },
   });
 }
@@ -2664,6 +3236,8 @@ export function useUpsertInventoryItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['inventory'] });
       void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
     },
   });
 }
@@ -2699,6 +3273,122 @@ export function useReverseInventoryTransaction() {
       void qc.invalidateQueries({ queryKey: ['inventory-transactions'] });
       void qc.invalidateQueries({ queryKey: ['shopping'] });
       void qc.invalidateQueries({ queryKey: ['menu-inventory-preview'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+    },
+  });
+}
+
+export interface InventoryBatchDatesInput {
+  receivedOn?: string | null;
+  productionDate?: string | null;
+  expiresOn?: string | null;
+  openedOn?: string | null;
+}
+
+export function useInventoryBatches(
+  status: 'all' | 'active' | 'expiring' | 'expired' = 'all',
+  days = 7,
+) {
+  return useQuery({
+    queryKey: ['inventory-batches', status, days],
+    queryFn: () =>
+      api<InventoryBatch[]>(`/inventory-batches?status=${status}&days=${days}`),
+  });
+}
+
+export function useCreateInventoryBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: InventoryBatchDatesInput & {
+        inventoryItemId: string;
+        quantity: number;
+      },
+    ) =>
+      api<InventoryBatch>('/inventory-batches', {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey: operationKey(`inventory-batch:${input.inventoryItemId}`),
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+    },
+  });
+}
+
+export function useUpdateInventoryBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: InventoryBatchDatesInput & { id: string; expectedVersion: number }) =>
+      api<InventoryBatch>(`/inventory-batches/${id}`, {
+        method: 'PATCH',
+        body,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['inventory-batches'] });
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+    },
+  });
+}
+
+export function useSmartMenuPlans() {
+  return useQuery({
+    queryKey: ['smart-menu-plans'],
+    queryFn: () => api<SmartMenuPlan[]>('/smart-menu-plans'),
+  });
+}
+
+export function useCreateSmartMenuPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (startsOn: string) =>
+      api<SmartMenuPlan>('/smart-menu-plans', {
+        method: 'POST',
+        body: {
+          startsOn,
+          idempotencyKey: operationKey(`smart-menu:${startsOn}`),
+        },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] }),
+  });
+}
+
+export function useCreateSmartMenuPoll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, closesAt }: { id: string; closesAt?: string | null }) =>
+      api<SmartMenuPlan>(`/smart-menu-plans/${id}/poll`, {
+        method: 'POST',
+        body: { closesAt },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+      void qc.invalidateQueries({ queryKey: ['polls'] });
+    },
+  });
+}
+
+export function useAdoptSmartMenuPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<SmartMenuPlan>(`/smart-menu-plans/${id}/adopt`, {
+        method: 'POST',
+        body: { idempotencyKey: operationKey(`smart-menu-adopt:${id}`) },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['smart-menu-plans'] });
+      void qc.invalidateQueries({ queryKey: ['menus'] });
+      void qc.invalidateQueries({ queryKey: ['menu-date-counts'] });
     },
   });
 }

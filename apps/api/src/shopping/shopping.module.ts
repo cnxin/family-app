@@ -21,7 +21,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
@@ -41,7 +41,7 @@ class ShoppingDateDto {
   date: string;
 }
 
-class ManualItemDto {
+export class ManualItemDto {
   @IsISO8601()
   date: string;
 
@@ -264,13 +264,26 @@ export class ShoppingService {
   }
 
   async addManual(dto: ManualItemDto, householdId: string) {
-    return this.items.save(
-      this.items.create({
+    return this.addManualWithinTransaction(
+      dto,
+      householdId,
+      this.dataSource.manager,
+    );
+  }
+
+  async addManualWithinTransaction(
+    dto: ManualItemDto,
+    householdId: string,
+    manager: EntityManager,
+  ) {
+    const items = manager.getRepository(ShoppingItem);
+    return items.save(
+      items.create({
         householdId,
         date: dto.date,
-        customName: dto.customName,
+        customName: dto.customName.trim(),
         totalQty: dto.totalQty != null ? String(dto.totalQty) : null,
-        unit: dto.unit ?? null,
+        unit: dto.unit?.trim() || null,
         source: 'manual',
       }),
     );
@@ -342,5 +355,6 @@ export class ShoppingController {
   imports: [TypeOrmModule.forFeature([ShoppingItem, InventoryTransaction])],
   controllers: [ShoppingController],
   providers: [ShoppingService],
+  exports: [ShoppingService],
 })
 export class ShoppingModule {}

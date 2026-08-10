@@ -1,9 +1,17 @@
 import * as Haptics from 'expo-haptics';
-import { Minus, PackageCheck, Plus, Trash2, X } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import {
+  Check,
+  Minus,
+  PackageCheck,
+  PackageOpen,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,10 +23,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import { InventoryPanel } from '../../components/inventory-panel';
+import { SmartMenuPanel } from '../../components/smart-menu-panel';
 import {
+  AdaptiveDialog,
   Card,
   ConfirmDialog,
   EmptyState,
+  IconButton,
   PressableScale,
   SectionHeader,
   Segmented,
@@ -38,6 +49,13 @@ import type { ShoppingItem } from '../../lib/types';
 
 function quantityLabel(value: string | null) {
   return value == null ? '0' : String(Number(value));
+}
+
+function validOptionalDate(value: string) {
+  if (!value.trim()) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return false;
+  const date = new Date(`${value.trim()}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value.trim();
 }
 
 function ItemRow({
@@ -184,6 +202,10 @@ function StockConfirmDialog({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [trackBatch, setTrackBatch] = useState(false);
+  const [productionDate, setProductionDate] = useState('');
+  const [expiresOn, setExpiresOn] = useState('');
+  const [openedOn, setOpenedOn] = useState('');
   const automaticInventoryId =
     item.inventoryItemId ??
     inventory?.find(
@@ -202,19 +224,28 @@ function StockConfirmDialog({
   const data = preview.data;
   const name = item.ingredient?.name ?? item.customName ?? '这件物品';
   const selected = data?.selectedInventoryItem;
+  const batchDatesValid = [productionDate, expiresOn, openedOn].every(validOptionalDate);
   const submit = async () => {
-    if (!data?.canConfirm || !selected) return;
+    if (!data?.canConfirm || !selected || !batchDatesValid) return;
     setError(null);
     try {
       const result = await confirm.mutateAsync({
         shoppingItemId: item.id,
         inventoryItemId: selected.id,
+        batch: trackBatch
+          ? {
+              receivedOn: todayStr(),
+              productionDate: productionDate.trim() || null,
+              expiresOn: expiresOn.trim() || null,
+              openedOn: openedOn.trim() || null,
+            }
+          : undefined,
       });
       const transaction = result.transactions[0];
       onSuccess(
         result.alreadyConfirmed
           ? `「${name}」已经确认入库，没有重复增加库存`
-          : `已入库 ${Number(transaction.delta)} ${transaction.unit}，当前 ${Number(transaction.quantityAfter)} ${transaction.unit}`,
+          : `已入库 ${Number(transaction.delta)} ${transaction.unit}，当前 ${Number(transaction.quantityAfter)} ${transaction.unit}${trackBatch ? '，并记录采购批次' : ''}`,
       );
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (submitError) {
@@ -223,21 +254,12 @@ function StockConfirmDialog({
   };
 
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible>
-      <View style={styles.stockOverlay}>
-        <Pressable
-          accessibilityLabel="关闭入库确认"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          accessibilityViewIsModal
-          style={[
-            styles.stockDialog,
-            { backgroundColor: c.card, borderColor: c.separator },
-          ]}
-        >
+    <AdaptiveDialog
+      accessibilityLabel={`确认${name}入库`}
+      maxWidth={480}
+      onClose={onClose}
+      visible
+    >
           <View style={styles.stockDialogHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.title2, { color: c.label }]}>确认「{name}」入库</Text>
@@ -245,14 +267,13 @@ function StockConfirmDialog({
                 采购数量 {quantityLabel(item.totalQty)} {item.unit ?? ''}
               </Text>
             </View>
-            <PressableScale
+            <IconButton
               accessibilityLabel="关闭"
-              haptic={false}
+              backgroundColor="transparent"
+              color={c.secondaryLabel}
+              icon={X}
               onPress={onClose}
-              style={styles.stockClose}
-            >
-              <X color={c.secondaryLabel} size={20} />
-            </PressableScale>
+            />
           </View>
 
           {preview.isLoading ? <ActivityIndicator style={{ marginVertical: 28 }} /> : null}
@@ -261,6 +282,7 @@ function StockConfirmDialog({
             <ScrollView
               contentContainerStyle={styles.stockDialogContent}
               showsVerticalScrollIndicator={false}
+              style={styles.stockDialogScroll}
             >
               <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>库存项</Text>
               {data.candidates.length ? (
@@ -312,6 +334,65 @@ function StockConfirmDialog({
                 </View>
               ) : null}
 
+              {selected ? (
+                <>
+                  <Pressable
+                    accessibilityLabel="记录采购批次与保质期"
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: trackBatch }}
+                    onPress={() => setTrackBatch((value) => !value)}
+                    style={[styles.batchToggle, { backgroundColor: c.fill }]}
+                  >
+                    <View
+                      style={[
+                        styles.batchCheckbox,
+                        {
+                          backgroundColor: trackBatch ? c.green : c.card,
+                          borderColor: trackBatch ? c.green : c.separator,
+                        },
+                      ]}
+                    >
+                      {trackBatch ? <Check color="#FFFFFF" size={15} /> : null}
+                    </View>
+                    <PackageOpen color={trackBatch ? c.green : c.secondaryLabel} size={19} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>记录采购批次</Text>
+                      <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+                        用于临期提醒和先进先出扣库
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {trackBatch ? (
+                    <View style={styles.batchDateFields}>
+                      {[
+                        ['生产日期（可选）', '采购批次生产日期', productionDate, setProductionDate],
+                        ['到期日期（可选）', '采购批次到期日期', expiresOn, setExpiresOn],
+                        ['开封日期（可选）', '采购批次开封日期', openedOn, setOpenedOn],
+                      ].map(([label, accessibilityLabel, value, setter]) => (
+                        <View key={label as string}>
+                          <Text style={[t.footnote, styles.batchDateLabel, { color: c.secondaryLabel }]}>
+                            {label as string}
+                          </Text>
+                          <TextInput
+                            accessibilityLabel={accessibilityLabel as string}
+                            autoCapitalize="none"
+                            maxLength={10}
+                            onChangeText={setter as (value: string) => void}
+                            placeholder="YYYY-MM-DD"
+                            placeholderTextColor={c.tertiaryLabel}
+                            style={[styles.batchDateInput, t.body, { backgroundColor: c.fill, color: c.label }]}
+                            value={value as string}
+                          />
+                        </View>
+                      ))}
+                      {!batchDatesValid ? (
+                        <Text style={[t.footnote, { color: c.red }]}>请使用有效的 YYYY-MM-DD 日期</Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
+
               {error ?? (preview.error instanceof Error ? preview.error.message : null) ? (
                 <Text style={[t.footnote, { color: c.red }]}>
                   {error ?? (preview.error instanceof Error ? preview.error.message : '预览失败')}
@@ -331,11 +412,11 @@ function StockConfirmDialog({
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              disabled={!data?.canConfirm || confirm.isPending}
+              disabled={!data?.canConfirm || !batchDatesValid || confirm.isPending}
               onPress={() => void submit()}
               style={[
                 styles.stockAction,
-                { backgroundColor: data?.canConfirm ? c.green : c.fillStrong },
+                { backgroundColor: data?.canConfirm && batchDatesValid ? c.green : c.fillStrong },
               ]}
             >
               {confirm.isPending ? (
@@ -345,16 +426,23 @@ function StockConfirmDialog({
               )}
             </Pressable>
           </View>
-        </View>
-      </View>
-    </Modal>
+    </AdaptiveDialog>
   );
 }
 
 export default function ShoppingScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
-  const [view, setView] = useState<'shopping' | 'inventory'>('shopping');
+  const params = useLocalSearchParams<{
+    create?: string | string[];
+    view?: string | string[];
+  }>();
+  const createParam = Array.isArray(params.create) ? params.create[0] : params.create;
+  const viewParam = Array.isArray(params.view) ? params.view[0] : params.view;
+  const shoppingScroll = useRef<ScrollView>(null);
+  const [view, setView] = useState<'shopping' | 'inventory' | 'smart-menu'>(
+    viewParam === 'smart-menu' ? 'smart-menu' : 'shopping',
+  );
   const [date, setDate] = useState(todayStr());
   const { data: items, isLoading } = useShoppingList(date);
   const addManual = useAddManualShoppingItem();
@@ -369,6 +457,14 @@ export default function ShoppingScreen() {
     error: boolean;
   } | null>(null);
   const [stockMessage, setStockMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (createParam === '1') setView('shopping');
+  }, [createParam]);
+
+  useEffect(() => {
+    if (viewParam === 'smart-menu') setView('smart-menu');
+  }, [viewParam]);
 
   const groups = useMemo(() => {
     const map = new Map<string, ShoppingItem[]>();
@@ -443,6 +539,7 @@ export default function ShoppingScreen() {
             options={[
               { label: '购物清单', value: 'shopping' as const },
               { label: '家庭库存', value: 'inventory' as const },
+              { label: '智能菜单', value: 'smart-menu' as const },
             ]}
             value={view}
           />
@@ -456,6 +553,10 @@ export default function ShoppingScreen() {
 
             <ScrollView
               contentContainerStyle={styles.scrollContent}
+              onContentSizeChange={() => {
+                if (createParam === '1') shoppingScroll.current?.scrollToEnd({ animated: true });
+              }}
+              ref={shoppingScroll}
               showsVerticalScrollIndicator={false}
             >
         {isLoading ? <ActivityIndicator style={{ marginTop: 48 }} /> : null}
@@ -494,7 +595,9 @@ export default function ShoppingScreen() {
         ) : null}
 
         <SectionHeader title="手动添加" />
-        <Card style={[styles.manualForm, desktop && styles.manualFormDesktop]}>
+        <Card
+          style={[styles.manualForm, desktop && styles.manualFormDesktop]}
+        >
           <TextInput
             accessibilityLabel="物品名称"
             style={[
@@ -590,8 +693,10 @@ export default function ShoppingScreen() {
         ) : null}
             </ScrollView>
           </>
-        ) : (
+        ) : view === 'inventory' ? (
           <InventoryPanel />
+        ) : (
+          <SmartMenuPanel />
         )}
       </PageContainer>
 
@@ -635,7 +740,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, paddingTop: 8 },
   pageDesktop: { paddingTop: 22 },
   header: { paddingTop: 0 },
-  viewControl: { width: 300, maxWidth: '100%', marginTop: 14 },
+  viewControl: { width: 390, maxWidth: '100%', marginTop: 14 },
   dateControl: { marginTop: 14 },
   scrollContent: { paddingBottom: 32 },
   itemRow: {
@@ -661,7 +766,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stockButton: {
-    minHeight: 34,
+    minHeight: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 9,
     flexDirection: 'row',
@@ -683,21 +788,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stockOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.38)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  stockDialog: {
-    width: '100%',
-    maxWidth: 480,
-    maxHeight: '88%',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
   stockDialogHeader: {
     minHeight: 72,
     paddingHorizontal: 18,
@@ -705,7 +795,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  stockClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  stockDialogScroll: { flexShrink: 1 },
   stockDialogContent: { paddingHorizontal: 18, paddingBottom: 16, gap: 12 },
   stockCandidates: { gap: 8 },
   stockCandidate: {
@@ -719,6 +809,30 @@ const styles = StyleSheet.create({
   },
   stockNotice: { borderRadius: radius.sm, padding: 12 },
   stockForecast: { borderRadius: radius.sm, padding: 13 },
+  batchToggle: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 58,
+    padding: 11,
+  },
+  batchCheckbox: {
+    alignItems: 'center',
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  batchDateFields: { gap: 3 },
+  batchDateLabel: { fontWeight: '700', marginBottom: 6, marginTop: 7 },
+  batchDateInput: {
+    borderRadius: radius.sm,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
   stockActions: {
     flexDirection: 'row',
     gap: 10,
@@ -737,7 +851,7 @@ const styles = StyleSheet.create({
   manualName: {
     flex: 1,
     minWidth: 0,
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 0,
@@ -748,25 +862,25 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   stepper: {
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  stepButton: { width: 36, height: 38, alignItems: 'center', justifyContent: 'center' },
+  stepButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   quantityInput: { width: 46, textAlign: 'center', paddingVertical: 0 },
   unitInput: {
     width: 70,
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 0,
     textAlign: 'center',
   },
   addBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',

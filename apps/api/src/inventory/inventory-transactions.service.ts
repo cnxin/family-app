@@ -10,11 +10,16 @@ import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import {
   InventoryItem,
+  InventoryBatch,
   InventoryTransaction,
   Menu,
   MenuItem,
   ShoppingItem,
 } from '../entities';
+import {
+  BatchDatesInput,
+  InventoryBatchesService,
+} from './inventory-batches.service';
 
 const MAX_QUANTITY = 99_999_999.99;
 
@@ -46,6 +51,10 @@ type MenuInventoryPreviewRow = MenuRequirement & {
   quantityBefore: number | null;
   quantityAfter: number | null;
   availableUnits: string[];
+  batchAllocations: ReturnType<
+    InventoryBatchesService['previewAllocations']
+  >['allocations'];
+  untrackedQuantity: number;
 };
 
 @Injectable()
@@ -54,6 +63,7 @@ export class InventoryTransactionsService {
     @InjectRepository(InventoryTransaction)
     private readonly transactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
+    private readonly batches: InventoryBatchesService,
   ) {}
 
   createTransaction(
@@ -185,6 +195,20 @@ export class InventoryTransactionsService {
     });
   }
 
+  applyBatchConsumption(
+    manager: EntityManager,
+    input: {
+      item: InventoryItem;
+      quantity: number;
+      transaction: InventoryTransaction;
+      actor: JwtUser;
+      sourceType: 'maintenance_record';
+      sourceId: string;
+    },
+  ) {
+    return this.batches.applyConsumption(manager, input);
+  }
+
   async shoppingPreview(
     shoppingItemId: string,
     householdId: string,
@@ -270,6 +294,7 @@ export class InventoryTransactionsService {
   async confirmShoppingReceipt(
     shoppingItemId: string,
     inventoryItemId: string | undefined,
+    batchDates: BatchDatesInput | undefined,
     user: JwtUser,
   ) {
     return this.dataSource.transaction(async (manager) => {
@@ -343,7 +368,18 @@ export class InventoryTransactionsService {
         sourceId: shoppingItem.id,
         idempotencyKey: `shopping-item:${shoppingItem.id}:receipt`,
       });
+      transaction.id = randomUUID();
       const saved = await manager.getRepository(InventoryTransaction).save(transaction);
+      if (batchDates) {
+        await this.batches.createReceiptBatch(manager, {
+          item: target,
+          quantity,
+          transaction: saved,
+          actor: user,
+          sourceId: shoppingItem.id,
+          dates: batchDates,
+        });
+      }
       return { alreadyConfirmed: false, transactions: [saved] };
     });
   }
@@ -363,7 +399,12 @@ export class InventoryTransactionsService {
       where: { householdId },
       order: { id: 'ASC' },
     });
-    const rows = this.menuPreviewRows(menu, inventory);
+    const batches = await this.batches.availableBatches(
+      this.dataSource.manager,
+      householdId,
+      inventory.map((item) => item.id),
+    );
+    const rows = this.menuPreviewRows(menu, inventory, batches);
     const blocking = rows.filter(
       (row) => row.status === 'insufficient' || row.status === 'unit_mismatch',
     );
@@ -412,7 +453,13 @@ export class InventoryTransactionsService {
         .orderBy('item.id', 'ASC')
         .setLock('pessimistic_write')
         .getMany();
-      const rows = this.menuPreviewRows(menu, inventory);
+      const batches = await this.batches.availableBatches(
+        manager,
+        user.householdId,
+        inventory.map((item) => item.id),
+        true,
+      );
+      const rows = this.menuPreviewRows(menu, inventory, batches);
       const unitMismatch = rows.find((row) => row.status === 'unit_mismatch');
       if (unitMismatch) {
         throw new ConflictException(
@@ -442,9 +489,7 @@ export class InventoryTransactionsService {
         }
         item.quantity = quantityString(row.quantityAfter);
         await manager.getRepository(InventoryItem).save(item);
-        saved.push(
-          await transactionRepository.save(
-            this.createTransaction(manager, {
+        const transaction = this.createTransaction(manager, {
               householdId: user.householdId,
               inventoryItemId: item.id,
               operationId,
@@ -457,9 +502,18 @@ export class InventoryTransactionsService {
               sourceType: 'menu',
               sourceId: menu.id,
               idempotencyKey: `menu:${menu.id}:consumption:${item.id}`,
-            }),
-          ),
-        );
+            });
+        transaction.id = randomUUID();
+        const savedTransaction = await transactionRepository.save(transaction);
+        await this.batches.applyConsumption(manager, {
+          item,
+          quantity: row.quantity,
+          transaction: savedTransaction,
+          actor: user,
+          sourceType: 'menu',
+          sourceId: menu.id,
+        });
+        saved.push(savedTransaction);
       }
       return { alreadyConfirmed: false, transactions: saved };
     });
@@ -560,6 +614,36 @@ export class InventoryTransactionsService {
           ),
         );
       }
+      const movementTransactionIds = await this.batches.reverseMovements(manager, {
+        originals,
+        reversals: saved,
+        actor: user,
+      });
+      for (const reversal of saved) {
+        const original = originals.find(
+          (candidate) => candidate.id === reversal.reversesTransactionId,
+        );
+        if (
+          !original ||
+          Number(reversal.delta) >= 0 ||
+          movementTransactionIds.has(original.id)
+        ) {
+          continue;
+        }
+        const item = items.find(
+          (candidate) => candidate.id === reversal.inventoryItemId,
+        );
+        if (!item) throw new NotFoundException('相关库存项不存在');
+        await this.batches.applyConsumption(manager, {
+          item,
+          quantity: -Number(reversal.delta),
+          transaction: reversal,
+          actor: user,
+          sourceType: 'inventory_transaction',
+          sourceId: original.id,
+          movementType: 'adjustment',
+        });
+      }
       return { alreadyReversed: false, transactions: saved };
     });
   }
@@ -615,7 +699,11 @@ export class InventoryTransactionsService {
     return [...merged.values()];
   }
 
-  private menuPreviewRows(menu: Menu, inventory: InventoryItem[]) {
+  private menuPreviewRows(
+    menu: Menu,
+    inventory: InventoryItem[],
+    batches: InventoryBatch[],
+  ) {
     return this.menuRequirements(menu).map<MenuInventoryPreviewRow>((requirement) => {
       const sameIngredient = inventory.filter(
         (item) => item.ingredientId === requirement.ingredientId,
@@ -630,10 +718,17 @@ export class InventoryTransactionsService {
           quantityBefore: null,
           quantityAfter: null,
           availableUnits: [...new Set(sameIngredient.map((item) => item.unit))],
+          batchAllocations: [],
+          untrackedQuantity: 0,
         };
       }
       const quantityBefore = Number(exact.quantity);
       const quantityAfter = roundQuantity(quantityBefore - requirement.quantity);
+      const allocation = this.batches.previewAllocations(
+        batches,
+        exact.id,
+        requirement.quantity,
+      );
       return {
         ...requirement,
         status: quantityAfter < 0 ? 'insufficient' : 'ready',
@@ -642,6 +737,8 @@ export class InventoryTransactionsService {
         quantityBefore,
         quantityAfter,
         availableUnits: [exact.unit],
+        batchAllocations: allocation.allocations,
+        untrackedQuantity: allocation.untrackedQuantity,
       };
     });
   }

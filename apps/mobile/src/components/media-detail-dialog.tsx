@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import { Film, X, type LucideIcon } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { AdaptiveDialog, IconButton } from './ui';
 import { radius, type as t, useTheme } from '../lib/theme';
 import type { MediaType } from '../lib/types';
 
@@ -79,27 +79,14 @@ export function MediaDetailDialog({
   };
 
   return (
-    <Modal
-      animationType="fade"
-      onRequestClose={onClose}
-      transparent
+    <AdaptiveDialog
+      accessibilityLabel={dialogTitle}
+      maxWidth={720}
+      onClose={onClose}
+      style={styles.dialog}
+      testID="media-detail-dialog"
       visible={visible}
     >
-      <View style={styles.overlay}>
-        <Pressable
-          accessibilityLabel="关闭影视详情"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          accessibilityViewIsModal
-          style={[
-            styles.dialog,
-            { backgroundColor: c.card, borderColor: c.separator },
-          ]}
-          testID="media-detail-dialog"
-        >
           <View style={[styles.header, { borderBottomColor: c.separator }]}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.caption, { color: c.secondaryLabel }]}>影视资料</Text>
@@ -107,17 +94,14 @@ export function MediaDetailDialog({
                 {dialogTitle}
               </Text>
             </View>
-            <Pressable
+            <IconButton
               accessibilityLabel="关闭"
-              accessibilityRole="button"
+              backgroundColor={c.fill}
+              color={c.secondaryLabel}
+              icon={X}
               onPress={onClose}
-              style={({ pressed }) => [
-                styles.closeButton,
-                { backgroundColor: pressed ? c.fillStrong : c.fill },
-              ]}
-            >
-              <X color={c.secondaryLabel} size={20} />
-            </Pressable>
+              style={styles.closeButton}
+            />
           </View>
 
           <ScrollView
@@ -258,27 +242,13 @@ export function MediaDetailDialog({
               })}
             </View>
           ) : null}
-        </View>
-      </View>
-    </Modal>
+    </AdaptiveDialog>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.46)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
   dialog: {
-    width: '100%',
-    maxWidth: 720,
     maxHeight: '92%',
-    borderWidth: 1,
-    borderRadius: radius.md,
-    overflow: 'hidden',
   },
   header: {
     minHeight: 70,
@@ -290,11 +260,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexShrink: 0,
   },
   content: { padding: 18, paddingBottom: 22 },
   hero: { flexDirection: 'row', alignItems: 'flex-start', gap: 18 },

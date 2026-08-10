@@ -1,10 +1,15 @@
 import { useRouter } from 'expo-router';
 import {
+  Bell,
   BookOpenText,
+  ChevronDown,
   ChevronRight,
+  Gift,
   History,
   KeyRound,
+  ShieldCheck,
   Share2,
+  Sparkles,
   Trash2,
   UserPlus,
   UsersRound,
@@ -33,9 +38,11 @@ import {
 import { memberSubtitle } from '../../lib/member';
 import {
   useCreateHouseholdInvitation,
+  useAgentProfile,
   useHouseholdInvitations,
   useRevokeHouseholdInvitation,
   useUpdateCookingPreference,
+  useUpdateAgentProfile,
   useUpdatePassword,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -50,8 +57,12 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { account, member, logout, updateAccount, updateMember } = useSession();
   const updatePreference = useUpdateCookingPreference();
+  const agentProfile = useAgentProfile(Boolean(member));
+  const updateAgentProfile = useUpdateAgentProfile();
   const updatePassword = useUpdatePassword();
   const canManageMembers = member?.role === 'owner' || member?.role === 'admin';
+  const consumer = member?.role === 'member';
+  const adminDesktop = desktop && !consumer;
   const { data: invitations } = useHouseholdInvitations(canManageMembers);
   const createInvitation = useCreateHouseholdInvitation();
   const revokeInvitation = useRevokeHouseholdInvitation();
@@ -66,6 +77,7 @@ export default function ProfileScreen() {
     useState<CreatedHouseholdInvitation | null>(null);
   const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [securityExpanded, setSecurityExpanded] = useState(false);
 
   const savePassword = () => {
     if (newPassword !== confirmPassword) {
@@ -128,18 +140,33 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
       <PageContainer
-        maxWidth={1040}
-        style={[styles.page, desktop && styles.pageDesktop]}
+        maxWidth={consumer ? 720 : 1040}
+        style={[
+          styles.page,
+          adminDesktop && styles.pageDesktop,
+          consumer && styles.pageConsumer,
+        ]}
       >
-        <View style={styles.header}>
-          <Text style={[t.largeTitle, { color: c.label }]}>我的</Text>
+        <View
+          style={[styles.header, consumer && styles.headerConsumer]}
+          testID={consumer ? 'consumer-profile-header' : undefined}
+        >
+          {consumer ? (
+            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>我的家庭身份</Text>
+          ) : null}
+          <Text style={[consumer ? t.title1 : t.largeTitle, { color: c.label }]}>我的</Text>
         </View>
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Card style={styles.profileCard}>
+          <Card
+            style={[
+              styles.profileCard,
+              consumer && { backgroundColor: c.tintSoft },
+            ]}
+          >
             <Text style={{ fontSize: 52 }}>{member?.avatarEmoji}</Text>
             <View style={{ marginLeft: 14, flex: 1 }}>
               <Text style={[t.title2, { color: c.label }]}>{member?.name}</Text>
@@ -181,42 +208,126 @@ export default function ProfileScreen() {
             </View>
           </Card>
 
-          <SectionHeader title="账号安全" />
-          <Card style={styles.formCard}>
-            {account?.requiresPasswordSetup ? (
-              <View style={[styles.securityNotice, { backgroundColor: c.orangeSoft }]}>
-                <KeyRound color={c.orange} size={18} />
-                <Text style={[t.subhead, { color: c.label, flex: 1 }]}>当前账号尚未设置密码</Text>
+          <SectionHeader title="小管家" />
+          <Card>
+            <PressableScale
+              accessibilityLabel="管理小管家记忆"
+              accessibilityRole="link"
+              haptic={false}
+              onPress={() => router.push('/agent-memory')}
+              style={styles.recipeRow}
+              testID="agent-memory-entry"
+            >
+              <View style={[styles.recipeIcon, { backgroundColor: c.tintSoft }]}>
+                <Sparkles color={c.tint} size={20} />
               </View>
-            ) : (
+              <View style={{ flex: 1 }}>
+                <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>我的记忆</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>管理个人偏好与共享知识</Text>
+              </View>
+              <ChevronRight color={c.tertiaryLabel} size={19} />
+            </PressableScale>
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+            <View style={styles.preferenceRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[t.body, { color: c.label }]}>启用记忆</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+                  {agentProfile.error
+                    ? '状态暂时无法读取'
+                    : updateAgentProfile.error
+                      ? '更新失败，请重试'
+                      : agentProfile.data?.memoryEnabled === false
+                        ? '小管家不会记录或使用个人偏好'
+                        : '让小管家记住确认过的个人偏好'}
+                </Text>
+              </View>
+              <Switch
+                accessibilityLabel="启用小管家记忆"
+                disabled={!agentProfile.data || updateAgentProfile.isPending}
+                onValueChange={(memoryEnabled) => {
+                  const profile = agentProfile.data;
+                  if (!profile) return;
+                  updateAgentProfile.mutate(
+                    { memoryEnabled, expectedVersion: profile.version },
+                    {
+                      onError: (error) =>
+                        Alert.alert(
+                          '更新失败',
+                          error instanceof Error ? error.message : '请稍后再试',
+                        ),
+                    },
+                  );
+                }}
+                trackColor={{ false: c.fillStrong, true: c.tintSoft }}
+                thumbColor={agentProfile.data?.memoryEnabled ? c.tint : c.tertiaryLabel}
+                style={styles.switchTarget}
+                value={agentProfile.data?.memoryEnabled ?? true}
+              />
+            </View>
+          </Card>
+
+          <SectionHeader title="账号安全" />
+          {consumer ? (
+            <Card>
+              <PressableScale
+                accessibilityLabel={`${securityExpanded ? '收起' : '展开'}账号安全设置`}
+                accessibilityState={{ expanded: securityExpanded }}
+                onPress={() => setSecurityExpanded((current) => !current)}
+                style={styles.securityDisclosure}
+                testID="consumer-security-disclosure"
+              >
+                <View style={[styles.recipeIcon, { backgroundColor: c.blueSoft }]}>
+                  <ShieldCheck color={c.blue} size={20} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>登录与密码</Text>
+                  <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>需要时再修改账号密码</Text>
+                </View>
+                <ChevronDown
+                  color={c.tertiaryLabel}
+                  size={19}
+                  style={{ transform: [{ rotate: securityExpanded ? '180deg' : '0deg' }] }}
+                />
+              </PressableScale>
+            </Card>
+          ) : null}
+          {!consumer || securityExpanded ? (
+            <Card style={[styles.formCard, consumer && styles.expandedSecurityCard]}>
+              {account?.requiresPasswordSetup ? (
+                <View style={[styles.securityNotice, { backgroundColor: c.orangeSoft }]}>
+                  <KeyRound color={c.orange} size={18} />
+                  <Text style={[t.subhead, { color: c.label, flex: 1 }]}>当前账号尚未设置密码</Text>
+                </View>
+              ) : (
+                <ProfileInput
+                  label="当前密码"
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                />
+              )}
               <ProfileInput
-                label="当前密码"
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
+                label="新密码"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+                placeholder="至少 8 位"
+              />
+              <ProfileInput
+                label="确认新密码"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
                 secureTextEntry
               />
-            )}
-            <ProfileInput
-              label="新密码"
-              value={newPassword}
-              onChangeText={setNewPassword}
-              secureTextEntry
-              placeholder="至少 8 位"
-            />
-            <ProfileInput
-              label="确认新密码"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-            <PrimaryButton
-              title="更新密码"
-              onPress={savePassword}
-              disabled={newPassword.length < 8 || confirmPassword.length < 8}
-              loading={updatePassword.isPending}
-              icon={<KeyRound color="#FFFFFF" size={18} />}
-            />
-          </Card>
+              <PrimaryButton
+                title="更新密码"
+                onPress={savePassword}
+                disabled={newPassword.length < 8 || confirmPassword.length < 8}
+                loading={updatePassword.isPending}
+                icon={<KeyRound color="#FFFFFF" size={18} />}
+              />
+            </Card>
+          ) : null}
 
           {canManageMembers ? (
             <>
@@ -329,6 +440,7 @@ export default function ProfileScreen() {
           <Card>
             <PressableScale
               accessibilityLabel="打开家庭菜谱"
+              accessibilityRole="link"
               haptic={false}
               onPress={() => router.push('/recipes')}
               style={styles.recipeRow}
@@ -339,7 +451,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>家庭菜谱</Text>
                 <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>
-                  管理菜品、成员做法和会做的菜
+                  {consumer ? '看看家里的菜谱和成员做法' : '管理菜品、成员做法和会做的菜'}
                 </Text>
               </View>
               <ChevronRight color={c.tertiaryLabel} size={19} />
@@ -347,6 +459,7 @@ export default function ProfileScreen() {
             <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
             <PressableScale
               accessibilityLabel="打开家庭活动"
+              accessibilityRole="link"
               haptic={false}
               onPress={() => router.push('/activity')}
               style={styles.recipeRow}
@@ -356,15 +469,73 @@ export default function ProfileScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>家庭活动</Text>
-                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>成员管理与菜单动态</Text>
+                <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>
+                  {consumer ? '看看家里最近发生了什么' : '成员管理与菜单动态'}
+                </Text>
               </View>
               <ChevronRight color={c.tertiaryLabel} size={19} />
             </PressableScale>
+            {consumer ? (
+              <>
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+                <PressableScale
+                  accessibilityLabel="打开我的积分"
+                  accessibilityRole="link"
+                  haptic={false}
+                  onPress={() => router.push('/points')}
+                  style={styles.recipeRow}
+                >
+                  <View style={[styles.recipeIcon, { backgroundColor: c.orangeSoft }]}>
+                    <Gift color={c.orange} size={20} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>我的积分</Text>
+                    <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>查看任务奖励和积分记录</Text>
+                  </View>
+                  <ChevronRight color={c.tertiaryLabel} size={19} />
+                </PressableScale>
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+                <PressableScale
+                  accessibilityLabel="打开家庭知识库"
+                  accessibilityRole="link"
+                  haptic={false}
+                  onPress={() => router.push('/knowledge')}
+                  style={styles.recipeRow}
+                >
+                  <View style={[styles.recipeIcon, { backgroundColor: c.greenSoft }]}>
+                    <BookOpenText color={c.green} size={20} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>家庭知识库</Text>
+                    <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>查找家里的说明和经验</Text>
+                  </View>
+                  <ChevronRight color={c.tertiaryLabel} size={19} />
+                </PressableScale>
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+                <PressableScale
+                  accessibilityLabel="打开消息通知"
+                  accessibilityRole="link"
+                  haptic={false}
+                  onPress={() => router.push('/notifications')}
+                  style={styles.recipeRow}
+                >
+                  <View style={[styles.recipeIcon, { backgroundColor: c.accentSoft }]}>
+                    <Bell color={c.accent} size={20} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[t.body, { color: c.label, fontWeight: '600' }]}>消息通知</Text>
+                    <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>查看需要处理的家庭消息</Text>
+                  </View>
+                  <ChevronRight color={c.tertiaryLabel} size={19} />
+                </PressableScale>
+              </>
+            ) : null}
             {canManageMembers ? (
               <>
                 <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
                 <PressableScale
                   accessibilityLabel="打开家庭成员"
+                  accessibilityRole="link"
                   haptic={false}
                   onPress={() => router.push('/members')}
                   style={styles.recipeRow}
@@ -435,6 +606,7 @@ function ProfileInput({
     <View style={{ gap: 6 }}>
       <Text style={[t.footnote, { color: c.secondaryLabel }]}>{label}</Text>
       <TextInput
+        accessibilityLabel={label}
         autoCapitalize="none"
         autoCorrect={false}
         maxLength={maxLength}
@@ -464,8 +636,11 @@ function formatExpiry(value: string) {
 const styles = StyleSheet.create({
   page: { flex: 1, paddingTop: 8 },
   pageDesktop: { paddingTop: 22 },
+  pageConsumer: { paddingTop: 14 },
   header: { paddingTop: 0 },
-  scrollContent: { paddingBottom: 32 },
+  headerConsumer: { paddingTop: 0, paddingBottom: 4 },
+  consumerEyebrow: { fontWeight: '700', marginBottom: 5 },
+  scrollContent: { paddingBottom: 56 },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -479,6 +654,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  switchTarget: { minHeight: 44, minWidth: 44 },
   formCard: { padding: 16, gap: 14 },
   securityNotice: {
     flexDirection: 'row',
@@ -487,6 +663,14 @@ const styles = StyleSheet.create({
     padding: 11,
     borderRadius: radius.sm,
   },
+  securityDisclosure: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 72,
+    paddingHorizontal: 14,
+  },
+  expandedSecurityCard: { marginTop: 10 },
   input: {
     minHeight: 44,
     borderWidth: 1,

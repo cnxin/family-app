@@ -40,6 +40,21 @@ import { AddBackupRunNotificationState1785230200000 } from './1785230200000-add-
 import { AddHouseholdKnowledge1785230300000 } from './1785230300000-add-household-knowledge';
 import { ConvergeHouseholdKnowledge1785230400000 } from './1785230400000-converge-household-knowledge';
 import { AddHouseholdTravel1785230500000 } from './1785230500000-add-household-travel';
+import { AddFamilyMemories1785230600000 } from './1785230600000-add-family-memories';
+import { AddFamilyAgent1785230700000 } from './1785230700000-add-family-agent';
+import { AddAgentActionProposals1785230800000 } from './1785230800000-add-agent-action-proposals';
+import { AddAgentChannelBindings1785230900000 } from './1785230900000-add-agent-channel-bindings';
+import { NormalizeAgentChannelPairingIndex1785231000000 } from './1785231000000-normalize-agent-channel-pairing-index';
+import { LinkAgentMessagesToRuns1785231100000 } from './1785231100000-link-agent-messages-to-runs';
+import { AddAgentDailyReadTools1785231200000 } from './1785231200000-add-agent-daily-read-tools';
+import { AgentRunRetryPresentations1785231300000 } from './1785231300000-agent-run-retry-presentations';
+import { AddFoodBatchesAndSmartMenus1785231400000 } from './1785231400000-add-food-batches-and-smart-menus';
+import { AllowAgentToolEventPresentationPurge1785231500000 } from './1785231500000-allow-agent-tool-event-presentation-purge';
+import { AddAgentMemberProfiles1785231600000 } from './1785231600000-add-agent-member-profiles';
+import { AddAgentMemory1785231700000 } from './1785231700000-add-agent-memory';
+import { AddAgentRoutines1785231800000 } from './1785231800000-add-agent-routines';
+import { AddAgentWeeklyReport1785231900000 } from './1785231900000-add-agent-weekly-report';
+import { AddAgentProposalGroups1785232000000 } from './1785232000000-add-agent-proposal-groups';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -84,4 +99,19 @@ export const ALL_MIGRATIONS = [
   AddHouseholdKnowledge1785230300000,
   ConvergeHouseholdKnowledge1785230400000,
   AddHouseholdTravel1785230500000,
+  AddFamilyMemories1785230600000,
+  AddFamilyAgent1785230700000,
+  AddAgentActionProposals1785230800000,
+  AddAgentChannelBindings1785230900000,
+  NormalizeAgentChannelPairingIndex1785231000000,
+  LinkAgentMessagesToRuns1785231100000,
+  AddAgentDailyReadTools1785231200000,
+  AgentRunRetryPresentations1785231300000,
+  AddFoodBatchesAndSmartMenus1785231400000,
+  AllowAgentToolEventPresentationPurge1785231500000,
+  AddAgentMemberProfiles1785231600000,
+  AddAgentMemory1785231700000,
+  AddAgentRoutines1785231800000,
+  AddAgentWeeklyReport1785231900000,
+  AddAgentProposalGroups1785232000000,
 ];

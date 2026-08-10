@@ -3,15 +3,21 @@ import { expect, test, type Page } from '@playwright/test';
 const API_URL = process.env.FAMILY_API_URL ?? 'http://127.0.0.1:3100';
 
 const NAVIGATION = {
-  home: { mobile: '首页', desktop: '家庭首页', path: '/' },
-  order: { mobile: '点菜', desktop: '点菜', path: '/order', module: '家庭食堂' },
-  kitchen: { mobile: '菜单安排', desktop: '菜单安排', path: '/kitchen', module: '家庭食堂' },
-  calendar: { mobile: '日历', desktop: '家庭日历', path: '/calendar' },
-  shopping: { mobile: '采购与库存', desktop: '采购与库存', path: '/shopping', module: '采购与库存' },
-  profile: { mobile: '我的', desktop: '我的', path: '/profile' },
+  home: { mobile: '首页', desktop: '家庭首页', path: '/', group: 'daily' },
+  order: { mobile: '点菜', desktop: '点菜', path: '/order', module: '家庭食堂', group: 'daily' },
+  kitchen: { mobile: '菜单安排', desktop: '菜单安排', path: '/kitchen', module: '家庭食堂', group: 'daily' },
+  calendar: { mobile: '日历', desktop: '家庭日历', path: '/calendar', group: 'schedule' },
+  shopping: { mobile: '采购与库存', desktop: '采购与库存', path: '/shopping', module: '采购与库存', group: 'daily' },
+  profile: { mobile: '我的', desktop: '我的', path: '/profile', group: 'system' },
 } as const;
 
 type NavigationKey = keyof typeof NAVIGATION;
+
+function managerAuthFile(projectName: string) {
+  return projectName === 'desktop-chrome'
+    ? 'e2e/.auth/desktop.json'
+    : 'e2e/.auth/mobile.json';
+}
 
 async function openSection(
   page: Page,
@@ -34,6 +40,14 @@ async function openSection(
       const moduleLink = page.getByRole('link', { name: module, exact: true });
       await expect(moduleLink).toBeVisible();
       await moduleLink.click();
+    }
+  }
+
+  if (projectName === 'desktop-chrome') {
+    const targetLink = page.getByRole('link', { name: target.desktop, exact: true }).first();
+    if (!(await targetLink.isVisible())) {
+      const group = page.getByTestId(`desktop-nav-group-${target.group}`);
+      if (!(await group.isDisabled())) await group.click();
     }
   }
 
@@ -66,83 +80,44 @@ async function expectNoHorizontalOverflow(page: Page) {
   );
 }
 
+async function ensureIsolatedManagerLogin(page: Page, projectName: string) {
+  await page.goto('/');
+  if (/\/login\/?$/.test(new URL(page.url()).pathname)) {
+    const testPassword = process.env.E2E_ACCOUNT_PASSWORD;
+    expect(
+      testPassword,
+      '隔离浏览器回归缺少 E2E_ACCOUNT_PASSWORD，拒绝猜测或修改开发账号密码',
+    ).not.toBeUndefined();
+    await page
+      .getByPlaceholder('输入账号')
+      .fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
+    await page.getByPlaceholder('输入密码').fill(testPassword ?? '');
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page).not.toHaveURL(/\/login\/?$/);
+  }
+  await page.context().storageState({
+    path: managerAuthFile(projectName),
+  });
+}
+
 test('家庭成员可浏览核心页面且布局不横向溢出', async (
-  { page, request },
+  { page },
   testInfo,
 ) => {
   test.setTimeout(180_000);
+  const fixtureSuffix = `${testInfo.project.name}-${Date.now().toString(36)}`;
   const runtimeErrors: string[] = [];
-  let simulatingUnauthorized = false;
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
-    if (
-      simulatingUnauthorized &&
-      message.text().includes('status of 401')
-    ) {
-      return;
-    }
     runtimeErrors.push(message.text());
   });
 
-  await page.goto('/');
+  await ensureIsolatedManagerLogin(page, testInfo.project.name);
   await expect(
     page.getByText('家庭工作台', { exact: true }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
-
-  let forcedUnauthorized = 0;
-  let refreshRequests = 0;
-  const presentedRefreshTokens: string[] = [];
-  let rejectedAuthorization: string | undefined;
-  const staleAccessRoute =
-    /\/(dishes|menus|shopping-list|tasks|polls|reminders|notifications)(\?|$)/;
-  simulatingUnauthorized = true;
-  page.on('request', (request) => {
-    if (new URL(request.url()).pathname === '/auth/refresh') {
-      refreshRequests += 1;
-      const body = request.postDataJSON() as { refreshToken?: string } | null;
-      if (body?.refreshToken) presentedRefreshTokens.push(body.refreshToken);
-    }
-  });
-  await page.route(staleAccessRoute, async (route) => {
-    const request = route.request();
-    if (request.resourceType() === 'document') {
-      await route.continue();
-      return;
-    }
-    const authorization = request.headers().authorization;
-    if (!rejectedAuthorization) rejectedAuthorization = authorization;
-    if (
-      request.method() === 'GET' &&
-      authorization === rejectedAuthorization &&
-      forcedUnauthorized < 1
-    ) {
-      forcedUnauthorized += 1;
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          error: { code: 'UNAUTHORIZED', message: '测试访问令牌失效' },
-        }),
-      });
-      return;
-    }
-    await route.continue();
-  });
-  await page.goto(`/?authRecovery=${Date.now()}`);
-  await expect(
-    page.getByText('家庭工作台', { exact: true }),
-  ).toBeVisible();
-  expect(forcedUnauthorized).toBe(1);
-  expect(refreshRequests).toBeGreaterThanOrEqual(1);
-  expect(refreshRequests).toBeLessThanOrEqual(2);
-  expect(new Set(presentedRefreshTokens).size).toBe(
-    presentedRefreshTokens.length,
-  );
-  await page.waitForLoadState('networkidle');
-  await page.unroute(staleAccessRoute);
-  simulatingUnauthorized = false;
   expect(runtimeErrors).toEqual([]);
   await page.screenshot({
     path: testInfo.outputPath('platform-home.png'),
@@ -167,7 +142,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   } else {
     await page.getByRole('link', { name: '家庭首页', exact: true }).click();
   }
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/(?:\?.*)?$/);
 
   const mediaRoute = /\/media(\?|$)/;
   const mediaConnectorsRoute = /\/media\/connectors(\?|$)/;
@@ -1229,6 +1204,9 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     testInfo.project.name === 'mobile-chrome'
       ? page.getByRole('link').filter({ hasText: '家庭任务' }).first()
       : page.getByRole('link', { name: '家庭任务', exact: true });
+  if (testInfo.project.name === 'desktop-chrome' && !(await tasksLink.isVisible())) {
+    await page.getByTestId('desktop-nav-group-household').click();
+  }
   await expect(tasksLink).toBeVisible();
   await tasksLink.click();
   await expect(page).toHaveURL(/\/tasks$/);
@@ -1236,7 +1214,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('button', { name: '添加任务', exact: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  const taskTitle = `任务回归-${testInfo.project.name}`;
+  const taskTitle = `任务回归-${fixtureSuffix}`;
   await page.getByRole('button', { name: '添加任务', exact: true }).first().click();
   await expect(page.getByText('新建家庭任务', { exact: true })).toBeVisible();
   await page.getByLabel('任务名称').fill(taskTitle);
@@ -1269,7 +1247,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
-  const knowledgeTitle = `浏览器知识文章-${testInfo.project.name}`;
+  const knowledgeTitle = `浏览器知识文章-${fixtureSuffix}`;
   await page.goto('/knowledge');
   await expect(page.getByText('家庭知识库', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '已归档', exact: true }).click();
@@ -1284,8 +1262,47 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  const travelTitle = `浏览器出行-${testInfo.project.name}`;
-  const checklistTitle = `证件袋-${testInfo.project.name}`;
+  const memoryTitle = `浏览器家庭回忆-${fixtureSuffix}`;
+  await page.goto('/memories');
+  await expect(page.getByRole('heading', { name: '家庭回忆', exact: true })).toBeVisible();
+  const memoryCreate = page.getByRole('button', { name: '新建家庭回忆', exact: true });
+  const memoryCreateBox = await memoryCreate.boundingBox();
+  expect(memoryCreateBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await memoryCreate.click();
+  const memoryForm = page.getByTestId('memory-form-dialog');
+  await expect(memoryForm).toBeVisible();
+  if (testInfo.project.name === 'mobile-chrome') {
+    await expect(memoryForm.getByTestId('adaptive-dialog-drag-handle')).toBeVisible();
+  }
+  await memoryForm.getByLabel('标题', { exact: true }).fill(memoryTitle);
+  await memoryForm.getByLabel('故事（选填）', { exact: true }).fill('一次隔离浏览器回归留下的非敏感家庭故事。');
+  await memoryForm.getByRole('button', { name: '出行', exact: true }).click();
+  await memoryForm.getByRole('button', { name: '保存回忆', exact: true }).click();
+  const memoryDetail = page.getByTestId('memory-detail-dialog');
+  await expect(memoryDetail.getByText(memoryTitle, { exact: true })).toBeVisible();
+  await expect(memoryDetail.getByText('一次隔离浏览器回归留下的非敏感家庭故事。', { exact: true })).toBeVisible();
+  const [memoryPhotoChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    memoryDetail.getByRole('button', { name: '选择回忆照片', exact: true }).click(),
+  ]);
+  await memoryPhotoChooser.setFiles({
+    name: 'family-memory-browser.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  });
+  await expect(memoryDetail.getByTestId('memory-photo-preview')).toBeVisible();
+  await memoryDetail.getByLabel('照片说明', { exact: true }).fill('浏览器回忆照片');
+  await memoryDetail.getByRole('button', { name: '添加照片', exact: true }).click();
+  await expect(memoryDetail.getByText('浏览器回忆照片', { exact: true })).toBeVisible();
+  await memoryDetail.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: `打开回忆${memoryTitle}`, exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  const travelTitle = `浏览器出行-${fixtureSuffix}`;
+  const checklistTitle = `证件袋-${fixtureSuffix}`;
   await page.goto('/travel');
   await expect(page.getByText('家庭出行', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '打包模板', exact: true }).click();
@@ -1330,13 +1347,13 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.getByRole('button', { name: '发起投票', exact: true }).last().click();
   const pollCard = page
     .getByRole('button', { name: `编辑投票${pollTitle}`, exact: true })
-    .locator('xpath=ancestor::div[.//*[@role="checkbox"]][1]');
+    .locator('xpath=ancestor::div[.//*[@role="radio"]][1]');
   await expect(
-    pollCard.getByRole('checkbox', { name: '选择周六上午', exact: true }),
+    pollCard.getByRole('radio', { name: '选择周六上午', exact: true }),
   ).toBeVisible();
 
   await pollCard
-    .getByRole('checkbox', { name: '选择周六上午', exact: true })
+    .getByRole('radio', { name: '选择周六上午', exact: true })
     .click();
   await pollCard.getByRole('button', { name: `提交${pollTitle}的投票` }).click();
   await expect(page.getByText(/1 票 · 100%/).first()).toBeVisible();
@@ -1348,17 +1365,21 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByText('编辑家庭投票', { exact: true })).not.toBeVisible();
   await expect(page.getByText('浏览器端已编辑投票', { exact: true })).toBeVisible();
 
+  await page.getByRole('button', { name: `更多投票操作${pollTitle}` }).click();
+  await expect(page.getByTestId('poll-management-dialog')).toBeVisible();
   await page.getByRole('button', { name: `结束投票${pollTitle}` }).click();
   await expect(page.getByText('结束这个投票？', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '结束投票', exact: true }).click();
   await page.getByRole('button', { name: '已结束', exact: true }).click();
+  await page.getByRole('button', { name: `更多投票操作${pollTitle}` }).click();
   await expect(page.getByRole('button', { name: `重新开启投票${pollTitle}` })).toBeVisible();
   await page.getByRole('button', { name: `重新开启投票${pollTitle}` }).click();
   await page.getByRole('button', { name: '进行中', exact: true }).click();
   await expect(
-    pollCard.getByRole('checkbox', { name: '取消选择周六上午', exact: true }),
+    pollCard.getByRole('radio', { name: '取消选择周六上午', exact: true }),
   ).toBeVisible();
 
+  await page.getByRole('button', { name: `更多投票操作${pollTitle}` }).click();
   await page.getByRole('button', { name: `删除投票${pollTitle}` }).click();
   await expect(page.getByText('删除这个投票？', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '删除投票', exact: true }).click();
@@ -1510,7 +1531,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.getByRole('button', { name: '打开家庭成员', exact: true }).click();
+  await page.getByRole('link', { name: '打开家庭成员', exact: true }).click();
   await expect(page).toHaveURL(/\/members$/);
   await expect(page.getByText('家庭成员', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '在家成员', exact: true })).toBeVisible();
@@ -1518,7 +1539,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('button', { name: '编辑爸爸', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '编辑爸爸', exact: true }).click();
   await expect(page.getByText('编辑成员', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('成员名称', { exact: true })).toHaveValue('爸爸');
+  await expect(page.getByLabel('成员名称', { exact: true }).last()).toHaveValue('爸爸');
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await expect(page.getByText('编辑成员', { exact: true })).not.toBeVisible();
   await expectNoHorizontalOverflow(page);
@@ -1530,7 +1551,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
     await openSection(page, testInfo.project.name, 'profile');
   }
 
-  await page.getByRole('button', { name: '打开家庭活动', exact: true }).click();
+  await page.getByRole('link', { name: '打开家庭活动', exact: true }).click();
   await expect(page).toHaveURL(/\/activity$/);
   await expect(page.getByText('家庭活动', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '全部', exact: true })).toBeVisible();
@@ -1556,19 +1577,114 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await openSection(page, testInfo.project.name, 'home');
   await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
   expect(runtimeErrors).toEqual([]);
-
-  const accessToken = await page.evaluate(() =>
-    window.localStorage.getItem('family-app-token'),
-  );
-  expect(accessToken).toBeTruthy();
-  await openSection(page, testInfo.project.name, 'profile');
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
-  await expect(page.getByText(/退出账号「爸爸」/)).toBeVisible();
-  await page.getByRole('button', { name: '退出', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
-  const revoked = await request.get(`${API_URL}/members`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  await page.context().storageState({
+    path: managerAuthFile(testInfo.project.name),
   });
-  expect(revoked.status()).toBe(401);
+});
+
+test('访问令牌失效后可刷新会话并在退出后撤销访问', async (
+  { browser, request },
+  testInfo,
+) => {
+  test.skip(testInfo.project.name !== 'mobile-chrome');
+
+  const context = await browser.newContext({
+    baseURL: process.env.FAMILY_WEB_URL ?? 'http://localhost:8081',
+    deviceScaleFactor: 1,
+    hasTouch: true,
+    isMobile: true,
+    storageState: 'e2e/.auth/recovery-mobile.json',
+    viewport: { width: 390, height: 844 },
+  });
+  const page = await context.newPage();
+  const runtimeErrors: string[] = [];
+  let expectedUnauthorizedConsoleErrors = 0;
+  let forcedUnauthorized = 0;
+  let refreshRequests = 0;
+  const presentedRefreshTokens: string[] = [];
+  let rejectedAuthorization: string | undefined;
+  const staleAccessRoute =
+    /\/(dishes|menus|shopping-list|tasks|polls|reminders|notifications)(\?|$)/;
+
+  page.on('pageerror', (error) => runtimeErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return;
+    if (
+      expectedUnauthorizedConsoleErrors > 0 &&
+      message.text().includes('status of 401')
+    ) {
+      expectedUnauthorizedConsoleErrors -= 1;
+      return;
+    }
+    runtimeErrors.push(message.text());
+  });
+  page.on('request', (browserRequest) => {
+    if (new URL(browserRequest.url()).pathname === '/auth/refresh') {
+      refreshRequests += 1;
+      const body = browserRequest.postDataJSON() as {
+        refreshToken?: string;
+      } | null;
+      if (body?.refreshToken) presentedRefreshTokens.push(body.refreshToken);
+    }
+  });
+
+  try {
+    await page.goto('/');
+    await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
+    await page.route(staleAccessRoute, async (route) => {
+      const browserRequest = route.request();
+      if (browserRequest.resourceType() === 'document') {
+        await route.continue();
+        return;
+      }
+      const authorization = browserRequest.headers().authorization;
+      if (!rejectedAuthorization) rejectedAuthorization = authorization;
+      if (
+        browserRequest.method() === 'GET' &&
+        authorization === rejectedAuthorization &&
+        forcedUnauthorized < 1
+      ) {
+        forcedUnauthorized += 1;
+        expectedUnauthorizedConsoleErrors += 1;
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: { code: 'UNAUTHORIZED', message: '测试访问令牌失效' },
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto(`/?authRecovery=${Date.now()}`);
+    await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
+    expect(forcedUnauthorized).toBe(1);
+    expect(refreshRequests).toBeGreaterThanOrEqual(1);
+    expect(refreshRequests).toBeLessThanOrEqual(2);
+    expect(new Set(presentedRefreshTokens).size).toBe(
+      presentedRefreshTokens.length,
+    );
+    await page.waitForLoadState('networkidle');
+    await page.unroute(staleAccessRoute);
+    expect(runtimeErrors).toEqual([]);
+
+    const accessToken = await page.evaluate(() =>
+      window.localStorage.getItem('family-app-token'),
+    );
+    expect(accessToken).toBeTruthy();
+    await openSection(page, testInfo.project.name, 'profile');
+    await page.getByRole('button', { name: '退出登录', exact: true }).click();
+    await expect(page.getByText(/退出账号「爸爸」/)).toBeVisible();
+    await page.getByRole('button', { name: '退出', exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
+    const revoked = await request.get(`${API_URL}/members`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(revoked.status()).toBe(401);
+  } finally {
+    await context.close();
+  }
 });

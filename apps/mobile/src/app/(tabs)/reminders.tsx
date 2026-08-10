@@ -600,11 +600,13 @@ export default function RemindersScreen() {
   const desktop = useDesktopLayout();
   const router = useRouter();
   const params = useLocalSearchParams<{
+    create?: string;
     sourceModule?: string;
     sourceId?: string;
     occurrenceDate?: string;
     reminderId?: string;
   }>();
+  const parameterCreate = firstParam(params.create);
   const parameterSourceModule = firstParam(params.sourceModule);
   const parameterSourceId = firstParam(params.sourceId);
   const parameterOccurrenceDate = firstParam(params.occurrenceDate);
@@ -639,10 +641,21 @@ export default function RemindersScreen() {
     if (!initialSourceKey) openedParam.current = null;
   }, [initialSourceKey]);
 
+  useEffect(() => {
+    if (parameterCreate !== '1') {
+      if (openedParam.current === 'create') openedParam.current = null;
+      return;
+    }
+    if (sourcesLoading || openedParam.current === 'create') return;
+    openedParam.current = 'create';
+    setEditingReminder(null);
+    setFormOpen(true);
+  }, [parameterCreate, sourcesLoading]);
+
   const closeForm = () => {
     setFormOpen(false);
     setEditingReminder(null);
-    if (initialSourceKey) router.replace('/reminders');
+    if (initialSourceKey || parameterCreate === '1') router.replace('/reminders');
   };
 
   const visibleReminders = useMemo(
@@ -792,14 +805,14 @@ const styles = StyleSheet.create({
   cardTitleWrap: { flex: 1, minWidth: 0 },
   statusBadge: { minHeight: 26, borderRadius: radius.sm, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },
   cardActions: { flexDirection: 'row', gap: 6 },
-  iconButton: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   cardDetails: { minHeight: 68, borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 18 },
   detailItem: { flexDirection: 'row', alignItems: 'center', gap: 9, minWidth: 170 },
   recipientSummary: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatarStack: { flexDirection: 'row', paddingLeft: 7 },
   recipientAvatar: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   recipientEmoji: { fontSize: 14 },
-  openButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  openButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(17, 25, 20, 0.38)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   formSheet: { width: '100%', maxWidth: 620, maxHeight: '92%', borderRadius: radius.md, borderWidth: 1, overflow: 'hidden' },
   formHeader: { minHeight: 76, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -807,7 +820,7 @@ const styles = StyleSheet.create({
   field: { gap: 8 },
   fieldLabel: { fontWeight: '700' },
   sourceFilters: { gap: 7, paddingBottom: 2 },
-  filterChip: { minHeight: 34, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  filterChip: { minHeight: 44, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
   sourceList: { height: 214, borderWidth: 1, borderRadius: radius.sm, overflow: 'hidden' },
   sourceOption: { minHeight: 64, borderBottomWidth: 1, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   noSourceText: { padding: 20, textAlign: 'center' },
@@ -815,7 +828,7 @@ const styles = StyleSheet.create({
   timeInputRow: { height: 48, borderRadius: radius.sm, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 9 },
   timeInput: { flex: 1, height: 48, padding: 0 },
   memberOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  memberOption: { minHeight: 42, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  memberOption: { minHeight: 44, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 7 },
   memberEmoji: { fontSize: 18 },
   message: { borderRadius: radius.sm, padding: 11 },
 });

@@ -1,5 +1,11 @@
 import type { Member, MemberRole } from './types';
 
+export function isHouseholdManager(
+  member: Pick<Member, 'role'> | null | undefined,
+) {
+  return member?.role === 'owner' || member?.role === 'admin';
+}
+
 export function memberRoleLabel(role: MemberRole) {
   if (role === 'owner') return '家庭管理员';
   if (role === 'admin') return '协管成员';

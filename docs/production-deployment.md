@@ -48,6 +48,31 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 元数据凭据同样优先使用 `/run/integration-secrets/` 下的 `*_FILE`，文件权限规则与媒体连接器一致。
 - 服务器变量是所有家庭的默认值。家庭管理员也可在“家庭观影 -> 观影设置 -> 搜索数据源”建立家庭覆盖；其 Token 使用 `integration_secret.txt` 进行 AES-256-GCM 加密，界面和 API 均不回显明文。
 
+可选家庭智能体：
+
+```bash
+openssl rand -base64 32 > deploy/secrets/agent_data_key.txt
+openssl rand -hex 32 > deploy/secrets/agent_mcp_key.txt
+openssl rand -hex 32 > deploy/secrets/agent_runtime_key.txt
+chmod 600 deploy/secrets/agent_*.txt
+```
+
+- `agent_data_key.txt` 用于 AES-256-GCM 加密对话正文，必须随数据库备份独立保存；丢失或直接轮换会导致已有对话无法解密。
+- `agent_mcp_key.txt` 只用于 Hermes 到 Family App MCP 的容器内认证，`agent_runtime_key.txt` 只用于 Family App 到 Hermes API Server 的认证，不能复用家庭账号、JWT 或媒体连接器密钥。
+- 模型密钥通过 `HERMES_OPENAI_API_KEY` 或部署环境的 Secret 管理注入 Hermes，不写入仓库、Compose 文件或日志。
+
+本机开发可使用独立 Hermes profile，不覆盖个人默认配置：
+
+```bash
+hermes profile create familyapp --no-skills
+node scripts/setup-local-hermes-secrets.mjs
+familyapp gateway install --start-now --start-on-login
+docker compose -f docker-compose.dev.yml -f docker-compose.local-agent.yml up -d --no-deps --force-recreate api
+```
+
+`deploy/hermes/config.local.yaml` 只为 API Server 启用 Family MCP；`docker-compose.local-agent.yml` 让容器内 API 通过 `host.docker.internal:8642` 连接本机 Hermes。脚本只在 profile 尚无配置时写入模板，并只生成缺失密钥；重复执行不会轮换现有密钥。切换模型提供方时，应同步调整该 profile 的 `model` 配置和所需的单个提供方凭据，不要复制个人消息渠道配置。
+- Hermes 是可选服务，不启用 `docker-compose.agent.yml` 时不影响家庭平台和 `/health/ready`。
+
 环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥、集成加密密钥以及连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效；集成加密密钥不能在未迁移现有密文时直接轮换。
 
 ## 3. 校验并启动
@@ -62,6 +87,20 @@ docker compose --env-file deploy/.env.production \
 docker compose --env-file deploy/.env.production \
   -f docker-compose.prod.yml up -d
 ```
+
+启用家庭智能体时，将可选叠加文件加入相同命令：
+
+```bash
+docker compose --env-file deploy/.env.production \
+  -f docker-compose.prod.yml \
+  -f docker-compose.agent.yml config --quiet
+
+docker compose --env-file deploy/.env.production \
+  -f docker-compose.prod.yml \
+  -f docker-compose.agent.yml up -d
+```
+
+生产环境不会发布 Hermes API 或 Dashboard 端口。Compose 已固定官方多架构清单 digest；首次启用前仍应在目标主机实际拉取并完成健康检查，再在家庭平台后台选择 Hermes。运行时不可用会回退到本地只读摘要。
 
 首次启动会在空数据库上执行 TypeORM 迁移，但不会创建“爸爸/妈妈”等演示数据。打开站点后，初始化页面要求填写家庭名称、首位管理员、登录账号、至少 8 位密码，以及 `deploy/secrets/bootstrap_secret.txt` 中的初始化密钥。初始化使用数据库事务与互斥锁，只有数据库完全未建户时可成功一次；之后同一密钥不能再创建家庭。
 

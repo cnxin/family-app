@@ -29,6 +29,7 @@ import {
 import {
   Between,
   DataSource,
+  EntityManager,
   In,
   IsNull,
   LessThanOrEqual,
@@ -54,7 +55,7 @@ class TaskRangeDto {
   end: string;
 }
 
-class CreateTaskDto {
+export class CreateTaskDto {
   @IsString()
   @MaxLength(120)
   title: string;
@@ -319,42 +320,50 @@ export class TasksService {
   }
 
   async create(dto: CreateTaskDto, user: JwtUser) {
+    const taskId = await this.dataSource.transaction((manager) =>
+      this.createWithinTransaction(dto, user, manager),
+    );
+    return this.findTask(taskId, user.householdId);
+  }
+
+  async createWithinTransaction(
+    dto: CreateTaskDto,
+    user: JwtUser,
+    manager: EntityManager,
+  ) {
     if ((dto.rewardPoints ?? 0) > 0 && !isAdmin(user)) {
       throw new ForbiddenException('只有家庭管理员可以设置任务积分');
     }
     const input = normalizeTaskInput(dto);
-    const taskId = await this.dataSource.transaction(async (manager) => {
-      const tasks = manager.getRepository(HouseholdTask);
-      const notifications = manager.getRepository(Notification);
-      const assignee = dto.defaultAssigneeId
-        ? await this.requireMember(dto.defaultAssigneeId, user, manager)
-        : null;
-      const task = await tasks.save(
-        tasks.create({
-          ...input,
+    const tasks = manager.getRepository(HouseholdTask);
+    const notifications = manager.getRepository(Notification);
+    const assignee = dto.defaultAssigneeId
+      ? await this.requireMember(dto.defaultAssigneeId, user, manager)
+      : null;
+    const task = await tasks.save(
+      tasks.create({
+        ...input,
+        householdId: user.householdId,
+        createdById: user.memberId,
+        defaultAssigneeId: assignee?.id ?? null,
+        rewardPoints: dto.rewardPoints ?? 0,
+      }),
+    );
+    if (assignee && assignee.id !== user.memberId) {
+      await notifications.save(
+        notifications.create({
           householdId: user.householdId,
-          createdById: user.memberId,
-          defaultAssigneeId: assignee?.id ?? null,
-          rewardPoints: dto.rewardPoints ?? 0,
+          recipientId: assignee.id,
+          module: 'task',
+          type: 'task_assigned',
+          sourceId: task.id,
+          title: `${user.name}给你安排了「${task.title}」`.slice(0, 160),
+          body: task.startsOn,
+          targetPath: `/tasks?date=${task.startsOn}&taskId=${task.id}`,
         }),
       );
-      if (assignee && assignee.id !== user.memberId) {
-        await notifications.save(
-          notifications.create({
-            householdId: user.householdId,
-            recipientId: assignee.id,
-            module: 'task',
-            type: 'task_assigned',
-            sourceId: task.id,
-            title: `${user.name}给你安排了「${task.title}」`.slice(0, 160),
-            body: task.startsOn,
-            targetPath: `/tasks?date=${task.startsOn}&taskId=${task.id}`,
-          }),
-        );
-      }
-      return task.id;
-    });
-    return this.findTask(taskId, user.householdId);
+    }
+    return task.id;
   }
 
   async update(id: string, dto: UpdateTaskDto, user: JwtUser) {

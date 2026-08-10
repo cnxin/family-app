@@ -1,12 +1,19 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import pg from 'pg';
 
 const { Client } = pg;
 const API_PORT = Number(process.env.TEST_API_PORT || 3199);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const TEST_DATABASE = `family_app_test_${randomUUID().replaceAll('-', '')}`;
+const TEST_UPLOAD_DIR = join(
+  tmpdir(),
+  `family-app-api-test-${randomUUID().replaceAll('-', '')}`,
+);
 const testEnvironment = {
   ...process.env,
   API_URL,
@@ -15,6 +22,10 @@ const testEnvironment = {
   CORS_ORIGINS: 'http://localhost:8081,http://192.168.1.20:8081',
   JWT_EXPIRES_SECONDS: '900',
   JWT_SECRET: 'family-app-api-test-secret',
+  AGENT_PURGE_POLL_INTERVAL_MS: '100',
+  AGENT_ROUTINE_POLL_INTERVAL_MS: '100',
+  AGENT_RUNTIME_KEY: 'family-app-api-test-runtime-key',
+  AGENT_RUNTIME_URL: 'http://127.0.0.1:3200',
   REFRESH_TOKEN_EXPIRES_SECONDS: '2592000',
   REMINDER_POLL_INTERVAL_MS: '200',
   NOTIFICATION_DELIVERY_POLL_INTERVAL_MS: '100',
@@ -32,6 +43,8 @@ const testEnvironment = {
   MOVIEPILOT_BASE_URL: '',
   MOVIEPILOT_API_KEY: '',
   MOVIEPILOT_RECONCILE_ENABLED: 'false',
+  OPENWEATHER_API_KEY: '',
+  OPENWEATHER_BASE_URL: 'http://127.0.0.1:1',
   TMDB_API_TOKEN: '',
   TMDB_API_KEY: '',
   DOUBAN_API_BASE_URL: '',
@@ -39,6 +52,7 @@ const testEnvironment = {
   BANGUMI_API_BASE_URL: 'http://127.0.0.1:1',
   BANGUMI_ACCESS_TOKEN: '',
   SMOKE_DATE: '2199-12-28',
+  UPLOAD_DIR: TEST_UPLOAD_DIR,
 };
 
 function wait(milliseconds) {
@@ -70,8 +84,8 @@ async function runProcess(command, args) {
   if (code !== 0) throw new Error(`${command} 执行失败，状态码 ${code}`);
 }
 
-function runScript(path) {
-  return runProcess(process.execPath, [path]);
+function runScript(path, ...args) {
+  return runProcess(process.execPath, [path, ...args]);
 }
 
 function startApi() {
@@ -186,6 +200,12 @@ let databaseCreated = false;
 let activeApiOutput = '';
 
 try {
+  await runScript('scripts/hermes-config-contract.mjs');
+  await runProcess(process.execPath, [
+    '-r',
+    'ts-node/register',
+    'scripts/agent-runtime.contract.ts',
+  ]);
   await admin.connect();
   await runProcess(process.execPath, [
     '-r',
@@ -226,6 +246,9 @@ try {
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
   await runScript('scripts/verify-legacy-pin-migration.mjs');
   await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+  await runScript('scripts/agent-proposal-groups.mjs', '--migration');
+  await runScript('scripts/agent-routines.mjs', '--migration');
+  await runScript('scripts/agent-profiles.mjs', '--migration');
   await runProcess(process.execPath, [
     '-r',
     'ts-node/register',
@@ -246,6 +269,15 @@ try {
   await runScript('scripts/external-notifications.mjs');
   await runScript('scripts/backups.mjs');
   await runScript('scripts/knowledge.mjs');
+  await runScript('scripts/memories.mjs');
+  await runScript('scripts/agent.mjs');
+  await runScript('scripts/agent-retention.mjs');
+  await runScript('scripts/agent-profiles.mjs');
+  await runScript('scripts/agent-memory.mjs');
+  await runScript('scripts/agent-tools.mjs');
+  await runScript('scripts/agent-page-context.mjs');
+  await runScript('scripts/agent-routines.mjs');
+  await runScript('scripts/agent-proposal-groups.mjs');
   await runScript('scripts/travel.mjs');
   await runScript('scripts/members-activities.mjs');
   await runScript('scripts/media.mjs');
@@ -257,6 +289,7 @@ try {
   await runScript('scripts/household-isolation.mjs');
   await runScript('scripts/security-consistency.mjs');
   await runScript('scripts/shopping-inventory.mjs');
+  await runScript('scripts/food-batches-smart-menu.mjs');
   await runScript('scripts/assets.mjs');
   await wait(50);
   assertApiLogs(activeApiOutput);
@@ -277,4 +310,5 @@ try {
     console.log('临时测试数据库已删除');
   }
   await admin.end();
+  await rm(TEST_UPLOAD_DIR, { recursive: true, force: true });
 }

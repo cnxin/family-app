@@ -21,7 +21,9 @@ export type Capability =
   | 'manage_points'
   | 'manage_members'
   | 'manage_guests'
-  | 'manage_integrations';
+  | 'manage_integrations'
+  | 'use_agent'
+  | 'manage_agent';
 
 const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
   owner: new Set([
@@ -35,6 +37,8 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_members',
     'manage_guests',
     'manage_integrations',
+    'use_agent',
+    'manage_agent',
   ]),
   admin: new Set([
     'place_meal_order',
@@ -47,6 +51,8 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_members',
     'manage_guests',
     'manage_integrations',
+    'use_agent',
+    'manage_agent',
   ]),
   member: new Set([
     'place_meal_order',
@@ -55,6 +61,7 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_shopping',
     'manage_inventory',
     'manage_assets',
+    'use_agent',
   ]),
 };
 

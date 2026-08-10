@@ -27,18 +27,25 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   Ingredient,
+  InventoryBatch,
+  InventoryBatchMovement,
   InventoryCategory,
   InventoryItem,
   InventoryTransaction,
   MaintenanceConsumable,
   ShoppingItem,
 } from '../entities';
+import {
+  BatchDatesInput,
+  InventoryBatchesService,
+} from './inventory-batches.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
 
 function isUniqueViolation(error: unknown) {
@@ -144,6 +151,65 @@ class InventoryTransactionsQueryDto {
   limit?: number;
 }
 
+class InventoryBatchesQueryDto {
+  @IsOptional()
+  @IsUUID()
+  inventoryItemId?: string;
+
+  @IsOptional()
+  @IsIn(['all', 'active', 'expiring', 'expired'])
+  status?: 'all' | 'active' | 'expiring' | 'expired';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  days?: number;
+}
+
+class BatchDatesDto implements BatchDatesInput {
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  receivedOn?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  productionDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  expiresOn?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  openedOn?: string | null;
+}
+
+class CreateInventoryBatchDto extends BatchDatesDto {
+  @IsUUID()
+  inventoryItemId: string;
+
+  @IsNumber()
+  @Min(0.01)
+  quantity: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  idempotencyKey: string;
+}
+
+class UpdateInventoryBatchDto extends BatchDatesDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
 class ShoppingInventoryPreviewDto {
   @IsOptional()
   @IsUUID()
@@ -154,6 +220,11 @@ class ConfirmShoppingReceiptDto {
   @IsOptional()
   @IsUUID()
   inventoryItemId?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BatchDatesDto)
+  batch?: BatchDatesDto;
 }
 
 @Injectable()
@@ -163,15 +234,23 @@ export class InventoryService {
     private readonly items: Repository<InventoryItem>,
     @InjectRepository(InventoryTransaction)
     private readonly transactions: Repository<InventoryTransaction>,
+    @InjectRepository(InventoryBatch)
+    private readonly batches: Repository<InventoryBatch>,
     private readonly dataSource: DataSource,
     private readonly ledger: InventoryTransactionsService,
+    private readonly batchService: InventoryBatchesService,
   ) {}
 
-  list(householdId: string) {
-    return this.items.find({
+  async list(householdId: string) {
+    const items = await this.items.find({
       where: { householdId },
       order: { category: 'ASC', name: 'ASC' },
     });
+    const summaries = await this.batchService.summaries(householdId, items);
+    return items.map((item) => ({
+      ...item,
+      batchSummary: summaries.get(item.id),
+    }));
   }
 
   async create(dto: CreateInventoryItemDto, user: JwtUser) {
@@ -328,8 +407,7 @@ export class InventoryService {
         await items.save(item);
 
         if (quantityChanged) {
-          await manager.getRepository(InventoryTransaction).save(
-            this.ledger.createTransaction(manager, {
+          const transaction = this.ledger.createTransaction(manager, {
               householdId: user.householdId,
               inventoryItemId: item.id,
               operationId: randomUUID(),
@@ -342,8 +420,20 @@ export class InventoryService {
               sourceType: 'manual_adjustment',
               sourceId: item.id,
               idempotencyKey: `manual-adjustment:${adjustmentKey!}`,
-            }),
-          );
+            });
+          transaction.id = randomUUID();
+          await manager.getRepository(InventoryTransaction).save(transaction);
+          if (quantityAfter < quantityBefore) {
+            await this.batchService.applyConsumption(manager, {
+              item,
+              quantity: quantityBefore - quantityAfter,
+              transaction,
+              actor: user,
+              sourceType: 'manual_adjustment',
+              sourceId: item.id,
+              movementType: 'adjustment',
+            });
+          }
         }
       });
     } catch (error) {
@@ -379,6 +469,9 @@ export class InventoryService {
     if (await this.transactions.existsBy({ inventoryItemId: id, householdId })) {
       throw new ConflictException('已有库存流水的库存项不能删除');
     }
+    if (await this.batches.existsBy({ inventoryItemId: id, householdId })) {
+      throw new ConflictException('已有食品批次的库存项不能删除');
+    }
     const result = await this.items.delete({ id, householdId });
     if (!result.affected) throw new NotFoundException('库存项不存在');
     return { id, removed: true };
@@ -390,6 +483,7 @@ export class InventoryController {
   constructor(
     private readonly service: InventoryService,
     private readonly ledger: InventoryTransactionsService,
+    private readonly batchesService: InventoryBatchesService,
   ) {}
 
   @Get('inventory')
@@ -431,6 +525,38 @@ export class InventoryController {
     );
   }
 
+  @Get('inventory-batches')
+  batches(
+    @Query() query: InventoryBatchesQueryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.batchesService.list(
+      user.householdId,
+      query.inventoryItemId,
+      query.status,
+      query.days,
+    );
+  }
+
+  @Post('inventory-batches')
+  @RequireCapabilities('manage_inventory')
+  createBatch(
+    @Body() dto: CreateInventoryBatchDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.batchesService.create(dto, user);
+  }
+
+  @Patch('inventory-batches/:id')
+  @RequireCapabilities('manage_inventory')
+  updateBatch(
+    @Param('id') id: string,
+    @Body() dto: UpdateInventoryBatchDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.batchesService.update(id, dto, user);
+  }
+
   @Get('shopping-items/:id/inventory-preview')
   shoppingPreview(
     @Param('id') id: string,
@@ -451,7 +577,12 @@ export class InventoryController {
     @Body() dto: ConfirmShoppingReceiptDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.ledger.confirmShoppingReceipt(id, dto.inventoryItemId, user);
+    return this.ledger.confirmShoppingReceipt(
+      id,
+      dto.inventoryItemId,
+      dto.batch,
+      user,
+    );
   }
 
   @Get('menus/:id/inventory-preview')
@@ -480,13 +611,23 @@ export class InventoryController {
     TypeOrmModule.forFeature([
       InventoryItem,
       Ingredient,
+      InventoryBatch,
+      InventoryBatchMovement,
       InventoryTransaction,
       MaintenanceConsumable,
       ShoppingItem,
     ]),
   ],
   controllers: [InventoryController],
-  providers: [InventoryService, InventoryTransactionsService],
-  exports: [InventoryTransactionsService],
+  providers: [
+    InventoryService,
+    InventoryBatchesService,
+    InventoryTransactionsService,
+  ],
+  exports: [
+    InventoryService,
+    InventoryBatchesService,
+    InventoryTransactionsService,
+  ],
 })
 export class InventoryModule {}

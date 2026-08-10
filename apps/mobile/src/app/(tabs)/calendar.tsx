@@ -21,7 +21,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,13 +37,20 @@ import {
   startOfMonth,
 } from '../../components/calendar-month';
 import { DateSelector } from '../../components/date-selector';
-import { Card, ConfirmDialog, PrimaryButton } from '../../components/ui';
+import {
+  AdaptiveDialog,
+  Card,
+  ConfirmDialog,
+  PressableScale,
+  PrimaryButton,
+} from '../../components/ui';
 import { formatPlanDate, parseDate, todayStr } from '../../lib/date';
 import {
   useCalendarEntries,
   useDeleteCalendarEvent,
   useUpsertCalendarEvent,
 } from '../../lib/queries';
+import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
 import type { CalendarEntry, MealType } from '../../lib/types';
 
@@ -156,27 +162,15 @@ function EventForm({
   };
 
   return (
-    <Modal
-      animationType="fade"
-      onRequestClose={onClose}
-      transparent
+    <AdaptiveDialog
+      accessibilityLabel={entry ? '编辑家庭事件' : '新建家庭事件'}
+      maxWidth={520}
+      onClose={onClose}
+      style={styles.formSheet}
+      testID="calendar-event-dialog"
       visible={visible}
     >
-      <View style={styles.modalOverlay}>
-        <Pressable
-          accessibilityLabel="关闭事件编辑"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          accessibilityViewIsModal
-          style={[
-            styles.formSheet,
-            { backgroundColor: c.card, borderColor: c.separator },
-          ]}
-        >
-          <View style={styles.formHeader}>
+      <View style={styles.formHeader}>
             <View>
               <Text style={[t.title2, { color: c.label }]}>
                 {entry ? '编辑家庭事件' : '新建家庭事件'}
@@ -196,13 +190,13 @@ function EventForm({
             >
               <X color={c.secondaryLabel} size={20} />
             </Pressable>
-          </View>
+      </View>
 
-          <ScrollView
-            contentContainerStyle={styles.formContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+      <ScrollView
+        contentContainerStyle={styles.formContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
             <View style={styles.field}>
               <Text style={[t.footnote, styles.fieldLabel, { color: c.secondaryLabel }]}>事件名称</Text>
               <TextInput
@@ -322,10 +316,8 @@ function EventForm({
                 title={entry ? '保存修改' : '添加事件'}
               />
             </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
+      </ScrollView>
+    </AdaptiveDialog>
   );
 }
 
@@ -533,6 +525,9 @@ export default function CalendarScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
   const router = useRouter();
+  const { member } = useSession();
+  const consumer = member?.role === 'member';
+  const adminDesktop = desktop && !consumer;
   const params = useLocalSearchParams<{ date?: string; eventId?: string }>();
   const parameterDate = validDate(firstParam(params.date));
   const parameterEventId = firstParam(params.eventId);
@@ -599,29 +594,41 @@ export default function CalendarScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <PageContainer maxWidth={1100} style={styles.page}>
-          <View style={styles.pageHeader}>
+        <PageContainer
+          maxWidth={consumer ? 720 : 1100}
+          style={[styles.page, consumer && styles.pageConsumer]}
+        >
+          <View
+            style={[
+              styles.pageHeader,
+              consumer && styles.pageHeaderConsumer,
+              consumer && { backgroundColor: c.blueSoft },
+            ]}
+            testID={consumer ? 'consumer-calendar-header' : undefined}
+          >
             <View style={styles.pageHeading}>
+              {consumer ? (
+                <Text style={[t.footnote, styles.consumerEyebrow, { color: c.blue }]}>家里的安排</Text>
+              ) : null}
               <Text style={[t.title1, { color: c.label }]}>家庭日历</Text>
               <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
                 {fullDate(selectedDate)}
               </Text>
             </View>
-            <Pressable
+            <PressableScale
+              accessibilityLabel="添加事件"
               accessibilityRole="button"
+              haptic
               onPress={openCreate}
-              style={({ pressed }) => [
-                styles.addButton,
-                { backgroundColor: pressed ? c.green : c.tint },
-              ]}
+              style={[styles.addButton, { backgroundColor: c.tint }]}
             >
               <Plus color="#FFFFFF" size={18} />
               <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>添加事件</Text>
-            </Pressable>
+            </PressableScale>
           </View>
 
-          <View style={[styles.main, desktop && styles.mainDesktop]}>
-            <Card style={[styles.calendarCard, desktop && styles.calendarCardDesktop]}>
+          <View style={[styles.main, adminDesktop && styles.mainDesktop]}>
+            <Card style={[styles.calendarCard, adminDesktop && styles.calendarCardDesktop]}>
               <CalendarMonth
                 entries={entries}
                 onMonthChange={setVisibleMonth}
@@ -765,6 +772,7 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   page: { paddingTop: 22, paddingBottom: 40 },
+  pageConsumer: { paddingTop: 14, paddingBottom: 56 },
   pageHeader: {
     minHeight: 56,
     flexDirection: 'row',
@@ -772,9 +780,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 14,
   },
+  pageHeaderConsumer: {
+    borderRadius: radius.md,
+    padding: 18,
+  },
   pageHeading: { flex: 1, minWidth: 0 },
+  consumerEyebrow: { fontWeight: '700', marginBottom: 5 },
   addButton: {
-    height: 42,
+    height: 44,
     borderRadius: radius.md,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -821,8 +834,8 @@ const styles = StyleSheet.create({
   creatorRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
   rowActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   smallIconButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -841,20 +854,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 10,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 25, 20, 0.42)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
   formSheet: {
-    width: '100%',
-    maxWidth: 520,
     maxHeight: '92%',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
   },
   formHeader: {
     minHeight: 70,
@@ -864,8 +865,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   iconButton: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',

@@ -45,6 +45,9 @@ try {
        AND column_name = 'pinHash'`,
   );
   assert(memberPinHashColumn.rowCount === 0, '成员档案不再保存登录凭据');
+  await db.query('DELETE FROM agent_member_profiles WHERE "memberId" = $1', [
+    member.id,
+  ]);
   await db.query('DELETE FROM members WHERE id = $1', [member.id]);
   await db.query('DELETE FROM accounts WHERE id = $1', [member.accountId]);
 } finally {

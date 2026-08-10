@@ -38,6 +38,7 @@ function DishCard({ dish, desktop }: { dish: RecipeDish; desktop: boolean }) {
     <Pressable
       accessibilityRole="link"
       onPress={() => router.push(`/dish/${dish.id}`)}
+      testID={`recipe-dish-${dish.id}`}
       style={({ pressed }) => [
         styles.cardPressable,
         { opacity: pressed ? 0.7 : 1 },

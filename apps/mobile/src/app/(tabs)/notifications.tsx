@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Bell,
   BellRing,
+  ArrowRight,
   CalendarDays,
   Check,
   CheckCheck,
@@ -14,6 +15,8 @@ import {
   ListTodo,
   Pencil,
   Plus,
+  Inbox,
+  Info,
   Radio,
   RefreshCw,
   RotateCcw,
@@ -56,11 +59,15 @@ import {
   useNotificationChannels,
   useNotificationDeliveries,
   useNotifications,
+  usePolls,
+  useReminders,
   useRetryNotificationDelivery,
+  useTasks,
   useTestNotificationChannel,
   useUpdateNotificationChannel,
   useUpdateNotificationPreference,
 } from '../../lib/queries';
+import { todayStr } from '../../lib/date';
 import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
 import type {
@@ -75,6 +82,7 @@ import type {
 type NotificationFilter = 'unread' | 'all';
 type NotificationView = 'inbox' | 'settings' | 'deliveries';
 type DeliveryFilter = 'all' | 'active' | 'sent' | 'failed';
+type ConsumerInboxView = 'actions' | 'updates';
 
 const MODULE_LABELS: Record<NotificationModule, string> = {
   menu: '菜单',
@@ -85,6 +93,7 @@ const MODULE_LABELS: Record<NotificationModule, string> = {
   media: '观影',
   guest: '访客',
   points: '积分',
+  agent: '小管家',
   system: '系统',
 };
 const MODULES = Object.keys(MODULE_LABELS) as NotificationModule[];
@@ -225,6 +234,229 @@ function NotificationRow({
         </Pressable>
       ) : null}
     </View>
+  );
+}
+
+interface InboxActionItem {
+  background: string;
+  color: string;
+  href: string;
+  icon: React.ComponentType<{ color?: string; size?: number }>;
+  id: string;
+  meta: string;
+  title: string;
+}
+
+function InboxActionRow({ item }: { item: InboxActionItem }) {
+  const c = useTheme();
+  const router = useRouter();
+  const Icon = item.icon;
+  return (
+    <PressableScale
+      accessibilityLabel={`处理${item.title}`}
+      accessibilityRole="link"
+      onPress={() => router.push(item.href as never)}
+      style={styles.consumerInboxAction}
+    >
+      <View style={[styles.consumerInboxIcon, { backgroundColor: item.background }]}>
+        <Icon color={item.color} size={18} />
+      </View>
+      <View style={styles.consumerInboxCopy}>
+        <Text numberOfLines={2} style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+          {item.title}
+        </Text>
+        <Text numberOfLines={1} style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>
+          {item.meta}
+        </Text>
+      </View>
+      <ArrowRight color={c.tertiaryLabel} size={17} />
+    </PressableScale>
+  );
+}
+
+function ConsumerInbox({
+  notifications,
+  notificationsError,
+  notificationsLoading,
+  markAll,
+  markAllPending,
+  markRead,
+  openNotification,
+}: {
+  notifications: AppNotification[];
+  notificationsError: boolean;
+  notificationsLoading: boolean;
+  markAll: () => void;
+  markAllPending: boolean;
+  markRead: (id: string) => void;
+  openNotification: (notification: AppNotification) => void;
+}) {
+  const c = useTheme();
+  const router = useRouter();
+  const { member } = useSession();
+  const today = todayStr();
+  const { data: tasks, isLoading: tasksLoading, error: tasksError } = useTasks(today, today);
+  const { data: polls, isLoading: pollsLoading, error: pollsError } = usePolls();
+  const { data: reminders, isLoading: remindersLoading } = useReminders('scheduled');
+  const [view, setView] = useState<ConsumerInboxView>('actions');
+  const unreadCount = notifications.filter((item) => !item.readAt).length;
+  const actions: InboxActionItem[] = [
+    ...(tasks ?? [])
+      .filter(
+        (entry) =>
+          entry.status === 'pending' &&
+          entry.canUpdate &&
+          (entry.assigneeId == null || entry.assigneeId === member?.id),
+      )
+      .map((entry) => ({
+        background: c.tintSoft,
+        color: c.tint,
+        href: `/tasks?date=${entry.dueDate}&taskId=${entry.taskId}`,
+        icon: ListTodo,
+        id: `task:${entry.id}`,
+        meta: entry.assigneeId ? '今天交给我的任务' : '今天可以认领的任务',
+        title: entry.task.title,
+      })),
+    ...(polls ?? [])
+      .filter((poll) => poll.status === 'open' && poll.canVote && poll.selectedOptionIds.length === 0)
+      .map((poll) => ({
+        background: c.accentSoft,
+        color: c.accent,
+        href: `/polls?pollId=${poll.id}`,
+        icon: Vote,
+        id: `poll:${poll.id}`,
+        meta: `${poll.options.length} 个选项 · 等你投票`,
+        title: poll.title,
+      })),
+  ];
+  const loadingActions = tasksLoading || pollsLoading;
+  const actionError = Boolean(tasksError || pollsError);
+  const upcomingReminders = (reminders ?? [])
+    .filter((reminder) => reminder.recipients.some((recipient) => recipient.member.id === member?.id))
+    .slice(0, 3);
+
+  return (
+    <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']} testID="consumer-family-inbox">
+      <PageContainer maxWidth={720} style={styles.consumerInboxPage}>
+        <View style={styles.consumerInboxHeader}>
+          <View style={[styles.consumerInboxHeaderIcon, { backgroundColor: c.tintSoft }]}>
+            <Inbox color={c.tint} size={23} />
+          </View>
+          <View style={styles.consumerInboxCopy}>
+            <Text style={[t.title1, { color: c.label }]}>家庭收件箱</Text>
+            <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>
+              {actions.length ? `${actions.length} 件事需要处理` : '待办已经处理完'} · {unreadCount} 条未读
+            </Text>
+          </View>
+          {view === 'updates' && unreadCount ? (
+            <PressableScale
+              accessibilityLabel="全部标为已读"
+              disabled={markAllPending}
+              onPress={markAll}
+              style={[styles.consumerMarkAll, { backgroundColor: c.fill }]}
+            >
+              <CheckCheck color={c.tint} size={17} />
+            </PressableScale>
+          ) : null}
+        </View>
+
+        <View style={styles.consumerInboxTabs}>
+          <Segmented<ConsumerInboxView>
+            onChange={setView}
+            options={[
+              { label: `需要处理 ${actions.length}`, value: 'actions' },
+              { label: `仅供了解 ${unreadCount}`, value: 'updates' },
+            ]}
+            value={view}
+          />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.consumerInboxScroll} showsVerticalScrollIndicator={false}>
+          {view === 'actions' ? (
+            <Card style={styles.consumerInboxList}>
+              {loadingActions ? <ActivityIndicator color={c.tint} style={styles.loader} /> : null}
+              {actionError ? (
+                <EmptyState icon={Inbox} title="待办加载失败" hint="请稍后重新打开收件箱" />
+              ) : null}
+              {!loadingActions && !actionError && actions.map((item) => (
+                <InboxActionRow item={item} key={item.id} />
+              ))}
+              {!loadingActions && !actionError && !actions.length ? (
+                <EmptyState
+                  icon={CheckCircle2}
+                  iconBackground={c.greenSoft}
+                  iconColor={c.green}
+                  title="现在没有需要处理的事"
+                  hint="新的家庭任务和投票会自动出现在这里"
+                />
+              ) : null}
+            </Card>
+          ) : (
+            <View style={styles.consumerInboxSections}>
+              {upcomingReminders.length || remindersLoading ? (
+                <View>
+                  <View style={styles.consumerInboxSectionTitle}>
+                    <BellRing color={c.blue} size={17} />
+                    <Text style={[t.headline, { color: c.label }]}>接下来提醒</Text>
+                  </View>
+                  <Card style={styles.consumerInboxList}>
+                    {remindersLoading ? <ActivityIndicator color={c.tint} style={styles.loader} /> : null}
+                    {upcomingReminders.map((reminder) => (
+                      <PressableScale
+                        accessibilityLabel={`打开提醒${reminder.source?.title ?? ''}`}
+                        accessibilityRole="link"
+                        key={reminder.id}
+                        onPress={() => {
+                          const target = reminder.source?.targetPath ?? `/reminders?reminderId=${reminder.id}`;
+                          router.push(target as never);
+                        }}
+                        style={styles.consumerInboxAction}
+                      >
+                        <View style={[styles.consumerInboxIcon, { backgroundColor: c.blueSoft }]}>
+                          <BellRing color={c.blue} size={18} />
+                        </View>
+                        <View style={styles.consumerInboxCopy}>
+                          <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+                            {reminder.source?.title ?? '家庭提醒'}
+                          </Text>
+                          <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 4 }]}>
+                            {notificationTime(reminder.remindAt)}
+                          </Text>
+                        </View>
+                        <Info color={c.tertiaryLabel} size={17} />
+                      </PressableScale>
+                    ))}
+                  </Card>
+                </View>
+              ) : null}
+              <View>
+                <View style={styles.consumerInboxSectionTitle}>
+                  <Info color={c.orange} size={17} />
+                  <Text style={[t.headline, { color: c.label }]}>家庭动态</Text>
+                </View>
+                <Card style={[styles.notificationList, styles.consumerNotificationList]}>
+                  {notificationsLoading ? <ActivityIndicator color={c.tint} style={styles.loader} /> : null}
+                  {notificationsError ? (
+                    <EmptyState icon={Bell} title="消息加载失败" hint="请检查 API 服务" />
+                  ) : null}
+                  {!notificationsLoading && !notificationsError && notifications.map((notification) => (
+                    <NotificationRow
+                      key={notification.id}
+                      notification={notification}
+                      onOpen={() => openNotification(notification)}
+                      onRead={() => markRead(notification.id)}
+                    />
+                  ))}
+                  {!notificationsLoading && !notificationsError && !notifications.length ? (
+                    <EmptyState icon={Bell} title="还没有家庭动态" hint="菜单、任务和日程变化会显示在这里" />
+                  ) : null}
+                </Card>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+      </PageContainer>
+    </SafeAreaView>
   );
 }
 
@@ -771,6 +1003,20 @@ export default function NotificationsScreen() {
     }
   };
 
+  if (member?.role === 'member') {
+    return (
+      <ConsumerInbox
+        markAll={() => markAll.mutate()}
+        markAllPending={markAll.isPending}
+        markRead={(id) => markRead.mutate(id)}
+        notifications={notifications ?? []}
+        notificationsError={Boolean(notificationsQuery.error)}
+        notificationsLoading={notificationsQuery.isLoading}
+        openNotification={(notification) => void openNotification(notification)}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer maxWidth={980} style={[styles.page, desktop && styles.pageDesktop]}>
@@ -953,6 +1199,38 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
+  consumerInboxPage: { flex: 1, paddingTop: 12 },
+  consumerInboxHeader: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 58 },
+  consumerInboxHeaderIcon: {
+    alignItems: 'center',
+    borderRadius: 23,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
+  consumerInboxCopy: { flex: 1, minWidth: 0 },
+  consumerMarkAll: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
+  consumerInboxTabs: { marginTop: 18 },
+  consumerInboxScroll: { paddingBottom: 104, paddingTop: 16 },
+  consumerInboxList: { overflow: 'hidden' },
+  consumerNotificationList: { minHeight: 0 },
+  consumerInboxAction: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 11,
+    minHeight: 72,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  consumerInboxIcon: {
+    alignItems: 'center',
+    borderRadius: 19,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  consumerInboxSections: { gap: 24 },
+  consumerInboxSectionTitle: { alignItems: 'center', flexDirection: 'row', gap: 7, marginBottom: 9, paddingHorizontal: 3 },
   screen: { flex: 1 },
   page: { flex: 1, paddingTop: 18 },
   pageDesktop: { paddingTop: 30 },
