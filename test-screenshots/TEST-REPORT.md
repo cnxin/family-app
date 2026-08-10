@@ -127,3 +127,57 @@ A7.3 专项结果为 **2/2**。两条 run 均为 Hermes、无回落；范围查�
 | A7.5 组提案 | 1/1 | 走路径 (a)：`propose_plan` 生成 5 个组内子项，无回落 |
 
 组提案输入改为明确周六晚餐、总计 5 人、来访爸爸不吃辣且其他人无忌口，并明确要求菜单、购物和准备任务。Hermes 真实运行 222.8 秒，先查询点菜、购物、库存和菜谱，再调用 `propose_plan` 创建 5 个子项，结构化结果记录 `proposalPath="a"`。本轮完整真实回归的 9 个主场景、2 个记忆场景、2 个页面上下文场景和 1 个组提案场景全部为 Hermes、回落数 0；没有修改工具 description、system prompt 或 Fake runtime。结构化明细见 `E2E-RESULTS.json`，页面证据见 `14-proposal-group.png`。
+
+## A6.1 信息架构收敛最终验收（2026-08-10）
+
+本节是 A6.1 的最终结果；上文 8 月 8 日和 A7.5 各节保留为历史批次记录，不代表本轮耗时、工具选择或授权参数。
+
+测试环境：Expo Web / Google Chrome，390 x 844 移动视口，触控模式。测试账号仍为 `爸爸` 空密码账号，没有修改密码、重新 seed 或覆盖开发数据。最终结构化结果的 `commitBase` 为 `A6.1-final-working-tree`。
+
+### A7.4-A 主场景
+
+| 场景 | 实际工具 | 耗时 | 结果 |
+| --- | --- | ---: | --- |
+| 查看我的待办任务 | `get_member_tasks` | 37.0s | 通过 |
+| 这周家里有什么安排 | `get_family_schedule`, `get_tasks` | 19.9s | 通过 |
+| 家里还有哪些菜快过期了 | `get_inventory_summary` | 14.1s | 通过 |
+| 购物清单里有什么 | `get_shopping_list`（2 次） | 27.4s | 通过 |
+| 搜索不辣的家常菜 | `search_recipes`（3 次） | 52.7s | 通过 |
+| 下周点了什么菜 | `get_dish_plan` | 14.5s | 通过 |
+| 深圳这几天天气怎么样 | `get_weather` | 6.9s | 通过，未配置时安全降级 |
+| 我的个人档案 | `get_member_profile` | 9.7s | 通过 |
+| 我明天有什么安排，需要准备什么食材 | `get_family_schedule`, `get_meal_plan` | 14.1s | 通过，多工具联动 |
+
+主场景为 **9/9**，平均 21.8 秒；9 个 run 均为 `runtimeKind=hermes`、`errorCode=null`，均产生工具事件和结构化卡片，`fallbackCount=0`。
+
+### 记忆、上下文与组提案
+
+| 范围 | 实际行为 | 结果 |
+| --- | --- | ---: |
+| 记忆写入 | `remember_preference` 创建候选，随后由测试确认 | 通过 |
+| 记忆召回 | `recall_preferences` 召回已确认的个人偏好 | 通过 |
+| 菜品有页面上下文 | `search_recipes` 按当前菜品回答 | 通过 |
+| 菜品无页面上下文 | 不调用工具，明确追问具体菜名 | 通过 |
+| 知识文章无页面上下文 | 不调用 `search_knowledge`，要求文章正文、链接或标题 | 通过 |
+| 家庭晚餐组提案 | 路径 (a)，调用 `propose_plan` 生成 4 个子项 | 通过 |
+
+记忆 **2/2**、页面上下文与反向断言 **3/3**、组提案 **1/1**，全部由 Hermes 完成且无回落。`travel` 的反向约束没有计入通过数：专项曾追问，但完整运行中仍可能默认选择首项，最终已按刹车规则回退，详见审核文档附录八。
+
+### 页面入口与响应式证据
+
+- 家庭资产、知识库、出行、投票四页的「问小管家」入口均紧跟页头，位于筛选和主体内容之前；底部小管家 tab 保留。
+- 320/375/390/414px 四视口验证入口不少于 44px、文本可收缩、页面无横向溢出，点击后 URL 只携带经过设计的 `route`。
+- `a61-assets-390.png`、`a61-knowledge-390.png`、`a61-travel-390.png`、`a61-polls-390.png` 为四个页面的 390 x 844 真实截图。
+- `15-no-knowledge-context.png` 为新增知识库反向断言的最终真机证据；01-14 PNG 和 `E2E-RESULTS.json` 均来自本轮最终运行。
+
+### 最终自动验收
+
+- API 全量回归：通过，约 63.4 秒。
+- schema 漂移检查：实体与迁移一致；本批无迁移。
+- API build：通过。
+- Mobile TypeScript 与 Expo lint：通过。
+- Mobile Web 全量：**43 passed / 8 skipped / 0 failed**，51 项全部得到明确结果，没有 `not run`。
+- Hermes 配置契约：两份 yaml 各 25 项，均与代码常量一致。
+- Agent 运行时契约：chat 240000ms、授权 360000ms、余量 120000ms。
+- 真实 Hermes 全套：1 passed，398.3 秒；工具 9/9、记忆 2/2、页面上下文 3/3、组提案 1/1、回落 0。
+- `git diff --check`：通过。

@@ -1,13 +1,13 @@
 {
-  "testedAt": "2026-08-09T15:43:28.412Z",
+  "testedAt": "2026-08-10T01:34:59.176Z",
   "device": "Expo Web / Chrome mobile viewport 390x844 / touch enabled",
-  "commitBase": "working-tree",
-  "conversationId": "d9d00314-3473-4aac-8e9d-e092ca6045c1",
+  "commitBase": "A6.1-final-working-tree",
+  "conversationId": "4455e9e8-8c24-40e4-bd7c-d7f6f49f7d86",
   "memoryConversationId": "",
   "summary": {
     "passed": 9,
     "total": 9,
-    "averageDurationMs": 76457,
+    "averageDurationMs": 21833,
     "runsWithToolEvents": 9,
     "runsWithCards": 9,
     "multiToolPassed": true,
@@ -28,11 +28,11 @@
       "expectedTool": "get_member_tasks",
       "expectedKind": "tasks",
       "screenshot": "01-tasks.png",
-      "runId": "3005aaf8-8ac7-4817-b45b-c363b2976f63",
+      "runId": "a9e3cf40-9725-4fdd-801a-3949cd3a0ddf",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 109570,
+      "durationMs": 37046,
       "toolNames": [
         "get_member_tasks"
       ],
@@ -42,7 +42,7 @@
       "cardTexts": [
         "成员任务 | 买菜（端到端测试） 2026-08-08 · 爸爸 待完成 | 交电费（端到端测试） 2026-08-10 · 爸爸 待完成"
       ],
-      "assistantText": "你的待办任务有 2 项：\n\n1. 买菜（端到端测试），截止 8 月 8 日，已过期\n2. 交电费（端到端测试），截止 8 月 10 日\n\n两项都还未完成。需要我帮你生成提醒或做其他安排吗？",
+      "assistantText": "你目前有 2 个待办任务：\n\n1. 买菜（端到端测试），原定 8 月 8 日，尚未完成（已过期限）\n2. 交电费（端到端测试），今天 8 月 10 日到期，尚未完成\n\n需要我帮你把某项任务生成提醒或做其他安排吗？",
       "passed": true,
       "note": null
     },
@@ -52,22 +52,24 @@
       "expectedTool": "get_family_schedule",
       "expectedKind": "schedule",
       "screenshot": "02-schedule.png",
-      "runId": "b8e05f4b-6c1e-415b-9d75-62a228a0ecfd",
+      "runId": "68fe8295-3d44-4dd7-b295-819229e47e98",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 114312,
+      "durationMs": 19916,
       "toolNames": [
         "get_family_schedule",
-        "get_calendar"
+        "get_tasks"
       ],
       "cardKinds": [
-        "schedule"
+        "schedule",
+        "tasks"
       ],
       "cardTexts": [
-        "家庭日程 | 家庭聚餐（端到端测试） 2026-08-09 · 爸爸 scheduled | 交电费（端到端测试） 2026-08-10 · 爸爸 pending | 晚餐菜单 2026-08-14 open | 浏览器出行-mobile-chrome 2026-08-15 planned | 浏览器出行-desktop-chrome 2026-08-15 planned | 浏览器出行-mobile-chrome-msjbi6vp 2026-08-15 planned | 浏览器出行-mobile-chrome-msjbtrow 2026-08-15 planned | 浏览器出行-desktop-chrome-msjbx803 2026-08-15 planned"
+        "家庭日程 | 交电费（端到端测试） 2026-08-10 · 爸爸 pending | 晚餐菜单 2026-08-14 open | 浏览器出行-mobile-chrome 2026-08-15 planned | 浏览器出行-desktop-chrome 2026-08-15 planned | 浏览器出行-mobile-chrome-msjbi6vp 2026-08-15 planned | 浏览器出行-mobile-chrome-msjbtrow 2026-08-15 planned | 浏览器出行-desktop-chrome-msjbx803 2026-08-15 planned | 浏览器出行-mobile-chrome-msjc3m6v 2026-08-15 planned",
+        "家庭任务 | 交电费（端到端测试） 2026-08-10 · 爸爸 待完成"
       ],
-      "assistantText": "本周（8/9-8/16）家里有这些安排：\n\n8/9（今天）家庭聚餐，全家参加\n8/10 交电费（爸爸的任务，本周到期）\n8/14 晚餐已有点菜菜单（1 道菜）\n8/15-8/16 有多条\"浏览器出行\"行程记录，看起来像是自动测试生成的重复数据，不是真实出行计划，建议核实一下\n\n需要我帮你确认某个安排或做提醒吗？",
+      "assistantText": "这周（8/10–8/16）家庭日程里有这些安排：\n\n周一 8/10：交电费（端到端测试），分配给爸爸，待完成\n周五 8/14：晚餐菜单已排好，1 道菜\n周六 8/15：有 14 条\"浏览器出行-xxx\"行程（测试区域，8/15–8/16）\n周日 8/16：另有 10 条同样的\"浏览器出行\"行程（8/16–8/17）\n\n注意：8/15 和 8/16 的\"浏览器出行\"行程名称相似、数量很多，看起来像是测试生成的数据，不一定是你真实要参与的出行。需要我帮你查看其中某个行程的详细清单，或者确认哪些需要保留吗？",
       "passed": true,
       "note": null
     },
@@ -77,13 +79,12 @@
       "expectedTool": "get_inventory_summary",
       "expectedKind": "inventory",
       "screenshot": "03-inventory.png",
-      "runId": "9de55e1c-6465-4b19-b8cb-a22715ef8d94",
+      "runId": "0f397258-b8b6-4c77-82f1-8f2abc33d718",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 50608,
+      "durationMs": 14140,
       "toolNames": [
-        "get_inventory_alerts",
         "get_inventory_summary"
       ],
       "cardKinds": [
@@ -92,7 +93,7 @@
       "cardTexts": [
         "库存摘要 | 牛奶（端到端测试） 2 瓶 缺货且临期"
       ],
-      "assistantText": "目前库存里有一项临期/低库存提醒：\n\n牛奶（端到端测试）：剩 2 瓶，低于 5 瓶阈值，且明天（8/10）到期，需要尽快处理。\n\n其他食材暂未发现临期提醒。需要我帮你把牛奶加进购物清单吗？",
+      "assistantText": "家里有一件临期物品：\n\n牛奶（端到端测试）：剩 2 瓶，今天 8/10 到期，而且低于 5 瓶的低库存线，属于\"低库存+临期\"双重提醒，已指向购物清单。\n\n建议尽快处理或补货。需要我生成一条补货购物清单的提案吗？",
       "passed": true,
       "note": null
     },
@@ -102,21 +103,24 @@
       "expectedTool": "get_shopping_list",
       "expectedKind": "shopping",
       "screenshot": "04-shopping.png",
-      "runId": "08ae46d5-c7d8-4203-8464-528e1b7e0c62",
+      "runId": "3074b669-bdc4-4f1f-9a1f-78d7a65d138f",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 68598,
+      "durationMs": 27387,
       "toolNames": [
+        "get_shopping_list",
         "get_shopping_list"
       ],
       "cardKinds": [
+        "shopping",
         "shopping"
       ],
       "cardTexts": [
+        "购物清单 | 购物清单已经处理完了",
         "购物清单 | 购物清单已经处理完了"
       ],
-      "assistantText": "今天的购物清单是空的，没有任何待购或已购项目。需要我查其他日期的清单吗？",
+      "assistantText": "当前购物清单是空的（查询了 8/10 及默认范围的清单，均无条目）。\n\n之前库存提醒里提到牛奶\"已指向购物清单\"，但目前清单里并没有实际条目。需要我生成一条补货牛奶的购物清单提案吗？",
       "passed": true,
       "note": null
     },
@@ -126,11 +130,11 @@
       "expectedTool": "search_recipes",
       "expectedKind": "recipes",
       "screenshot": "05-recipes.png",
-      "runId": "1471e1f2-7141-4769-a7e5-520f693052f6",
+      "runId": "bb3aa109-9ade-4b0f-8b41-c01da860445e",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 91870,
+      "durationMs": 52743,
       "toolNames": [
         "search_recipes",
         "search_recipes",
@@ -144,9 +148,9 @@
       "cardTexts": [
         "菜谱搜索 | 没有找到匹配的家庭菜谱",
         "菜谱搜索 | 没有找到匹配的家庭菜谱",
-        "菜谱搜索 | 没有找到匹配的家庭菜谱"
+        "菜谱搜索 | 不辣家常蒸蛋（端到端测试） 素菜 · 15 分钟 难度 1"
       ],
-      "assistantText": "我搜索了\"不辣\"\"家常菜\"\"清淡\"等关键词，家庭菜谱库里都没有找到匹配的菜谱记录，目前菜谱库可能是空的。\n\n如果你有具体想做的菜名（比如西红柿炒蛋、清蒸鱼），告诉我菜名，我再帮你搜；或者你想让我帮你拟一份不辣的家常菜单提案吗？",
+      "assistantText": "找到 1 道符合条件的菜：\n\n不辣家常蒸蛋（端到端测试）— 素菜，用时约 15 分钟，难度低。食材：番茄、鸡蛋。\n\n注意这道菜名里带\"端到端测试\"，可能是测试数据。需要我帮你查它的完整做法，或者看看其他家常菜吗？",
       "passed": true,
       "note": null
     },
@@ -156,11 +160,11 @@
       "expectedTool": "get_dish_plan",
       "expectedKind": "dish-plan",
       "screenshot": "06-dish-plan.png",
-      "runId": "58db1ffd-07ef-43f9-b798-ace8001eba52",
+      "runId": "043e705d-77d5-4832-ab6c-8091354d3387",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 65444,
+      "durationMs": 14520,
       "toolNames": [
         "get_dish_plan"
       ],
@@ -168,9 +172,9 @@
         "dish-plan"
       ],
       "cardTexts": [
-        "点菜计划 | 蒜蓉西兰花 2026-08-14 · 晚餐 pending"
+        "点菜计划 | 这段时间还没有点菜安排"
       ],
-      "assistantText": "下周（8/10-8/16）只点了 1 道菜：\n\n8/14 晚餐：蒜蓉西兰花（待确认状态）\n\n其他日期和餐次都没有点菜安排。需要我帮你补点几天的菜单吗？",
+      "assistantText": "下周（8/17–8/23）的点菜计划目前是空的，还没有人点菜。\n\n需要我帮你提议下周某天点几个菜吗？或者你可以告诉我想吃什么，我来生成点菜提案。",
       "passed": true,
       "note": null
     },
@@ -180,11 +184,11 @@
       "expectedTool": "get_weather",
       "expectedKind": "weather",
       "screenshot": "07-weather.png",
-      "runId": "029ff612-410e-4254-a4b3-ccb6b84d492c",
+      "runId": "0262c253-484a-42f1-9264-fef064ff34e1",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 61158,
+      "durationMs": 6892,
       "toolNames": [
         "get_weather"
       ],
@@ -194,7 +198,7 @@
       "cardTexts": [
         "天气预报 | 天气服务尚未配置"
       ],
-      "assistantText": "天气服务暂时不可用（返回\"weather_api_not_configured\"，即天气接口未配置），所以深圳这几天的天气我无法查询，不能给你预报。\n\n建议稍后再试，或者直接看手机天气 App 会更准确。",
+      "assistantText": "抱歉，查不了深圳的天气——天气服务目前未配置（接口返回 weather_api_not_configured），我无法提供预报数据。\n\n建议你通过手机自带天气 App 或其他天气网站查看。等天气服务配置好后我就可以帮你查了。",
       "passed": true,
       "note": null
     },
@@ -204,11 +208,11 @@
       "expectedTool": "get_member_profile",
       "expectedKind": "member-profile",
       "screenshot": "08-profile.png",
-      "runId": "c6238bee-4101-49e8-9215-d4c54f1edc08",
+      "runId": "9faf962e-3fd4-4660-9de0-c98145981e2b",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 33125,
+      "durationMs": 9729,
       "toolNames": [
         "get_member_profile"
       ],
@@ -218,7 +222,7 @@
       "cardTexts": [
         "成员档案 | 👨‍🍳 爸爸 owner · balanced 记忆已开启"
       ],
-      "assistantText": "你的档案信息如下：\n\n姓名：爸爸\n角色：家庭主人（owner）\n头像：👨‍🍳\n偏好：喜欢做饭（prefersCooking）\n语音助手名：小管家\n偏好记忆：已开启\n回复风格：均衡（balanced）\n\n需要我更新或查看其他信息吗？",
+      "assistantText": "你的个人档案：\n\n名字：爸爸\n身份：家庭管理员（owner）\n头像：👨🍳（厨师）\n偏好：喜欢做饭（prefersCooking: true）\n小助手名称：小管家\n记忆功能：已开启\n回复风格：均衡型\n\n档案里还有一些系统级字段（如 untrustedContent 标记），就不展开了。有什么需要我按你的偏好调整的吗？",
       "passed": true,
       "note": null
     },
@@ -228,31 +232,24 @@
       "expectedTool": "multi-tool",
       "expectedKind": null,
       "screenshot": "09-multi-tool.png",
-      "runId": "78c66622-186f-400b-a8b5-ec215123f9a8",
+      "runId": "f32ac0db-deab-4374-9d22-cad9b33a29f0",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 93424,
+      "durationMs": 14121,
       "toolNames": [
-        "get_calendar",
         "get_family_schedule",
-        "get_member_tasks",
-        "get_meal_plan",
-        "get_shopping_list"
+        "get_meal_plan"
       ],
       "cardKinds": [
         "schedule",
-        "tasks",
-        "meals",
-        "shopping"
+        "meals"
       ],
       "cardTexts": [
-        "家庭日程 | 交电费（端到端测试） 2026-08-10 · 爸爸 pending",
-        "成员任务 | 买菜（端到端测试） 2026-08-08 · 爸爸 待完成 | 交电费（端到端测试） 2026-08-10 · 爸爸 待完成",
-        "今日菜单 | 这一天还没有安排菜单",
-        "购物清单 | 购物清单已经处理完了"
+        "家庭日程 | 晚餐菜单 2026-08-14 open | 浏览器出行-mobile-chrome 2026-08-15 planned | 浏览器出行-desktop-chrome 2026-08-15 planned | 浏览器出行-mobile-chrome-msjbi6vp 2026-08-15 planned | 浏览器出行-mobile-chrome-msjbtrow 2026-08-15 planned | 浏览器出行-desktop-chrome-msjbx803 2026-08-15 planned | 浏览器出行-mobile-chrome-msjc3m6v 2026-08-15 planned | 浏览器出行-desktop-chrome-msjc6xnb 2026-08-15 planned",
+        "今日菜单 | 这一天还没有安排菜单"
       ],
-      "assistantText": "明天（8/10）的安排和食材情况如下：\n\n安排：交电费（端到端测试），待办，本周到期，负责人是你本人。\n另外你还有一个未完成的待办：买菜（端到端测试），8/8 就到期了，还没完成。\n\n食材：明天三餐没有点菜计划，8/10 的购物清单也是空的，所以目前没有需要准备的食材。\n\n提醒一下：冰箱里那 2 瓶牛奶明天到期，要尽快喝完或用掉。需要我帮你拟一份明天的不辣家常菜单和配套购物清单吗？",
+      "assistantText": "明天（8/11）的安排查过了：\n\n日程：没有任何安排事项。\n三餐：还没有点菜/菜单计划，所以暂时不需要准备特定食材。\n\n另外说明一下：日程里 8/14 有个晚餐菜单事件、8/15 之后有一批出行事件，但看内容都像是测试数据，而且都不在明天。\n\n需要我帮你给明天安排一顿饭（比如按你喜欢的家常菜提议菜单）吗？",
       "passed": true,
       "note": null
     }
@@ -264,17 +261,17 @@
       "expectedTool": "remember_preference",
       "expectedKind": null,
       "screenshot": "10-memory-write.png",
-      "runId": "c2d52df6-9c05-4176-b19f-999d06fa2ce4",
+      "runId": "4daaa1f9-2682-402c-b430-b1427fa3bace",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 49484,
+      "durationMs": 17760,
       "toolNames": [
         "remember_preference"
       ],
       "cardKinds": [],
       "cardTexts": [],
-      "assistantText": "已生成\"我不吃辣\"的偏好记忆提案，等你确认后才生效。这也与刚才周六晚餐全部不辣的菜单一致。",
+      "assistantText": "已为你创建\"我不吃辣\"的记忆提案，状态是待确认，需要你在 Family App 里确认后才会正式生效。确认后我以后帮你排菜、买菜都会按你不吃辣来考虑。",
       "passed": true,
       "note": null
     },
@@ -284,17 +281,17 @@
       "expectedTool": "recall_preferences",
       "expectedKind": null,
       "screenshot": "11-memory-recall.png",
-      "runId": "ea2dde45-2874-4a81-bab9-6aa738c6b5ee",
+      "runId": "f8e6d7a1-bbb1-4c77-a3a4-e90af1fd7eda",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 54378,
+      "durationMs": 12656,
       "toolNames": [
         "recall_preferences"
       ],
       "cardKinds": [],
       "cardTexts": [],
-      "assistantText": "你的已确认饮食偏好有 1 条：不吃辣（2026/8/8 记录，当前生效中，仅你本人可见）。\n\n所以周六你爸妈来吃饭时点不辣菜单和你的偏好正好一致。还有其他偏好（如忌口、口味偏好）目前没有记录，需要的话可以告诉我，我帮你记下来。",
+      "assistantText": "根据已确认的偏好记录：你（个人私密偏好，仅自己可见）是不吃辣。\n\n这条偏好是 8/8 记录并确认的，状态有效。之前安排周六晚餐时你说\"来访的爸爸不吃辣、其他人没忌口\"，按这条记录来看你自己也不吃辣——既然菜单本来全程不辣，正好合适。如果这条记录有误或想调整（比如加一条其他偏好），告诉我即可。",
       "passed": true,
       "note": null
     }
@@ -306,11 +303,11 @@
       "expectedTool": "search_recipes",
       "expectedKind": "recipes",
       "screenshot": "12-page-context.png",
-      "runId": "4ed0a806-3050-41e6-976c-f8188b7fe95c",
+      "runId": "e3db66d4-00dc-4a85-8d80-8f1f7ce28699",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 55964,
+      "durationMs": 15508,
       "toolNames": [
         "search_recipes"
       ],
@@ -320,7 +317,7 @@
       "cardTexts": [
         "菜谱搜索 | 不辣家常蒸蛋（端到端测试） 素菜 · 15 分钟 难度 1"
       ],
-      "assistantText": "这道菜「不辣家常蒸蛋（端到端测试）」需要 2 种食材：\n\n- 番茄\n- 鸡蛋\n\n菜谱显示烹饪时间约 15 分钟，属于素菜。需要我帮你看看家里库存够不够吗？",
+      "assistantText": "这道菜\"不辣家常蒸蛋（端到端测试）\"需要两种食材：番茄和鸡蛋。属于素菜，烹饪约15分钟，难度很低。",
       "passed": true,
       "note": null
     },
@@ -330,15 +327,33 @@
       "expectedTool": "search_recipes",
       "expectedKind": "recipes",
       "screenshot": "13-no-context.png",
-      "runId": "3ed8e82f-8c06-4b05-86f5-b67e0159516a",
+      "runId": "73e59f1e-28f6-450f-9de2-a6c075e478d8",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 21068,
+      "durationMs": 3476,
       "toolNames": [],
       "cardKinds": [],
       "cardTexts": [],
-      "assistantText": "请问您指的是哪道菜？我需要具体的菜名才能帮您查食材。您可以告诉我菜名，或者说明是在哪个菜单/计划里看到的菜。",
+      "assistantText": "您说的是\"这道菜\"，但目前我这边没有看到具体的菜名或页面上下文，无法确定您指的是哪道菜。请告诉我菜名（比如\"红烧肉\"、\"番茄炒蛋\"），我就可以帮您查家庭菜谱里的食材清单。\n\n如果您是想直接提供菜名检索，我也可以帮您搜索家庭知识库或菜谱库。",
+      "passed": true,
+      "note": null
+    },
+    {
+      "id": "page-context-missing-knowledge",
+      "prompt": "这篇文章主要讲了什么",
+      "expectedTool": "search_knowledge",
+      "expectedKind": "knowledge",
+      "screenshot": "15-no-knowledge-context.png",
+      "runId": "9537eda1-7506-40af-80a8-a428800a680f",
+      "runtimeKind": "hermes",
+      "runStatus": "completed",
+      "errorCode": null,
+      "durationMs": 4538,
+      "toolNames": [],
+      "cardKinds": [],
+      "cardTexts": [],
+      "assistantText": "我没有看到文章内容——你还没有把文章发给我，或者需要告诉我文章标题。请把文章正文或链接贴过来，我再帮你总结。",
       "passed": true,
       "note": null
     }
@@ -350,41 +365,39 @@
       "expectedTool": "propose_plan",
       "expectedKind": null,
       "screenshot": "14-proposal-group.png",
-      "runId": "977f3687-a2da-4a6e-ab6e-11f9c028fff2",
+      "runId": "ec4de70e-2e43-4e5c-92c4-a433ef4e4320",
       "runtimeKind": "hermes",
       "runStatus": "completed",
       "errorCode": null,
-      "durationMs": 222810,
+      "durationMs": 112084,
       "toolNames": [
+        "search_recipes",
+        "search_recipes",
+        "search_recipes",
         "get_dish_plan",
-        "get_shopping_list",
-        "get_inventory_summary",
-        "search_recipes",
-        "search_recipes",
+        "get_calendar",
         "search_recipes",
         "propose_plan"
       ],
       "cardKinds": [
+        "recipes",
+        "recipes",
+        "recipes",
         "dish-plan",
-        "shopping",
-        "inventory",
-        "recipes",
-        "recipes",
         "recipes"
       ],
       "cardTexts": [
-        "点菜计划 | 这段时间还没有点菜安排",
-        "购物清单 | 购物清单已经处理完了",
-        "库存摘要 | 牛奶（端到端测试） 2 瓶 缺货且临期",
+        "菜谱搜索 | 没有找到匹配的家庭菜谱",
         "菜谱搜索 | 不辣家常蒸蛋（端到端测试） 素菜 · 15 分钟 难度 1",
-        "菜谱搜索 | 清蒸鲈鱼 荤菜 · 20 分钟 难度 2",
-        "菜谱搜索 | 不辣家常蒸蛋（端到端测试） 素菜 · 15 分钟 难度 1 | 韭菜鸡蛋饺子 主食 · 90 分钟 难度 3 | 番茄鸡蛋面 主食 · 15 分钟 难度 1 | 可乐鸡翅 荤菜 · 25 分钟 难度 1 | 番茄炒蛋 素菜 · 10 分钟 难度 1"
+        "菜谱搜索 | 不辣家常蒸蛋（端到端测试） 素菜 · 15 分钟 难度 1",
+        "点菜计划 | 这段时间还没有点菜安排",
+        "菜谱搜索 | 不辣家常蒸蛋（端到端测试） 素菜 · 15 分钟 难度 1 | 拍黄瓜 素菜 · 5 分钟 难度 1 | 韭菜鸡蛋饺子 主食 · 90 分钟 难度 3 | 番茄鸡蛋面 主食 · 15 分钟 难度 1 | 冬瓜排骨汤 汤 · 50 分钟 难度 2 | 酸辣土豆丝 素菜 · 10 分钟 难度 1 | 地三鲜 素菜 · 20 分钟 难度 2 | 蒜蓉西兰花 素菜 · 8 分钟 难度 1"
       ],
-      "assistantText": "提案已生成（编号 519c039b），等你确认。内容如下：\n\n周六 8/15 晚 5 人晚餐，全部不辣：\n\n菜单（5 道）：清蒸鲈鱼、可乐鸡翅、番茄炒蛋、不辣家常蒸蛋、韭菜鸡蛋饺子\n\n购物清单（8/15，11 项）：鲈鱼 1 条、鸡翅 1.5 斤、番茄 2 斤、韭菜 1 斤、鸡蛋 12 个、饺子皮 1.5 斤、生姜 1 块、小葱 1 把、可乐 1 瓶、生抽 1 瓶、白糖 1 袋\n\n当天任务（3 项）：采购聚餐食材、提前包好饺子、准备晚餐并招待爸妈（负责人暂未指定）\n\n注意：这只是一组提案，还没生效，需要你在 Family App 里确认；确认后整组一起生效，不能只确认其中某几步。有其他想调整的（比如换菜、加菜）现在告诉我，我可以重新出提案。",
+      "assistantText": "提案已生成，等你确认（待确认，未生效）。内容如下：\n\n8/15 周六爸妈来家晚餐（5 人，全程不辣）\n菜品：清蒸鲈鱼、可乐鸡翅、蒜蓉西兰花、番茄炒蛋、冬瓜排骨汤\n购物清单：鲈鱼 1 条、鸡翅 1000 克、排骨 500 克、冬瓜 1 块、西兰花 2 颗、番茄 6 个、鸡蛋 10 个、葱 1 把、姜 1 块、蒜 1 头\n任务：8/15 采购食材（20 积分）、备菜与烹饪（50 积分）\n\n说明几点：菜谱库里有 17 道菜，我排除了酸辣土豆丝、麻婆豆腐、干煸豆角、鱼香肉丝、地三鲜这些带辣或含豆瓣酱的，剩下全是清淡家常菜，5 人 4 菜 1 汤的量比较合适。购物清单是手动项，确认后还需在购物页关联库存才能入库。另外当天日历上有一批\"浏览器出行\"测试记录，不影响这次安排。\n\n在 Family App 里确认后整组才生效。需要调整菜单或分量吗？",
       "passed": true,
       "note": null,
-      "proposalGroupId": "519c039b-0bde-4cb0-b417-5dfef7f570d1",
-      "proposalStepCount": 5,
+      "proposalGroupId": "1b1d37ea-7e80-49ae-9abe-0feab8688a75",
+      "proposalStepCount": 4,
       "proposalPath": "a"
     }
   ]
