@@ -80,6 +80,7 @@ const apiBaseUrl = (
 const fallbackCode = 'HERMES_UNAVAILABLE_FALLBACK';
 const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
 const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
+const readToolsOnly = process.env.HERMES_E2E_READ_TOOLS_ONLY === '1';
 
 function existingReport() {
   try {
@@ -180,6 +181,14 @@ function hasSpecificWeatherClaims(text: string) {
   return (
     /-?\d+(?:\.\d+)?\s*(?:°\s*C|℃|摄氏度)/i.test(text) ||
     /(?:降水|降雨).{0,8}\d+(?:\.\d+)?\s*(?:毫米|mm|%)/i.test(text)
+  );
+}
+
+function claimsFamilyDataWithoutEvidence(text: string) {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  return !/(?:无法|不能|没法|查不到|不确定|工具不可用|没有权限)|(?:请|需要).{0,12}(?:告诉|提供|说明|补充)|(?:哪(?:个|些|项|天|位)|具体(?:是|哪)).{0,12}[？?]/.test(
+    normalized,
   );
 }
 
@@ -401,13 +410,19 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
         (!input.clarifyWithoutContext.forbiddenText ||
           !assistantText.includes(input.clarifyWithoutContext.forbiddenText)) &&
         input.clarifyWithoutContext.responsePattern.test(assistantText));
+    const ungroundedFamilyClaim =
+      toolNames.length === 0 &&
+      input.expectedTool !== 'none' &&
+      !input.clarifyWithoutContext &&
+      claimsFamilyDataWithoutEvidence(assistantText);
     const passed =
       run?.runtimeKind === 'hermes' &&
       !fallback &&
       (input.clarifyWithoutContext ? clarificationSafe : expectedMatched) &&
       weatherSafe &&
       grounded &&
-      honestUnavailable;
+      honestUnavailable &&
+      !ungroundedFamilyClaim;
     const note = fallback
       ? 'Hermes 回落，模型未参与'
       : !grounded
@@ -418,6 +433,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           ? clarificationSafe
             ? null
             : `无上下文时未明确追问${input.clarifyWithoutContext.entityLabel}，或擅自选择了家庭资源`
+          : ungroundedFamilyClaim
+            ? '未调用任何工具却给出了具体家庭数据结论'
           : !expectedMatched
             ? input.proposalGroup
               ? '既未生成多子项组提案，也未分别覆盖菜单、购物和任务提案'
@@ -493,18 +510,20 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
 
   if (!memoryOnly && !pageContextOnly) {
     for (const scenario of scenarios) await runScenario(scenario);
-    const proposalGroup = await runScenario({
-      id: 'proposal-group-family-dinner',
-      prompt:
-        '周六晚上爸妈来家里吃饭，加上我们一共5个人；来访的爸爸不吃辣，其他人没有忌口。请把晚餐菜单、需要购买的食材和当天要做的准备任务都安排好，直接生成提案让我确认。',
-      expectedTool: 'propose_plan',
-      expectedKind: null,
-      screenshot: '14-proposal-group.png',
-      proposalGroup: true,
-    });
-    expect(proposalGroup.passed).toBeTruthy();
+    if (!readToolsOnly) {
+      const proposalGroup = await runScenario({
+        id: 'proposal-group-family-dinner',
+        prompt:
+          '周六晚上爸妈来家里吃饭，加上我们一共5个人；来访的爸爸不吃辣，其他人没有忌口。请把晚餐菜单、需要购买的食材和当天要做的准备任务都安排好，直接生成提案让我确认。',
+        expectedTool: 'propose_plan',
+        expectedKind: null,
+        screenshot: '14-proposal-group.png',
+        proposalGroup: true,
+      });
+      expect(proposalGroup.passed).toBeTruthy();
+    }
   }
-  if (!pageContextOnly) {
+  if (!pageContextOnly && !readToolsOnly) {
     const memoryWrite = await runScenario({
       id: 'memory-write',
       prompt: '记住我不吃辣',
@@ -558,7 +577,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     );
   }
 
-  if (!memoryOnly) {
+  if (!memoryOnly && !readToolsOnly) {
     await page.goto('/recipes');
     const dishEntry = page.locator('[data-testid^="recipe-dish-"]').first();
     await expect(dishEntry).toBeVisible();

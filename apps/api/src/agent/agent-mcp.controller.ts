@@ -104,7 +104,7 @@ export class AgentMcpController {
       includeCompleted: z.boolean().optional(),
       limit: z.number().int().min(1).max(20).optional(),
     });
-    register('get_shopping_list', '读取指定日期的家庭购物清单', {
+    register('get_shopping_list', '这是查询家庭购物清单内容的唯一数据来源。用户询问购物清单中有什么、是否为空或某项是否在清单时必须调用本工具；不得依据对话历史或模型自身知识编造清单内容', {
       runId,
       date: z.string().optional(),
       includeChecked: z.boolean().optional(),
@@ -172,7 +172,7 @@ export class AgentMcpController {
       runId,
       memberId: z.string().uuid().optional(),
     });
-    register('recall_preferences', '读取当前成员可见且已确认的小管家偏好', {
+    register('recall_preferences', '这是回顾当前成员已记录偏好的唯一数据来源。用户询问自己有哪些已记录偏好时必须调用本工具；不得仅凭对话历史声称某项偏好存在或不存在', {
       runId,
       scope: z.enum(['member_private', 'household']).optional(),
       memoryKey: z.enum(AGENT_MEMORY_KEYS).optional(),
