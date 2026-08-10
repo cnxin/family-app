@@ -32,6 +32,15 @@ function RootStack() {
           sheetCornerRadius: 24,
         }}
       />
+      <Stack.Screen
+        name="asset/[id]"
+        options={{
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.7, 1],
+          sheetGrabberVisible: true,
+          sheetCornerRadius: 24,
+        }}
+      />
       <Stack.Screen name="dish-edit" options={{ presentation: 'modal' }} />
       <Stack.Screen name="recipe-edit" options={{ presentation: 'modal' }} />
     </Stack>

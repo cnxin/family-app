@@ -313,6 +313,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     multiTool?: boolean;
     weather?: boolean;
     requiredText?: string;
+    textOnly?: boolean;
+    honestUnavailable?: boolean;
     clarifyWithoutContext?: ClarificationExpectation;
     proposalGroup?: boolean;
   }) {
@@ -372,7 +374,9 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           ? 'b'
           : null
       : null;
-    const expectedMatched = input.proposalGroup
+    const expectedMatched = input.textOnly
+      ? assistantText.trim().length > 0
+      : input.proposalGroup
       ? proposalPath !== null
       : input.multiTool
         ? new Set(toolNames).size >= 2 && cards.length >= 2
@@ -388,6 +392,9 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       [assistantText, ...cards.map((card) => JSON.stringify(card))].some((text) =>
         text.includes(input.requiredText!),
       );
+    const honestUnavailable =
+      !input.honestUnavailable ||
+      /没有(?:找到|记录|工具)|找不到|无法|没法|缺少|不可用/.test(assistantText);
     const clarificationSafe =
       !input.clarifyWithoutContext ||
       (!toolNames.includes(input.clarifyWithoutContext.forbiddenTool) &&
@@ -399,11 +406,14 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       !fallback &&
       (input.clarifyWithoutContext ? clarificationSafe : expectedMatched) &&
       weatherSafe &&
-      grounded;
+      grounded &&
+      honestUnavailable;
     const note = fallback
       ? 'Hermes 回落，模型未参与'
       : !grounded
         ? '回答未基于当前页面实体'
+        : !honestUnavailable
+          ? '资产保修数据不可达时没有诚实说明限制'
         : input.clarifyWithoutContext
           ? clarificationSafe
             ? null
@@ -588,6 +598,50 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       requiredText: targetDish.name,
     });
     expect(contextual.passed).toBeTruthy();
+
+    const assets = await agentApi<{ id: string; name: string }[]>(
+      page,
+      '/assets?status=all',
+    );
+    expect(
+      assets.length,
+      '资产页面上下文真机回归需要开发库至少保留一项资产；列表跳转由 mock 响应式套件覆盖',
+    ).toBeGreaterThan(0);
+    await page.goto(`/asset/${assets[0].id}`);
+    await expect(page).toHaveURL(/\/asset\/[0-9a-f-]{36}$/);
+    const targetAsset = {
+      id: new URL(page.url()).pathname.split('/').at(-1)!,
+      name: await page.getByTestId('asset-detail-name').innerText(),
+    };
+    await page.getByTestId('asset-ask-assistant').click();
+    await expect(page).toHaveURL(/\/assistant\?.*entityType=asset/);
+    await expect(page.getByTestId('agent-page-context')).toContainText(
+      `正在参考：${targetAsset.name}`,
+    );
+
+    const assetConversationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/agent/conversations'),
+    );
+    await page.getByTestId('agent-new-conversation').click();
+    const assetConversation = await responseData(await assetConversationResponse);
+    activeConversationId = assetConversation?.id ?? '';
+    expect(activeConversationId).toBeTruthy();
+    await expect(
+      page.getByTestId(`agent-message-list-${activeConversationId}`),
+    ).toBeVisible();
+    const assetContextual = await runScenario({
+      id: 'page-context-asset',
+      prompt: '这个东西保修到什么时候',
+      expectedTool: 'none',
+      expectedKind: null,
+      screenshot: '16-page-context-asset.png',
+      requiredText: targetAsset.name,
+      textOnly: true,
+      honestUnavailable: true,
+    });
+    expect(assetContextual.passed).toBeTruthy();
 
     await page.getByTestId('agent-page-context-clear').click();
     await expect(page.getByTestId('agent-page-context')).toHaveCount(0);

@@ -1551,7 +1551,13 @@ function AssetCard({ asset, onOpen }: { asset: HomeAsset; onOpen: () => void }) 
     .sort((left, right) => left.nextDueDate.localeCompare(right.nextDueDate))[0];
   const due = nextPlan ? dueState(nextPlan.nextDueDate) : null;
   return (
-    <Pressable accessibilityRole="button" onPress={onOpen} style={styles.assetCell}>
+    <Pressable
+      accessibilityLabel={`查看资产${asset.name}`}
+      accessibilityRole="button"
+      onPress={onOpen}
+      style={styles.assetCell}
+      testID={`asset-card-${asset.id}`}
+    >
       {({ pressed }) => (
         <Card style={[styles.assetCard, { backgroundColor: pressed ? c.cardPressed : c.card }]}>
           <View style={styles.assetCardTop}>
@@ -1716,7 +1722,11 @@ export default function AssetsScreen() {
             </View>
           ) : null}
           {visibleAssets.map((asset) => (
-            <AssetCard asset={asset} key={asset.id} onOpen={() => setSelectedAssetId(asset.id)} />
+            <AssetCard
+              asset={asset}
+              key={asset.id}
+              onOpen={() => router.push(`/asset/${asset.id}`)}
+            />
           ))}
         </ScrollView>
       </PageContainer>

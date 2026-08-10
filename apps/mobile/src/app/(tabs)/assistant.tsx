@@ -51,6 +51,7 @@ import {
   useAgentSettings,
   useAgentProposalGroups,
   useAgentStatus,
+  useAsset,
   useArchiveAgentConversation,
   useCancelAgentRun,
   useConfirmAgentProposal,
@@ -1045,6 +1046,11 @@ export default function AssistantScreen() {
       ? activePageContext.entityId
       : undefined,
   );
+  const { data: contextAsset } = useAsset(
+    activePageContext?.entityType === 'asset'
+      ? activePageContext.entityId ?? null
+      : null,
+  );
   const scrollRef = React.useRef<ScrollView>(null);
   const messageCount = conversation?.messages.length ?? 0;
   const latestRunStatus = conversation?.runs[0]?.status;
@@ -1190,7 +1196,7 @@ export default function AssistantScreen() {
                   numberOfLines={2}
                   style={[t.footnote, styles.pageContextText, { color: c.label }]}
                 >
-                  正在参考：{contextDish?.name ?? '当前页面'}
+                  正在参考：{contextDish?.name ?? contextAsset?.name ?? '当前页面'}
                 </Text>
                 <PressableScale
                   accessibilityLabel="清除当前页面上下文"
