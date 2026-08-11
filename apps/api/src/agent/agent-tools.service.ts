@@ -44,6 +44,8 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 const MAX_RESULT_ITEMS = 20;
 const MAX_EXTENDED_RESULT_ITEMS = 50;
 const MAX_RESPONSE_BYTES = 48_000;
+const SEARCH_RECIPES_RUN_LIMIT = 2;
+const SEARCH_RECIPES_LIMIT_ERROR = 'recipe_search_limit_reached';
 
 function dateOnly(value: unknown, fallback: string) {
   const normalized = typeof value === 'string' ? value : fallback;
@@ -261,6 +263,7 @@ function resultPresentation(toolName: string, output: unknown) {
     };
   }
   if (toolName === 'search_recipes') {
+    if (record?.error === SEARCH_RECIPES_LIMIT_ERROR) return null;
     const rows = rowsFor('recipes');
     return {
       kind: 'recipes',
@@ -683,6 +686,19 @@ export class AgentToolsService {
         }));
     }
     if (toolName === 'search_recipes') {
+      const searchCount = await this.events.countBy({
+        runId: run.id,
+        toolName: 'search_recipes',
+      });
+      if (searchCount >= SEARCH_RECIPES_RUN_LIMIT) {
+        return {
+          error: SEARCH_RECIPES_LIMIT_ERROR,
+          message:
+            '本次对话已达菜谱搜索上限，请基于已有搜索结果继续规划',
+          recipes: [],
+          total: 0,
+        };
+      }
       return this.searchRecipes(input, user);
     }
     if (toolName === 'get_dish_plan') {
@@ -1178,6 +1194,13 @@ export class AgentToolsService {
         outputSummary: {
           itemCount: outputItemCount(output),
           ok: status === 'completed',
+          errorCode:
+            output &&
+            typeof output === 'object' &&
+            !Array.isArray(output) &&
+            typeof (output as Record<string, unknown>).error === 'string'
+              ? (output as Record<string, unknown>).error
+              : null,
         },
         presentationCiphertext:
           encryptedPresentation?.contentCiphertext ?? null,

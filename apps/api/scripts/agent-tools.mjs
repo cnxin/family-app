@@ -254,24 +254,29 @@ try {
      WHERE "householdId" = $1 AND "memberId" = $2`,
     [owner.member.householdId, owner.member.id],
   );
-  const runId = randomUUID();
-  await db.query(
-    `INSERT INTO agent_runs (
-       id, "householdId", "conversationId", "requestedByMemberId", "agentProfileId",
-       "clientRequestId", "runtimeKind", "runtimeVersion", "modelAlias", status,
-       "allowedTools", "authorizationExpiresAt", "startedAt"
-     ) VALUES ($1, $2, $3, $4, $5, $6, 'fake', 'a7.4-a', 'hermes-agent',
-       'running', $7, now() + interval '10 minutes', now())`,
-    [
-      runId,
-      owner.member.householdId,
-      conversation.data.id,
-      owner.member.id,
-      profile.rows[0].id,
-      `agent-tools:${runId}`,
-      JSON.stringify(TOOL_NAMES),
-    ],
-  );
+  async function createToolRun(runtimeVersion = 'a7.4-a') {
+    const id = randomUUID();
+    await db.query(
+      `INSERT INTO agent_runs (
+         id, "householdId", "conversationId", "requestedByMemberId", "agentProfileId",
+         "clientRequestId", "runtimeKind", "runtimeVersion", "modelAlias", status,
+         "allowedTools", "authorizationExpiresAt", "startedAt"
+       ) VALUES ($1, $2, $3, $4, $5, $6, 'fake', $7, 'hermes-agent',
+         'running', $8, now() + interval '10 minutes', now())`,
+      [
+        id,
+        owner.member.householdId,
+        conversation.data.id,
+        owner.member.id,
+        profile.rows[0].id,
+        `agent-tools:${id}`,
+        runtimeVersion,
+        JSON.stringify(TOOL_NAMES),
+      ],
+    );
+    return id;
+  }
+  const runId = await createToolRun();
 
   console.log('2. MCP 注册和 8 个工具冒烟');
   const listed = await mcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
@@ -482,6 +487,66 @@ try {
           !row.presentationCiphertext.includes(recipeName),
       ),
     '8 个工具均生成加密结构化卡片，审计行不保存明文展示内容',
+  );
+
+  console.log('4. 菜谱搜索按 runId 强制限制为两次');
+  const limitedRunId = await createToolRun('search-recipes-limit');
+  const limitedFirst = await mcp(
+    toolCall(16, 'search_recipes', limitedRunId, { query: recipeName }),
+  );
+  const limitedSecond = await mcp(
+    toolCall(17, 'search_recipes', limitedRunId, { query: recipeName }),
+  );
+  const limitedThird = await mcp(
+    toolCall(18, 'search_recipes', limitedRunId, { query: recipeName }),
+  );
+  const limitedEvents = await db.query(
+    `SELECT status, "outputSummary", "presentationCiphertext"
+     FROM agent_tool_events
+     WHERE "runId" = $1 AND "toolName" = 'search_recipes'
+     ORDER BY "startedAt"`,
+    [limitedRunId],
+  );
+  const limitedRun = await db.query(
+    `SELECT status FROM agent_runs WHERE id = $1`,
+    [limitedRunId],
+  );
+  assert(
+    [limitedFirst, limitedSecond].every((response) =>
+      toolResult(response)?.recipes.some((recipe) => recipe.name === recipeName),
+    ) &&
+      toolResult(limitedThird)?.error === 'recipe_search_limit_reached' &&
+      toolResult(limitedThird)?.message.includes('请基于已有搜索结果继续规划') &&
+      !limitedThird.body?.result?.isError &&
+      limitedEvents.rows.length === 3 &&
+      limitedEvents.rows.slice(0, 2).every(
+        (event) =>
+          event.status === 'completed' &&
+          event.outputSummary.errorCode == null &&
+          event.presentationCiphertext,
+      ) &&
+      limitedEvents.rows[2].status === 'completed' &&
+      limitedEvents.rows[2].outputSummary.errorCode ===
+        'recipe_search_limit_reached' &&
+      limitedEvents.rows[2].presentationCiphertext == null &&
+      limitedRun.rows[0].status === 'running',
+    '同一 run 前两次搜索成功，第三次返回正常业务上限且 run 不失败',
+  );
+
+  const independentRunId = await createToolRun('search-recipes-independent');
+  const independentSearch = await mcp(
+    toolCall(19, 'search_recipes', independentRunId, { query: recipeName }),
+  );
+  const independentEvents = await db.query(
+    `SELECT count(*)::int AS count FROM agent_tool_events
+     WHERE "runId" = $1 AND "toolName" = 'search_recipes'`,
+    [independentRunId],
+  );
+  assert(
+    toolResult(independentSearch)?.recipes.some(
+      (recipe) => recipe.name === recipeName,
+    ) && independentEvents.rows[0].count === 1,
+    '不同 runId 的菜谱搜索次数相互独立',
   );
 
   console.log('A7.4-A 只读工具回归通过');
