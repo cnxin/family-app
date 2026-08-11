@@ -165,8 +165,10 @@ const apiBaseUrl = (
   process.env.FAMILY_API_URL ?? 'http://localhost:3100'
 ).replace(/\/+$/, '');
 const fallbackCode = 'HERMES_UNAVAILABLE_FALLBACK';
-const maxScenarioAttempts = 3;
+const maxScenarioAttempts =
+  process.env.HERMES_E2E_SINGLE_ATTEMPT === '1' ? 1 : 3;
 const retryDelayMs = 90_000;
+const runCompletionTimeoutMs = 450_000;
 const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
 const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
 const readToolsOnly = process.env.HERMES_E2E_READ_TOOLS_ONLY === '1';
@@ -176,6 +178,7 @@ const focusedScenarioPrompts = [
   '购物清单里有什么',
   '下周点了什么菜',
   '我的个人档案',
+  '搜索不辣的家常菜',
 ] as const;
 type FocusedScenarioPrompt = (typeof focusedScenarioPrompts)[number];
 
@@ -651,7 +654,7 @@ async function runHermesLiveTest(
           details
             .get(activeConversationId)
             ?.runs.find((run) => run.id === createdRun.id)?.status ?? 'missing',
-        { timeout: 300_000, intervals: [700, 1_000, 2_000] },
+        { timeout: runCompletionTimeoutMs, intervals: [700, 1_000, 2_000] },
       )
       .toMatch(/completed|failed|cancelled/);
 

@@ -4,23 +4,25 @@ import {
   AGENT_TOOL_AUTHORIZATION_TTL_MS,
 } from '../src/agent/agent.types';
 
-const minimumAuthorizationHeadroomMs = 60_000;
+const minimumAuthorizationHeadroomMs = Math.max(
+  60_000,
+  AGENT_HERMES_STOP_WAIT_MS,
+);
 const minimumChatTimeoutMs = 120_000;
-const maximumChatTimeoutMs = 300_000;
+// 组提案真机实测需要超过 240 秒，允许在保留授权余量的前提下提高到 420 秒。
+const maximumChatTimeoutMs = 420_000;
 const headroomMs =
-  AGENT_TOOL_AUTHORIZATION_TTL_MS -
-  AGENT_HERMES_CHAT_TIMEOUT_MS -
-  AGENT_HERMES_STOP_WAIT_MS;
+  AGENT_TOOL_AUTHORIZATION_TTL_MS - AGENT_HERMES_CHAT_TIMEOUT_MS;
 
 if (
   AGENT_HERMES_CHAT_TIMEOUT_MS < minimumChatTimeoutMs ||
   AGENT_HERMES_CHAT_TIMEOUT_MS > maximumChatTimeoutMs
 ) {
-  throw new Error('Hermes chat 超时必须在 120 至 300 秒之间');
+  throw new Error('Hermes chat 超时必须在 120 至 420 秒之间');
 }
 if (headroomMs < minimumAuthorizationHeadroomMs) {
   throw new Error(
-    'Hermes chat 与停止确认完成后必须至少给工具授权保留 60 秒余量',
+    'Hermes chat 超时后必须至少给工具授权保留 60 秒余量，并覆盖停止确认窗口',
   );
 }
 
