@@ -171,6 +171,12 @@ const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
 const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
 const readToolsOnly = process.env.HERMES_E2E_READ_TOOLS_ONLY === '1';
 const financeOnly = process.env.HERMES_E2E_FINANCE_ONLY === '1';
+const focusedScenarioPrompts = [
+  '购物清单里有什么',
+  '下周点了什么菜',
+  '我的个人档案',
+] as const;
+type FocusedScenarioPrompt = (typeof focusedScenarioPrompts)[number];
 
 function existingReport() {
   try {
@@ -435,25 +441,41 @@ function claimsFamilyDataWithoutEvidence(text: string) {
   );
 }
 
-test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
+async function runHermesLiveTest(
+  page: Page,
+  focusedScenarioPrompt?: FocusedScenarioPrompt,
+) {
   test.setTimeout(14_400_000);
   const previous = existingReport();
   const details = watchConversationDetails(page);
+  const previousResults = (previous?.results ?? []).filter(
+    (result: Result) => typeof result.id === 'number',
+  );
   const results: Result[] = memoryOnly || pageContextOnly
-    ? (previous?.results ?? []).filter(
-        (result: Result) => typeof result.id === 'number',
-      )
-    : [];
-  const memoryChecks: Result[] = pageContextOnly
+    ? previousResults
+    : focusedScenarioPrompt
+      ? previousResults.filter(
+          (result: Result) => result.prompt !== focusedScenarioPrompt,
+        )
+      : previousResults.filter((result: Result) =>
+          focusedScenarioPrompts.includes(
+            result.prompt as FocusedScenarioPrompt,
+          ),
+        );
+  const memoryChecks: Result[] = pageContextOnly || focusedScenarioPrompt
     ? (previous?.memoryChecks ?? [])
     : [];
-  const pageContextChecks: Result[] = memoryOnly
+  const pageContextChecks: Result[] = memoryOnly || focusedScenarioPrompt
     ? (previous?.pageContextChecks ?? [])
     : [];
   const proposalGroupChecks: Result[] =
-    memoryOnly || pageContextOnly ? (previous?.proposalGroupChecks ?? []) : [];
+    memoryOnly || pageContextOnly || focusedScenarioPrompt
+      ? (previous?.proposalGroupChecks ?? [])
+      : [];
   const financeChecks: Result[] =
-    memoryOnly || pageContextOnly ? (previous?.financeChecks ?? []) : [];
+    memoryOnly || pageContextOnly || focusedScenarioPrompt
+      ? (previous?.financeChecks ?? [])
+      : [];
   let conversationId =
     memoryOnly || pageContextOnly ? (previous?.conversationId ?? '') : '';
   let memoryConversationId = pageContextOnly
@@ -563,20 +585,25 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
   await expect(page.getByText('Hermes 已连接', { exact: true })).toBeVisible();
   await persistAuthState();
 
-  const createResponsePromise = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      new URL(response.url()).pathname.endsWith('/agent/conversations'),
-  );
-  await page.getByTestId('agent-new-conversation').click();
-  const conversation = await responseData(await createResponsePromise);
-  activeConversationId = conversation?.id ?? '';
-  expect(activeConversationId).toBeTruthy();
-  await expect(
-    page.getByTestId(`agent-message-list-${activeConversationId}`),
-  ).toBeVisible();
-  if (memoryOnly) memoryConversationId = activeConversationId;
-  else if (!pageContextOnly) conversationId = activeConversationId;
+  async function createFreshConversation(delayMs = 0) {
+    if (delayMs > 0) await page.waitForTimeout(delayMs);
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/agent/conversations'),
+    );
+    await page.getByTestId('agent-new-conversation').click();
+    const conversation = await responseData(await responsePromise);
+    activeConversationId = conversation?.id ?? '';
+    expect(activeConversationId).toBeTruthy();
+    await expect(
+      page.getByTestId(`agent-message-list-${activeConversationId}`),
+    ).toBeVisible();
+    if (memoryOnly) memoryConversationId = activeConversationId;
+    else if (!pageContextOnly) conversationId = activeConversationId;
+  }
+
+  await createFreshConversation();
 
   await page.getByTestId('agent-history-trigger').click();
   const historyItem = page.getByTestId(
@@ -798,28 +825,13 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     return { result, fallback };
   }
 
-  async function startRetryConversation() {
-    await page.waitForTimeout(retryDelayMs);
-    const responsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        new URL(response.url()).pathname.endsWith('/agent/conversations'),
-    );
-    await page.getByTestId('agent-new-conversation').click();
-    const conversation = await responseData(await responsePromise);
-    activeConversationId = conversation?.id ?? '';
-    expect(activeConversationId).toBeTruthy();
-    await expect(
-      page.getByTestId(`agent-message-list-${activeConversationId}`),
-    ).toBeVisible();
-  }
-
   async function runScenario(input: ScenarioInput) {
     const attemptDurationsMs: number[] = [];
     const attemptRunIds: string[] = [];
     const attemptErrorCodes: (string | null)[] = [];
 
     for (let attempt = 1; attempt <= maxScenarioAttempts; attempt += 1) {
+      await createFreshConversation(attempt > 1 ? retryDelayMs : 0);
       const { result, fallback } = await executeScenarioAttempt(
         input,
         attempt,
@@ -841,7 +853,6 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       );
 
       if (fallback && attempt < maxScenarioAttempts) {
-        await startRetryConversation();
         continue;
       }
 
@@ -882,8 +893,16 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
   ] as const;
 
   if (!memoryOnly && !pageContextOnly && !financeOnly) {
-    for (const scenario of scenarios) await runScenario(scenario);
-    if (!readToolsOnly) {
+    const selectedScenarios = focusedScenarioPrompt
+      ? scenarios.filter((scenario) => scenario.prompt === focusedScenarioPrompt)
+      : scenarios.filter(
+          (scenario) =>
+            !focusedScenarioPrompts.includes(
+              scenario.prompt as FocusedScenarioPrompt,
+            ),
+        );
+    for (const scenario of selectedScenarios) await runScenario(scenario);
+    if (!readToolsOnly && !focusedScenarioPrompt) {
       const proposalGroup = await runScenario({
         id: 'proposal-group-family-dinner',
         prompt:
@@ -897,7 +916,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     }
   }
 
-  if (!memoryOnly && !pageContextOnly && !readToolsOnly) {
+  if (!memoryOnly && !pageContextOnly && !readToolsOnly && !focusedScenarioPrompt) {
     const testAccountName = 'Hermes 真机记账测试账户';
     const accounts = await agentApi<FinanceAccount[]>(
       page,
@@ -1068,7 +1087,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     ).toBeTruthy();
   }
 
-  if (!pageContextOnly && !readToolsOnly && !financeOnly) {
+  if (!pageContextOnly && !readToolsOnly && !financeOnly && !focusedScenarioPrompt) {
     const memoryWrite = await runScenario({
       id: 'memory-write',
       prompt: '记住我不吃辣',
@@ -1132,7 +1151,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     }
   }
 
-  if (!memoryOnly && !readToolsOnly && !financeOnly) {
+  if (!memoryOnly && !readToolsOnly && !financeOnly && !focusedScenarioPrompt) {
     await page.goto('/recipes');
     const dishEntry = page.locator('[data-testid^="recipe-dish-"]').first();
     await expect(dishEntry).toBeVisible();
@@ -1307,7 +1326,13 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
 
   }
 
-  if (!pageContextOnly) {
+  if (focusedScenarioPrompt) {
+    const focusedResult = results.find(
+      (result) => result.prompt === focusedScenarioPrompt,
+    );
+    expect(focusedResult, `未执行单场景：${focusedScenarioPrompt}`).toBeTruthy();
+    expect(focusedResult?.passed).toBeTruthy();
+  } else if (!pageContextOnly) {
     if (!financeOnly) expect(summary().passed).toBeGreaterThanOrEqual(7);
     expect(summary().fallbackCount).toBe(0);
     expect(memoryChecks.every((result) => result.passed)).toBeTruthy();
@@ -1315,4 +1340,16 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     expect(financeChecks.every((result) => result.passed)).toBeTruthy();
   }
   expect(pageContextChecks.every((result) => result.passed)).toBeTruthy();
+}
+
+if (!memoryOnly && !pageContextOnly && !financeOnly) {
+  for (const prompt of focusedScenarioPrompts) {
+    test(`A7.4-A/A7.3 真实 Hermes 单场景 / ${prompt}`, async ({ page }) => {
+      await runHermesLiveTest(page, prompt);
+    });
+  }
+}
+
+test('A7.4-A/A7.3 真实 Hermes 其余工具与页面上下文', async ({ page }) => {
+  await runHermesLiveTest(page);
 });
