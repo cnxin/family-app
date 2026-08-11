@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>家庭应用 UI 方向</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="lab-header">
+      <div>
+        <p class="lab-kicker">FAMILY APP / UI STUDY</p>
+        <h1>两个界面方向</h1>
+      </div>
+      <p class="lab-meta">390 × 844 · 可交互</p>
+    </header>
+
+    <main class="comparison-grid" aria-label="家庭应用界面方案对比">
+      <section class="concept" aria-labelledby="concept-a-title">
+        <div class="concept-heading">
+          <div>
+            <span class="concept-index">方案 A</span>
+            <h2 id="concept-a-title">流动日常</h2>
+          </div>
+          <button class="round-action concept-theme" data-phone="phone-a" aria-label="切换方案 A 深浅色">
+            <i data-lucide="moon"></i>
+          </button>
+        </div>
+        <div class="phone phone-a" id="phone-a" data-variant="a" data-dark="false">
+          <div class="device-status" aria-hidden="true">
+            <span>9:41</span>
+            <span class="device-signals"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-medium"></i></span>
+          </div>
+          <div class="app-stage" data-stage></div>
+          <nav class="bottom-nav" data-nav aria-label="方案 A 主导航"></nav>
+          <div class="sheet-layer" data-sheet aria-hidden="true"></div>
+          <div class="toast" data-toast role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="concept" aria-labelledby="concept-b-title">
+        <div class="concept-heading">
+          <div>
+            <span class="concept-index">方案 B</span>
+            <h2 id="concept-b-title">清晰控制</h2>
+          </div>
+          <button class="round-action concept-theme" data-phone="phone-b" aria-label="切换方案 B 深浅色">
+            <i data-lucide="moon"></i>
+          </button>
+        </div>
+        <div class="phone phone-b" id="phone-b" data-variant="b" data-dark="false">
+          <div class="device-status" aria-hidden="true">
+            <span>9:41</span>
+            <span class="device-signals"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-medium"></i></span>
+          </div>
+          <div class="app-stage" data-stage></div>
+          <nav class="bottom-nav" data-nav aria-label="方案 B 主导航"></nav>
+          <div class="sheet-layer" data-sheet aria-hidden="true"></div>
+          <div class="toast" data-toast role="status" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+
+    <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script defer src="./app.js"></script>
+  </body>
+</html>
