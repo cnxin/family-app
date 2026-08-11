@@ -1297,16 +1297,20 @@ async function runHermesLiveTest(
           entityId: testAsset.id,
         },
       });
+      const [warrantyYear, warrantyMonth, warrantyDay] =
+        testAsset.warrantyExpiresOn.split('-');
+      const normalizedAssetAnswer = assetContextual.assistantText.replace(
+        /\s+/g,
+        '',
+      );
       const warrantyDateVariants = [
         testAsset.warrantyExpiresOn,
-        testAsset.warrantyExpiresOn.replace(
-          /^(\d{4})-(\d{2})-(\d{2})$/,
-          '$1年$2月$3日',
-        ),
+        `${warrantyYear}年${Number(warrantyMonth)}月${Number(warrantyDay)}日`,
+        `${warrantyYear}年${warrantyMonth}月${warrantyDay}日`,
       ];
       expect(
         warrantyDateVariants.some((date) =>
-          assetContextual.assistantText.includes(date),
+          normalizedAssetAnswer.includes(date),
         ),
         '资产保修回答必须包含工具返回的真实到期日',
       ).toBeTruthy();
