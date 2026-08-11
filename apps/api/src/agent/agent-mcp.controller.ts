@@ -151,7 +151,7 @@ export class AgentMcpController {
       runId,
       filter: z.enum(['low_stock', 'expiring_soon', 'all']).optional(),
     });
-    register('search_recipes', '按关键词、食材或分类搜索家庭菜谱。用户以“这道菜”等词指代单个菜品、但既无具体菜名也无页面上下文时，不得猜测菜品或调用无条件搜索，应先追问具体菜名；“搜索不辣的家常菜”等范围查询应直接调用本工具', {
+    register('search_recipes', '按关键词、食材或分类搜索家庭菜谱。用户以“这道菜”等词指代单个菜品、但既无具体菜名也无页面上下文时，不得猜测菜品或调用无条件搜索，应先追问具体菜名；“搜索不辣的家常菜”等范围查询应直接调用本工具。同一 run 内最多调用本工具 2 次；若前两次结果不满足需求，必须直接使用已有结果继续规划，不得继续搜索', {
       runId,
       query: z.string().max(80).optional(),
       ingredients: z.array(z.string().min(1).max(64)).max(10).optional(),
