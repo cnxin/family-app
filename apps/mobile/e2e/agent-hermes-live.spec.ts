@@ -166,11 +166,12 @@ const apiBaseUrl = (
 ).replace(/\/+$/, '');
 const fallbackCode = 'HERMES_UNAVAILABLE_FALLBACK';
 const maxScenarioAttempts = 3;
-const retryDelayMs = 30_000;
+const retryDelayMs = 90_000;
 const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
 const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
 const readToolsOnly = process.env.HERMES_E2E_READ_TOOLS_ONLY === '1';
 const financeOnly = process.env.HERMES_E2E_FINANCE_ONLY === '1';
+const proposalGroupOnly = process.env.HERMES_E2E_PROPOSAL_GROUP_ONLY === '1';
 const focusedScenarioPrompts = [
   '购物清单里有什么',
   '下周点了什么菜',
@@ -451,7 +452,7 @@ async function runHermesLiveTest(
   const previousResults = (previous?.results ?? []).filter(
     (result: Result) => typeof result.id === 'number',
   );
-  const results: Result[] = memoryOnly || pageContextOnly
+  const results: Result[] = memoryOnly || pageContextOnly || proposalGroupOnly
     ? previousResults
     : focusedScenarioPrompt
       ? previousResults.filter(
@@ -462,10 +463,12 @@ async function runHermesLiveTest(
             result.prompt as FocusedScenarioPrompt,
           ),
         );
-  const memoryChecks: Result[] = pageContextOnly || focusedScenarioPrompt
+  const memoryChecks: Result[] =
+    pageContextOnly || focusedScenarioPrompt || proposalGroupOnly
     ? (previous?.memoryChecks ?? [])
     : [];
-  const pageContextChecks: Result[] = memoryOnly || focusedScenarioPrompt
+  const pageContextChecks: Result[] =
+    memoryOnly || focusedScenarioPrompt || proposalGroupOnly
     ? (previous?.pageContextChecks ?? [])
     : [];
   const proposalGroupChecks: Result[] =
@@ -893,7 +896,9 @@ async function runHermesLiveTest(
   ] as const;
 
   if (!memoryOnly && !pageContextOnly && !financeOnly) {
-    const selectedScenarios = focusedScenarioPrompt
+    const selectedScenarios = proposalGroupOnly
+      ? []
+      : focusedScenarioPrompt
       ? scenarios.filter((scenario) => scenario.prompt === focusedScenarioPrompt)
       : scenarios.filter(
           (scenario) =>
@@ -916,7 +921,13 @@ async function runHermesLiveTest(
     }
   }
 
-  if (!memoryOnly && !pageContextOnly && !readToolsOnly && !focusedScenarioPrompt) {
+  if (
+    !memoryOnly &&
+    !pageContextOnly &&
+    !readToolsOnly &&
+    !focusedScenarioPrompt &&
+    !proposalGroupOnly
+  ) {
     const testAccountName = 'Hermes 真机记账测试账户';
     const accounts = await agentApi<FinanceAccount[]>(
       page,
@@ -1087,7 +1098,13 @@ async function runHermesLiveTest(
     ).toBeTruthy();
   }
 
-  if (!pageContextOnly && !readToolsOnly && !financeOnly && !focusedScenarioPrompt) {
+  if (
+    !pageContextOnly &&
+    !readToolsOnly &&
+    !financeOnly &&
+    !focusedScenarioPrompt &&
+    !proposalGroupOnly
+  ) {
     const memoryWrite = await runScenario({
       id: 'memory-write',
       prompt: '记住我不吃辣',
@@ -1151,7 +1168,13 @@ async function runHermesLiveTest(
     }
   }
 
-  if (!memoryOnly && !readToolsOnly && !financeOnly && !focusedScenarioPrompt) {
+  if (
+    !memoryOnly &&
+    !readToolsOnly &&
+    !financeOnly &&
+    !focusedScenarioPrompt &&
+    !proposalGroupOnly
+  ) {
     await page.goto('/recipes');
     const dishEntry = page.locator('[data-testid^="recipe-dish-"]').first();
     await expect(dishEntry).toBeVisible();
@@ -1332,6 +1355,9 @@ async function runHermesLiveTest(
     );
     expect(focusedResult, `未执行单场景：${focusedScenarioPrompt}`).toBeTruthy();
     expect(focusedResult?.passed).toBeTruthy();
+  } else if (proposalGroupOnly) {
+    expect(proposalGroupChecks).toHaveLength(1);
+    expect(proposalGroupChecks[0]?.passed).toBeTruthy();
   } else if (!pageContextOnly) {
     if (!financeOnly) expect(summary().passed).toBeGreaterThanOrEqual(7);
     expect(summary().fallbackCount).toBe(0);
@@ -1342,7 +1368,7 @@ async function runHermesLiveTest(
   expect(pageContextChecks.every((result) => result.passed)).toBeTruthy();
 }
 
-if (!memoryOnly && !pageContextOnly && !financeOnly) {
+if (!memoryOnly && !pageContextOnly && !financeOnly && !proposalGroupOnly) {
   for (const prompt of focusedScenarioPrompts) {
     test(`A7.4-A/A7.3 真实 Hermes 单场景 / ${prompt}`, async ({ page }) => {
       await runHermesLiveTest(page, prompt);

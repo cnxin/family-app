@@ -45,6 +45,7 @@ export type AgentToolName =
   | AgentMemoryToolName;
 
 export const AGENT_HERMES_CHAT_TIMEOUT_MS = 4 * 60_000;
+export const AGENT_HERMES_STOP_WAIT_MS = 45_000;
 export const AGENT_TOOL_AUTHORIZATION_TTL_MS = 6 * 60_000;
 
 export const AGENT_MEMORY_KEYS = [
