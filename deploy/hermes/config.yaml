@@ -9,7 +9,8 @@ platform_toolsets:
 gateway:
   platforms:
     api_server:
-      direct_model_requests: true
+      extra:
+        direct_model_requests: true
 
 mcp_servers:
   family_app:
