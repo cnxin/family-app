@@ -693,9 +693,15 @@ async function runHermesLiveTest(
       ? await agentApi<ProposalGroup[]>(page, '/agent/proposal-groups')
       : [];
     const proposalGroup = groups.find((group) => group.runId === createdRun.id);
+    const proposalStepTypes = new Set(
+      proposalGroup?.steps.map((step) => step.actionType) ?? [],
+    );
+    const completePlan = ['menu', 'shopping', 'task'].every((actionType) =>
+      proposalStepTypes.has(actionType),
+    );
     const proposalPath = input.proposalGroup
       ? toolNames.includes('propose_plan') &&
-        (proposalGroup?.steps.length ?? 0) >= 2
+        completePlan
         ? 'a'
         : ['propose_menu', 'propose_shopping_items', 'propose_task'].every(
               (tool) => toolNames.includes(tool),
@@ -921,19 +927,63 @@ async function runHermesLiveTest(
             !focusedScenarioPrompts.includes(
               scenario.prompt as FocusedScenarioPrompt,
             ),
-        );
+          );
     for (const scenario of selectedScenarios) await runScenario(scenario);
     if (!readToolsOnly && !focusedScenarioPrompt) {
-      const proposalGroup = await runScenario({
-        id: 'proposal-group-family-dinner',
-        prompt:
-          '周六晚上爸妈来家里吃饭，加上我们一共5个人；来访的爸爸不吃辣，其他人没有忌口。请把晚餐菜单、需要购买的食材和当天要做的准备任务都安排好，直接生成提案让我确认。',
-        expectedTool: 'propose_plan',
-        expectedKind: null,
-        screenshot: '14-proposal-group.png',
-        proposalGroup: true,
-      });
-      expect(proposalGroup.passed).toBeTruthy();
+      const fixtureSuffix = Date.now().toString(36);
+      const fixtureDishes: { id: string; name: string }[] = [];
+      try {
+        for (const fixture of [
+          {
+            name: `Hermes E2E 清蒸鲈鱼 ${fixtureSuffix}`,
+            category: '荤菜',
+            ingredients: [
+              { name: '鲈鱼', category: '肉类', quantity: 1, unit: '条' },
+              { name: '生姜', category: '蔬菜', quantity: 1, unit: '块' },
+            ],
+          },
+          {
+            name: `Hermes E2E 番茄炒蛋 ${fixtureSuffix}`,
+            category: '素菜',
+            ingredients: [
+              { name: '番茄', category: '蔬菜', quantity: 3, unit: '个' },
+              { name: '鸡蛋', category: '蛋奶', quantity: 4, unit: '个' },
+            ],
+          },
+        ]) {
+          fixtureDishes.push(
+            await agentApi<{ id: string; name: string }>(
+              page,
+              '/dishes',
+              'POST',
+              {
+                ...fixture,
+                difficulty: 1,
+                estMinutes: 25,
+                note: '不辣家常菜，仅供 Hermes 组提案真机验收。',
+                recipeSteps: [{ text: '按家庭默认做法烹饪，全程不加辣。' }],
+              },
+            ),
+          );
+        }
+
+        const proposalGroup = await runScenario({
+          id: 'proposal-group-family-dinner',
+          prompt:
+            `周六晚上爸妈来家里吃饭，加上我们一共5个人；来访的爸爸不吃辣，其他人没有忌口。` +
+            `晚餐请使用家庭菜谱里的“${fixtureDishes.map((dish) => dish.name).join('”和“')}”。` +
+            '请把晚餐菜单、需要购买的食材和当天要做的准备任务都安排好，直接生成提案让我确认。',
+          expectedTool: 'propose_plan',
+          expectedKind: null,
+          screenshot: '14-proposal-group.png',
+          proposalGroup: true,
+        });
+        expect(proposalGroup.passed).toBeTruthy();
+      } finally {
+        for (const fixtureDish of fixtureDishes) {
+          await agentApi(page, `/dishes/${fixtureDish.id}`, 'DELETE');
+        }
+      }
     }
   }
 
