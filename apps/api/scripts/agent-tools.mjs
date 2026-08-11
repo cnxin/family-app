@@ -17,6 +17,7 @@ const TOOL_NAMES = [
   'get_dish_plan',
   'get_weather',
   'get_member_profile',
+  'get_asset_detail',
 ];
 
 if (!DATABASE.startsWith('family_app_test_')) {
@@ -119,7 +120,7 @@ try {
   const completedDate = addDays(today, 3);
   const suffix = randomUUID().slice(0, 8);
 
-  console.log('1. 构造 8 个只读工具的家庭数据');
+  console.log('1. 构造 9 个只读工具的家庭数据');
   const pendingTaskTitle = `工具待办-${suffix}`;
   const completedTaskTitle = `工具完成-${suffix}`;
   const pendingTask = await request('/tasks', owner.accessToken, 'POST', {
@@ -243,6 +244,34 @@ try {
     '菜谱和点菜计划夹具创建成功',
   );
 
+  const assetName = `资产工具-${suffix}`;
+  const assetWarrantyExpiresOn = addDays(today, 30);
+  const assetNextMaintenanceAt = addDays(today, 15);
+  const asset = await request('/assets', owner.accessToken, 'POST', {
+    name: assetName,
+    category: 'appliance',
+    location: '工具回归位置',
+    brand: 'A7.4',
+    model: 'asset-detail',
+    purchaseDate: today,
+    purchasePrice: 8888,
+    warrantyExpiresOn: assetWarrantyExpiresOn,
+  });
+  const maintenancePlan = await request(
+    `/assets/${asset.data.id}/maintenance-plans`,
+    owner.accessToken,
+    'POST',
+    {
+      title: `维保工具-${suffix}`,
+      frequencyDays: 180,
+      nextDueDate: assetNextMaintenanceAt,
+    },
+  );
+  assert(
+    asset.status === 201 && maintenancePlan.status === 201,
+    '资产详情夹具包含价格、保修和维保日期',
+  );
+
   const conversation = await request(
     '/agent/conversations',
     owner.accessToken,
@@ -278,13 +307,15 @@ try {
   }
   const runId = await createToolRun();
 
-  console.log('2. MCP 注册和 8 个工具冒烟');
+  console.log('2. MCP 注册和 9 个工具冒烟');
   const listed = await mcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
   const registeredTools = listed.body?.result?.tools ?? [];
   const registeredNames = registeredTools.map((tool) => tool.name);
   assert(
-    TOOL_NAMES.every((name) => registeredNames.includes(name)),
-    '8 个只读工具均已注册 MCP schema',
+    registeredNames.length === 28 &&
+      new Set(registeredNames).size === 28 &&
+      TOOL_NAMES.every((name) => registeredNames.includes(name)),
+    'MCP 目录精确注册 28 个工具且 9 个只读工具均有 schema',
   );
   const descriptionFor = (name) =>
     registeredTools.find((tool) => tool.name === name)?.description ?? '';
@@ -295,9 +326,11 @@ try {
       descriptionFor('get_tasks').includes('全家') &&
       descriptionFor('search_recipes').includes('这道菜') &&
       descriptionFor('search_recipes').includes('范围查询应直接调用') &&
+      descriptionFor('get_asset_detail').includes('唯一途径') &&
+      descriptionFor('get_asset_detail').includes('不得自行选择') &&
       descriptionFor('remember_preference').includes('必须立即调用') &&
       descriptionFor('remember_preference').includes('不得追问'),
-    '天气来源、任务边界、单菜品指代和个人记忆直写候选语义已进入 MCP 工具描述',
+    '天气来源、任务边界、单实体指代和个人记忆直写候选语义已进入 MCP 工具描述',
   );
 
   const memberTasks = await mcp(
@@ -408,6 +441,22 @@ try {
     '成员档案仅返回当前家庭的非敏感字段',
   );
 
+  const assetDetail = await mcp(
+    toolCall(20, 'get_asset_detail', runId, { assetId: asset.data.id }),
+  );
+  const assetResult = toolResult(assetDetail);
+  assert(
+    assetResult?.name === assetName &&
+      assetResult.expiresAt === assetWarrantyExpiresOn &&
+      assetResult.isUnderWarranty === true &&
+      assetResult.warrantyDaysRemaining === 30 &&
+      assetResult.nextMaintenanceAt === assetNextMaintenanceAt &&
+      assetResult.brandModel === 'A7.4 asset-detail' &&
+      !Object.hasOwn(assetResult, 'purchasePrice') &&
+      !Object.hasOwn(assetResult, 'documents'),
+    '资产详情返回真实保修和维保信息且不暴露价格或文档正文',
+  );
+
   console.log('3. 参数边界、家庭隔离与结构化卡片');
   const invalidDays = await mcp(
     toolCall(12, 'get_family_schedule', runId, { days: 31 }),
@@ -420,6 +469,7 @@ try {
   );
   const foreignHouseholdId = randomUUID();
   const foreignMemberId = randomUUID();
+  const foreignAssetId = randomUUID();
   const foreignDishName = `隔离菜谱-${suffix}`;
   await db.query(
     `INSERT INTO households (id, name, slug)
@@ -435,6 +485,12 @@ try {
     `INSERT INTO dishes (id, "householdId", name, category, difficulty, "isActive")
      VALUES ($1, $2, $3, '素菜', 1, true)`,
     [randomUUID(), foreignHouseholdId, foreignDishName],
+  );
+  await db.query(
+    `INSERT INTO home_assets (
+       id, "householdId", name, category, status, "createdById"
+     ) VALUES ($1, $2, '隔离资产', 'appliance', 'active', $3)`,
+    [foreignAssetId, foreignHouseholdId, foreignMemberId],
   );
   const foreignProfile = await mcp(
     toolCall(14, 'get_member_profile', runId, { memberId: foreignMemberId }),
@@ -476,6 +532,12 @@ try {
       .filter((event) => event.runId === runId && event.presentation)
       .map((event) => event.toolName),
   );
+  const assetPresentation = detail.data.toolEvents.find(
+    (event) =>
+      event.runId === runId &&
+      event.toolName === 'get_asset_detail' &&
+      event.presentation,
+  )?.presentation;
   assert(
     TOOL_NAMES.every((name) => presentedTools.has(name)) &&
       eventRows.rows.every(
@@ -486,7 +548,36 @@ try {
           !row.presentationCiphertext.includes(scheduleTitle) &&
           !row.presentationCiphertext.includes(recipeName),
       ),
-    '8 个工具均生成加密结构化卡片，审计行不保存明文展示内容',
+    '9 个工具均生成加密结构化卡片，审计行不保存明文展示内容',
+  );
+  assert(
+    assetPresentation?.kind === 'asset-detail' &&
+      assetPresentation.items?.[0]?.title === assetName &&
+      assetPresentation.items?.[0]?.status.includes('在保') &&
+      assetPresentation.footer?.includes(assetWarrantyExpiresOn) &&
+      assetPresentation.footer?.includes(assetNextMaintenanceAt),
+    '资产详情卡片显著展示在保状态、到期日和下次维保日期',
+  );
+
+  const missingAssetId = await mcp(
+    toolCall(21, 'get_asset_detail', runId),
+  );
+  const foreignAsset = await mcp(
+    toolCall(22, 'get_asset_detail', runId, { assetId: foreignAssetId }),
+  );
+  const nonexistentAsset = await mcp(
+    toolCall(23, 'get_asset_detail', runId, { assetId: randomUUID() }),
+  );
+  assert(
+    toolResult(missingAssetId)?.error === 'asset_id_required' &&
+      toolResult(missingAssetId)?.message.includes('不得自行选择'),
+    'assetId 缺省时返回明确业务错误且禁止自行选择资产',
+  );
+  assert(
+    foreignAsset.body?.result?.isError === true &&
+      JSON.stringify(foreignAsset.body.result) ===
+        JSON.stringify(nonexistentAsset.body?.result),
+    '跨家庭 assetId 与不存在 UUID 返回一致的拒绝响应',
   );
 
   console.log('4. 菜谱搜索按 runId 强制限制为两次');
