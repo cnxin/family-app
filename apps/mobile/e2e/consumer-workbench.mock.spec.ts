@@ -145,6 +145,18 @@ async function installHomeRoutes(page: Page) {
   await page.route(/\/knowledge-articles(?:\?.*)?$/, (route) => json(route, []));
   await page.route(/\/travel-plans(?:\?.*)?$/, (route) => json(route, []));
   await page.route(/\/memories(?:\?.*)?$/, (route) => json(route, []));
+  await page.route(/\/finance\/summary\?month=/, (route) => json(route, {
+    month: today.slice(0, 7),
+    currency: 'CNY',
+    income: 0,
+    expense: 0,
+    net: 0,
+    totalBalance: 0,
+    accounts: [],
+    categories: [],
+    budgets: [],
+    categorySpending: [],
+  }));
   await page.route(/\/activities(?:\?.*)?$/, (route) => json(route, [{
     id: 'activity-fixture',
     module: 'task',

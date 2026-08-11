@@ -1631,6 +1631,9 @@ test('访问令牌失效后可刷新会话并在退出后撤销访问', async (
   try {
     await page.goto('/');
     await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    refreshRequests = 0;
+    presentedRefreshTokens.length = 0;
     await page.route(staleAccessRoute, async (route) => {
       const browserRequest = route.request();
       if (browserRequest.resourceType() === 'document') {
@@ -1661,8 +1664,7 @@ test('访问令牌失效后可刷新会话并在退出后撤销访问', async (
     await page.goto(`/?authRecovery=${Date.now()}`);
     await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
     expect(forcedUnauthorized).toBe(1);
-    expect(refreshRequests).toBeGreaterThanOrEqual(1);
-    expect(refreshRequests).toBeLessThanOrEqual(2);
+    expect(refreshRequests).toBe(1);
     expect(new Set(presentedRefreshTokens).size).toBe(
       presentedRefreshTokens.length,
     );
