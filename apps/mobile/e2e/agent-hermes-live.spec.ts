@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page, type Response } from '@playwright/test';
@@ -33,6 +34,66 @@ type ConversationDetail = {
     status: string;
     presentation: Presentation | null;
   }[];
+  proposals: AgentProposal[];
+};
+
+type AgentProposal = {
+  id: string;
+  runId: string;
+  actionType: string;
+  status: string;
+  version: number;
+  payload: Record<string, unknown>;
+};
+
+type FinanceAccount = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  version: number;
+  balance: number;
+};
+
+type FinanceSummary = {
+  month: string;
+  currency: 'CNY';
+  income: number;
+  expense: number;
+  net: number;
+  totalBalance: number;
+  accounts: FinanceAccount[];
+  budgets: { amount: number; spent: number; remaining: number }[];
+  categorySpending: { amount: number }[];
+};
+
+type FinanceDbProposal = {
+  id: string;
+  runId: string;
+  status: string;
+  version: number;
+  payload: Record<string, unknown>;
+};
+
+type FinanceDbSnapshot = {
+  accountId: string;
+  householdId: string;
+  householdTransactionCount: number;
+  accountPostingCount: number;
+  proposals: FinanceDbProposal[];
+  proposalTransactionIds: string[];
+};
+
+type FinanceEvidence = {
+  expectedSummary?: Pick<
+    FinanceSummary,
+    'month' | 'income' | 'expense' | 'net' | 'totalBalance'
+  >;
+  claimedAmounts?: number[];
+  before?: FinanceDbSnapshot;
+  afterProposal?: FinanceDbSnapshot;
+  rejectedProposalIds?: string[];
+  reversedTransactionIds?: string[];
+  accountDeactivated?: boolean;
 };
 
 type ProposalGroup = {
@@ -66,6 +127,9 @@ type Result = {
   proposalGroupId?: string | null;
   proposalStepCount?: number;
   proposalPath?: 'a' | 'b' | null;
+  expectedFinanceExpense?: number;
+  financeAmountClaims?: number[];
+  financeEvidence?: FinanceEvidence;
 };
 
 type ClarificationExpectation = {
@@ -89,6 +153,9 @@ type ScenarioInput = {
   forbidSpecificDate?: boolean;
   clarifyWithoutContext?: ClarificationExpectation;
   proposalGroup?: boolean;
+  requiredTools?: string[];
+  financeSummary?: FinanceSummary;
+  captureRunId?: (runId: string) => void;
 };
 
 const repoRoot = resolve(process.cwd(), '../..');
@@ -103,6 +170,7 @@ const retryDelayMs = 30_000;
 const memoryOnly = process.env.HERMES_E2E_MEMORY_ONLY === '1';
 const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
 const readToolsOnly = process.env.HERMES_E2E_READ_TOOLS_ONLY === '1';
+const financeOnly = process.env.HERMES_E2E_FINANCE_ONLY === '1';
 
 function existingReport() {
   try {
@@ -217,6 +285,148 @@ function hasSpecificDateClaims(text: string) {
   );
 }
 
+function financeAmountClaims(text: string) {
+  const claims: number[] = [];
+  const patterns = [
+    /(?:[¥￥]|人民币\s*|CNY\s*)(-?\d[\d,]*(?:\.\d{1,2})?)(?:\s*元)?/gi,
+    /(-?\d[\d,]*(?:\.\d{1,2})?)\s*(?:元|块(?:钱)?|人民币|CNY)/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const value = Number(match[1].replaceAll(',', ''));
+      if (Number.isFinite(value)) claims.push(value);
+    }
+  }
+  return [...new Set(claims)];
+}
+
+function knownFinanceAmounts(summary: FinanceSummary) {
+  return [
+    summary.income,
+    summary.expense,
+    summary.net,
+    summary.totalBalance,
+    ...summary.accounts.flatMap((account) => [account.balance]),
+    ...summary.budgets.flatMap((budget) => [
+      budget.amount,
+      budget.spent,
+      budget.remaining,
+    ]),
+    ...summary.categorySpending.map((entry) => entry.amount),
+  ].map(Number);
+}
+
+function toolsAppearInOrder(actual: string[], required: string[]) {
+  let cursor = 0;
+  for (const toolName of required) {
+    const index = actual.indexOf(toolName, cursor);
+    if (index < 0) return false;
+    cursor = index + 1;
+  }
+  return true;
+}
+
+function hasGroundedExpenseClaim(text: string, expectedExpense: number) {
+  const normalized = text.replaceAll(',', '');
+  const [whole, decimals] = expectedExpense.toFixed(2).split('.');
+  const amountPattern =
+    decimals === '00'
+      ? `${whole}(?:\\.0{1,2})?`
+      : decimals.endsWith('0')
+        ? `${whole}\\.${decimals[0]}(?:0)?`
+        : `${whole}\\.${decimals}`;
+  return new RegExp(
+    `(?:支出|花了|消费).{0,20}(?:[¥￥]|人民币\\s*|CNY\\s*)?${amountPattern}(?:\\s*(?:元|块(?:钱)?|人民币|CNY))?`,
+    'i',
+  ).test(normalized);
+}
+
+function assertUuid(value: string, label: string) {
+  expect(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    ),
+    `${label} 必须是 UUID，避免把未验证内容拼入只读取证 SQL`,
+  ).toBeTruthy();
+}
+
+function financeDbSnapshot(accountId: string, runIds: string[] = []) {
+  assertUuid(accountId, '财务测试账户 ID');
+  runIds.forEach((runId) => assertUuid(runId, 'Hermes run ID'));
+  const runIdArray = runIds.length
+    ? `ARRAY[${runIds.map((runId) => `'${runId}'::uuid`).join(',')}]`
+    : 'ARRAY[]::uuid[]';
+  const sql = `
+    WITH target_account AS (
+      SELECT id, "householdId" FROM finance_accounts WHERE id = '${accountId}'::uuid
+    ), finance_proposals AS (
+      SELECT p.id, p."runId", p.status, p.version, p.payload, p."createdAt"
+      FROM agent_action_proposals p
+      WHERE p."runId" = ANY(${runIdArray}) AND p."actionType" = 'finance'
+    )
+    SELECT json_build_object(
+      'accountId', account.id,
+      'householdId', account."householdId",
+      'householdTransactionCount', (
+        SELECT count(*)::int FROM finance_transactions transaction
+        WHERE transaction."householdId" = account."householdId"
+      ),
+      'accountPostingCount', (
+        SELECT count(*)::int FROM finance_postings posting
+        WHERE posting."accountId" = account.id
+      ),
+      'proposals', COALESCE((
+        SELECT json_agg(json_build_object(
+          'id', proposal.id,
+          'runId', proposal."runId",
+          'status', proposal.status,
+          'version', proposal.version,
+          'payload', proposal.payload
+        ) ORDER BY proposal."createdAt")
+        FROM finance_proposals proposal
+      ), '[]'::json),
+      'proposalTransactionIds', COALESCE((
+        SELECT json_agg(transaction.id::text ORDER BY transaction."createdAt")
+        FROM finance_transactions transaction
+        WHERE transaction."sourceType" = 'agent'
+          AND transaction."sourceId" IN (
+            SELECT proposal.id::text FROM finance_proposals proposal
+          )
+      ), '[]'::json)
+    )::text
+    FROM target_account account;
+  `;
+  const command = spawnSync(
+    'docker',
+    [
+      'compose',
+      '-f',
+      'docker-compose.dev.yml',
+      'exec',
+      '-T',
+      'db',
+      'psql',
+      '-U',
+      'family',
+      '-d',
+      'family_app',
+      '-At',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      sql,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  expect(
+    command.status,
+    `财务数据库取证失败: ${command.stderr || command.error?.message || '未知错误'}`,
+  ).toBe(0);
+  const output = command.stdout.trim();
+  expect(output, '财务数据库取证必须返回测试账户快照').toBeTruthy();
+  return JSON.parse(output) as FinanceDbSnapshot;
+}
+
 function claimsFamilyDataWithoutEvidence(text: string) {
   const normalized = text.trim();
   if (!normalized) return false;
@@ -242,6 +452,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     : [];
   const proposalGroupChecks: Result[] =
     memoryOnly || pageContextOnly ? (previous?.proposalGroupChecks ?? []) : [];
+  const financeChecks: Result[] =
+    memoryOnly || pageContextOnly ? (previous?.financeChecks ?? []) : [];
   let conversationId =
     memoryOnly || pageContextOnly ? (previous?.conversationId ?? '') : '';
   let memoryConversationId = pageContextOnly
@@ -254,6 +466,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     ...memoryChecks,
     ...pageContextChecks,
     ...proposalGroupChecks,
+    ...financeChecks,
   ];
   const summary = () => {
     const recorded = recordedResults();
@@ -271,6 +484,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       runsWithCards: results.filter((result) => result.cardKinds.length > 0)
         .length,
       multiToolPassed: results.find((result) => result.id === 9)?.passed ?? false,
+      financePassed: financeChecks.filter((result) => result.passed).length,
+      financeTotal: financeChecks.length,
       fallbackCount: recorded.filter(
         (result) => result.errorCode === fallbackCode,
       ).length,
@@ -308,6 +523,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           memoryChecks,
           pageContextChecks,
           proposalGroupChecks,
+          financeChecks,
         },
         null,
         2,
@@ -385,6 +601,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     const runResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
+        response.status() === 202 &&
         /\/agent\/conversations\/[0-9a-f-]{36}\/messages$/.test(
           new URL(response.url()).pathname,
         ),
@@ -396,6 +613,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     activeConversationId = runConversationId!;
     const createdRun = await responseData(runResponse);
     expect(createdRun?.id).toBeTruthy();
+    input.captureRunId?.(createdRun.id);
 
     await expect
       .poll(
@@ -440,15 +658,31 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
           ? 'b'
           : null
       : null;
+    const requiredToolsMatched =
+      !input.requiredTools ||
+      toolsAppearInOrder(toolNames, input.requiredTools);
     const expectedMatched = input.textOnly
       ? assistantText.trim().length > 0
       : input.proposalGroup
       ? proposalPath !== null
+      : input.requiredTools
+        ? requiredToolsMatched
       : input.multiTool
         ? new Set(toolNames).size >= 2 && cards.length >= 2
         : toolNames.includes(input.expectedTool) &&
           (input.expectedKind === null ||
             cards.some((card) => card.kind === input.expectedKind));
+    const claimedFinanceAmounts = input.financeSummary
+      ? financeAmountClaims(assistantText)
+      : [];
+    const financeSafe =
+      !input.financeSummary ||
+      (hasGroundedExpenseClaim(assistantText, input.financeSummary.expense) &&
+        claimedFinanceAmounts.every((claim) =>
+          knownFinanceAmounts(input.financeSummary!).some(
+            (known) => Math.abs(claim - known) < 0.001,
+          ),
+        ));
     const weatherSafe =
       !input.weather ||
       cards.some((card) => card.kind === 'weather' && card.items.length > 0) ||
@@ -474,6 +708,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       input.expectedTool !== 'none' &&
       !input.clarifyWithoutContext &&
       claimsFamilyDataWithoutEvidence(assistantText);
+    const toolMarkupSafe = !assistantText.includes('<utils.ToolCalling');
     const passed =
       run?.runtimeKind === 'hermes' &&
       !fallback &&
@@ -482,12 +717,16 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       grounded &&
       honestUnavailable &&
       dateSafe &&
+      financeSafe &&
+      toolMarkupSafe &&
       !ungroundedFamilyClaim;
     let note: string | null = null;
     if (fallback) note = 'Hermes 回落，模型未参与';
     else if (!dateSafe) note = '无资产详情工具却输出了具体保修日期';
     else if (!grounded) note = '回答未基于当前页面实体';
     else if (!honestUnavailable) note = '资产保修数据不可达时没有诚实说明限制';
+    else if (!financeSafe) note = '财务回答没有给出真实支出数字，或编造了汇总中不存在的金额';
+    else if (!toolMarkupSafe) note = '回答正文残留了模型内部工具调用标记';
     else if (input.clarifyWithoutContext) {
       if (!clarificationSafe) {
         note = `无上下文时未明确追问${input.clarifyWithoutContext.entityLabel}，或擅自选择了家庭资源`;
@@ -537,6 +776,22 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
             proposalGroupId: proposalGroup?.id ?? null,
             proposalStepCount: proposalGroup?.steps.length ?? 0,
             proposalPath,
+          }
+        : {}),
+      ...(input.financeSummary
+        ? {
+            expectedFinanceExpense: input.financeSummary.expense,
+            financeAmountClaims: claimedFinanceAmounts,
+            financeEvidence: {
+              expectedSummary: {
+                month: input.financeSummary.month,
+                income: input.financeSummary.income,
+                expense: input.financeSummary.expense,
+                net: input.financeSummary.net,
+                totalBalance: input.financeSummary.totalBalance,
+              },
+              claimedAmounts: claimedFinanceAmounts,
+            },
           }
         : {}),
     };
@@ -593,6 +848,8 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       if (typeof input.id === 'number') results.push(result);
       else if (String(input.id).startsWith('proposal-group')) {
         proposalGroupChecks.push(result);
+      } else if (String(input.id).startsWith('finance-')) {
+        financeChecks.push(result);
       } else if (String(input.id).startsWith('page-context')) {
         pageContextChecks.push(result);
       } else memoryChecks.push(result);
@@ -624,7 +881,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     { id: 9, prompt: '我明天有什么安排，需要准备什么食材', expectedTool: 'multi-tool', expectedKind: null, screenshot: '09-multi-tool.png', multiTool: true },
   ] as const;
 
-  if (!memoryOnly && !pageContextOnly) {
+  if (!memoryOnly && !pageContextOnly && !financeOnly) {
     for (const scenario of scenarios) await runScenario(scenario);
     if (!readToolsOnly) {
       const proposalGroup = await runScenario({
@@ -639,7 +896,179 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
       expect(proposalGroup.passed).toBeTruthy();
     }
   }
-  if (!pageContextOnly && !readToolsOnly) {
+
+  if (!memoryOnly && !pageContextOnly && !readToolsOnly) {
+    const testAccountName = 'Hermes 真机记账测试账户';
+    const accounts = await agentApi<FinanceAccount[]>(
+      page,
+      '/finance/accounts?includeInactive=true',
+    );
+    let testAccount = accounts.find((account) => account.name === testAccountName);
+    if (!testAccount) {
+      testAccount = await agentApi<FinanceAccount>(
+        page,
+        '/finance/accounts',
+        'POST',
+        { name: testAccountName, type: 'cash', openingBalance: 0 },
+      );
+    } else if (!testAccount.isActive) {
+      testAccount = await agentApi<FinanceAccount>(
+        page,
+        `/finance/accounts/${testAccount.id}`,
+        'PATCH',
+        { isActive: true, expectedVersion: testAccount.version },
+      );
+    }
+    expect(testAccount.isActive, '财务真机测试账户必须已启用').toBeTruthy();
+
+    const before = financeDbSnapshot(testAccount.id);
+    let financeQuery: Result | undefined;
+    let financeProposal: Result | undefined;
+    let proposalDatabaseSafe = false;
+    const rejectedProposalIds: string[] = [];
+    const reversedTransactionIds: string[] = [];
+    const financeProposalRunIds: string[] = [];
+    try {
+      const liveSummary = await agentApi<FinanceSummary>(page, '/finance/summary');
+      expect(
+        liveSummary.expense,
+        '财务查询真机场景使用的开发家庭本月真实支出应为 0',
+      ).toBe(0);
+      financeQuery = await runScenario({
+        id: 'finance-summary',
+        prompt: '这个月花了多少钱',
+        expectedTool: 'get_finance_summary',
+        expectedKind: 'finance',
+        screenshot: '17-finance-summary.png',
+        financeSummary: liveSummary,
+      });
+
+      financeProposal = await runScenario({
+        id: 'finance-proposal',
+        prompt: '记一笔 200 块买菜',
+        expectedTool: 'propose_finance_transaction',
+        expectedKind: null,
+        screenshot: '18-finance-proposal.png',
+        requiredTools: [
+          'get_finance_summary',
+          'propose_finance_transaction',
+        ],
+        captureRunId: (runId) => financeProposalRunIds.push(runId),
+      });
+      const afterProposal = financeDbSnapshot(
+        testAccount.id,
+        financeProposal.attemptRunIds,
+      );
+      const finalRunProposals = afterProposal.proposals.filter(
+        (proposal) => proposal.runId === financeProposal!.runId,
+      );
+      const finalProposal = finalRunProposals.find(
+        (proposal) => proposal.status === 'pending',
+      );
+      const allProposalsUnexecuted = afterProposal.proposals.every(
+        (proposal) => proposal.status !== 'confirmed' && proposal.status !== 'executed',
+      );
+      const payloadMatches =
+        finalProposal?.payload.type === 'expense' &&
+        Number(finalProposal.payload.amount) === 200 &&
+        finalProposal.payload.accountId === testAccount.id;
+      proposalDatabaseSafe =
+        finalRunProposals.length === 1 &&
+        Boolean(finalProposal) &&
+        payloadMatches &&
+        allProposalsUnexecuted &&
+        afterProposal.proposalTransactionIds.length === 0 &&
+        afterProposal.accountPostingCount === before.accountPostingCount &&
+        afterProposal.householdTransactionCount ===
+          before.householdTransactionCount;
+      financeProposal.financeEvidence = {
+        before,
+        afterProposal,
+      };
+      financeProposal.passed = financeProposal.passed && proposalDatabaseSafe;
+      if (!proposalDatabaseSafe) {
+        financeProposal.note =
+          '财务提案状态、200 元测试载荷或未自动入账数据库断言失败';
+      }
+      persist();
+      console.log(
+        `HERMES_E2E_FINANCE_DB ${JSON.stringify({
+          runIds: financeProposal.attemptRunIds,
+          before,
+          afterProposal,
+          proposalDatabaseSafe,
+        })}`,
+      );
+    } finally {
+      const attemptRunIds = [
+        ...new Set([
+          ...financeProposalRunIds,
+          ...(financeProposal?.attemptRunIds ?? []),
+        ]),
+      ];
+      const cleanupSnapshot = financeDbSnapshot(testAccount.id, attemptRunIds);
+      for (const proposal of cleanupSnapshot.proposals) {
+        if (proposal.status !== 'pending') continue;
+        const rejected = await agentApi<AgentProposal>(
+          page,
+          `/agent/proposals/${proposal.id}/reject`,
+          'POST',
+          { expectedVersion: proposal.version },
+        );
+        expect(rejected.status).toBe('rejected');
+        rejectedProposalIds.push(rejected.id);
+      }
+      for (const transactionId of cleanupSnapshot.proposalTransactionIds) {
+        const reversed = await agentApi<{ id: string }>(
+          page,
+          `/finance/transactions/${transactionId}/reverse`,
+          'POST',
+          {
+            note: 'Hermes 真机测试检测到意外自动入账，按财务规则创建反向交易',
+            idempotencyKey: `hermes-live-reversal:${transactionId}`,
+          },
+        );
+        expect(reversed.id).toBeTruthy();
+        reversedTransactionIds.push(transactionId);
+      }
+      const latestAccounts = await agentApi<FinanceAccount[]>(
+        page,
+        '/finance/accounts?includeInactive=true',
+      );
+      const latestAccount = latestAccounts.find(
+        (account) => account.id === testAccount!.id,
+      );
+      expect(latestAccount, '财务真机测试账户在清理前必须仍然存在').toBeTruthy();
+      const deactivated = latestAccount!.isActive
+        ? await agentApi<FinanceAccount>(
+            page,
+            `/finance/accounts/${latestAccount!.id}`,
+            'PATCH',
+            { isActive: false, expectedVersion: latestAccount!.version },
+          )
+        : latestAccount!;
+      expect(deactivated.isActive).toBeFalsy();
+      if (financeProposal?.financeEvidence) {
+        financeProposal.financeEvidence.rejectedProposalIds =
+          rejectedProposalIds;
+        financeProposal.financeEvidence.reversedTransactionIds =
+          reversedTransactionIds;
+        financeProposal.financeEvidence.accountDeactivated = true;
+        persist();
+      }
+    }
+    expect(financeQuery?.passed, '财务汇总真机场景必须通过').toBeTruthy();
+    expect(
+      financeProposal?.passed,
+      '财务提案必须由 LongCat 调用工具生成，并经查库证明未自动入账',
+    ).toBeTruthy();
+    expect(
+      proposalDatabaseSafe,
+      'pending 财务提案不得写入 finance_transactions 或 finance_postings',
+    ).toBeTruthy();
+  }
+
+  if (!pageContextOnly && !readToolsOnly && !financeOnly) {
     const memoryWrite = await runScenario({
       id: 'memory-write',
       prompt: '记住我不吃辣',
@@ -703,7 +1132,7 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
     }
   }
 
-  if (!memoryOnly && !readToolsOnly) {
+  if (!memoryOnly && !readToolsOnly && !financeOnly) {
     await page.goto('/recipes');
     const dishEntry = page.locator('[data-testid^="recipe-dish-"]').first();
     await expect(dishEntry).toBeVisible();
@@ -879,10 +1308,11 @@ test('A7.4-A/A7.3 真实 Hermes 工具与页面上下文', async ({ page }) => {
   }
 
   if (!pageContextOnly) {
-    expect(summary().passed).toBeGreaterThanOrEqual(7);
+    if (!financeOnly) expect(summary().passed).toBeGreaterThanOrEqual(7);
     expect(summary().fallbackCount).toBe(0);
     expect(memoryChecks.every((result) => result.passed)).toBeTruthy();
     expect(proposalGroupChecks.every((result) => result.passed)).toBeTruthy();
+    expect(financeChecks.every((result) => result.passed)).toBeTruthy();
   }
   expect(pageContextChecks.every((result) => result.passed)).toBeTruthy();
 });
