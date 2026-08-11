@@ -1,31 +1,313 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type Route,
+} from '@playwright/test';
+import type {
+  FinanceAccount,
+  FinanceBudget,
+  FinanceCategory,
+  FinanceTransaction,
+  Member,
+} from '../src/lib/types';
 
-async function openAuthenticated(
-  page: Page,
-  path: string,
-  projectName: string,
-) {
-  await page.goto(path);
-  if (/\/login\/?$/.test(new URL(page.url()).pathname)) {
-    const password = process.env.E2E_ACCOUNT_PASSWORD;
-    expect(
-      password,
-      '隔离浏览器测试必须提供 E2E_ACCOUNT_PASSWORD；空字符串表示无密码账号',
-    ).not.toBeUndefined();
-    await page
-      .getByPlaceholder('输入账号')
-      .fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
-    await page.getByPlaceholder('输入密码').fill(password ?? '');
-    await page.getByRole('button', { name: '登录', exact: true }).click();
-    await page.waitForURL((url) => !/\/login\/?$/.test(url.pathname));
-    await page.goto(path);
-  }
-  await page.context().storageState({
-    path:
-      projectName === 'desktop-chrome'
-        ? 'e2e/.auth/desktop.json'
-        : 'e2e/.auth/mobile.json',
+const householdId = 'household-finance-web-fixture';
+const now = '2026-08-12T08:00:00.000Z';
+const currentDate = '2026-08-12';
+const currentMonth = currentDate.slice(0, 7);
+const member: Member = {
+  id: 'member-finance-web-fixture',
+  householdId,
+  name: '爸爸',
+  avatarEmoji: 'F',
+  role: 'owner',
+  prefersCooking: true,
+  disabledAt: null,
+  createdAt: now,
+};
+const accountProfile = {
+  id: 'account-finance-web-fixture',
+  loginName: 'finance-web-fixture',
+  requiresPasswordSetup: false,
+};
+
+async function json(route: Route, data: unknown, status = 200) {
+  await route.fulfill({
+    body: JSON.stringify({ data }),
+    contentType: 'application/json',
+    status,
   });
+}
+
+function category(
+  id: string,
+  name: string,
+  kind: FinanceCategory['kind'],
+): FinanceCategory {
+  return {
+    id,
+    householdId,
+    name,
+    kind,
+    systemKey: kind === 'expense' ? 'food' : 'salary',
+    icon: 'circle',
+    color: kind === 'expense' ? '#26734D' : '#2563A8',
+    sortOrder: 10,
+    isActive: true,
+    version: 1,
+    createdById: member.id,
+    createdBy: member,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function account(
+  id: string,
+  name: string,
+  openingBalance: number,
+): FinanceAccount {
+  return {
+    id,
+    householdId,
+    name,
+    type: 'bank',
+    openingBalance,
+    balance: openingBalance,
+    currency: 'CNY',
+    isActive: true,
+    version: 1,
+    createdById: member.id,
+    createdBy: member,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function installFixtureSession(page: Page) {
+  await page.addInitScript(
+    ({ accountFixture, memberFixture }) => {
+      window.localStorage.setItem('family-app-token', 'finance-web-token');
+      window.localStorage.setItem(
+        'family-app-refresh-token',
+        'finance-web-refresh-token',
+      );
+      window.localStorage.setItem(
+        'family-app-account',
+        JSON.stringify(accountFixture),
+      );
+      window.localStorage.setItem(
+        'family-app-member',
+        JSON.stringify(memberFixture),
+      );
+    },
+    { accountFixture: accountProfile, memberFixture: member },
+  );
+  await page.route(/\/auth\/refresh$/, (route) =>
+    json(route, {
+      accessToken: 'finance-web-token-refreshed',
+      refreshToken: 'finance-web-refresh-token-refreshed',
+      account: accountProfile,
+      member,
+    }),
+  );
+  await page.route(/\/notifications(?:\?.*)?$/, (route) => json(route, []));
+}
+
+async function installFinanceRoutes(page: Page, withAccount: boolean) {
+  const accounts: FinanceAccount[] = withAccount
+    ? [account('finance-account-viewport', '视口测试账户', 1000)]
+    : [];
+  const categories = [
+    category('finance-category-food', '餐饮', 'expense'),
+    category('finance-category-salary', '工资', 'income'),
+  ];
+  const budgets: FinanceBudget[] = [];
+  const transactions: FinanceTransaction[] = [];
+  let sequence = 0;
+
+  await page.route(/\/finance(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
+    const request = route.request();
+    if (request.resourceType() === 'document') {
+      await route.continue();
+      return;
+    }
+    const url = new URL(request.url());
+    const path = url.pathname;
+    const method = request.method();
+
+    if (method === 'GET' && path === '/finance/accounts') {
+      return json(route, accounts);
+    }
+    if (method === 'GET' && path === '/finance/categories') {
+      return json(route, categories);
+    }
+    if (method === 'GET' && path === '/finance/transactions') {
+      const type = url.searchParams.get('type');
+      return json(
+        route,
+        type
+          ? transactions.filter((entry) => entry.type === type)
+          : transactions,
+      );
+    }
+    if (method === 'GET' && path === '/finance/summary') {
+      const expense = transactions
+        .filter((entry) => entry.type === 'expense' && !entry.reversed)
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const income = transactions
+        .filter((entry) => entry.type === 'income' && !entry.reversed)
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      return json(route, {
+        month: url.searchParams.get('month') ?? currentMonth,
+        currency: 'CNY',
+        income,
+        expense,
+        net: income - expense,
+        totalBalance: accounts.reduce((sum, entry) => sum + entry.balance, 0),
+        accounts,
+        categories,
+        budgets,
+        categorySpending: expense
+          ? [{ category: categories[0], amount: expense }]
+          : [],
+      });
+    }
+    if (method === 'POST' && path === '/finance/accounts') {
+      const body = request.postDataJSON() as {
+        name: string;
+        openingBalance?: number;
+      };
+      const created = account(
+        `finance-account-${++sequence}`,
+        body.name,
+        body.openingBalance ?? 0,
+      );
+      accounts.push(created);
+      return json(route, created, 201);
+    }
+    if (method === 'PUT' && path === '/finance/budgets') {
+      const body = request.postDataJSON() as {
+        amount: number;
+        categoryId: string;
+        month: string;
+      };
+      const targetCategory = categories.find(
+        (entry) => entry.id === body.categoryId,
+      )!;
+      const saved: FinanceBudget = {
+        id: `finance-budget-${++sequence}`,
+        householdId,
+        categoryId: targetCategory.id,
+        category: targetCategory,
+        month: body.month,
+        amount: body.amount,
+        spent: 0,
+        remaining: body.amount,
+        ratio: 0,
+        version: 1,
+        updatedById: member.id,
+        updatedBy: member,
+        createdAt: now,
+        updatedAt: now,
+      };
+      budgets.splice(0, budgets.length, saved);
+      return json(route, saved);
+    }
+    if (method === 'POST' && path === '/finance/transactions') {
+      const body = request.postDataJSON() as {
+        accountId: string;
+        amount: number;
+        categoryId: string;
+        note?: string | null;
+        occurredOn: string;
+        title: string;
+        type: 'expense' | 'income';
+      };
+      const targetAccount = accounts.find(
+        (entry) => entry.id === body.accountId,
+      )!;
+      const targetCategory = categories.find(
+        (entry) => entry.id === body.categoryId,
+      )!;
+      const delta = body.type === 'expense' ? -body.amount : body.amount;
+      targetAccount.balance += delta;
+      const created: FinanceTransaction = {
+        id: `finance-transaction-${++sequence}`,
+        householdId,
+        type: body.type,
+        amount: body.amount,
+        currency: 'CNY',
+        title: body.title,
+        note: body.note ?? null,
+        occurredOn: body.occurredOn,
+        categoryId: targetCategory.id,
+        category: targetCategory,
+        actorId: member.id,
+        actor: member,
+        actorName: member.name,
+        sourceType: 'manual',
+        sourceId: `finance-source-${sequence}`,
+        reversalOfId: null,
+        postings: [
+          {
+            id: `finance-posting-${sequence}`,
+            transactionId: `finance-transaction-${sequence}`,
+            accountId: targetAccount.id,
+            account: targetAccount,
+            delta,
+            createdAt: now,
+          },
+        ],
+        reversed: false,
+        reversalId: null,
+        createdAt: now,
+      };
+      transactions.unshift(created);
+      return json(route, created, 201);
+    }
+    const reversal = path.match(/^\/finance\/transactions\/([^/]+)\/reverse$/);
+    if (method === 'POST' && reversal) {
+      const original = transactions.find((entry) => entry.id === reversal[1])!;
+      const targetAccount = original.postings[0].account;
+      targetAccount.balance -= original.postings[0].delta;
+      original.reversed = true;
+      original.reversalId = `finance-reversal-${++sequence}`;
+      const reversed: FinanceTransaction = {
+        ...original,
+        id: original.reversalId,
+        type: 'reversal',
+        title: `撤销：${original.title}`,
+        sourceType: 'finance_transaction',
+        sourceId: original.id,
+        reversalOfId: original.id,
+        postings: original.postings.map((posting) => ({
+          ...posting,
+          id: `finance-reversal-posting-${sequence}`,
+          transactionId: original.reversalId!,
+          delta: -posting.delta,
+        })),
+        reversed: false,
+        reversalId: null,
+      };
+      transactions.unshift(reversed);
+      return json(route, reversed, 201);
+    }
+    await route.fulfill({
+      body: JSON.stringify({
+        error: { code: 'UNHANDLED_FINANCE_FIXTURE', message: path },
+      }),
+      contentType: 'application/json',
+      status: 501,
+    });
+  });
+}
+
+async function openFinance(page: Page) {
+  await page.goto('/finance');
+  await expect(page).not.toHaveURL(/\/login\/?$/);
 }
 
 async function expectTouchTarget(locator: Locator, label: string) {
@@ -45,10 +327,15 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(widths.root).toBeLessThanOrEqual(1);
 }
 
+test.beforeEach(async ({ page }, testInfo) => {
+  await installFixtureSession(page);
+  await installFinanceRoutes(page, !testInfo.title.includes('首次建账'));
+});
+
 test('管理员可从空账本完成首次建账、预算、记账和撤销', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chrome');
   test.setTimeout(90_000);
-  await openAuthenticated(page, '/finance', testInfo.project.name);
+  await openFinance(page);
 
   await expect(page.getByRole('heading', { name: '家庭财务', exact: true })).toBeVisible();
   await expect(page.getByText('还没有财务账户', { exact: true })).toBeVisible();
@@ -92,7 +379,7 @@ test('管理员可从空账本完成首次建账、预算、记账和撤销', as
 });
 
 test('家庭财务在移动和桌面视口无横向溢出且弹层可操作', async ({ page }, testInfo) => {
-  await openAuthenticated(page, '/finance', testInfo.project.name);
+  await openFinance(page);
   await expect(page.getByRole('heading', { name: '家庭财务', exact: true })).toBeVisible();
   await expectTouchTarget(page.getByRole('button', { name: '问小管家', exact: true }), '问小管家按钮');
   await expectTouchTarget(page.getByRole('button', { name: '上个月', exact: true }), '上个月按钮');
@@ -124,7 +411,7 @@ test('家庭财务适配 375 像素小屏、横屏、深色和减少动态效果
     { name: 'landscape', width: 844, height: 390 },
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await openAuthenticated(page, '/finance', testInfo.project.name);
+    await openFinance(page);
     await expect(page.getByRole('heading', { name: '家庭财务', exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.screenshot({

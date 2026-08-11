@@ -1661,8 +1661,8 @@ test('访问令牌失效后可刷新会话并在退出后撤销访问', async (
       await route.continue();
     });
 
-    await page.goto(`/?authRecovery=${Date.now()}`);
-    await expect(page.getByText('家庭工作台', { exact: true })).toBeVisible();
+    await openSection(page, testInfo.project.name, 'order');
+    await expect(page).toHaveURL(/\/order$/);
     expect(forcedUnauthorized).toBe(1);
     expect(refreshRequests).toBe(1);
     expect(new Set(presentedRefreshTokens).size).toBe(
