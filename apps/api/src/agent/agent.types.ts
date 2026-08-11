@@ -16,6 +16,7 @@ export const AGENT_READ_TOOLS = [
   'get_dish_plan',
   'get_weather',
   'get_member_profile',
+  'get_asset_detail',
   'get_finance_summary',
 ] as const;
 
@@ -79,6 +80,7 @@ export interface AgentPageContextCandidate {
 export interface AgentResolvedPageContext {
   route: string;
   entityType?: AgentPageEntityType;
+  entityId?: string;
   name?: string;
   date?: string;
   untrustedContent: true;

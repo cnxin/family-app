@@ -1979,11 +1979,13 @@ export interface AgentToolPresentation {
     | 'dish-plan'
     | 'weather'
     | 'member-profile'
+    | 'asset-detail'
     | 'finance';
   title: string;
   emptyText: string;
   targetPath: string;
   items: AgentToolPresentationItem[];
+  footer?: string;
 }
 
 export interface AgentToolEvent {

@@ -13,6 +13,7 @@ type Presentation = {
   title: string;
   emptyText: string;
   items: { title: string; detail: string; status: string }[];
+  footer?: string;
 };
 
 type Run = {
@@ -156,6 +157,10 @@ type ScenarioInput = {
   requiredTools?: string[];
   financeSummary?: FinanceSummary;
   captureRunId?: (runId: string) => void;
+  expectedPageContext?: {
+    entityType: string;
+    entityId: string;
+  };
 };
 
 const repoRoot = resolve(process.cwd(), '../..');
@@ -174,6 +179,7 @@ const pageContextOnly = process.env.HERMES_E2E_PAGE_CONTEXT_ONLY === '1';
 const readToolsOnly = process.env.HERMES_E2E_READ_TOOLS_ONLY === '1';
 const financeOnly = process.env.HERMES_E2E_FINANCE_ONLY === '1';
 const proposalGroupOnly = process.env.HERMES_E2E_PROPOSAL_GROUP_ONLY === '1';
+const assetOnly = process.env.HERMES_E2E_ASSET_ONLY === '1';
 const focusedScenarioPrompts = [
   '购物清单里有什么',
   '下周点了什么菜',
@@ -641,6 +647,12 @@ async function runHermesLiveTest(
     );
     await page.getByTestId('agent-send-button').click();
     const runResponse = await runResponsePromise;
+    if (input.expectedPageContext) {
+      const requestBody = runResponse.request().postDataJSON() as {
+        pageContext?: { entityType?: string; entityId?: string };
+      };
+      expect(requestBody.pageContext).toMatchObject(input.expectedPageContext);
+    }
     const runConversationId = new URL(runResponse.url()).pathname.split('/').at(-2);
     expect(runConversationId).toBeTruthy();
     activeConversationId = runConversationId!;
@@ -796,6 +808,7 @@ async function runHermesLiveTest(
           ...card.items.map((item) =>
             `${item.title} ${item.detail} ${item.status}`.trim(),
           ),
+          card.footer,
           card.items.length ? '' : card.emptyText,
         ]
           .filter(Boolean)
@@ -898,7 +911,7 @@ async function runHermesLiveTest(
     { id: 9, prompt: '我明天有什么安排，需要准备什么食材', expectedTool: 'multi-tool', expectedKind: null, screenshot: '09-multi-tool.png', multiTool: true },
   ] as const;
 
-  if (!memoryOnly && !pageContextOnly && !financeOnly) {
+  if (!memoryOnly && !pageContextOnly && !financeOnly && !assetOnly) {
     const selectedScenarios = proposalGroupOnly
       ? []
       : focusedScenarioPrompt
@@ -929,7 +942,8 @@ async function runHermesLiveTest(
     !pageContextOnly &&
     !readToolsOnly &&
     !focusedScenarioPrompt &&
-    !proposalGroupOnly
+    !proposalGroupOnly &&
+    !assetOnly
   ) {
     const testAccountName = 'Hermes 真机记账测试账户';
     const accounts = await agentApi<FinanceAccount[]>(
@@ -1106,7 +1120,8 @@ async function runHermesLiveTest(
     !readToolsOnly &&
     !financeOnly &&
     !focusedScenarioPrompt &&
-    !proposalGroupOnly
+    !proposalGroupOnly &&
+    !assetOnly
   ) {
     const memoryWrite = await runScenario({
       id: 'memory-write',
@@ -1178,118 +1193,138 @@ async function runHermesLiveTest(
     !focusedScenarioPrompt &&
     !proposalGroupOnly
   ) {
-    await page.goto('/recipes');
-    const dishEntry = page.locator('[data-testid^="recipe-dish-"]').first();
-    await expect(dishEntry).toBeVisible();
-    await persistAuthState();
-    await dishEntry.tap();
-    await expect(page).toHaveURL(/\/dish\/[0-9a-f-]{36}$/);
-    const targetDish = {
-      id: new URL(page.url()).pathname.split('/').at(-1)!,
-      name: await page.getByTestId('dish-detail-name').innerText(),
-    };
-    await page.getByTestId('dish-ask-assistant').click();
-    await expect(page).toHaveURL(/\/assistant\?.*entityType=dish/);
-    await expect(page.getByTestId('agent-page-context')).toContainText(
-      `正在参考：${targetDish.name}`,
-    );
-
-    const contextConversationResponse = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        new URL(response.url()).pathname.endsWith('/agent/conversations'),
-    );
-    await page.getByTestId('agent-new-conversation').click();
-    const contextConversation = await responseData(
-      await contextConversationResponse,
-    );
-    activeConversationId = contextConversation?.id ?? '';
-    expect(activeConversationId).toBeTruthy();
-    await expect(
-      page.getByTestId(`agent-message-list-${activeConversationId}`),
-    ).toBeVisible();
-    const contextual = await runScenario({
-      id: 'page-context-dish',
-      prompt: '这道菜需要什么食材',
-      expectedTool: 'search_recipes',
-      expectedKind: 'recipes',
-      screenshot: '12-page-context.png',
-      requiredText: targetDish.name,
-    });
-    expect(contextual.passed).toBeTruthy();
-
-    // get_asset_detail 就绪后取消跳过，并改为能查询保修日期的正向断言。
-    await test.step.skip('资产保修页面上下文（等待 get_asset_detail）', async () => {
-      const testAsset = await agentApi<{
-        id: string;
-        name: string;
-        status: 'active' | 'retired';
-      }>(
-        page,
-        '/assets',
-        'POST',
-        {
-          name: `Hermes 资产上下文 E2E-${Date.now().toString(36)}`,
-          category: 'appliance',
-          location: '真机 E2E 测试位置',
-          brand: 'E2E',
-          model: 'context-fixture',
-          purchaseDate: '2026-08-10',
-          warrantyExpiresOn: '2199-12-31',
-          note: '真机页面上下文临时资产，测试后通过正常 API 归档。',
-        },
+    let targetDish: { id: string; name: string } | null = null;
+    if (!assetOnly) {
+      await page.goto('/recipes');
+      const dishEntry = page.locator('[data-testid^="recipe-dish-"]').first();
+      await expect(dishEntry).toBeVisible();
+      await persistAuthState();
+      await dishEntry.tap();
+      await expect(page).toHaveURL(/\/dish\/[0-9a-f-]{36}$/);
+      targetDish = {
+        id: new URL(page.url()).pathname.split('/').at(-1)!,
+        name: await page.getByTestId('dish-detail-name').innerText(),
+      };
+      await page.getByTestId('dish-ask-assistant').click();
+      await expect(page).toHaveURL(/\/assistant\?.*entityType=dish/);
+      await expect(page.getByTestId('agent-page-context')).toContainText(
+        `正在参考：${targetDish.name}`,
       );
-      expect(testAsset.status).toBe('active');
-      try {
-        await page.goto(`/asset/${testAsset.id}`);
-        await expect(page).toHaveURL(/\/asset\/[0-9a-f-]{36}$/);
-        const targetAsset = {
-          id: new URL(page.url()).pathname.split('/').at(-1)!,
-          name: await page.getByTestId('asset-detail-name').innerText(),
-        };
-        expect(targetAsset.id).toBe(testAsset.id);
-        await page.getByTestId('asset-ask-assistant').click();
-        await expect(page).toHaveURL(/\/assistant\?.*entityType=asset/);
-        await expect(page.getByTestId('agent-page-context')).toContainText(
-          `正在参考：${targetAsset.name}`,
-        );
 
-        const assetConversationResponse = page.waitForResponse(
-          (response) =>
-            response.request().method() === 'POST' &&
-            new URL(response.url()).pathname.endsWith('/agent/conversations'),
-        );
-        await page.getByTestId('agent-new-conversation').click();
-        const assetConversation = await responseData(
-          await assetConversationResponse,
-        );
-        activeConversationId = assetConversation?.id ?? '';
-        expect(activeConversationId).toBeTruthy();
-        await expect(
-          page.getByTestId(`agent-message-list-${activeConversationId}`),
-        ).toBeVisible();
-        const assetContextual = await runScenario({
-          id: 'page-context-asset',
-          prompt: '这个东西保修到什么时候',
-          expectedTool: 'none',
-          expectedKind: null,
-          screenshot: '16-page-context-asset.png',
-          textOnly: true,
-          honestUnavailable: true,
-          // 当前只验证无详情工具时不编造日期；get_asset_detail 上线后补正向工具断言。
-          forbidSpecificDate: true,
-        });
-        expect(assetContextual.passed).toBeTruthy();
-      } finally {
-        const retired = await agentApi<{ status: 'active' | 'retired' }>(
-          page,
-          `/assets/${testAsset.id}`,
-          'PATCH',
-          { status: 'retired' },
-        );
-        expect(retired.status).toBe('retired');
-      }
-    });
+      const contextConversationResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname.endsWith('/agent/conversations'),
+      );
+      await page.getByTestId('agent-new-conversation').click();
+      const contextConversation = await responseData(
+        await contextConversationResponse,
+      );
+      activeConversationId = contextConversation?.id ?? '';
+      expect(activeConversationId).toBeTruthy();
+      await expect(
+        page.getByTestId(`agent-message-list-${activeConversationId}`),
+      ).toBeVisible();
+      const contextual = await runScenario({
+        id: 'page-context-dish',
+        prompt: '这道菜需要什么食材',
+        expectedTool: 'search_recipes',
+        expectedKind: 'recipes',
+        screenshot: '12-page-context.png',
+        requiredText: targetDish.name,
+      });
+      expect(contextual.passed).toBeTruthy();
+    }
+
+    const testAsset = await agentApi<{
+      id: string;
+      name: string;
+      status: 'active' | 'retired';
+      warrantyExpiresOn: string;
+    }>(
+      page,
+      '/assets',
+      'POST',
+      {
+        name: `Hermes 资产上下文 E2E-${Date.now().toString(36)}`,
+        category: 'appliance',
+        location: '真机 E2E 测试位置',
+        brand: 'E2E',
+        model: 'context-fixture',
+        purchaseDate: '2026-08-10',
+        warrantyExpiresOn: '2199-12-31',
+        note: '真机页面上下文临时资产，测试后通过正常 API 归档。',
+      },
+    );
+    expect(testAsset.status).toBe('active');
+    try {
+      await page.goto(`/asset/${testAsset.id}`);
+      await expect(page).toHaveURL(/\/asset\/[0-9a-f-]{36}$/);
+      const targetAsset = {
+        id: new URL(page.url()).pathname.split('/').at(-1)!,
+        name: await page.getByTestId('asset-detail-name').innerText(),
+      };
+      expect(targetAsset.id).toBe(testAsset.id);
+      await page.getByTestId('asset-ask-assistant').click();
+      await expect(page).toHaveURL(/\/assistant\?.*entityType=asset/);
+      await expect(page.getByTestId('agent-page-context')).toContainText(
+        `正在参考：${targetAsset.name}`,
+      );
+
+      const assetConversationResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname.endsWith('/agent/conversations'),
+      );
+      await page.getByTestId('agent-new-conversation').click();
+      const assetConversation = await responseData(
+        await assetConversationResponse,
+      );
+      activeConversationId = assetConversation?.id ?? '';
+      expect(activeConversationId).toBeTruthy();
+      await expect(
+        page.getByTestId(`agent-message-list-${activeConversationId}`),
+      ).toBeVisible();
+      const assetContextual = await runScenario({
+        id: 'page-context-asset',
+        prompt: '这个东西保修到什么时候',
+        expectedTool: 'get_asset_detail',
+        expectedKind: 'asset-detail',
+        screenshot: '16-page-context-asset.png',
+        requiredText: testAsset.warrantyExpiresOn,
+        expectedPageContext: {
+          entityType: 'asset',
+          entityId: testAsset.id,
+        },
+      });
+      const warrantyDateVariants = [
+        testAsset.warrantyExpiresOn,
+        testAsset.warrantyExpiresOn.replace(
+          /^(\d{4})-(\d{2})-(\d{2})$/,
+          '$1年$2月$3日',
+        ),
+      ];
+      expect(
+        warrantyDateVariants.some((date) =>
+          assetContextual.assistantText.includes(date),
+        ),
+        '资产保修回答必须包含工具返回的真实到期日',
+      ).toBeTruthy();
+      expect(assetContextual.passed).toBeTruthy();
+    } finally {
+      const retired = await agentApi<{ status: 'active' | 'retired' }>(
+        page,
+        `/assets/${testAsset.id}`,
+        'PATCH',
+        { status: 'retired' },
+      );
+      expect(retired.status).toBe('retired');
+    }
+    if (assetOnly) {
+      expect(pageContextChecks).toHaveLength(1);
+      expect(pageContextChecks[0]?.passed).toBeTruthy();
+      return;
+    }
 
     await page.getByTestId('agent-page-context-clear').click();
     await expect(page.getByTestId('agent-page-context')).toHaveCount(0);
@@ -1316,7 +1351,7 @@ async function runHermesLiveTest(
       screenshot: '13-no-context.png',
       clarifyWithoutContext: {
         entityLabel: '菜品',
-        forbiddenText: targetDish.name,
+        forbiddenText: targetDish!.name,
         forbiddenTool: 'search_recipes',
         responsePattern: /哪道菜|具体.*菜|菜名|指的是|请.*说明|无法确定/,
       },
@@ -1374,14 +1409,20 @@ async function runHermesLiveTest(
   expect(pageContextChecks.every((result) => result.passed)).toBeTruthy();
 }
 
-if (!memoryOnly && !pageContextOnly && !financeOnly && !proposalGroupOnly) {
-  for (const prompt of focusedScenarioPrompts) {
-    test(`A7.4-A/A7.3 真实 Hermes 单场景 / ${prompt}`, async ({ page }) => {
-      await runHermesLiveTest(page, prompt);
-    });
+if (assetOnly) {
+  test('A7.4-A/A7.3 真实 Hermes 资产保修页面上下文', async ({ page }) => {
+    await runHermesLiveTest(page);
+  });
+} else {
+  if (!memoryOnly && !pageContextOnly && !financeOnly && !proposalGroupOnly) {
+    for (const prompt of focusedScenarioPrompts) {
+      test(`A7.4-A/A7.3 真实 Hermes 单场景 / ${prompt}`, async ({ page }) => {
+        await runHermesLiveTest(page, prompt);
+      });
+    }
   }
-}
 
-test('A7.4-A/A7.3 真实 Hermes 其余工具与页面上下文', async ({ page }) => {
-  await runHermesLiveTest(page);
-});
+  test('A7.4-A/A7.3 真实 Hermes 其余工具与页面上下文', async ({ page }) => {
+    await runHermesLiveTest(page);
+  });
+}

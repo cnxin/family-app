@@ -142,6 +142,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_travel_checklist: '查看出行清单',
   get_watch_candidates: '查看家庭片单',
   get_recent_memories: '查看家庭回忆',
+  get_asset_detail: '查看资产详情',
   get_finance_summary: '查看家庭财务',
   propose_finance_transaction: '生成记账提案',
 };
@@ -224,6 +225,17 @@ function ToolResultCard({ presentation }: { presentation: AgentToolPresentation 
           {presentation.emptyText}
         </Text>
       )}
+      {presentation.footer ? (
+        <Text
+          style={[
+            t.caption,
+            styles.resultFooter,
+            { borderTopColor: c.separator, color: c.secondaryLabel },
+          ]}
+        >
+          {presentation.footer}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -1610,6 +1622,12 @@ const styles = StyleSheet.create({
   },
   resultDetail: { lineHeight: 17, marginTop: 2 },
   resultEmpty: { lineHeight: 19, paddingHorizontal: 14, paddingVertical: 16 },
+  resultFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    lineHeight: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   proposal: {
     alignSelf: 'stretch',
     borderLeftWidth: 3,

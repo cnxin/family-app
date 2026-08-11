@@ -173,6 +173,14 @@ export class AgentMcpController {
       memberId: z.string().uuid().optional(),
     });
     register(
+      'get_asset_detail',
+      '这是查询单个具体资产的详情、保修、维保和状态的唯一途径。用户用“这个东西”“这台电器”“这件资产”指代某个具体资产且页面上下文提供 assetId 时必须调用本工具；没有页面上下文且用户未指明是哪件资产时必须追问，不得自行选择家庭中的任意资产。本约束只覆盖单个具体资产的指代，不影响范围查询',
+      {
+        runId,
+        assetId: z.string().uuid().optional(),
+      },
+    );
+    register(
       'get_finance_summary',
       '这是家庭共享账本的余额、收支、预算、账户 ID 和分类 ID 的唯一数据来源。回答家庭财务事实或生成记账提案前必须先调用本工具；不得依据对话历史猜测金额、账户或分类。',
       {

@@ -36,6 +36,7 @@ mcp_servers:
         - get_dish_plan
         - get_weather
         - get_member_profile
+        - get_asset_detail
         - get_finance_summary
         - recall_preferences
         - remember_preference

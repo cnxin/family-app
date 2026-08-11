@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AssetsService } from '../assets/assets.module';
 import { JwtUser } from '../auth/jwt.guard';
 import { CalendarService } from '../calendar/calendar.module';
 import { openweatherApiKey, openweatherBaseUrl } from '../common/config';
@@ -103,6 +104,12 @@ function addDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
+}
+
+function daysBetween(from: string, to: string) {
+  const fromDate = new Date(`${from}T00:00:00.000Z`);
+  const toDate = new Date(`${to}T00:00:00.000Z`);
+  return Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000);
 }
 
 function userFor(run: AgentRun, member: Member): JwtUser {
@@ -355,6 +362,55 @@ function resultPresentation(toolName: string, output: unknown) {
       ],
     };
   }
+  if (toolName === 'get_asset_detail' && record) {
+    if (record.error) return null;
+    const categoryLabels: Record<string, string> = {
+      appliance: '家电',
+      furniture: '家具',
+      electronics: '数码',
+      tool: '工具',
+      other: '其他',
+    };
+    const warrantyStatus =
+      record.warrantyStatus === 'active'
+        ? Number(record.warrantyDaysRemaining) === 0
+          ? '在保 · 今日到期'
+          : `在保 · 剩余 ${String(record.warrantyDaysRemaining)} 天`
+        : record.warrantyStatus === 'expired'
+          ? `已过保 ${String(record.warrantyDaysExpired)} 天`
+          : '未记录保修信息';
+    const targetPath = `/asset/${String(record.id ?? '')}`;
+    return {
+      kind: 'asset-detail',
+      title: '资产详情',
+      emptyText: '没有找到资产详情',
+      targetPath,
+      items: [
+        {
+          id: String(record.id ?? ''),
+          title: String(record.name ?? '未命名资产'),
+          detail: [
+            categoryLabels[String(record.category)] ?? record.category,
+            record.location,
+            record.brandModel,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          status: warrantyStatus,
+          targetPath,
+        },
+      ],
+      footer:
+        [
+          record.expiresAt ? `保修到期 ${String(record.expiresAt)}` : null,
+          record.nextMaintenanceAt
+            ? `下次维保 ${String(record.nextMaintenanceAt)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || '暂无保修和维保日期',
+    };
+  }
   if (toolName === 'get_finance_summary' && record) {
     const rows = rowsFor('accounts');
     return {
@@ -418,6 +474,7 @@ export class AgentToolsService {
     private readonly proposalGroups: AgentProposalGroupsService,
     private readonly agentMemory: AgentMemoryService,
     private readonly finance: FinanceService,
+    private readonly assets: AssetsService,
   ) {}
 
   async execute(
@@ -755,6 +812,54 @@ export class AgentToolsService {
         assistantName: profile?.assistantName ?? null,
         memoryEnabled: profile?.memoryEnabled ?? null,
         responseStyle: profile?.responseStyle ?? null,
+        untrustedContent: true,
+      };
+    }
+    if (toolName === 'get_asset_detail') {
+      const assetId =
+        typeof input.assetId === 'string' ? input.assetId.trim() : '';
+      if (!assetId) {
+        return {
+          error: 'asset_id_required',
+          message: '缺少 assetId，请先确认用户指的是哪件资产，不得自行选择',
+        };
+      }
+      const asset = await this.assets.get(assetId, user.householdId);
+      const expiresAt = asset.warrantyExpiresOn;
+      const warrantyDelta = expiresAt
+        ? daysBetween(today(), expiresAt)
+        : null;
+      const nextMaintenanceAt = asset.maintenancePlans
+        .filter((plan) => plan.isEnabled)
+        .map((plan) => plan.nextDueDate)
+        .sort()[0] ?? null;
+      return {
+        id: asset.id,
+        name: asset.name,
+        category: asset.category,
+        status: asset.status,
+        location: asset.location,
+        brand: asset.brand,
+        model: asset.model,
+        brandModel: [asset.brand, asset.model].filter(Boolean).join(' ') || null,
+        purchaseDate: asset.purchaseDate,
+        expiresAt,
+        warrantyStatus:
+          warrantyDelta == null
+            ? 'unknown'
+            : warrantyDelta >= 0
+              ? 'active'
+              : 'expired',
+        isUnderWarranty:
+          warrantyDelta == null ? null : warrantyDelta >= 0,
+        warrantyDaysRemaining:
+          warrantyDelta != null && warrantyDelta >= 0 ? warrantyDelta : null,
+        warrantyDaysExpired:
+          warrantyDelta != null && warrantyDelta < 0
+            ? Math.abs(warrantyDelta)
+            : null,
+        nextMaintenanceAt,
+        targetPath: `/asset/${asset.id}`,
         untrustedContent: true,
       };
     }
@@ -1156,6 +1261,7 @@ export class AgentToolsService {
       get_dish_plan: 'menu',
       get_weather: 'weather',
       get_member_profile: 'member',
+      get_asset_detail: 'asset',
       recall_preferences: 'agent_memory',
       remember_preference: 'agent_memory',
       propose_task: 'task',
@@ -1181,7 +1287,11 @@ export class AgentToolsService {
         toolName,
         sourceModule: sourceModule[toolName] ?? 'agent',
         sourceId:
-          typeof input.travelPlanId === 'string' ? input.travelPlanId : null,
+          typeof input.assetId === 'string'
+            ? input.assetId
+            : typeof input.travelPlanId === 'string'
+              ? input.travelPlanId
+              : null,
         status,
         inputSummary: {
           hasQuery: Boolean(input.query),
