@@ -26,6 +26,17 @@ function assert(condition, message) {
   console.log(`  ✓ ${message}`);
 }
 
+async function waitFor(check, timeoutMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  let value;
+  do {
+    value = await check();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } while (Date.now() < deadline);
+  return value;
+}
+
 async function request(path, token, method = 'GET', body) {
   const response = await fetch(`${BASE}${path}`, {
     method,
@@ -55,6 +66,23 @@ async function runMigrationPhase() {
     let latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
+    if (latest[0]?.name === 'AddSubscriptionRenewalCycle1785232300000') {
+      await AppDataSource.undoLastMigration();
+      latest = await AppDataSource.query(
+        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+      );
+      const renewalColumn = await AppDataSource.query(
+        `SELECT count(*)::int AS n
+         FROM information_schema.columns
+         WHERE table_name = 'home_assets'
+           AND column_name = 'renewalIntervalMonths'`,
+      );
+      assert(
+        latest[0]?.name === 'AddSubscriptionAsset1785232200000' &&
+          renewalColumn[0].n === 0,
+        '订阅续费周期迁移可干净回退并移除新增列',
+      );
+    }
     if (latest[0]?.name === 'AddSubscriptionAsset1785232200000') {
       const owners = await AppDataSource.query(
         `SELECT id, "householdId" FROM members
@@ -337,6 +365,31 @@ async function runApiPhase() {
         expectedVersion: settings.data.version,
       },
     );
+    const deliveryDisabled = await request(
+      '/agent/routines/nightly_digest/delivery',
+      owner.accessToken,
+      'PUT',
+      {
+        enabled: false,
+        expectedSettingsVersion: settingsUpdated.data.version,
+        expectedRoutineVersion: updated.data.version,
+      },
+    );
+    const disabledSettings = await request('/agent/settings', owner.accessToken);
+    const disabledRoutines = await request('/agent/routines', owner.accessToken);
+    const disabledNightly = disabledRoutines.data.find(
+      (routine) => routine.kind === 'nightly_digest',
+    );
+    const deliveryRestored = await request(
+      '/agent/routines/nightly_digest/delivery',
+      owner.accessToken,
+      'PUT',
+      {
+        enabled: true,
+        expectedSettingsVersion: deliveryDisabled.data.settingsVersion,
+        expectedRoutineVersion: deliveryDisabled.data.routine.version,
+      },
+    );
     assert(
       routines.status === 200 &&
         routines.data.length === 2 &&
@@ -357,8 +410,19 @@ async function runApiPhase() {
         stale.status === 409 &&
         settingsUpdated.status === 200 &&
         settingsUpdated.data.dailyRoutineNotificationLimit === 4 &&
-        settingsUpdated.data.routineNotificationsEnabled === true,
+        settingsUpdated.data.routineNotificationsEnabled === true &&
+        deliveryDisabled.status === 200 &&
+        deliveryDisabled.data.enabled === false &&
+        disabledSettings.data.routineNotificationsEnabled === false &&
+        disabledNightly.enabled === false &&
+        deliveryRestored.status === 200 &&
+        deliveryRestored.data.enabled === true,
       '仅 manage_agent 可管理两种例行任务，周报默认周日 20:00 关闭且 PATCH 支持 nextRunAt',
+    );
+    assert(
+      deliveryDisabled.data.settingsVersion === settingsUpdated.data.version + 1 &&
+        deliveryDisabled.data.routine.version === updated.data.version + 1,
+      '主动提醒通过单一事务同时更新通知总开关与夜间汇总任务',
     );
 
     console.log('2. 每日通知上限、limit=0 与关闭时仍积压');
@@ -693,14 +757,18 @@ async function runApiPhase() {
       [expiry.routineId],
     );
     await service.dispatchDue();
-    const expiryItems = await db.query(
-      `SELECT "sourceType", "sourceId", summary, status
-       FROM agent_routine_items
-       WHERE "householdId" = $1
-         AND "sourceType" IN ('subscription_renewal', 'medicine_expiry')
-       ORDER BY "sourceType"`,
-      [expiry.householdId],
-    );
+    const expiryItems =
+      (await waitFor(async () => {
+        const rows = await db.query(
+          `SELECT "sourceType", "sourceId", summary, status
+           FROM agent_routine_items
+           WHERE "householdId" = $1
+             AND "sourceType" IN ('subscription_renewal', 'medicine_expiry')
+           ORDER BY "sourceType"`,
+          [expiry.householdId],
+        );
+        return rows.length === 2 ? rows : null;
+      })) ?? [];
     assert(
       expiryItems.length === 2 &&
         expiryItems.some(

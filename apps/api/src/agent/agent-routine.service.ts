@@ -39,6 +39,12 @@ export interface UpdateAgentRoutineInput {
   expectedVersion: number;
 }
 
+export interface ConfigureNightlyDeliveryInput {
+  enabled: boolean;
+  expectedSettingsVersion: number;
+  expectedRoutineVersion: number;
+}
+
 export interface EnqueueRoutineNotificationInput {
   householdId: string;
   routineKind: AgentRoutineKind;
@@ -265,6 +271,57 @@ export class AgentRoutineService
     return this.presentRoutine(
       (await this.routines.findOneBy({ id: current.id }))!,
     );
+  }
+
+  async configureNightlyDelivery(
+    input: ConfigureNightlyDeliveryInput,
+    user: JwtUser,
+  ) {
+    await this.ensureRoutine('nightly_digest', user);
+    return this.dataSource.transaction(async (manager) => {
+      const setting = await manager
+        .getRepository(AgentSetting)
+        .createQueryBuilder('setting')
+        .where('setting.householdId = :householdId', {
+          householdId: user.householdId,
+        })
+        .setLock('pessimistic_write')
+        .getOne();
+      const routine = await manager
+        .getRepository(AgentRoutine)
+        .createQueryBuilder('routine')
+        .where('routine.householdId = :householdId', {
+          householdId: user.householdId,
+        })
+        .andWhere('routine.kind = :kind', { kind: 'nightly_digest' })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!setting || !routine) {
+        throw new BadRequestException('小管家提醒设置尚未初始化，请刷新后重试');
+      }
+      if (
+        setting.version !== input.expectedSettingsVersion ||
+        routine.version !== input.expectedRoutineVersion
+      ) {
+        throw new ConflictException('提醒设置已被其他成员更新，请刷新后重试');
+      }
+      setting.routineNotificationsEnabled = input.enabled;
+      setting.updatedByMemberId = user.memberId;
+      setting.version += 1;
+      routine.enabled = input.enabled;
+      routine.nextRunAt = nextScheduledAt(
+        routine.scheduleHour,
+        routine.scheduleMinute,
+      );
+      routine.version += 1;
+      await manager.getRepository(AgentSetting).save(setting);
+      await manager.getRepository(AgentRoutine).save(routine);
+      return {
+        enabled: input.enabled,
+        routine: this.presentRoutine(routine),
+        settingsVersion: setting.version,
+      };
+    });
   }
 
   async enqueueNotification(input: EnqueueRoutineNotificationInput) {

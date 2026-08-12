@@ -16,6 +16,7 @@ import type {
   AgentMemberProfile,
   AgentPageContext,
   AgentRun,
+  AgentRoutine,
   AgentSettings,
   AgentStatus,
   AgentActionProposal,
@@ -26,6 +27,7 @@ import type {
   CreateAgentMemoryCandidateDto,
   AppNotification,
   AssetCategory,
+  AssetRenewalIntervalMonths,
   AssetDocument,
   AssetDocumentType,
   BackupDashboard,
@@ -159,6 +161,37 @@ export function useUpdateAgentSettings() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['agent-settings'] });
       void qc.invalidateQueries({ queryKey: ['agent-status'] });
+    },
+  });
+}
+
+export function useAgentRoutines(enabled = true) {
+  return useQuery({
+    queryKey: ['agent', 'routines'],
+    queryFn: () => api<AgentRoutine[]>('/agent/routines'),
+    enabled,
+  });
+}
+
+export function useConfigureNightlyDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      enabled: boolean;
+      expectedSettingsVersion: number;
+      expectedRoutineVersion: number;
+    }) =>
+      api<{
+        enabled: boolean;
+        routine: AgentRoutine;
+        settingsVersion: number;
+      }>('/agent/routines/nightly_digest/delivery', {
+        method: 'PUT',
+        body: input,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent-settings'] });
+      void qc.invalidateQueries({ queryKey: ['agent', 'routines'] });
     },
   });
 }
@@ -2647,6 +2680,7 @@ export interface AssetUpsertInput {
   purchasePrice?: number | null;
   warrantyExpiresOn?: string | null;
   renewsOn?: string | null;
+  renewalIntervalMonths?: AssetRenewalIntervalMonths | null;
   status?: 'active' | 'retired';
   note?: string | null;
 }
@@ -2662,6 +2696,22 @@ export function useUpsertAsset() {
       void qc.invalidateQueries({ queryKey: ['assets'] });
       void qc.invalidateQueries({ queryKey: ['asset', asset.id] });
       void qc.invalidateQueries({ queryKey: ['reminder-sources'] });
+    },
+  });
+}
+
+export function useRenewSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { assetId: string; renewedOn?: string }) =>
+      api<HomeAsset>(`/assets/${input.assetId}/renew`, {
+        method: 'POST',
+        body: input.renewedOn ? { renewedOn: input.renewedOn } : {},
+      }),
+    onSuccess: (asset) => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      qc.setQueryData(['asset', asset.id], asset);
+      void qc.invalidateQueries({ queryKey: ['activities'] });
     },
   });
 }

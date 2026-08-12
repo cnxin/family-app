@@ -180,6 +180,19 @@ class UpdateAgentRoutineDto {
   expectedVersion: number;
 }
 
+class ConfigureNightlyDeliveryDto {
+  @IsBoolean()
+  enabled: boolean;
+
+  @IsInt()
+  @Min(1)
+  expectedSettingsVersion: number;
+
+  @IsInt()
+  @Min(1)
+  expectedRoutineVersion: number;
+}
+
 class ListAgentProposalGroupsDto {
   @IsOptional()
   @IsIn(['pending', 'confirmed', 'rejected', 'expired', 'failed'])
@@ -375,6 +388,15 @@ export class AgentController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.routines.update(kind, dto, user);
+  }
+
+  @Put('routines/nightly_digest/delivery')
+  @RequireCapabilities('manage_agent')
+  configureNightlyDelivery(
+    @Body() dto: ConfigureNightlyDeliveryDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.routines.configureNightlyDelivery(dto, user);
   }
 
   @Get('profile')

@@ -47,6 +47,7 @@ import {
   AssetCategory,
   AssetDocument,
   AssetDocumentType,
+  AssetRenewalIntervalMonths,
   AssetStatus,
   HomeAsset,
   InventoryItem,
@@ -75,6 +76,7 @@ const WARRANTY_CATEGORIES: AssetCategory[] = [
   'electronics',
   'tool',
 ];
+const RENEWAL_INTERVALS: AssetRenewalIntervalMonths[] = [1, 3, 6, 12];
 const DOCUMENT_TYPES: AssetDocumentType[] = [
   'receipt',
   'manual',
@@ -152,6 +154,10 @@ class CreateAssetDto {
   renewsOn?: string | null;
 
   @IsOptional()
+  @IsIn(RENEWAL_INTERVALS)
+  renewalIntervalMonths?: AssetRenewalIntervalMonths | null;
+
+  @IsOptional()
   @IsString()
   @MaxLength(1000)
   note?: string | null;
@@ -210,6 +216,10 @@ class UpdateAssetDto {
   renewsOn?: string | null;
 
   @IsOptional()
+  @IsIn(RENEWAL_INTERVALS)
+  renewalIntervalMonths?: AssetRenewalIntervalMonths | null;
+
+  @IsOptional()
   @IsIn(['active', 'retired'])
   status?: AssetStatus;
 
@@ -217,6 +227,13 @@ class UpdateAssetDto {
   @IsString()
   @MaxLength(1000)
   note?: string | null;
+}
+
+class RenewSubscriptionDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  renewedOn?: string;
 }
 
 class CreateAssetDocumentDto {
@@ -386,6 +403,28 @@ function addDays(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function shanghaiDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function addMonths(value: string, months: number) {
+  const source = new Date(`${value}T00:00:00.000Z`);
+  const day = source.getUTCDate();
+  const target = new Date(
+    Date.UTC(source.getUTCFullYear(), source.getUTCMonth() + months, 1),
+  );
+  const lastDay = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return target.toISOString().slice(0, 10);
+}
+
 function roundQuantity(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -514,6 +553,10 @@ export class AssetsService {
       dto.category === 'subscription'
         ? dateOnly(dto.renewsOn, '续费日期')
         : null;
+    const renewalIntervalMonths =
+      dto.category === 'subscription'
+        ? (dto.renewalIntervalMonths ?? null)
+        : null;
     this.assertWarrantyDates(purchaseDate, warrantyExpiresOn);
     const assetId = await this.dataSource.transaction(async (manager) => {
       const assets = manager.getRepository(HomeAsset);
@@ -531,6 +574,7 @@ export class AssetsService {
             dto.purchasePrice == null ? null : String(dto.purchasePrice),
           warrantyExpiresOn,
           renewsOn,
+          renewalIntervalMonths,
           status: 'active',
           note: nullableText(dto.note),
           createdById: user.memberId,
@@ -576,6 +620,14 @@ export class AssetsService {
         : null;
       const effectiveRenewsOn =
         nextCategory === 'subscription' ? nextRenewsOn : null;
+      const nextRenewalInterval = Object.prototype.hasOwnProperty.call(
+        dto,
+        'renewalIntervalMonths',
+      )
+        ? (dto.renewalIntervalMonths ?? null)
+        : asset.renewalIntervalMonths;
+      const effectiveRenewalInterval =
+        nextCategory === 'subscription' ? nextRenewalInterval : null;
       this.assertWarrantyDates(nextPurchaseDate, effectiveWarranty);
 
       if (dto.name != null) asset.name = dto.name.trim();
@@ -611,6 +663,12 @@ export class AssetsService {
       ) {
         asset.renewsOn = effectiveRenewsOn;
       }
+      if (
+        Object.prototype.hasOwnProperty.call(dto, 'renewalIntervalMonths') ||
+        nextCategory !== 'subscription'
+      ) {
+        asset.renewalIntervalMonths = effectiveRenewalInterval;
+      }
       if (Object.prototype.hasOwnProperty.call(dto, 'note')) {
         asset.note = nullableText(dto.note);
       }
@@ -639,6 +697,53 @@ export class AssetsService {
           assetId: asset.id,
           changedFields: Object.keys(dto),
           status: asset.status,
+        },
+      });
+    });
+    return this.get(id, user.householdId);
+  }
+
+  async renewSubscription(
+    id: string,
+    dto: RenewSubscriptionDto,
+    user: JwtUser,
+  ) {
+    const renewedOn = dateOnly(dto.renewedOn ?? shanghaiDate(), '续费完成日期')!;
+    await this.dataSource.transaction(async (manager) => {
+      const asset = await this.lockAsset(id, user.householdId, manager);
+      if (asset.category !== 'subscription' || asset.status !== 'active') {
+        throw new BadRequestException('只有使用中的订阅资产可以标记已续费');
+      }
+      if (!asset.renewalIntervalMonths) {
+        throw new BadRequestException('请先设置订阅的续费周期');
+      }
+      const previousRenewsOn = asset.renewsOn;
+      const baseDate =
+        previousRenewsOn && previousRenewsOn >= renewedOn
+          ? previousRenewsOn
+          : renewedOn;
+      asset.renewsOn = addMonths(baseDate, asset.renewalIntervalMonths);
+      await manager.getRepository(HomeAsset).save(asset);
+      await manager.query(
+        `UPDATE agent_routine_items
+         SET status = 'expired'
+         WHERE "householdId" = $1
+           AND "sourceType" = 'subscription_renewal'
+           AND "sourceId" = $2
+           AND status = 'pending'`,
+        [user.householdId, asset.id],
+      );
+      await recordActivity(manager, user, {
+        module: 'asset',
+        action: 'subscription_renewed',
+        summary: `${user.name} 将订阅「${asset.name}」标记为已续费`,
+        detail: `续费日期：${previousRenewsOn ?? '未记录'} → ${asset.renewsOn}`,
+        targetPath: `/asset/${asset.id}`,
+        metadata: {
+          assetId: asset.id,
+          previousRenewsOn,
+          renewsOn: asset.renewsOn,
+          renewalIntervalMonths: asset.renewalIntervalMonths,
         },
       });
     });
@@ -1720,6 +1825,16 @@ export class AssetsController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.update(id, dto, user);
+  }
+
+  @Post('assets/:id/renew')
+  @RequireCapabilities('manage_assets')
+  renewSubscription(
+    @Param('id') id: string,
+    @Body() dto: RenewSubscriptionDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.renewSubscription(id, dto, user);
   }
 
   @Post('assets/:id/documents')

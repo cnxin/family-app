@@ -101,6 +101,8 @@ const asset = {
   purchaseDate: '2098-08-08',
   purchasePrice: '4599.00',
   warrantyExpiresOn: '2099-12-31',
+  renewsOn: null,
+  renewalIntervalMonths: null,
   status: 'active',
   note: '滤芯更换前先核对库存，并保留每次维护后的购买凭证和服务记录。',
   createdById: member.id,
@@ -422,11 +424,30 @@ async function installMocks(page: Page) {
         runtimeProfile: 'familyapp',
         modelAlias: 'mock',
         retentionDays: 30,
+        dailyRoutineNotificationLimit: 3,
+        routineNotificationsEnabled: false,
         readToolsEnabled: [],
         proposalToolsEnabled: [],
         version: 1,
         updatedAt: createdAt,
       });
+      return;
+    }
+    if (path === '/agent/routines') {
+      await json(route, [
+        {
+          id: '00000000-0000-4000-8000-000000000316',
+          kind: 'nightly_digest',
+          enabled: false,
+          scheduleHour: 21,
+          scheduleMinute: 0,
+          lastRunAt: null,
+          nextRunAt: createdAt,
+          version: 1,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ]);
       return;
     }
     if (path === '/agent/profile') {

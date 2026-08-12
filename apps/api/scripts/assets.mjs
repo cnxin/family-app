@@ -119,6 +119,63 @@ try {
     '家具与其他分类不保存保修到期日',
   );
 
+  const subscription = await request('/assets', token, 'POST', {
+    name: '资产回归影音订阅',
+    category: 'subscription',
+    renewsOn: '2026-01-31',
+    renewalIntervalMonths: 1,
+  });
+  await db.query(
+    `INSERT INTO agent_routine_items (
+       "householdId", "routineKind", "sourceType", "sourceId", summary
+     ) VALUES ($1, 'nightly_digest', 'subscription_renewal', $2, $3)`,
+    [member.householdId, subscription.data.id, '资产回归影音订阅即将续费'],
+  );
+  const renewedSubscription = await request(
+    `/assets/${subscription.data.id}/renew`,
+    token,
+    'POST',
+    { renewedOn: '2026-01-31' },
+  );
+  const renewalEvidence = await db.query(
+    `SELECT
+       (SELECT status FROM agent_routine_items
+        WHERE "householdId" = $1 AND "sourceType" = 'subscription_renewal'
+          AND "sourceId" = $2 ORDER BY "createdAt" DESC LIMIT 1) AS reminder_status,
+       (SELECT count(*)::int FROM household_activity_logs
+        WHERE "householdId" = $1 AND action = 'subscription_renewed'
+          AND metadata->>'assetId' = $2) AS activities`,
+    [member.householdId, subscription.data.id],
+  );
+  const subscriptionWithoutCycle = await request('/assets', token, 'POST', {
+    name: '资产回归无周期订阅',
+    category: 'subscription',
+    renewsOn: '2026-03-01',
+  });
+  const missingCycleRenewal = await request(
+    `/assets/${subscriptionWithoutCycle.data.id}/renew`,
+    token,
+    'POST',
+  );
+  const nonSubscriptionRenewal = await request(
+    `/assets/${assetWithoutWarranty.data.id}/renew`,
+    token,
+    'POST',
+  );
+  assert(
+    subscription.status === 201 &&
+      subscription.data.renewalIntervalMonths === 1 &&
+      renewedSubscription.status === 201 &&
+      renewedSubscription.data.renewsOn === '2026-02-28' &&
+      renewalEvidence.rows[0].reminder_status === 'expired' &&
+      renewalEvidence.rows[0].activities === 1,
+    '订阅续费按周期安全顺延月末日期、关闭旧提醒并记录活动',
+  );
+  assert(
+    missingCycleRenewal.status === 400 && nonSubscriptionRenewal.status === 400,
+    '未设置周期或非订阅资产不能标记已续费',
+  );
+
   const unsafeDocument = await request(
     `/assets/${asset.data.id}/documents`,
     token,

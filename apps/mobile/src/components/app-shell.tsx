@@ -284,7 +284,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <View
         style={[
           styles.sidebar,
-          { backgroundColor: c.chromeStrong, borderRightColor: c.separator },
+          { backgroundColor: c.chromeStrong },
           materialStyle,
         ]}
         testID="admin-desktop-sidebar"
@@ -330,10 +330,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     }))
                   }
                   pressedColor={c.fill}
-                  style={[
-                    styles.navGroupHeader,
-                    activeGroup && { backgroundColor: c.fill },
-                  ]}
+                  style={styles.navGroupHeader}
                   testID={`desktop-nav-group-${group.id}`}
                 >
                   <Text
@@ -532,7 +529,6 @@ const styles = StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row' },
   sidebar: {
     width: 232,
-    borderRightWidth: 1,
     paddingHorizontal: 16,
     paddingTop: 20,
   },

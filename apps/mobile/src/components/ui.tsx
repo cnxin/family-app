@@ -25,7 +25,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { useSession } from '../lib/session';
 import { radius, type as t, useTheme } from '../lib/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -35,13 +34,6 @@ const NATIVE_DIALOG_SHADOW: ViewStyle = {
   shadowOpacity: 0.22,
   shadowRadius: 30,
   elevation: 16,
-};
-const NATIVE_CONSUMER_CARD_SHADOW: ViewStyle = {
-  shadowColor: '#173224',
-  shadowOffset: { width: 0, height: 3 },
-  shadowOpacity: 0.07,
-  shadowRadius: 10,
-  elevation: 2,
 };
 
 export function PressableScale({
@@ -53,6 +45,7 @@ export function PressableScale({
   accessibilityLabel,
   accessibilityRole = 'button',
   accessibilityState,
+  ariaChecked,
   ariaExpanded,
   testID,
 }: {
@@ -64,6 +57,7 @@ export function PressableScale({
   accessibilityLabel?: string;
   accessibilityRole?: AccessibilityRole;
   accessibilityState?: AccessibilityState;
+  ariaChecked?: boolean;
   ariaExpanded?: boolean;
   testID?: string;
 }) {
@@ -81,6 +75,7 @@ export function PressableScale({
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
       accessibilityState={accessibilityState}
+      aria-checked={ariaChecked}
       aria-expanded={ariaExpanded}
       disabled={disabled}
       hitSlop={6}
@@ -224,6 +219,49 @@ export function IconButton({
   );
 }
 
+export function IOSSwitch({
+  accessibilityLabel,
+  disabled,
+  onValueChange,
+  testID,
+  value,
+}: {
+  accessibilityLabel: string;
+  disabled?: boolean;
+  onValueChange: (value: boolean) => void;
+  testID?: string;
+  value: boolean;
+}) {
+  const c = useTheme();
+  return (
+    <PressableScale
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      ariaChecked={value}
+      disabled={disabled}
+      haptic
+      onPress={() => onValueChange(!value)}
+      style={styles.switchTarget}
+      testID={testID}
+    >
+      <View
+        style={[
+          styles.switchTrack,
+          { backgroundColor: value ? c.green : c.fillStrong },
+        ]}
+      >
+        <View
+          style={[
+            styles.switchThumb,
+            value ? styles.switchThumbOn : styles.switchThumbOff,
+          ]}
+        />
+      </View>
+    </PressableScale>
+  );
+}
+
 export function Card({
   children,
   style,
@@ -232,21 +270,14 @@ export function Card({
   style?: StyleProp<ViewStyle>;
 }) {
   const c = useTheme();
-  const { member } = useSession();
-  const consumer = member?.role === 'member';
-  const consumerShadow = Platform.OS === 'web'
-    ? ({ boxShadow: '0 4px 18px rgba(23, 50, 36, 0.07)' } as ViewStyle)
-    : NATIVE_CONSUMER_CARD_SHADOW;
   return (
     <View
       style={[
         {
           backgroundColor: c.card,
           borderRadius: radius.md,
-          borderWidth: consumer ? 0 : 1,
-          borderColor: c.separator,
+          borderWidth: 0,
         },
-        consumer && consumerShadow,
         style,
       ]}
     >
@@ -259,7 +290,7 @@ export function SectionHeader({ title, right }: { title: string; right?: React.R
   const c = useTheme();
   return (
     <View style={styles.sectionHeader}>
-      <Text style={[t.footnote, { color: c.secondaryLabel, textTransform: 'uppercase' }]}>
+      <Text style={[t.footnote, { color: c.secondaryLabel }]}>
         {title}
       </Text>
       {right}
@@ -267,7 +298,7 @@ export function SectionHeader({ title, right }: { title: string; right?: React.R
   );
 }
 
-export function Segmented<T extends string>({
+export function Segmented<T extends string | number>({
   options,
   value,
   onChange,
@@ -873,6 +904,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  switchTarget: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 56,
+  },
+  switchTrack: {
+    borderRadius: 16,
+    height: 31,
+    justifyContent: 'center',
+    width: 51,
+  },
+  switchThumb: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    height: 27,
+    position: 'absolute',
+    top: 2,
+    width: 27,
+    ...Platform.select({
+      web: { boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)' } as ViewStyle,
+      default: {
+        elevation: 2,
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.25,
+        shadowRadius: 2,
+      } as ViewStyle,
+    }),
+  },
+  switchThumbOff: { left: 2 },
+  switchThumbOn: { right: 2 },
   segmented: {
     flexDirection: 'row',
     borderRadius: 9,

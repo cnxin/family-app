@@ -19,25 +19,14 @@ import { useTheme } from '../../lib/theme';
 function TabIcon({
   icon: Icon,
   color,
-  backgroundColor,
   focused,
 }: {
   icon: LucideIcon;
   color: ColorValue;
-  backgroundColor?: string;
   focused?: boolean;
 }) {
   return (
-    <View
-      style={backgroundColor && focused ? {
-        alignItems: 'center',
-        backgroundColor,
-        borderRadius: 14,
-        height: 28,
-        justifyContent: 'center',
-        width: 38,
-      } : undefined}
-    >
+    <View>
       <Icon color={color} size={22} strokeWidth={focused ? 2.3 : 2} />
     </View>
   );
@@ -77,10 +66,10 @@ export default function TabLayout() {
               paddingBottom: 9,
               ...tabBarMaterial,
               ...(Platform.OS === 'web'
-                ? { boxShadow: '0 -6px 22px rgba(23, 50, 36, 0.07)' }
+                ? { boxShadow: '0 -5px 20px rgba(0, 0, 0, 0.08)' }
                 : {
                   elevation: 10,
-                  shadowColor: '#173224',
+                  shadowColor: '#000000',
                   shadowOffset: { width: 0, height: -4 },
                   shadowOpacity: 0.07,
                   shadowRadius: 12,
@@ -103,7 +92,6 @@ export default function TabLayout() {
           title: consumer ? '今天' : '首页',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              backgroundColor={consumer ? c.tintSoft : undefined}
               color={color}
               focused={focused}
               icon={consumer ? House : LayoutDashboard}
@@ -160,7 +148,6 @@ export default function TabLayout() {
           href: consumer ? '/canteen' : null,
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              backgroundColor={consumer ? c.orangeSoft : undefined}
               color={color}
               focused={focused}
               icon={CookingPot}
@@ -174,7 +161,6 @@ export default function TabLayout() {
           title: consumer ? '安排' : '日历',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              backgroundColor={consumer ? c.tintSoft : undefined}
               color={color}
               focused={focused}
               icon={CalendarDays}
@@ -201,7 +187,6 @@ export default function TabLayout() {
           tabBarBadgeStyle: { backgroundColor: c.red, color: '#FFFFFF', fontSize: 10 },
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              backgroundColor={consumer ? c.tintSoft : undefined}
               color={color}
               focused={focused}
               icon={Bell}
@@ -313,7 +298,6 @@ export default function TabLayout() {
           title: '我的',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              backgroundColor={consumer ? c.tintSoft : undefined}
               color={color}
               focused={focused}
               icon={UserRound}

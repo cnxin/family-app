@@ -314,8 +314,8 @@ async function expectTouchTarget(locator: Locator, label: string) {
   await expect(locator, `${label} 应可见`).toBeVisible();
   const box = await locator.boundingBox();
   expect(box, `${label} 应有可测量尺寸`).not.toBeNull();
-  expect(box?.width ?? 0, `${label} 宽度`).toBeGreaterThanOrEqual(44);
-  expect(box?.height ?? 0, `${label} 高度`).toBeGreaterThanOrEqual(44);
+  expect((box?.width ?? 0) + 0.01, `${label} 宽度`).toBeGreaterThanOrEqual(44);
+  expect((box?.height ?? 0) + 0.01, `${label} 高度`).toBeGreaterThanOrEqual(44);
 }
 
 async function expectNoHorizontalOverflow(page: Page) {

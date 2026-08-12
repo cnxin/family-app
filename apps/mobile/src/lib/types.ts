@@ -669,6 +669,7 @@ export type AssetCategory =
   | 'tool'
   | 'subscription'
   | 'other';
+export type AssetRenewalIntervalMonths = 1 | 3 | 6 | 12;
 export type AssetStatus = 'active' | 'retired';
 export type AssetDocumentType = 'receipt' | 'manual' | 'warranty' | 'other';
 
@@ -764,6 +765,7 @@ export interface HomeAsset {
   purchasePrice: string | null;
   warrantyExpiresOn: string | null;
   renewsOn: string | null;
+  renewalIntervalMonths: AssetRenewalIntervalMonths | null;
   status: AssetStatus;
   note: string | null;
   createdById: string;
@@ -1849,6 +1851,21 @@ export interface AgentSettings {
   readToolsEnabled: string[];
   proposalToolsEnabled: string[];
   version: number;
+  updatedAt: string;
+}
+
+export type AgentRoutineKind = 'nightly_digest' | 'weekly_report';
+
+export interface AgentRoutine {
+  id: string;
+  kind: AgentRoutineKind;
+  enabled: boolean;
+  scheduleHour: number;
+  scheduleMinute: number;
+  lastRunAt: string | null;
+  nextRunAt: string;
+  version: number;
+  createdAt: string;
   updatedAt: string;
 }
 

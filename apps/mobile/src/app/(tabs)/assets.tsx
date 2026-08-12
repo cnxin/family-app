@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  Armchair,
   Archive,
   BellPlus,
   CalendarClock,
@@ -9,10 +10,14 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  HousePlug,
+  Laptop,
+  LayoutGrid,
   Package,
   Pencil,
   Plus,
   ReceiptText,
+  Repeat2,
   RotateCcw,
   ShoppingCart,
   Sparkles,
@@ -20,6 +25,7 @@ import {
   Upload,
   Wrench,
   X,
+  type LucideIcon,
 } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -34,7 +40,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PageContainer, useDesktopLayout } from '../../components/app-shell';
+import {
+  PageContainer,
+  useDesktopLayout,
+  useLayoutMode,
+} from '../../components/app-shell';
 import { DateSelector } from '../../components/date-selector';
 import {
   Card,
@@ -68,19 +78,30 @@ import type {
   AssetCategory,
   AssetDocument,
   AssetDocumentType,
+  AssetRenewalIntervalMonths,
   HomeAsset,
   MaintenanceConsumable,
   MaintenancePlan,
 } from '../../lib/types';
 
-const CATEGORY_META: Record<AssetCategory, { label: string; short: string }> = {
-  appliance: { label: '家电', short: '电' },
-  furniture: { label: '家具', short: '家' },
-  electronics: { label: '数码', short: '数' },
-  tool: { label: '工具', short: '工' },
-  subscription: { label: '订阅', short: '续' },
-  other: { label: '其他', short: '物' },
+const CATEGORY_META: Record<AssetCategory, { label: string; icon: LucideIcon }> = {
+  appliance: { label: '家电', icon: HousePlug },
+  furniture: { label: '家具', icon: Armchair },
+  electronics: { label: '数码', icon: Laptop },
+  tool: { label: '工具', icon: Wrench },
+  subscription: { label: '订阅', icon: Repeat2 },
+  other: { label: '其他', icon: Package },
 };
+
+const RENEWAL_INTERVAL_OPTIONS: {
+  label: string;
+  value: AssetRenewalIntervalMonths;
+}[] = [
+  { label: '月付', value: 1 },
+  { label: '季付', value: 3 },
+  { label: '半年', value: 6 },
+  { label: '年付', value: 12 },
+];
 
 const WARRANTY_CATEGORIES: AssetCategory[] = [
   'appliance',
@@ -126,6 +147,12 @@ function dueState(value: string) {
   return { label: formatPlanDate(value), urgent: false };
 }
 
+function dayDifference(value: string) {
+  return Math.round(
+    (parseDate(value).getTime() - parseDate(todayStr()).getTime()) / 86_400_000,
+  );
+}
+
 function idempotencyKey() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -142,9 +169,16 @@ function Sheet({
   title: string;
 }) {
   const c = useTheme();
+  const desktop = useDesktopLayout();
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible>
-      <View style={styles.overlay}>
+      <View
+        style={[
+          styles.overlay,
+          { backgroundColor: c.scrim },
+          !desktop && styles.overlayCompact,
+        ]}
+      >
         <Pressable
           accessibilityLabel="关闭窗口"
           accessibilityRole="button"
@@ -153,8 +187,13 @@ function Sheet({
         />
         <View
           accessibilityViewIsModal
-          style={[styles.sheet, { backgroundColor: c.card, borderColor: c.separator }]}
+          style={[
+            styles.sheet,
+            { backgroundColor: c.bg },
+            !desktop && styles.sheetCompact,
+          ]}
         >
+          {!desktop ? <View style={[styles.sheetHandle, { backgroundColor: c.fillStrong }]} /> : null}
           <View style={styles.sheetHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[t.title2, { color: c.label }]}>{title}</Text>
@@ -275,6 +314,8 @@ function AssetEditor({
   const [renewsOn, setRenewsOn] = useState(
     asset?.renewsOn ?? addDays(todayStr(), 30),
   );
+  const [renewalIntervalMonths, setRenewalIntervalMonths] =
+    useState<AssetRenewalIntervalMonths>(asset?.renewalIntervalMonths ?? 1);
   const [note, setNote] = useState(asset?.note ?? '');
   const [message, setMessage] = useState<string | null>(null);
   const parsedPrice = purchasePrice.trim() ? Number(purchasePrice) : null;
@@ -302,6 +343,10 @@ function AssetEditor({
             : null,
         renewsOn:
           category === 'subscription' && renewalEnabled ? renewsOn : null,
+        renewalIntervalMonths:
+          category === 'subscription' && renewalEnabled
+            ? renewalIntervalMonths
+            : null,
         status: asset?.status,
         note: note.trim() || null,
       });
@@ -427,13 +472,24 @@ function AssetEditor({
           </Field>
         ) : null}
         {category === 'subscription' ? (
-          <OptionalDateField
-            enabled={renewalEnabled}
-            label="续费日期"
-            onEnabledChange={setRenewalEnabled}
-            onValueChange={setRenewsOn}
-            value={renewsOn}
-          />
+          <View style={styles.subscriptionFields}>
+            <OptionalDateField
+              enabled={renewalEnabled}
+              label="续费日期"
+              onEnabledChange={setRenewalEnabled}
+              onValueChange={setRenewsOn}
+              value={renewsOn}
+            />
+            {renewalEnabled ? (
+              <Field label="续费周期">
+                <Segmented
+                  onChange={setRenewalIntervalMonths}
+                  options={RENEWAL_INTERVAL_OPTIONS}
+                  value={renewalIntervalMonths}
+                />
+              </Field>
+            ) : null}
+          </View>
         ) : WARRANTY_CATEGORIES.includes(category) ? (
           <OptionalDateField
             enabled={warrantyEnabled}
@@ -1586,47 +1642,103 @@ function AssetDetail({
   );
 }
 
-function AssetCard({ asset, onOpen }: { asset: HomeAsset; onOpen: () => void }) {
+function AssetCard({
+  asset,
+  compact,
+  last,
+  onOpen,
+}: {
+  asset: HomeAsset;
+  compact: boolean;
+  last: boolean;
+  onOpen: () => void;
+}) {
   const c = useTheme();
+  const CategoryIcon = CATEGORY_META[asset.category].icon;
   const nextPlan = asset.maintenancePlans
     .filter((plan) => plan.isEnabled)
     .sort((left, right) => left.nextDueDate.localeCompare(right.nextDueDate))[0];
   const due = nextPlan ? dueState(nextPlan.nextDueDate) : null;
+  const subscriptionDue = asset.renewsOn ? dueState(asset.renewsOn) : null;
+  const statusIcon = asset.category === 'subscription' ? Repeat2 : nextPlan ? CalendarClock : Wrench;
+  const StatusIcon = statusIcon;
+  const statusColor =
+    asset.category === 'subscription'
+      ? subscriptionDue?.urgent || (asset.renewsOn && dayDifference(asset.renewsOn) <= 14)
+        ? c.orange
+        : c.tint
+      : due?.urgent
+        ? c.red
+        : nextPlan
+          ? c.orange
+          : c.tertiaryLabel;
+  const statusText =
+    asset.category === 'subscription'
+      ? asset.renewsOn
+        ? `下次续费 · ${subscriptionDue?.label}`
+        : '尚未设置续费日期'
+      : nextPlan && due
+        ? `${nextPlan.title} · ${due.label}`
+        : '暂无维护计划';
+  const content = (
+    <View
+      style={[
+        compact ? styles.assetListRow : styles.assetCard,
+        compact && !last && {
+          borderBottomColor: c.separator,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+        },
+      ]}
+    >
+      <View style={styles.assetCardTop}>
+        <View style={[styles.assetMark, { backgroundColor: asset.status === 'active' ? c.tintSoft : c.fill }]}>
+          <CategoryIcon
+            color={asset.status === 'active' ? c.tint : c.secondaryLabel}
+            size={21}
+            strokeWidth={2}
+          />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={compact ? 1 : 2} style={[t.headline, { color: c.label }]}>{asset.name}</Text>
+          <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>
+            {[CATEGORY_META[asset.category].label, asset.location, asset.brand]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+          {compact ? (
+            <View style={styles.assetListStatus}>
+              <StatusIcon color={statusColor} size={14} />
+              <Text numberOfLines={1} style={[t.caption, { color: statusColor, flex: 1 }]}>
+                {statusText}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <ChevronRight color={c.tertiaryLabel} size={18} />
+      </View>
+      {!compact ? (
+        <View style={[styles.assetCardBottom, { borderTopColor: c.separator }]}>
+          <StatusIcon color={statusColor} size={16} />
+          <Text numberOfLines={1} style={[t.footnote, { color: statusColor, flex: 1 }]}>
+            {statusText}
+          </Text>
+          <Text style={[t.caption, { color: c.tertiaryLabel }]}>{asset.documents.length} 份资料</Text>
+        </View>
+      ) : null}
+    </View>
+  );
   return (
     <Pressable
       accessibilityLabel={`查看资产${asset.name}`}
       accessibilityRole="button"
       onPress={onOpen}
-      style={styles.assetCell}
+      style={compact ? styles.assetListCell : styles.assetCell}
       testID={`asset-card-${asset.id}`}
     >
       {({ pressed }) => (
-        <Card style={[styles.assetCard, { backgroundColor: pressed ? c.cardPressed : c.card }]}>
-          <View style={styles.assetCardTop}>
-            <View style={[styles.assetMark, { backgroundColor: asset.status === 'active' ? c.tintSoft : c.fill }]}>
-              <Text style={[t.headline, { color: asset.status === 'active' ? c.tint : c.secondaryLabel }]}>{CATEGORY_META[asset.category].short}</Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={2} style={[t.headline, { color: c.label }]}>{asset.name}</Text>
-              <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}>{[CATEGORY_META[asset.category].label, asset.location, asset.brand].filter(Boolean).join(' · ')}</Text>
-            </View>
-            <ChevronRight color={c.tertiaryLabel} size={18} />
-          </View>
-          <View style={[styles.assetCardBottom, { borderTopColor: c.separator }]}>
-            {nextPlan && due ? (
-              <>
-                <CalendarClock color={due.urgent ? c.red : c.orange} size={16} />
-                <Text numberOfLines={1} style={[t.footnote, { color: due.urgent ? c.red : c.secondaryLabel, flex: 1 }]}>{nextPlan.title} · {due.label}</Text>
-              </>
-            ) : (
-              <>
-                <Wrench color={c.tertiaryLabel} size={16} />
-                <Text style={[t.footnote, { color: c.secondaryLabel, flex: 1 }]}>暂无维护计划</Text>
-              </>
-            )}
-            <Text style={[t.caption, { color: c.tertiaryLabel }]}>{asset.documents.length} 份资料</Text>
-          </View>
-        </Card>
+        <View style={{ backgroundColor: pressed ? c.cardPressed : c.card }}>
+          {content}
+        </View>
       )}
     </Pressable>
   );
@@ -1635,6 +1747,7 @@ function AssetCard({ asset, onOpen }: { asset: HomeAsset; onOpen: () => void }) 
 export default function AssetsScreen() {
   const c = useTheme();
   const desktop = useDesktopLayout();
+  const compact = useLayoutMode() === 'compact';
   const router = useRouter();
   const params = useLocalSearchParams<{ assetId?: string }>();
   const parameterAssetId = firstParam(params.assetId);
@@ -1653,6 +1766,13 @@ export default function AssetsScreen() {
     asset.maintenancePlans.filter(
       (plan) => plan.isEnabled && plan.nextDueDate <= todayStr(30),
     ),
+  );
+  const dueSubscriptions = activeAssets.filter(
+    (asset) =>
+      asset.category === 'subscription' &&
+      Boolean(asset.renewsOn) &&
+      dayDifference(asset.renewsOn!) >= 0 &&
+      dayDifference(asset.renewsOn!) <= 14,
   );
   const visibleAssets = useMemo(
     () =>
@@ -1673,12 +1793,15 @@ export default function AssetsScreen() {
             <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>家电、家具、设备和维护资料</Text>
           </View>
           <Pressable
+            accessibilityLabel="新增资产"
             accessibilityRole="button"
             onPress={() => setEditingAsset('new')}
             style={[styles.addButton, { backgroundColor: c.tint }]}
           >
             <Plus color="#FFFFFF" size={19} />
-            <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新增资产</Text>
+            {desktop ? (
+              <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>新增资产</Text>
+            ) : null}
           </Pressable>
         </View>
 
@@ -1708,8 +1831,10 @@ export default function AssetsScreen() {
           </View>
           <View style={[styles.summaryDivider, { backgroundColor: c.separator }]} />
           <View style={styles.summaryItem}>
-            <Text style={[t.title2, { color: duePlans.length ? c.orange : c.label }]}>{duePlans.length}</Text>
-            <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>30 天内维护</Text>
+            <Text style={[t.title2, { color: duePlans.length || dueSubscriptions.length ? c.orange : c.label }]}>
+              {duePlans.length + dueSubscriptions.length}
+            </Text>
+            <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>临近事项</Text>
           </View>
           <View style={[styles.summaryDivider, { backgroundColor: c.separator }]} />
           <View style={styles.summaryItem}>
@@ -1730,24 +1855,41 @@ export default function AssetsScreen() {
             />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.chips}>
+            <View accessibilityRole="toolbar" style={styles.categoryFilters}>
               {(['all', ...Object.keys(CATEGORY_META)] as (AssetCategory | 'all')[]).map((value) => {
                 const selected = category === value;
+                const CategoryIcon = value === 'all' ? LayoutGrid : CATEGORY_META[value].icon;
+                const label = value === 'all' ? '全部' : CATEGORY_META[value].label;
                 return (
                   <Pressable
+                    accessibilityLabel={`筛选${label}资产`}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
                     key={value}
                     onPress={() => setCategory(value)}
-                    style={[
-                      styles.chip,
+                    style={({ pressed }) => [
+                      styles.categoryFilter,
                       {
-                        backgroundColor: selected ? c.tintSoft : c.card,
-                        borderColor: selected ? c.tint : c.separator,
+                        backgroundColor: selected
+                          ? c.tintSoft
+                          : pressed
+                            ? c.fill
+                            : 'transparent',
                       },
                     ]}
                   >
-                    <Text style={[t.footnote, { color: selected ? c.tint : c.secondaryLabel, fontWeight: '700' }]}>{value === 'all' ? '全部分类' : CATEGORY_META[value].label}</Text>
+                    <CategoryIcon color={selected ? c.tint : c.secondaryLabel} size={16} />
+                    <Text
+                      style={[
+                        t.footnote,
+                        {
+                          color: selected ? c.tint : c.secondaryLabel,
+                          fontWeight: selected ? '700' : '600',
+                        },
+                      ]}
+                    >
+                      {label}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -1760,16 +1902,33 @@ export default function AssetsScreen() {
           {error ? <Card style={styles.errorCard}><Text style={[t.subhead, { color: c.red }]}>资产加载失败，请检查 API 服务</Text></Card> : null}
           {!isLoading && !error && !visibleAssets.length ? (
             <View style={{ width: '100%' }}>
-              <EmptyState emoji="🏠" title="还没有家庭资产" hint="从常用家电或需要定期维护的设备开始记录" />
+              <EmptyState
+                hint="从常用家电、订阅或需要定期维护的设备开始记录"
+                icon={HousePlug}
+                iconBackground={c.tintSoft}
+                iconColor={c.tint}
+                title="还没有家庭资产"
+              />
             </View>
           ) : null}
-          {visibleAssets.map((asset) => (
-            <AssetCard
-              asset={asset}
-              key={asset.id}
-              onOpen={() => router.push(`/asset/${asset.id}`)}
-            />
-          ))}
+          {visibleAssets.length ? (
+            <View
+              style={[
+                styles.assetCollection,
+                compact && { backgroundColor: c.card, gap: 0 },
+              ]}
+            >
+              {visibleAssets.map((asset, index) => (
+                <AssetCard
+                  asset={asset}
+                  compact={compact}
+                  key={asset.id}
+                  last={index === visibleAssets.length - 1}
+                  onOpen={() => router.push(`/asset/${asset.id}`)}
+                />
+              ))}
+            </View>
+          ) : null}
         </ScrollView>
       </PageContainer>
 
@@ -1803,7 +1962,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, paddingTop: 12 },
   pageDesktop: { paddingTop: 26 },
   pageHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  addButton: { minHeight: 44, borderRadius: radius.sm, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  addButton: { minHeight: 44, minWidth: 44, borderRadius: radius.full, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   assistantEntry: { minHeight: 52, marginTop: 16, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   assistantEntryIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   assistantEntryText: { flex: 1, minWidth: 0, fontWeight: '700' },
@@ -1811,18 +1970,26 @@ const styles = StyleSheet.create({
   summaryItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   summaryDivider: { width: 1, height: 38 },
   controls: { marginTop: 18, gap: 12 },
-  assetGrid: { paddingTop: 16, paddingBottom: 40, flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  assetGrid: { paddingTop: 16, paddingBottom: 40 },
+  assetCollection: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 12, borderRadius: radius.md, overflow: 'hidden' },
   assetCell: { width: 280, minWidth: 0, flexGrow: 1, maxWidth: 440 },
-  assetCard: { minHeight: 132, padding: 14 },
+  assetListCell: { width: '100%' },
+  assetListRow: { minHeight: 88, marginLeft: 14, paddingRight: 14, paddingVertical: 12 },
+  assetListStatus: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  assetCard: { minHeight: 132, padding: 14, borderRadius: radius.md },
   assetCardTop: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   assetMark: { width: 42, height: 42, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   assetCardBottom: { marginTop: 14, paddingTop: 11, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 7 },
   errorCard: { width: '100%', padding: 18 },
-  overlay: { flex: 1, backgroundColor: 'rgba(17, 25, 20, 0.42)', alignItems: 'center', justifyContent: 'center', padding: 14 },
-  sheet: { width: '100%', maxWidth: 680, maxHeight: '92%', borderRadius: radius.md, borderWidth: 1, overflow: 'hidden' },
+  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 14 },
+  overlayCompact: { justifyContent: 'flex-end', padding: 0 },
+  sheet: { width: '100%', maxWidth: 680, maxHeight: '92%', borderRadius: 20, overflow: 'hidden' },
+  sheetCompact: { maxHeight: '94%', borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  sheetHandle: { alignSelf: 'center', borderRadius: radius.full, height: 5, marginTop: 8, width: 36 },
   sheetHeader: { minHeight: 76, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconButton: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   formContent: { paddingHorizontal: 18, paddingBottom: 20, gap: 16 },
+  subscriptionFields: { gap: 16 },
   detailContent: { paddingHorizontal: 18, paddingBottom: 24 },
   field: { flex: 1, minWidth: 210, gap: 7 },
   fieldLabel: { fontWeight: '700' },
@@ -1834,6 +2001,8 @@ const styles = StyleSheet.create({
   consumablePreviewList: { gap: 7 },
   consumablePreviewRow: { minHeight: 58, borderRadius: radius.sm, paddingHorizontal: 11, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 8 },
   shoppingButton: { minHeight: 42, borderRadius: radius.sm, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  categoryFilters: { flexDirection: 'row', gap: 4, paddingRight: 4 },
+  categoryFilter: { minHeight: 44, borderRadius: radius.sm, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minHeight: 36, borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
   checkboxRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 9 },

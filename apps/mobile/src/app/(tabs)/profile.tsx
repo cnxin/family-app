@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import {
   Bell,
+  BellRing,
   BookOpenText,
   ChevronDown,
   ChevronRight,
@@ -20,7 +21,6 @@ import {
   ScrollView,
   Share,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -30,6 +30,7 @@ import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import {
   Card,
   ConfirmDialog,
+  IOSSwitch,
   PressableScale,
   PrimaryButton,
   SectionHeader,
@@ -39,6 +40,9 @@ import { memberSubtitle } from '../../lib/member';
 import {
   useCreateHouseholdInvitation,
   useAgentProfile,
+  useAgentRoutines,
+  useAgentSettings,
+  useConfigureNightlyDelivery,
   useHouseholdInvitations,
   useRevokeHouseholdInvitation,
   useUpdateCookingPreference,
@@ -61,11 +65,21 @@ export default function ProfileScreen() {
   const updateAgentProfile = useUpdateAgentProfile();
   const updatePassword = useUpdatePassword();
   const canManageMembers = member?.role === 'owner' || member?.role === 'admin';
+  const canManageAgent = canManageMembers;
   const consumer = member?.role === 'member';
   const adminDesktop = desktop && !consumer;
   const { data: invitations } = useHouseholdInvitations(canManageMembers);
   const createInvitation = useCreateHouseholdInvitation();
   const revokeInvitation = useRevokeHouseholdInvitation();
+  const agentSettings = useAgentSettings(canManageAgent);
+  const agentRoutines = useAgentRoutines(canManageAgent);
+  const configureNightlyDelivery = useConfigureNightlyDelivery();
+  const nightlyRoutine = agentRoutines.data?.find(
+    (routine) => routine.kind === 'nightly_digest',
+  );
+  const nightlyDeliveryEnabled = Boolean(
+    agentSettings.data?.routineNotificationsEnabled && nightlyRoutine?.enabled,
+  );
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -188,7 +202,7 @@ export default function ProfileScreen() {
                   {member?.prefersCooking ? '已标记' : '未标记'}
                 </Text>
               </View>
-              <Switch
+              <IOSSwitch
                 accessibilityLabel="愿意参与掌勺"
                 disabled={!member || updatePreference.isPending}
                 onValueChange={(prefersCooking) => {
@@ -201,8 +215,6 @@ export default function ProfileScreen() {
                       ),
                   });
                 }}
-                trackColor={{ false: c.fillStrong, true: c.tintSoft }}
-                thumbColor={member?.prefersCooking ? c.tint : c.tertiaryLabel}
                 value={member?.prefersCooking ?? false}
               />
             </View>
@@ -241,7 +253,7 @@ export default function ProfileScreen() {
                         : '让小管家记住确认过的个人偏好'}
                 </Text>
               </View>
-              <Switch
+              <IOSSwitch
                 accessibilityLabel="启用小管家记忆"
                 disabled={!agentProfile.data || updateAgentProfile.isPending}
                 onValueChange={(memoryEnabled) => {
@@ -258,12 +270,60 @@ export default function ProfileScreen() {
                     },
                   );
                 }}
-                trackColor={{ false: c.fillStrong, true: c.tintSoft }}
-                thumbColor={agentProfile.data?.memoryEnabled ? c.tint : c.tertiaryLabel}
-                style={styles.switchTarget}
                 value={agentProfile.data?.memoryEnabled ?? true}
               />
             </View>
+            {canManageAgent ? (
+              <>
+                <View style={[styles.insetSeparator, { backgroundColor: c.separator }]} />
+                <View style={styles.preferenceRow}>
+                  <View style={[styles.recipeIcon, { backgroundColor: c.orangeSoft }]}>
+                    <BellRing color={c.orange} size={20} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[t.body, { color: c.label }]}>主动提醒</Text>
+                    <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>
+                      {agentSettings.error || agentRoutines.error
+                        ? '提醒状态暂时无法读取'
+                        : nightlyRoutine
+                          ? `每天 ${String(nightlyRoutine.scheduleHour).padStart(2, '0')}:${String(
+                              nightlyRoutine.scheduleMinute,
+                            ).padStart(2, '0')} 汇总临期订阅、药品和家庭待办`
+                          : '正在读取夜间汇总计划'}
+                    </Text>
+                  </View>
+                  <IOSSwitch
+                    accessibilityLabel="启用家庭主动提醒"
+                    disabled={
+                      !agentSettings.data ||
+                      !nightlyRoutine ||
+                      configureNightlyDelivery.isPending
+                    }
+                    onValueChange={(enabled) => {
+                      if (!agentSettings.data || !nightlyRoutine) return;
+                      configureNightlyDelivery.mutate(
+                        {
+                          enabled,
+                          expectedSettingsVersion: agentSettings.data.version,
+                          expectedRoutineVersion: nightlyRoutine.version,
+                        },
+                        {
+                          onError: (toggleError) =>
+                            Alert.alert(
+                              '更新失败',
+                              toggleError instanceof Error
+                                ? toggleError.message
+                                : '请刷新后重试',
+                            ),
+                        },
+                      );
+                    }}
+                    testID="nightly-delivery-switch"
+                    value={nightlyDeliveryEnabled}
+                  />
+                </View>
+              </>
+            ) : null}
           </Card>
 
           <SectionHeader title="账号安全" />
@@ -654,7 +714,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  switchTarget: { minHeight: 44, minWidth: 44 },
+  insetSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 66,
+  },
   formCard: { padding: 16, gap: 14 },
   securityNotice: {
     flexDirection: 'row',

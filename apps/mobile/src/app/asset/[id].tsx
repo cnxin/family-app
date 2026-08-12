@@ -1,22 +1,30 @@
+import * as Haptics from 'expo-haptics';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  Armchair,
   ArrowLeft,
+  BadgeCheck,
   CalendarClock,
   ChevronRight,
   CircleAlert,
   ExternalLink,
   FileText,
+  HousePlug,
+  Laptop,
   MapPin,
   Package,
   Pencil,
   ReceiptText,
+  Repeat2,
   ShieldCheck,
   ShieldX,
   Sparkles,
   Wrench,
+  type LucideIcon,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   ActivityIndicator,
   Linking,
   ScrollView,
@@ -29,12 +37,13 @@ import {
   PageContainer,
   useLayoutMode,
 } from '../../components/app-shell';
-import { Card, PressableScale } from '../../components/ui';
+import { Card, ConfirmDialog, PressableScale } from '../../components/ui';
 import { photoUri } from '../../lib/api';
 import { parseDate, todayStr } from '../../lib/date';
 import {
   useAsset,
   useAssetDocumentAccess,
+  useRenewSubscription,
 } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { radius, type as t, useTheme } from '../../lib/theme';
@@ -51,6 +60,22 @@ const CATEGORY_LABELS: Record<AssetCategory, string> = {
   tool: '工具',
   subscription: '订阅',
   other: '其他',
+};
+
+const CATEGORY_ICONS: Record<AssetCategory, LucideIcon> = {
+  appliance: HousePlug,
+  furniture: Armchair,
+  electronics: Laptop,
+  tool: Wrench,
+  subscription: Repeat2,
+  other: Package,
+};
+
+const RENEWAL_INTERVAL_LABELS: Record<number, string> = {
+  1: '每月',
+  3: '每季度',
+  6: '每半年',
+  12: '每年',
 };
 
 const WARRANTY_CATEGORIES: AssetCategory[] = [
@@ -179,8 +204,10 @@ export default function AssetDetailScreen() {
     ready && Boolean(member && id),
   );
   const accessDocument = useAssetDocumentAccess();
+  const renewSubscription = useRenewSubscription();
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [renewConfirmVisible, setRenewConfirmVisible] = useState(false);
 
   const warranty = useMemo(
     () => warrantyState(asset?.warrantyExpiresOn ?? null),
@@ -229,6 +256,28 @@ export default function AssetDetailScreen() {
     Boolean(asset && WARRANTY_CATEGORIES.includes(asset.category));
   const ExpiryIcon =
     asset?.category === 'subscription' ? CalendarClock : WarrantyIcon;
+  const CategoryIcon = asset ? CATEGORY_ICONS[asset.category] : Package;
+
+  const confirmRenewal = () => {
+    if (!asset) return;
+    renewSubscription.mutate(
+      { assetId: asset.id },
+      {
+        onSuccess: (renewed) => {
+          setRenewConfirmVisible(false);
+          void Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success,
+          );
+          Alert.alert('续费已记录', `下次续费：${dateLabel(renewed.renewsOn)}`);
+        },
+        onError: (renewError) =>
+          Alert.alert(
+            '记录失败',
+            renewError instanceof Error ? renewError.message : '请稍后再试',
+          ),
+      },
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: c.bg }]} edges={['top', 'bottom']}>
@@ -293,7 +342,7 @@ export default function AssetDetailScreen() {
           >
             <View style={styles.identityRow}>
               <View style={[styles.assetIcon, { backgroundColor: c.tintSoft }]}>
-                <Package color={c.tint} size={24} />
+                <CategoryIcon color={c.tint} size={24} />
               </View>
               <View style={styles.flexCopy}>
                 <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
@@ -343,17 +392,59 @@ export default function AssetDetailScreen() {
                   </View>
                 </View>
                 <View style={[styles.warrantyDate, { borderTopColor: c.separator }]}>
-                  <Text style={[t.caption, { color: c.secondaryLabel }]}>
-                    {asset.category === 'subscription' ? '续费日期' : '保修到期日'}
-                  </Text>
-                  <Text style={[t.subhead, styles.flexCopy, { color: c.label, fontWeight: '700' }]}>
-                    {dateLabel(
-                      asset.category === 'subscription'
-                        ? asset.renewsOn
-                        : asset.warrantyExpiresOn,
-                    )}
-                  </Text>
+                  <View style={styles.flexCopy}>
+                    <Text style={[t.caption, { color: c.secondaryLabel }]}>
+                      {asset.category === 'subscription' ? '下次续费' : '保修到期日'}
+                    </Text>
+                    <Text style={[t.subhead, { color: c.label, fontWeight: '700', marginTop: 3 }]}>
+                      {dateLabel(
+                        asset.category === 'subscription'
+                          ? asset.renewsOn
+                          : asset.warrantyExpiresOn,
+                      )}
+                    </Text>
+                  </View>
+                  {asset.category === 'subscription' ? (
+                    <Text style={[t.footnote, { color: c.secondaryLabel }]}>
+                      {asset.renewalIntervalMonths
+                        ? RENEWAL_INTERVAL_LABELS[asset.renewalIntervalMonths]
+                        : '周期未设置'}
+                    </Text>
+                  ) : null}
                 </View>
+                {asset.category === 'subscription' && asset.status === 'active' ? (
+                  asset.renewalIntervalMonths ? (
+                    <PressableScale
+                      accessibilityLabel={`将${asset.name}标记为已续费`}
+                      disabled={renewSubscription.isPending}
+                      onPress={() => setRenewConfirmVisible(true)}
+                      style={[styles.renewButton, { backgroundColor: c.card }]}
+                      testID="asset-mark-renewed"
+                    >
+                      {renewSubscription.isPending ? (
+                        <ActivityIndicator color={c.tint} size="small" />
+                      ) : (
+                        <BadgeCheck color={c.tint} size={19} />
+                      )}
+                      <Text style={[t.subhead, { color: c.tint, fontWeight: '600' }]}>
+                        标记已续费
+                      </Text>
+                    </PressableScale>
+                  ) : (
+                    <PressableScale
+                      accessibilityLabel="设置订阅续费周期"
+                      onPress={() =>
+                        router.push({ pathname: '/home-assets', params: { assetId: asset.id } })
+                      }
+                      style={[styles.renewButton, { backgroundColor: c.card }]}
+                    >
+                      <Pencil color={c.tint} size={18} />
+                      <Text style={[t.subhead, { color: c.tint, fontWeight: '600' }]}>
+                        设置续费周期
+                      </Text>
+                    </PressableScale>
+                  )
+                ) : null}
               </Card>
             ) : null}
 
@@ -526,6 +617,21 @@ export default function AssetDetailScreen() {
           </ScrollView>
         )}
       </PageContainer>
+      <ConfirmDialog
+        confirmLabel="标记已续费"
+        loading={renewSubscription.isPending}
+        message={
+          asset
+            ? `确认「${asset.name}」已经续费？下次日期将按${
+                RENEWAL_INTERVAL_LABELS[asset.renewalIntervalMonths ?? 0] ?? '已设置周期'
+              }顺延。`
+            : ''
+        }
+        onCancel={() => setRenewConfirmVisible(false)}
+        onConfirm={confirmRenewal}
+        title="确认已续费"
+        visible={renewConfirmVisible}
+      />
     </SafeAreaView>
   );
 }
@@ -550,6 +656,7 @@ const styles = StyleSheet.create({
   warrantyIcon: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   warrantyDetail: { marginTop: 3, lineHeight: 19 },
   warrantyDate: { marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  renewButton: { minHeight: 44, marginTop: 12, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   assistantEntry: { minHeight: 52, marginTop: 12, borderRadius: radius.md, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   assistantIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   assistantCopy: { flex: 1, minWidth: 0, fontWeight: '700' },

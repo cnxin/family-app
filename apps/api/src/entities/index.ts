@@ -188,6 +188,7 @@ export type AssetCategory =
   | 'tool'
   | 'subscription'
   | 'other';
+export type AssetRenewalIntervalMonths = 1 | 3 | 6 | 12;
 export type AssetStatus = 'active' | 'retired';
 export type AssetDocumentType = 'receipt' | 'manual' | 'warranty' | 'other';
 export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
@@ -3561,6 +3562,10 @@ export class ReminderRecipient {
   'CHK_home_assets_warranty_dates',
   `"purchaseDate" IS NULL OR "warrantyExpiresOn" IS NULL OR "warrantyExpiresOn" >= "purchaseDate"`,
 )
+@Check(
+  'CHK_home_assets_renewal_interval',
+  `"renewalIntervalMonths" IS NULL OR "renewalIntervalMonths" IN (1, 3, 6, 12)`,
+)
 @Index('IDX_home_assets_household_status', ['householdId', 'status'])
 @Index('IDX_home_assets_household_category', ['householdId', 'category'])
 export class HomeAsset {
@@ -3606,6 +3611,9 @@ export class HomeAsset {
 
   @Column({ type: 'date', nullable: true })
   renewsOn: string | null;
+
+  @Column({ type: 'smallint', nullable: true })
+  renewalIntervalMonths: AssetRenewalIntervalMonths | null;
 
   @Column({ type: 'varchar', length: 16, default: 'active' })
   status: AssetStatus;

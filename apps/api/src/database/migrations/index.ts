@@ -57,6 +57,7 @@ import { AddAgentWeeklyReport1785231900000 } from './1785231900000-add-agent-wee
 import { AddAgentProposalGroups1785232000000 } from './1785232000000-add-agent-proposal-groups';
 import { AddFamilyFinance1785232100000 } from './1785232100000-add-family-finance';
 import { AddSubscriptionAsset1785232200000 } from './1785232200000-add-subscription-asset';
+import { AddSubscriptionRenewalCycle1785232300000 } from './1785232300000-add-subscription-renewal-cycle';
 
 export const ALL_MIGRATIONS = [
   InitialSchema1785226400000,
@@ -118,4 +119,5 @@ export const ALL_MIGRATIONS = [
   AddAgentProposalGroups1785232000000,
   AddFamilyFinance1785232100000,
   AddSubscriptionAsset1785232200000,
+  AddSubscriptionRenewalCycle1785232300000,
 ];

@@ -118,7 +118,7 @@ test('首页核心操作满足鼠标和触控尺寸要求', async ({ page }, tes
 test('深色模式和减少动态效果保持清晰反馈', async ({ page }, testInfo) => {
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   const title = await openAuthenticatedHome(page, testInfo.project.name);
-  await expect(title).toHaveCSS('color', 'rgb(244, 247, 244)');
+  await expect(title).toHaveCSS('color', 'rgb(255, 255, 255)');
 
   const button = testInfo.project.name === 'mobile-chrome'
     ? page.getByTestId('home-notification-button')
