@@ -9,6 +9,7 @@ const PASSWORD = process.env.SEED_ACCOUNT_PASSWORD || 'family1234';
 const MCP_KEY = process.env.AGENT_MCP_KEY || 'family-app-local-agent-mcp-key';
 const DATABASE = process.env.DB_NAME || 'family_app';
 const TOOL_NAMES = [
+  'get_travel_checklist',
   'get_member_tasks',
   'get_family_schedule',
   'get_inventory_summary',
@@ -19,6 +20,9 @@ const TOOL_NAMES = [
   'get_member_profile',
   'get_asset_detail',
 ];
+const PRESENTED_TOOL_NAMES = TOOL_NAMES.filter(
+  (name) => name !== 'get_travel_checklist',
+);
 
 if (!DATABASE.startsWith('family_app_test_')) {
   throw new Error('agent-tools.mjs 只允许在 API 临时测试库中运行');
@@ -272,6 +276,32 @@ try {
     '资产详情夹具包含价格、保修和维保日期',
   );
 
+  const travelTitle = `工具行程-${suffix}`;
+  const travelItemTitle = `工具行程清单-${suffix}`;
+  const travelPlan = await request('/travel-plans', owner.accessToken, 'POST', {
+    title: travelTitle,
+    destination: '工具回归目的地',
+    startDate: fixtureDate,
+    endDate: completedDate,
+    idempotencyKey: `agent-tools-travel-${suffix}`,
+  });
+  const travelItem = await request(
+    `/travel-plans/${travelPlan.data.id}/items`,
+    owner.accessToken,
+    'POST',
+    {
+      title: travelItemTitle,
+      category: 'supplies',
+      quantity: 2,
+      assignedMemberId: owner.member.id,
+      idempotencyKey: `agent-tools-travel-item-${suffix}`,
+    },
+  );
+  assert(
+    travelPlan.status === 201 && travelItem.status === 201,
+    '行程清单夹具包含显式行程和协作清单项',
+  );
+
   const conversation = await request(
     '/agent/conversations',
     owner.accessToken,
@@ -307,7 +337,7 @@ try {
   }
   const runId = await createToolRun();
 
-  console.log('2. MCP 注册和 9 个工具冒烟');
+  console.log('2. MCP 注册和 10 个工具冒烟');
   const listed = await mcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
   const registeredTools = listed.body?.result?.tools ?? [];
   const registeredNames = registeredTools.map((tool) => tool.name);
@@ -315,7 +345,7 @@ try {
     registeredNames.length === 28 &&
       new Set(registeredNames).size === 28 &&
       TOOL_NAMES.every((name) => registeredNames.includes(name)),
-    'MCP 目录精确注册 28 个工具且 9 个只读工具均有 schema',
+    'MCP 目录精确注册 28 个工具且 10 个只读工具均有 schema',
   );
   const descriptionFor = (name) =>
     registeredTools.find((tool) => tool.name === name)?.description ?? '';
@@ -324,6 +354,8 @@ try {
       descriptionFor('get_weather').includes('不得依据模型自身知识') &&
       descriptionFor('get_member_tasks').includes('我的任务') &&
       descriptionFor('get_tasks').includes('全家') &&
+      descriptionFor('get_travel_checklist').includes('必须先追问') &&
+      descriptionFor('get_travel_checklist').includes('不得自动选择') &&
       descriptionFor('search_recipes').includes('这道菜') &&
       descriptionFor('search_recipes').includes('范围查询应直接调用') &&
       descriptionFor('get_asset_detail').includes('唯一途径') &&
@@ -457,6 +489,24 @@ try {
     '资产详情返回真实保修和维保信息且不暴露价格或文档正文',
   );
 
+  const travelChecklist = await mcp(
+    toolCall(24, 'get_travel_checklist', runId, {
+      travelPlanId: travelPlan.data.id,
+    }),
+  );
+  const travelResult = toolResult(travelChecklist);
+  assert(
+    travelResult?.id === travelPlan.data.id &&
+      travelResult?.title === travelTitle &&
+      travelResult?.items.some(
+        (item) =>
+          item.title === travelItemTitle &&
+          item.quantity === 2 &&
+          item.assignedMemberName === owner.member.name,
+      ),
+    '显式 travelPlanId 返回对应行程和真实协作清单',
+  );
+
   console.log('3. 参数边界、家庭隔离与结构化卡片');
   const invalidDays = await mcp(
     toolCall(12, 'get_family_schedule', runId, { days: 31 }),
@@ -521,7 +571,7 @@ try {
      FROM agent_tool_events
      WHERE "runId" = $1 AND status = 'completed'
        AND "toolName" = ANY($2::varchar[])`,
-    [runId, TOOL_NAMES],
+    [runId, PRESENTED_TOOL_NAMES],
   );
   const detail = await request(
     `/agent/conversations/${conversation.data.id}`,
@@ -539,7 +589,7 @@ try {
       event.presentation,
   )?.presentation;
   assert(
-    TOOL_NAMES.every((name) => presentedTools.has(name)) &&
+    PRESENTED_TOOL_NAMES.every((name) => presentedTools.has(name)) &&
       eventRows.rows.every(
         (row) =>
           row.presentationCiphertext &&
@@ -578,6 +628,18 @@ try {
       JSON.stringify(foreignAsset.body.result) ===
         JSON.stringify(nonexistentAsset.body?.result),
     '跨家庭 assetId 与不存在 UUID 返回一致的拒绝响应',
+  );
+
+  const missingTravelPlanId = await mcp(
+    toolCall(25, 'get_travel_checklist', runId),
+  );
+  const missingTravelResult = toolResult(missingTravelPlanId);
+  assert(
+    missingTravelResult?.error === 'travel_plan_id_required' &&
+      missingTravelResult?.message.includes('不得自行选择') &&
+      !Object.hasOwn(missingTravelResult, 'id') &&
+      !Object.hasOwn(missingTravelResult, 'items'),
+    'travelPlanId 缺省时返回明确业务错误且不返回任何行程数据',
   );
 
   console.log('4. 菜谱搜索按 runId 强制限制为两次');

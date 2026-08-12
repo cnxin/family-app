@@ -913,11 +913,15 @@ export class AgentToolsService {
       }));
     }
     if (toolName === 'get_travel_checklist') {
-      const planId = typeof input.travelPlanId === 'string' ? input.travelPlanId : '';
-      const plan = planId
-        ? await this.travel.detail(planId, user)
-        : (await this.travel.listPlans({ status: 'active' }, user))[0];
-      if (!plan) return null;
+      const planId =
+        typeof input.travelPlanId === 'string' ? input.travelPlanId.trim() : '';
+      if (!planId) {
+        return {
+          error: 'travel_plan_id_required',
+          message: '缺少 travelPlanId，请先确认用户指的是哪个行程，不得自行选择',
+        };
+      }
+      const plan = await this.travel.detail(planId, user);
       return {
         id: plan.id,
         title: plan.title,

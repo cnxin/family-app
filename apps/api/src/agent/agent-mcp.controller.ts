@@ -124,7 +124,7 @@ export class AgentMcpController {
       query: z.string().max(80).optional(),
       limit: z.number().int().min(1).max(20).optional(),
     });
-    register('get_travel_checklist', '读取计划中行程的协作清单', {
+    register('get_travel_checklist', '读取指定计划中行程的协作清单。当用户未指明具体行程且页面上下文未携带行程 ID 时必须先追问，不得自动选择家庭中的任意行程；只有用户明确指定行程或页面上下文提供行程 ID 时才调用本工具', {
       runId,
       travelPlanId: z.string().uuid().optional(),
     });
