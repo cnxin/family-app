@@ -91,6 +91,7 @@ export class AgentPageContextService {
     const resolved: AgentResolvedPageContext = {
       route,
       ...(candidate.entityType ? { entityType: candidate.entityType } : {}),
+      ...(name && candidate.entityId ? { entityId: candidate.entityId } : {}),
       ...(name ? { name: boundedText(name) } : {}),
       ...(candidate.selectedDate ? { date: candidate.selectedDate } : {}),
       untrustedContent: true,

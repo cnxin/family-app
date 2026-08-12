@@ -104,7 +104,7 @@ export class AgentMcpController {
       includeCompleted: z.boolean().optional(),
       limit: z.number().int().min(1).max(20).optional(),
     });
-    register('get_shopping_list', '读取指定日期的家庭购物清单', {
+    register('get_shopping_list', '这是查询家庭购物清单内容的唯一数据来源。用户询问购物清单中有什么、是否为空或某项是否在清单时必须调用本工具；不得依据对话历史或模型自身知识编造清单内容', {
       runId,
       date: z.string().optional(),
       includeChecked: z.boolean().optional(),
@@ -124,7 +124,7 @@ export class AgentMcpController {
       query: z.string().max(80).optional(),
       limit: z.number().int().min(1).max(20).optional(),
     });
-    register('get_travel_checklist', '读取计划中行程的协作清单', {
+    register('get_travel_checklist', '读取指定计划中行程的协作清单。当用户未指明具体行程且页面上下文未携带行程 ID 时必须先追问，不得自动选择家庭中的任意行程；只有用户明确指定行程或页面上下文提供行程 ID 时才调用本工具', {
       runId,
       travelPlanId: z.string().uuid().optional(),
     });
@@ -151,7 +151,7 @@ export class AgentMcpController {
       runId,
       filter: z.enum(['low_stock', 'expiring_soon', 'all']).optional(),
     });
-    register('search_recipes', '按关键词、食材或分类搜索家庭菜谱。用户以“这道菜”等词指代单个菜品、但既无具体菜名也无页面上下文时，不得猜测菜品或调用无条件搜索，应先追问具体菜名；“搜索不辣的家常菜”等范围查询应直接调用本工具', {
+    register('search_recipes', '这是搜索家庭菜谱库的唯一途径；不得在未调用本工具的情况下回答任何涉及具体菜品的问题。按关键词、食材或分类搜索家庭菜谱；搜索无匹配时必须如实告知，不得根据模型自身知识虚构任何菜名或菜谱内容。用户以“这道菜”等词指代单个菜品、但既无具体菜名也无页面上下文时，不得猜测菜品或调用无条件搜索，应先追问具体菜名；“搜索不辣的家常菜”等范围查询应直接调用本工具。同一 run 内最多调用本工具 2 次；若前两次结果不满足需求，必须直接使用已有结果继续规划，不得继续搜索', {
       runId,
       query: z.string().max(80).optional(),
       ingredients: z.array(z.string().min(1).max(64)).max(10).optional(),
@@ -172,7 +172,23 @@ export class AgentMcpController {
       runId,
       memberId: z.string().uuid().optional(),
     });
-    register('recall_preferences', '读取当前成员可见且已确认的小管家偏好', {
+    register(
+      'get_asset_detail',
+      '这是查询单个具体资产的详情、保修、维保和状态的唯一途径。用户用“这个东西”“这台电器”“这件资产”指代某个具体资产且页面上下文提供 assetId 时必须调用本工具；没有页面上下文且用户未指明是哪件资产时必须追问，不得自行选择家庭中的任意资产。本约束只覆盖单个具体资产的指代，不影响范围查询',
+      {
+        runId,
+        assetId: z.string().uuid().optional(),
+      },
+    );
+    register(
+      'get_finance_summary',
+      '这是家庭共享账本的余额、收支、预算、账户 ID 和分类 ID 的唯一数据来源。回答家庭财务事实或生成记账提案前必须先调用本工具；不得依据对话历史猜测金额、账户或分类。',
+      {
+        runId,
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      },
+    );
+    register('recall_preferences', '这是回顾当前成员已记录偏好的唯一数据来源。用户询问自己有哪些已记录偏好时必须调用本工具；不得仅凭对话历史声称某项偏好存在或不存在', {
       runId,
       scope: z.enum(['member_private', 'household']).optional(),
       memoryKey: z.enum(AGENT_MEMORY_KEYS).optional(),
@@ -185,7 +201,7 @@ export class AgentMcpController {
     });
     register(
       'propose_plan',
-      '当用户的请求需要同时改动多个家庭模块（例如来客吃饭涉及菜单、任务和购物清单）时，必须只调用本工具把所有步骤打包成一组提案，不得分别调用多个 propose_* 工具。用户确认后整组生效，不支持只确认其中几步；请按实际执行依赖排列 steps。',
+      '当用户的请求需要同时改动多个家庭模块（例如来客吃饭涉及菜单、任务和购物清单）时，必须只调用本工具把所有步骤打包成一组提案，不得分别调用多个 propose_* 工具。用户确认后整组生效，不支持只确认其中几步；请按实际执行依赖排列 steps。财务记账不能放入本工具，必须单独调用 propose_finance_transaction 并独立确认。',
       {
         runId,
         title: z.string().min(1).max(120),
@@ -351,6 +367,21 @@ export class AgentMcpController {
         .min(1)
         .max(20),
     });
+    register(
+      'propose_finance_transaction',
+      '为家庭共享账本生成单笔收入、支出或账户间转账提案，只有成员在 Family App 内明确确认后才会写入。调用前必须先用 get_finance_summary 取得真实账户和分类 ID；金额、类型、账户、分类或日期不明确时必须先追问，不得猜测。财务提案不能放入 propose_plan。',
+      {
+        runId,
+        type: z.enum(['expense', 'income', 'transfer']),
+        amount: z.number().positive().max(999_999_999_999.99),
+        accountId: z.string().uuid(),
+        toAccountId: z.string().uuid().nullable().optional(),
+        categoryId: z.string().uuid().nullable().optional(),
+        title: z.string().min(1).max(120),
+        note: z.string().max(1000).nullable().optional(),
+        occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      },
+    );
     return server;
   }
 }

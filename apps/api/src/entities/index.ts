@@ -63,6 +63,25 @@ export type PointsLedgerSourceType =
   | 'task'
   | 'reward_redemption'
   | 'points_ledger';
+export type FinanceAccountType =
+  | 'cash'
+  | 'bank'
+  | 'alipay'
+  | 'wechat'
+  | 'other';
+export type FinanceCategoryKind = 'expense' | 'income';
+export type FinanceTransactionType =
+  | 'expense'
+  | 'income'
+  | 'transfer'
+  | 'reversal';
+export type FinanceTransactionSourceType =
+  | 'manual'
+  | 'agent'
+  | 'shopping_item'
+  | 'asset'
+  | 'media_subscription'
+  | 'finance_transaction';
 export type RewardRedemptionStatus =
   | 'pending'
   | 'approved'
@@ -184,6 +203,7 @@ export type ActivityModule =
   | 'knowledge'
   | 'memory'
   | 'travel'
+  | 'finance'
   | 'system';
 export type NotificationModule =
   | 'menu'
@@ -253,7 +273,13 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 export type AgentToolEventStatus = 'running' | 'completed' | 'failed';
-export type AgentActionType = 'task' | 'reminder' | 'poll' | 'menu' | 'shopping';
+export type AgentActionType =
+  | 'task'
+  | 'reminder'
+  | 'poll'
+  | 'menu'
+  | 'shopping'
+  | 'finance';
 export type AgentActionProposalStatus =
   | 'pending'
   | 'confirmed'
@@ -4550,6 +4576,376 @@ export class PointsLedger {
   createdAt: Date;
 }
 
+@Entity('finance_accounts')
+@Check(
+  'CHK_finance_accounts_type',
+  `"type" IN ('cash', 'bank', 'alipay', 'wechat', 'other')`,
+)
+@Check('CHK_finance_accounts_currency', `"currency" = 'CNY'`)
+@Check('CHK_finance_accounts_version', `"version" >= 1`)
+@Unique('UQ_finance_accounts_household_name', ['householdId', 'name'])
+@Index('IDX_finance_accounts_household_active', [
+  'householdId',
+  'isActive',
+  'createdAt',
+])
+export class FinanceAccount {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_finance_accounts_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  name: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  type: FinanceAccountType;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  openingBalance: string;
+
+  @Column({ type: 'varchar', length: 3, default: 'CNY' })
+  currency: 'CNY';
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_finance_accounts_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('finance_categories')
+@Check(
+  'CHK_finance_categories_kind',
+  `"kind" IN ('expense', 'income')`,
+)
+@Check('CHK_finance_categories_version', `"version" >= 1`)
+@Unique('UQ_finance_categories_household_kind_name', [
+  'householdId',
+  'kind',
+  'name',
+])
+@Index('UQ_finance_categories_household_system_key', [
+  'householdId',
+  'systemKey',
+], {
+  unique: true,
+  where: '"systemKey" IS NOT NULL',
+})
+@Index('IDX_finance_categories_household_kind_active', [
+  'householdId',
+  'kind',
+  'isActive',
+  'sortOrder',
+])
+export class FinanceCategory {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_finance_categories_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  name: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  kind: FinanceCategoryKind;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  systemKey: string | null;
+
+  @Column({ type: 'varchar', length: 32, default: 'circle' })
+  icon: string;
+
+  @Column({ type: 'varchar', length: 7, default: '#26734D' })
+  color: string;
+
+  @Column({ type: 'int', default: 0 })
+  sortOrder: number;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_finance_categories_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+@Entity('finance_transactions')
+@Check(
+  'CHK_finance_transactions_type',
+  `"type" IN ('expense', 'income', 'transfer', 'reversal')`,
+)
+@Check(
+  'CHK_finance_transactions_source_type',
+  `"sourceType" IN ('manual', 'agent', 'shopping_item', 'asset', 'media_subscription', 'finance_transaction')`,
+)
+@Check('CHK_finance_transactions_amount', `"amount" > 0`)
+@Check('CHK_finance_transactions_currency', `"currency" = 'CNY'`)
+@Check(
+  'CHK_finance_transactions_category',
+  `("type" IN ('expense', 'income') AND "categoryId" IS NOT NULL) OR ("type" IN ('transfer', 'reversal'))`,
+)
+@Check(
+  'CHK_finance_transactions_reversal',
+  `("type" = 'reversal' AND "reversalOfId" IS NOT NULL) OR ("type" <> 'reversal' AND "reversalOfId" IS NULL)`,
+)
+@Index(
+  'UQ_finance_transactions_household_idempotency',
+  ['householdId', 'idempotencyKey'],
+  { unique: true },
+)
+@Index('UQ_finance_transactions_reversal', ['reversalOfId'], {
+  unique: true,
+  where: '"reversalOfId" IS NOT NULL',
+})
+@Index('IDX_finance_transactions_household_occurred', [
+  'householdId',
+  'occurredOn',
+  'createdAt',
+])
+export class FinanceTransaction {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_finance_transactions_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  type: FinanceTransactionType;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2 })
+  amount: string;
+
+  @Column({ type: 'varchar', length: 3, default: 'CNY' })
+  currency: 'CNY';
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'date' })
+  occurredOn: string;
+
+  @ManyToOne(() => FinanceCategory, { eager: true, nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'categoryId',
+    foreignKeyConstraintName: 'FK_finance_transactions_category',
+  })
+  category: FinanceCategory | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'actorId',
+    foreignKeyConstraintName: 'FK_finance_transactions_actor',
+  })
+  actor: Member;
+
+  @Column('uuid')
+  actorId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  actorName: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  sourceType: FinanceTransactionSourceType;
+
+  @Column({ type: 'varchar', length: 180 })
+  sourceId: string;
+
+  @Column({ type: 'varchar', length: 180 })
+  idempotencyKey: string;
+
+  @Column({ type: 'varchar', length: 64 })
+  requestFingerprint: string;
+
+  @ManyToOne(() => FinanceTransaction, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'reversalOfId',
+    foreignKeyConstraintName: 'FK_finance_transactions_reversal_of',
+  })
+  reversalOf: FinanceTransaction | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reversalOfId: string | null;
+
+  @OneToMany(() => FinancePosting, (posting) => posting.transaction, {
+    eager: true,
+  })
+  postings: FinancePosting[];
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  createdAt: Date;
+}
+
+@Entity('finance_postings')
+@Check('CHK_finance_postings_delta', `"delta" <> 0`)
+@Index('IDX_finance_postings_account_created', ['accountId', 'createdAt'])
+@Index('IDX_finance_postings_household_transaction', [
+  'householdId',
+  'transactionId',
+])
+export class FinancePosting {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_finance_postings_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => FinanceTransaction, (transaction) => transaction.postings, {
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'transactionId',
+    foreignKeyConstraintName: 'FK_finance_postings_transaction',
+  })
+  transaction: FinanceTransaction;
+
+  @Column('uuid')
+  transactionId: string;
+
+  @ManyToOne(() => FinanceAccount, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'accountId',
+    foreignKeyConstraintName: 'FK_finance_postings_account',
+  })
+  account: FinanceAccount;
+
+  @Column('uuid')
+  accountId: string;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2 })
+  delta: string;
+
+  @CreateDateColumn({ type: 'timestamptz', default: () => 'clock_timestamp()' })
+  createdAt: Date;
+}
+
+@Entity('finance_budgets')
+@Check('CHK_finance_budgets_amount', `"amount" >= 0`)
+@Check('CHK_finance_budgets_month', `"month" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`)
+@Check('CHK_finance_budgets_version', `"version" >= 1`)
+@Unique('UQ_finance_budgets_household_category_month', [
+  'householdId',
+  'categoryId',
+  'month',
+])
+@Index('IDX_finance_budgets_household_month', ['householdId', 'month'])
+export class FinanceBudget {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_finance_budgets_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => FinanceCategory, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'categoryId',
+    foreignKeyConstraintName: 'FK_finance_budgets_category',
+  })
+  category: FinanceCategory;
+
+  @Column('uuid')
+  categoryId: string;
+
+  @Column({ type: 'varchar', length: 7 })
+  month: string;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2 })
+  amount: string;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedById',
+    foreignKeyConstraintName: 'FK_finance_budgets_updated_by',
+  })
+  updatedBy: Member;
+
+  @Column('uuid')
+  updatedById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('rewards')
 @Check('CHK_rewards_cost', `"cost" >= 1 AND "cost" <= 1000000`)
 @Unique('UQ_rewards_household_name', ['householdId', 'name'])
@@ -6065,6 +6461,14 @@ export class AgentSetting {
       'get_travel_checklist',
       'get_watch_candidates',
       'get_recent_memories',
+      'get_member_tasks',
+      'get_family_schedule',
+      'get_inventory_summary',
+      'search_recipes',
+      'get_dish_plan',
+      'get_weather',
+      'get_member_profile',
+      'get_finance_summary',
     ],
   })
   readToolsEnabled: string[];
@@ -6078,6 +6482,7 @@ export class AgentSetting {
       'propose_menu',
       'propose_shopping_items',
       'propose_plan',
+      'propose_finance_transaction',
     ],
   })
   proposalToolsEnabled: string[];
@@ -7348,6 +7753,11 @@ export const ALL_ENTITIES = [
   InventoryBatchMovement,
   PointsAccount,
   PointsLedger,
+  FinanceAccount,
+  FinanceCategory,
+  FinanceTransaction,
+  FinancePosting,
+  FinanceBudget,
   Reward,
   RewardRedemption,
   TravelPlan,

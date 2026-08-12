@@ -9,6 +9,8 @@ const runningRunId = '00000000-0000-4000-8000-000000000303';
 const proposalId = '00000000-0000-4000-8000-000000000304';
 const proposalGroupId = '00000000-0000-4000-8000-000000000309';
 const dishId = '00000000-0000-4000-8000-000000000305';
+const assetId = '00000000-0000-4000-8000-000000000313';
+const assetDocumentId = '00000000-0000-4000-8000-000000000314';
 const memoryId = '00000000-0000-4000-8000-000000000306';
 const createdAt = '2099-08-08T08:00:00.000Z';
 const account = {
@@ -84,6 +86,54 @@ const memory = {
   visibility: 'member_private',
   untrustedContent: true,
   version: 1,
+  createdAt,
+  updatedAt: createdAt,
+};
+
+const asset = {
+  id: assetId,
+  name: '客厅超长名称智能空气净化与新风一体设备',
+  category: 'appliance',
+  location: '客厅电视柜右侧靠近阳台的设备收纳区域',
+  brand: '家庭设备品牌',
+  model: 'HOME-AIR-ULTRA-2026',
+  serialNumber: 'ASSET-RESPONSIVE-0000000001',
+  purchaseDate: '2098-08-08',
+  purchasePrice: '4599.00',
+  warrantyExpiresOn: '2099-12-31',
+  status: 'active',
+  note: '滤芯更换前先核对库存，并保留每次维护后的购买凭证和服务记录。',
+  createdById: member.id,
+  createdBy: member,
+  documents: [
+    {
+      id: assetDocumentId,
+      assetId,
+      type: 'warranty',
+      title: '整机与核心部件延长保修服务凭证',
+      url: '/asset-documents/mock/content',
+      createdById: member.id,
+      createdBy: member,
+      createdAt,
+    },
+  ],
+  maintenancePlans: [
+    {
+      id: '00000000-0000-4000-8000-000000000315',
+      assetId,
+      title: '清洁传感器并更换复合滤芯',
+      frequencyDays: 180,
+      nextDueDate: '2099-10-18',
+      isEnabled: true,
+      note: '完成后记录滤芯批次和剩余库存，避免下次维护时临时采购。',
+      consumables: [],
+      createdById: member.id,
+      createdBy: member,
+      createdAt,
+      updatedAt: createdAt,
+    },
+  ],
+  maintenanceRecords: [],
   createdAt,
   updatedAt: createdAt,
 };
@@ -331,6 +381,9 @@ async function installMocks(page: Page) {
   await page.route(/\/members$/, (route) => json(route, [member]));
   await page.route(/\/notifications(?:\?.*)?$/, (route) => json(route, []));
   await page.route(/\/assets\?status=all$/, (route) => json(route, []));
+  await page.route(new RegExp(`/assets/${assetId}$`), (route) =>
+    json(route, asset),
+  );
   await page.route(/\/knowledge-articles\?status=active$/, (route) => json(route, []));
   await page.route(/\/travel-plans\?status=active$/, (route) => json(route, []));
   await page.route(/\/travel-templates\?status=all$/, (route) => json(route, []));
@@ -531,6 +584,62 @@ async function assertBusinessAssistantEntries(page: Page) {
   }
 }
 
+async function assertAssetDetail(page: Page) {
+  const path = `/asset/${assetId}`;
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openFixture(page, path, () => page.getByTestId('asset-detail-name'));
+
+  for (const width of [320, 375, 390, 414]) {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 844 });
+    const assistant = page.getByTestId('asset-ask-assistant');
+    await assistant.scrollIntoViewIfNeeded();
+    await expectContained(page, page.getByTestId('asset-detail-name'), `${width}px 资产名称`);
+    await expectContained(
+      page,
+      page.getByTestId('asset-warranty-status'),
+      `${width}px 保修状态`,
+    );
+    await expectContained(page, assistant, `${width}px 资产小管家入口`);
+    await expectTouchTarget(page.getByTestId('asset-detail-back'), `${width}px 返回按钮`);
+    await expectTouchTarget(
+      page.getByTestId('asset-detail-manage'),
+      `${width}px 管理资产按钮`,
+    );
+    await expectTouchTarget(assistant, `${width}px 资产小管家入口`);
+    await expectNoPageOverflow(page, `${width}px 资产详情`);
+    if (width === 390) {
+      await page.screenshot({
+        path: resolve(screenshots, 'asset-detail-390.png'),
+        fullPage: true,
+      });
+    }
+    const document = page.getByTestId(`asset-document-${assetDocumentId}`);
+    await document.scrollIntoViewIfNeeded();
+    await expectContained(page, document, `${width}px 资产文档行`);
+    await expectTouchTarget(document, `${width}px 资产文档行`);
+    await expectNoPageOverflow(page, `${width}px 资产详情滚动区域`);
+  }
+
+  await page.getByTestId('asset-ask-assistant').click();
+  await expect(page).toHaveURL(/\/assistant\?/);
+  const assistantUrl = new URL(page.url());
+  expect(assistantUrl.pathname).toBe('/assistant');
+  expect(assistantUrl.searchParams.get('route')).toBe(path);
+  expect(assistantUrl.searchParams.get('entityType')).toBe('asset');
+  expect(assistantUrl.searchParams.get('entityId')).toBe(assetId);
+
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openFixture(page, path, () => page.getByTestId('asset-detail-name'));
+  await expectNoPageOverflow(page, '390px 暗色资产详情');
+  await page.screenshot({
+    path: resolve(screenshots, 'asset-detail-390-dark.png'),
+    fullPage: true,
+  });
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
+}
+
 async function showConversationEvidence(page: Page, replyVisible = true) {
   const reply = page.getByText(longAssistantReply, { exact: true });
   const result = page.getByTestId('agent-result-schedule');
@@ -544,6 +653,7 @@ test('小管家聊天、提案和记忆页在常见移动视口完整显示', as
   test.skip(testInfo.project.name !== 'mobile-chrome', '仅在触控移动视口执行响应式矩阵');
   const mocks = await installMocks(page);
   await assertBusinessAssistantEntries(page);
+  await assertAssetDetail(page);
   const contextPath =
     `/assistant?route=${encodeURIComponent(`/dish/${dishId}`)}` +
     `&entityType=dish&entityId=${dishId}`;

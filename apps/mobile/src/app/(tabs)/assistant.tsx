@@ -51,6 +51,7 @@ import {
   useAgentSettings,
   useAgentProposalGroups,
   useAgentStatus,
+  useAsset,
   useArchiveAgentConversation,
   useCancelAgentRun,
   useConfirmAgentProposal,
@@ -92,6 +93,7 @@ const SUGGESTIONS = [
   }).format(new Date())}`,
   '最近有哪些东西快没了？',
   '家庭片单里有什么可以看？',
+  '这个月家庭支出了多少？',
 ];
 
 function errorMessage(error: unknown) {
@@ -140,6 +142,9 @@ const TOOL_LABELS: Record<string, string> = {
   get_travel_checklist: '查看出行清单',
   get_watch_candidates: '查看家庭片单',
   get_recent_memories: '查看家庭回忆',
+  get_asset_detail: '查看资产详情',
+  get_finance_summary: '查看家庭财务',
+  propose_finance_transaction: '生成记账提案',
 };
 
 function ToolProgress({ events, queued }: { events: AgentToolEvent[]; queued: boolean }) {
@@ -220,6 +225,17 @@ function ToolResultCard({ presentation }: { presentation: AgentToolPresentation 
           {presentation.emptyText}
         </Text>
       )}
+      {presentation.footer ? (
+        <Text
+          style={[
+            t.caption,
+            styles.resultFooter,
+            { borderTopColor: c.separator, color: c.secondaryLabel },
+          ]}
+        >
+          {presentation.footer}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -1045,6 +1061,11 @@ export default function AssistantScreen() {
       ? activePageContext.entityId
       : undefined,
   );
+  const { data: contextAsset } = useAsset(
+    activePageContext?.entityType === 'asset'
+      ? activePageContext.entityId ?? null
+      : null,
+  );
   const scrollRef = React.useRef<ScrollView>(null);
   const messageCount = conversation?.messages.length ?? 0;
   const latestRunStatus = conversation?.runs[0]?.status;
@@ -1190,7 +1211,7 @@ export default function AssistantScreen() {
                   numberOfLines={2}
                   style={[t.footnote, styles.pageContextText, { color: c.label }]}
                 >
-                  正在参考：{contextDish?.name ?? '当前页面'}
+                  正在参考：{contextDish?.name ?? contextAsset?.name ?? '当前页面'}
                 </Text>
                 <PressableScale
                   accessibilityLabel="清除当前页面上下文"
@@ -1601,6 +1622,12 @@ const styles = StyleSheet.create({
   },
   resultDetail: { lineHeight: 17, marginTop: 2 },
   resultEmpty: { lineHeight: 19, paddingHorizontal: 14, paddingVertical: 16 },
+  resultFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    lineHeight: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   proposal: {
     alignSelf: 'stretch',
     borderLeftWidth: 3,

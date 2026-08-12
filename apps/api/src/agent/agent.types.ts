@@ -16,6 +16,8 @@ export const AGENT_READ_TOOLS = [
   'get_dish_plan',
   'get_weather',
   'get_member_profile',
+  'get_asset_detail',
+  'get_finance_summary',
 ] as const;
 
 export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];
@@ -27,6 +29,7 @@ export const AGENT_PROPOSAL_TOOLS = [
   'propose_menu',
   'propose_shopping_items',
   'propose_plan',
+  'propose_finance_transaction',
 ] as const;
 
 export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];
@@ -42,8 +45,9 @@ export type AgentToolName =
   | AgentProposalToolName
   | AgentMemoryToolName;
 
-export const AGENT_HERMES_CHAT_TIMEOUT_MS = 4 * 60_000;
-export const AGENT_TOOL_AUTHORIZATION_TTL_MS = 6 * 60_000;
+export const AGENT_HERMES_CHAT_TIMEOUT_MS = 6 * 60_000;
+export const AGENT_HERMES_STOP_WAIT_MS = 45_000;
+export const AGENT_TOOL_AUTHORIZATION_TTL_MS = 7 * 60_000;
 
 export const AGENT_MEMORY_KEYS = [
   'diet_restriction',
@@ -76,6 +80,7 @@ export interface AgentPageContextCandidate {
 export interface AgentResolvedPageContext {
   route: string;
   entityType?: AgentPageEntityType;
+  entityId?: string;
   name?: string;
   date?: string;
   untrustedContent: true;

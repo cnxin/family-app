@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AssetsService } from '../assets/assets.module';
 import { JwtUser } from '../auth/jwt.guard';
 import { CalendarService } from '../calendar/calendar.module';
 import { openweatherApiKey, openweatherBaseUrl } from '../common/config';
@@ -24,6 +25,7 @@ import { MenusService } from '../menus/menus.module';
 import { ShoppingService } from '../shopping/shopping.module';
 import { TasksService } from '../tasks/tasks.module';
 import { TravelService } from '../travel/travel.module';
+import { FinanceService } from '../finance/finance.module';
 import {
   AGENT_MEMORY_KEYS,
   AGENT_READ_TOOLS,
@@ -43,6 +45,8 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 const MAX_RESULT_ITEMS = 20;
 const MAX_EXTENDED_RESULT_ITEMS = 50;
 const MAX_RESPONSE_BYTES = 48_000;
+const SEARCH_RECIPES_RUN_LIMIT = 2;
+const SEARCH_RECIPES_LIMIT_ERROR = 'recipe_search_limit_reached';
 
 function dateOnly(value: unknown, fallback: string) {
   const normalized = typeof value === 'string' ? value : fallback;
@@ -100,6 +104,12 @@ function addDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
+}
+
+function daysBetween(from: string, to: string) {
+  const fromDate = new Date(`${from}T00:00:00.000Z`);
+  const toDate = new Date(`${to}T00:00:00.000Z`);
+  return Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000);
 }
 
 function userFor(run: AgentRun, member: Member): JwtUser {
@@ -260,6 +270,7 @@ function resultPresentation(toolName: string, output: unknown) {
     };
   }
   if (toolName === 'search_recipes') {
+    if (record?.error === SEARCH_RECIPES_LIMIT_ERROR) return null;
     const rows = rowsFor('recipes');
     return {
       kind: 'recipes',
@@ -351,6 +362,74 @@ function resultPresentation(toolName: string, output: unknown) {
       ],
     };
   }
+  if (toolName === 'get_asset_detail' && record) {
+    if (record.error) return null;
+    const categoryLabels: Record<string, string> = {
+      appliance: '家电',
+      furniture: '家具',
+      electronics: '数码',
+      tool: '工具',
+      other: '其他',
+    };
+    const warrantyStatus =
+      record.warrantyStatus === 'active'
+        ? Number(record.warrantyDaysRemaining) === 0
+          ? '在保 · 今日到期'
+          : `在保 · 剩余 ${String(record.warrantyDaysRemaining)} 天`
+        : record.warrantyStatus === 'expired'
+          ? `已过保 ${String(record.warrantyDaysExpired)} 天`
+          : '未记录保修信息';
+    const targetPath = `/asset/${String(record.id ?? '')}`;
+    return {
+      kind: 'asset-detail',
+      title: '资产详情',
+      emptyText: '没有找到资产详情',
+      targetPath,
+      items: [
+        {
+          id: String(record.id ?? ''),
+          title: String(record.name ?? '未命名资产'),
+          detail: [
+            categoryLabels[String(record.category)] ?? record.category,
+            record.location,
+            record.brandModel,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          status: warrantyStatus,
+          targetPath,
+        },
+      ],
+      footer:
+        [
+          record.expiresAt ? `保修到期 ${String(record.expiresAt)}` : null,
+          record.nextMaintenanceAt
+            ? `下次维保 ${String(record.nextMaintenanceAt)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || '暂无保修和维保日期',
+    };
+  }
+  if (toolName === 'get_finance_summary' && record) {
+    const rows = rowsFor('accounts');
+    return {
+      kind: 'finance',
+      title: `${String(record.month ?? '本月')}家庭财务`,
+      emptyText: '还没有建立家庭财务账户',
+      targetPath: '/finance',
+      items: rows.slice(0, 8).map((entry) => {
+        const item = entry as Record<string, unknown>;
+        return {
+          id: String(item.id ?? ''),
+          title: String(item.name ?? '未命名账户'),
+          detail: `余额 ¥${Number(item.balance ?? 0).toFixed(2)}`,
+          status: item.isActive === false ? '已停用' : '使用中',
+          targetPath: '/finance',
+        };
+      }),
+    };
+  }
   return null;
 }
 
@@ -394,6 +473,8 @@ export class AgentToolsService {
     private readonly proposals: AgentProposalsService,
     private readonly proposalGroups: AgentProposalGroupsService,
     private readonly agentMemory: AgentMemoryService,
+    private readonly finance: FinanceService,
+    private readonly assets: AssetsService,
   ) {}
 
   async execute(
@@ -662,6 +743,19 @@ export class AgentToolsService {
         }));
     }
     if (toolName === 'search_recipes') {
+      const searchCount = await this.events.countBy({
+        runId: run.id,
+        toolName: 'search_recipes',
+      });
+      if (searchCount >= SEARCH_RECIPES_RUN_LIMIT) {
+        return {
+          error: SEARCH_RECIPES_LIMIT_ERROR,
+          message:
+            '本次对话已达菜谱搜索上限，请基于已有搜索结果继续规划',
+          recipes: [],
+          total: 0,
+        };
+      }
       return this.searchRecipes(input, user);
     }
     if (toolName === 'get_dish_plan') {
@@ -721,6 +815,58 @@ export class AgentToolsService {
         untrustedContent: true,
       };
     }
+    if (toolName === 'get_asset_detail') {
+      const assetId =
+        typeof input.assetId === 'string' ? input.assetId.trim() : '';
+      if (!assetId) {
+        return {
+          error: 'asset_id_required',
+          message: '缺少 assetId，请先确认用户指的是哪件资产，不得自行选择',
+        };
+      }
+      const asset = await this.assets.get(assetId, user.householdId);
+      const expiresAt = asset.warrantyExpiresOn;
+      const warrantyDelta = expiresAt
+        ? daysBetween(today(), expiresAt)
+        : null;
+      const nextMaintenanceAt = asset.maintenancePlans
+        .filter((plan) => plan.isEnabled)
+        .map((plan) => plan.nextDueDate)
+        .sort()[0] ?? null;
+      return {
+        id: asset.id,
+        name: asset.name,
+        category: asset.category,
+        status: asset.status,
+        location: asset.location,
+        brand: asset.brand,
+        model: asset.model,
+        brandModel: [asset.brand, asset.model].filter(Boolean).join(' ') || null,
+        purchaseDate: asset.purchaseDate,
+        expiresAt,
+        warrantyStatus:
+          warrantyDelta == null
+            ? 'unknown'
+            : warrantyDelta >= 0
+              ? 'active'
+              : 'expired',
+        isUnderWarranty:
+          warrantyDelta == null ? null : warrantyDelta >= 0,
+        warrantyDaysRemaining:
+          warrantyDelta != null && warrantyDelta >= 0 ? warrantyDelta : null,
+        warrantyDaysExpired:
+          warrantyDelta != null && warrantyDelta < 0
+            ? Math.abs(warrantyDelta)
+            : null,
+        nextMaintenanceAt,
+        targetPath: `/asset/${asset.id}`,
+        untrustedContent: true,
+      };
+    }
+    if (toolName === 'get_finance_summary') {
+      const month = typeof input.month === 'string' ? input.month : undefined;
+      return this.finance.summary(month, user);
+    }
     if (toolName === 'get_meal_plan') {
       const date = dateOnly(input.date, today());
       const menus = await this.menus.listExistingByDate(user.householdId, date);
@@ -767,11 +913,15 @@ export class AgentToolsService {
       }));
     }
     if (toolName === 'get_travel_checklist') {
-      const planId = typeof input.travelPlanId === 'string' ? input.travelPlanId : '';
-      const plan = planId
-        ? await this.travel.detail(planId, user)
-        : (await this.travel.listPlans({ status: 'active' }, user))[0];
-      if (!plan) return null;
+      const planId =
+        typeof input.travelPlanId === 'string' ? input.travelPlanId.trim() : '';
+      if (!planId) {
+        return {
+          error: 'travel_plan_id_required',
+          message: '缺少 travelPlanId，请先确认用户指的是哪个行程，不得自行选择',
+        };
+      }
+      const plan = await this.travel.detail(planId, user);
       return {
         id: plan.id,
         title: plan.title,
@@ -1115,6 +1265,7 @@ export class AgentToolsService {
       get_dish_plan: 'menu',
       get_weather: 'weather',
       get_member_profile: 'member',
+      get_asset_detail: 'asset',
       recall_preferences: 'agent_memory',
       remember_preference: 'agent_memory',
       propose_task: 'task',
@@ -1140,7 +1291,11 @@ export class AgentToolsService {
         toolName,
         sourceModule: sourceModule[toolName] ?? 'agent',
         sourceId:
-          typeof input.travelPlanId === 'string' ? input.travelPlanId : null,
+          typeof input.assetId === 'string'
+            ? input.assetId
+            : typeof input.travelPlanId === 'string'
+              ? input.travelPlanId
+              : null,
         status,
         inputSummary: {
           hasQuery: Boolean(input.query),
@@ -1153,6 +1308,13 @@ export class AgentToolsService {
         outputSummary: {
           itemCount: outputItemCount(output),
           ok: status === 'completed',
+          errorCode:
+            output &&
+            typeof output === 'object' &&
+            !Array.isArray(output) &&
+            typeof (output as Record<string, unknown>).error === 'string'
+              ? (output as Record<string, unknown>).error
+              : null,
         },
         presentationCiphertext:
           encryptedPresentation?.contentCiphertext ?? null,

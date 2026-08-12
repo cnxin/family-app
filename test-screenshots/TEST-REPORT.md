@@ -181,3 +181,39 @@ A7.3 专项结果为 **2/2**。两条 run 均为 Hermes、无回落；范围查�
 - Agent 运行时契约：chat 240000ms、授权 360000ms、余量 120000ms。
 - 真实 Hermes 全套：1 passed，398.3 秒；工具 9/9、记忆 2/2、页面上下文 3/3、组提案 1/1、回落 0。
 - `git diff --check`：通过。
+
+## Hermes 波动验收加固（2026-08-10，未闭环）
+
+本批将 `get_shopping_list` 和 `recall_preferences` 的中性描述改为场景级强约束，并增加通用防线：没有任何工具事件却直接给出家庭数据结论时判定失败。购物清单约束后的九个只读场景为 9/9；记忆约束后的两轮为 8/9 和 7/9，失败场景均已调用正确工具，但在 240 秒发生 `HERMES_UNAVAILABLE_FALLBACK`，没有发现 description 引起的错工具回归。
+
+真机场景现在最多尝试 3 次，只在 `HERMES_UNAVAILABLE_FALLBACK` 时等待 30 秒并开启新会话重试。错工具、未调工具编造或其他非回落能力错误立即失败。每条结果记录 `attempts`、`attemptDurationsMs`、`attemptRunIds` 和 `attemptErrorCodes`；汇总记录 `totalAttempts`、`totalRetries` 和 `fallbackAttemptCount`。产品 chat 超时仍为 240000ms，测试框架总预算提高到 4 小时以容纳最坏情况下的重试。
+
+### 本轮真机结果
+
+| 场景 | attempts | 每次耗时 | 结果 |
+| --- | ---: | --- | --- |
+| 查看我的待办任务 | 1 | 113.045s | 通过 |
+| 这周家里有什么安排 | 1 | 100.276s | 通过 |
+| 家里还有哪些菜快过期了 | 1 | 146.174s | 通过 |
+| 购物清单里有什么 | 1 | 113.105s | 通过，调用 `get_shopping_list` |
+| 搜索不辣的家常菜 | 1 | 112.752s | 通过 |
+| 下周点了什么菜 | 1 | 128.086s | 通过 |
+| 深圳这几天天气怎么样 | 1 | 103.738s | 通过，未配置时安全降级 |
+| 我的个人档案 | 1 | 96.354s | 通过 |
+| 明天安排与食材 | 1 | 110.119s | 通过，多工具联动 |
+| 家庭晚餐组提案 | 2 | 240.110s / 231.984s | 第一次回落，第二次路径 (a) 通过并生成 4 个子项 |
+| 记住我不吃辣 | 1 | 60.024s | 通过，测试候选已清理 |
+| 我有什么饮食偏好 | 1 | 135.087s | 通过，调用 `recall_preferences` |
+| 菜品页面上下文 | 1 | 98.823s | 通过 |
+| 资产页面上下文 | 1 | 34.737s | 失败：诚实说明资产详情工具不可用，但未复述上下文资产名称 |
+
+已执行 14 个场景，共 **15 次 attempts、1 次重试、1 次 fallback attempt**。A7.4-A 为 9/9、记忆为 2/2、组提案为 1/1；页面上下文执行到资产场景时因非回落能力错误停止，后续无上下文菜品和知识文章场景未运行。按规则没有重试该资产场景，也没有放宽 `requiredText` grounding 断言。失败运行生成的截图与 `E2E-RESULTS.json` 已还原到 HEAD，未作为验收结果提交。
+
+资产夹具通过 `POST /assets` 创建并直接使用返回 ID，`finally` 通过 `PATCH /assets/:id` 将其归档；执行后 `active_assets=0`。当前产品 API 没有 `DELETE /assets/:id`，所以不能实现指令所说的“删除且不留测试数据”，本轮留下 1 条 retired 测试资产及对应审计记录，没有选择或修改用户已有资产。
+
+### 自动回归
+
+- API 全量：通过，63.6 秒；schema 无漂移；API build 通过。
+- Hermes 配置契约：两份 yaml 各 25 项；运行时契约仍为 chat 240000ms、授权 360000ms、余量 120000ms。
+- Mobile TypeScript 与 Expo lint：通过。
+- Mobile Web 首轮为 42 passed / 8 skipped / 1 failed，鉴权恢复用例观察到 3 次 refresh；专项复跑通过，间隔登录限流窗口后完整复跑为 **43 passed / 8 skipped / 0 failed / 0 not run**，未修改该断言。

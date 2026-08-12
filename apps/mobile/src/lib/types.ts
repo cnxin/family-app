@@ -298,6 +298,7 @@ export type ActivityModule =
   | 'knowledge'
   | 'memory'
   | 'travel'
+  | 'finance'
   | 'system';
 
 export interface HouseholdActivity {
@@ -1446,6 +1447,123 @@ export interface PointsLedger {
   createdAt: string;
 }
 
+export type FinanceAccountType =
+  | 'cash'
+  | 'bank'
+  | 'alipay'
+  | 'wechat'
+  | 'other';
+export type FinanceCategoryKind = 'expense' | 'income';
+export type FinanceTransactionType =
+  | 'expense'
+  | 'income'
+  | 'transfer'
+  | 'reversal';
+
+export interface FinanceAccount {
+  id: string;
+  householdId: string;
+  name: string;
+  type: FinanceAccountType;
+  openingBalance: number;
+  balance: number;
+  currency: 'CNY';
+  isActive: boolean;
+  version: number;
+  createdById: string;
+  createdBy: Member;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceCategory {
+  id: string;
+  householdId: string;
+  name: string;
+  kind: FinanceCategoryKind;
+  systemKey: string | null;
+  icon: string;
+  color: string;
+  sortOrder: number;
+  isActive: boolean;
+  version: number;
+  createdById: string;
+  createdBy: Member;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinancePosting {
+  id: string;
+  transactionId: string;
+  accountId: string;
+  account: FinanceAccount;
+  delta: number;
+  createdAt: string;
+}
+
+export interface FinanceTransaction {
+  id: string;
+  householdId: string;
+  type: FinanceTransactionType;
+  amount: number;
+  currency: 'CNY';
+  title: string;
+  note: string | null;
+  occurredOn: string;
+  categoryId: string | null;
+  category: FinanceCategory | null;
+  actorId: string;
+  actor: Member;
+  actorName: string;
+  sourceType:
+    | 'manual'
+    | 'agent'
+    | 'shopping_item'
+    | 'asset'
+    | 'media_subscription'
+    | 'finance_transaction';
+  sourceId: string;
+  reversalOfId: string | null;
+  postings: FinancePosting[];
+  reversed: boolean;
+  reversalId: string | null;
+  createdAt: string;
+}
+
+export interface FinanceBudget {
+  id: string;
+  householdId: string;
+  categoryId: string;
+  category: FinanceCategory;
+  month: string;
+  amount: number;
+  spent: number;
+  remaining: number;
+  ratio: number;
+  version: number;
+  updatedById: string;
+  updatedBy: Member;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceSummary {
+  month: string;
+  currency: 'CNY';
+  income: number;
+  expense: number;
+  net: number;
+  totalBalance: number;
+  accounts: FinanceAccount[];
+  categories: FinanceCategory[];
+  budgets: FinanceBudget[];
+  categorySpending: {
+    category: FinanceCategory | null;
+    amount: number;
+  }[];
+}
+
 export interface Reward {
   id: string;
   householdId: string;
@@ -1851,11 +1969,23 @@ export interface AgentToolPresentationItem {
 }
 
 export interface AgentToolPresentation {
-  kind: 'tasks' | 'shopping' | 'meals';
+  kind:
+    | 'tasks'
+    | 'shopping'
+    | 'meals'
+    | 'schedule'
+    | 'inventory'
+    | 'recipes'
+    | 'dish-plan'
+    | 'weather'
+    | 'member-profile'
+    | 'asset-detail'
+    | 'finance';
   title: string;
   emptyText: string;
   targetPath: string;
   items: AgentToolPresentationItem[];
+  footer?: string;
 }
 
 export interface AgentToolEvent {
@@ -1879,7 +2009,7 @@ export type AgentProposalStatus =
 export interface AgentActionProposal {
   id: string;
   runId: string;
-  actionType: 'task' | 'reminder' | 'poll' | 'menu' | 'shopping';
+  actionType: 'task' | 'reminder' | 'poll' | 'menu' | 'shopping' | 'finance';
   actionLabel: string;
   preview: {
     title: string;

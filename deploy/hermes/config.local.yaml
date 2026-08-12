@@ -1,10 +1,16 @@
 model:
-  default: mimo-v2.5-free
+  default: longcat-2.0-free
   provider: opencode-zen
 
 platform_toolsets:
   api_server:
     - family_app
+
+gateway:
+  platforms:
+    api_server:
+      extra:
+        direct_model_requests: true
 
 mcp_servers:
   family_app:
@@ -30,6 +36,8 @@ mcp_servers:
         - get_dish_plan
         - get_weather
         - get_member_profile
+        - get_asset_detail
+        - get_finance_summary
         - recall_preferences
         - remember_preference
         - propose_task
@@ -38,6 +46,7 @@ mcp_servers:
         - propose_menu
         - propose_shopping_items
         - propose_plan
+        - propose_finance_transaction
       prompts: false
       resources: false
 

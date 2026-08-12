@@ -74,6 +74,14 @@ import type {
   FamilyMemory,
   FamilyMemoryCategory,
   FamilyMemorySourceModule,
+  FinanceAccount,
+  FinanceAccountType,
+  FinanceBudget,
+  FinanceCategory,
+  FinanceCategoryKind,
+  FinanceSummary,
+  FinanceTransaction,
+  FinanceTransactionType,
   KnowledgeArticle,
   KnowledgeArticleCategory,
   KnowledgeArticleRevision,
@@ -2206,6 +2214,173 @@ export function useReversePointsLedger() {
       idempotencyKey: string;
     }) => api<PointsLedger>(`/points/ledger/${id}/reverse`, { method: 'POST', body }),
     onSuccess: () => invalidatePoints(qc),
+  });
+}
+
+function invalidateFinance(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['finance'] });
+  void qc.invalidateQueries({ queryKey: ['activities'] });
+}
+
+export function useFinanceSummary(month: string, enabled = true) {
+  return useQuery({
+    queryKey: ['finance', 'summary', month],
+    queryFn: () => api<FinanceSummary>(`/finance/summary?month=${month}`),
+    enabled,
+  });
+}
+
+export function useFinanceAccounts(includeInactive = false, enabled = true) {
+  return useQuery({
+    queryKey: ['finance', 'accounts', includeInactive],
+    queryFn: () => api<FinanceAccount[]>(
+      `/finance/accounts${includeInactive ? '?includeInactive=true' : ''}`,
+    ),
+    enabled,
+  });
+}
+
+export function useFinanceCategories(includeInactive = false, enabled = true) {
+  return useQuery({
+    queryKey: ['finance', 'categories', includeInactive],
+    queryFn: () => api<FinanceCategory[]>(
+      `/finance/categories${includeInactive ? '?includeInactive=true' : ''}`,
+    ),
+    enabled,
+  });
+}
+
+export function useFinanceTransactions(
+  month: string,
+  type?: FinanceTransactionType,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['finance', 'transactions', month, type ?? 'all'],
+    queryFn: () => api<FinanceTransaction[]>(
+      `/finance/transactions?month=${month}&limit=100${type ? `&type=${type}` : ''}`,
+    ),
+    enabled,
+  });
+}
+
+export interface FinanceTransactionInput {
+  type: Exclude<FinanceTransactionType, 'reversal'>;
+  amount: number;
+  accountId: string;
+  toAccountId?: string | null;
+  categoryId?: string | null;
+  title: string;
+  note?: string | null;
+  occurredOn: string;
+}
+
+export function useCreateFinanceTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: FinanceTransactionInput) =>
+      api<FinanceTransaction>('/finance/transactions', {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey: operationKey('finance:transaction:create'),
+        },
+      }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useReverseFinanceTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string | null }) =>
+      api<FinanceTransaction>(`/finance/transactions/${id}/reverse`, {
+        method: 'POST',
+        body: {
+          note,
+          idempotencyKey: operationKey(`finance:transaction:reverse:${id}`),
+        },
+      }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useCreateFinanceAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      type: FinanceAccountType;
+      openingBalance?: number;
+    }) => api<FinanceAccount>('/finance/accounts', { method: 'POST', body: input }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useUpdateFinanceAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      name?: string;
+      type?: FinanceAccountType;
+      isActive?: boolean;
+      expectedVersion: number;
+    }) => api<FinanceAccount>(`/finance/accounts/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useCreateFinanceCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      kind: FinanceCategoryKind;
+      color?: string;
+      icon?: string;
+    }) => api<FinanceCategory>('/finance/categories', { method: 'POST', body: input }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useUpdateFinanceCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      name?: string;
+      color?: string;
+      icon?: string;
+      isActive?: boolean;
+      expectedVersion: number;
+    }) => api<FinanceCategory>(`/finance/categories/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useUpsertFinanceBudget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      categoryId: string;
+      month: string;
+      amount: number;
+      expectedVersion?: number;
+    }) => api<FinanceBudget>('/finance/budgets', { method: 'PUT', body: input }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useDeleteFinanceBudget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, expectedVersion }: { id: string; expectedVersion: number }) =>
+      api<{ deleted: true; id: string }>(
+        `/finance/budgets/${id}?expectedVersion=${expectedVersion}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: () => invalidateFinance(qc),
   });
 }
 

@@ -98,26 +98,71 @@ function contextJson(prompt) {
 }
 
 const captures = new Map();
+const hermesRuns = new Map();
+const stoppedHermesRuns = new Set();
 const stub = createServer(async (incoming, outgoing) => {
-  if (incoming.method !== 'POST' || incoming.url !== '/v1/chat/completions') {
-    outgoing.writeHead(404).end();
+  const pathname = new URL(incoming.url ?? '/', STUB_URL).pathname;
+  if (incoming.method === 'POST' && pathname === '/v1/runs') {
+    let raw = '';
+    for await (const chunk of incoming) raw += chunk;
+    const payload = JSON.parse(raw);
+    const systemPrompt = payload.instructions ?? '';
+    const localRunId = systemPrompt.match(/runId=([0-9a-f-]{36})/)?.[1];
+    if (localRunId) captures.set(localRunId, systemPrompt);
+    const hermesRunId = `run_stub_${randomUUID().replaceAll('-', '')}`;
+    hermesRuns.set(hermesRunId, {
+      object: 'hermes.run',
+      run_id: hermesRunId,
+      localRunId,
+      status:
+        payload.input === '保持运行直到取消' ? 'running' : 'completed',
+      output: '页面上下文测试回答',
+      usage: { input_tokens: 12, output_tokens: 5, total_tokens: 17 },
+    });
+    outgoing.writeHead(202, { 'Content-Type': 'application/json' });
+    outgoing.end(JSON.stringify({ run_id: hermesRunId, status: 'started' }));
     return;
   }
-  let raw = '';
-  for await (const chunk of incoming) raw += chunk;
-  const payload = JSON.parse(raw);
-  const systemPrompt =
-    payload.messages?.find((message) => message.role === 'system')?.content ?? '';
-  const runId = systemPrompt.match(/runId=([0-9a-f-]{36})/)?.[1];
-  if (runId) captures.set(runId, systemPrompt);
-  outgoing.writeHead(200, { 'Content-Type': 'application/json' });
-  outgoing.end(
-    JSON.stringify({
-      choices: [{ message: { content: '页面上下文测试回答' } }],
-      usage: { prompt_tokens: 12, completion_tokens: 5 },
-    }),
-  );
+
+  const runMatch = pathname.match(/^\/v1\/runs\/([^/]+)$/);
+  if (incoming.method === 'GET' && runMatch) {
+    const run = hermesRuns.get(decodeURIComponent(runMatch[1]));
+    if (!run) {
+      outgoing.writeHead(404, { 'Content-Type': 'application/json' });
+      outgoing.end(JSON.stringify({ error: { message: 'run not found' } }));
+      return;
+    }
+    outgoing.writeHead(200, { 'Content-Type': 'application/json' });
+    outgoing.end(JSON.stringify(run));
+    return;
+  }
+
+  const stopMatch = pathname.match(/^\/v1\/runs\/([^/]+)\/stop$/);
+  if (incoming.method === 'POST' && stopMatch) {
+    const hermesRunId = decodeURIComponent(stopMatch[1]);
+    const run = hermesRuns.get(hermesRunId);
+    if (!run) {
+      outgoing.writeHead(404, { 'Content-Type': 'application/json' });
+      outgoing.end(JSON.stringify({ error: { message: 'run not found' } }));
+      return;
+    }
+    run.status = 'cancelled';
+    stoppedHermesRuns.add(hermesRunId);
+    outgoing.writeHead(200, { 'Content-Type': 'application/json' });
+    outgoing.end(JSON.stringify({ run_id: hermesRunId, status: 'stopping' }));
+    return;
+  }
+
+  outgoing.writeHead(404).end();
 });
+
+async function waitUntil(predicate, message) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`等待超时: ${message}`);
+}
 
 const db = new Client({
   host: process.env.DB_HOST || '127.0.0.1',
@@ -141,6 +186,45 @@ try {
     expectedVersion: currentSettings.data.version,
   });
   assert(hermesSettings.status === 200, '测试家庭已切换到本地 Hermes stub');
+
+  const cancellationConversation = await request(
+    '/agent/conversations',
+    owner.accessToken,
+    'POST',
+    { title: 'Hermes Runs 取消回归' },
+  );
+  const cancellationRun = await request(
+    `/agent/conversations/${cancellationConversation.data.id}/messages`,
+    owner.accessToken,
+    'POST',
+    { message: '保持运行直到取消', clientRequestId: randomUUID() },
+  );
+  await waitUntil(
+    () =>
+      [...hermesRuns.values()].some(
+        (run) => run.localRunId === cancellationRun.data.id,
+      ),
+    'Hermes stub 接收运行',
+  );
+  const cancelled = await request(
+    `/agent/runs/${cancellationRun.data.id}/cancel`,
+    owner.accessToken,
+    'POST',
+  );
+  await waitUntil(
+    () =>
+      [...hermesRuns.entries()].some(
+        ([hermesRunId, run]) =>
+          run.localRunId === cancellationRun.data.id &&
+          run.status === 'cancelled' &&
+          stoppedHermesRuns.has(hermesRunId),
+      ),
+    'Hermes stub 收到 stop 并进入 cancelled',
+  );
+  assert(
+    cancelled.status === 201 && cancelled.data.status === 'cancelled',
+    '本地取消会调用 Hermes Runs stop 并确认远端终态',
+  );
 
   const conversation = await request(
     '/agent/conversations',

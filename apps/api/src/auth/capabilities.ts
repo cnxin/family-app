@@ -19,6 +19,9 @@ export type Capability =
   | 'manage_inventory'
   | 'manage_assets'
   | 'manage_points'
+  | 'view_finance'
+  | 'record_finance'
+  | 'manage_finance'
   | 'manage_members'
   | 'manage_guests'
   | 'manage_integrations'
@@ -34,6 +37,9 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_inventory',
     'manage_assets',
     'manage_points',
+    'view_finance',
+    'record_finance',
+    'manage_finance',
     'manage_members',
     'manage_guests',
     'manage_integrations',
@@ -48,6 +54,9 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_inventory',
     'manage_assets',
     'manage_points',
+    'view_finance',
+    'record_finance',
+    'manage_finance',
     'manage_members',
     'manage_guests',
     'manage_integrations',
@@ -61,6 +70,8 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_shopping',
     'manage_inventory',
     'manage_assets',
+    'view_finance',
+    'record_finance',
     'use_agent',
   ]),
 };
