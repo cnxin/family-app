@@ -25,7 +25,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { radius, type as t, useTheme } from '../lib/theme';
+import { radius, shadows, type as t, useTheme } from '../lib/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const NATIVE_DIALOG_SHADOW: ViewStyle = {
@@ -265,9 +265,11 @@ export function IOSSwitch({
 export function Card({
   children,
   style,
+  testID,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
 }) {
   const c = useTheme();
   return (
@@ -275,11 +277,16 @@ export function Card({
       style={[
         {
           backgroundColor: c.card,
-          borderRadius: radius.md,
-          borderWidth: 0,
+          borderRadius: radius.lg,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: c.separator,
+          ...(Platform.OS === 'web'
+            ? { boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)' }
+            : shadows.sm),
         },
         style,
       ]}
+      testID={testID}
     >
       {children}
     </View>
@@ -298,7 +305,20 @@ export function GroupedList({
   const c = useTheme();
   return (
     <View
-      style={[styles.groupedList, { backgroundColor: c.card }, style]}
+      style={[
+        styles.groupedList,
+        {
+          backgroundColor: c.card,
+          borderRadius: radius.lg,
+          borderColor: c.separator,
+          borderWidth: StyleSheet.hairlineWidth,
+          overflow: 'hidden',
+          ...(Platform.OS === 'web'
+            ? { boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)' }
+            : shadows.sm),
+        },
+        style,
+      ]}
       testID={testID}
     >
       {children}

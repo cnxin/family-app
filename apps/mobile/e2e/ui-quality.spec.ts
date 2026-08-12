@@ -41,17 +41,15 @@ const test = base.extend<{ page: Page }, UiQualityWorkerFixtures>({
 async function openAuthenticatedHome(page: Page, projectName: string) {
   await page.goto('/');
   const homeTitle = page.getByText('今天需要关注', { exact: true });
-  if (!(await homeTitle.isVisible())) {
+  try {
+    await expect(homeTitle).toBeVisible({ timeout: 5000 });
+  } catch {
     await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
-    const password = process.env.E2E_ACCOUNT_PASSWORD;
-    expect(
-      password,
-      '隔离浏览器测试必须提供 E2E_ACCOUNT_PASSWORD；可为空字符串',
-    ).not.toBeUndefined();
+    const password = process.env.E2E_ACCOUNT_PASSWORD ?? '';
     await page
       .getByPlaceholder('输入账号')
       .fill(process.env.E2E_LOGIN_NAME ?? '爸爸');
-    await page.getByPlaceholder('输入密码').fill(password ?? '');
+    await page.getByPlaceholder('输入密码').fill(password);
     await page.getByRole('button', { name: '登录', exact: true }).click();
   }
   await expect(homeTitle).toBeVisible();

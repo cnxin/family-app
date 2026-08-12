@@ -63,8 +63,8 @@ function SchedulePoster({ posterUrl, title }: { posterUrl: string | null; title:
 
   if (!posterUrl || failed) {
     return (
-      <View style={[styles.schedulePoster, styles.schedulePosterFallback, { backgroundColor: c.fill }]}>
-        <Film color={c.tertiaryLabel} size={21} />
+      <View style={[styles.schedulePoster, styles.schedulePosterFallback, { backgroundColor: c.mediaSoft }]}>
+        <Film color={c.mediaAccent} size={22} />
       </View>
     );
   }
@@ -92,8 +92,8 @@ function Connector({ connector }: { connector: MediaConnectorSummary }) {
         : { label: '离线', color: c.red, background: c.redSoft };
   return (
     <View style={[styles.connectorRow, { borderBottomColor: c.separator }]}>
-      <View style={[styles.connectorIcon, { backgroundColor: c.fill }]}>
-        <Server color={c.secondaryLabel} size={17} />
+      <View style={[styles.connectorIcon, { backgroundColor: c.mediaSoft }]}>
+        <Server color={c.mediaAccent} size={18} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={[t.subhead, { color: c.label, fontWeight: '700' }]}>{connector.name}</Text>
@@ -138,17 +138,26 @@ export default function MediaHomeScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <PageContainer maxWidth={1120} style={[styles.page, desktop && styles.pageDesktop]}>
           <ModuleBackButton href="/" label="家庭首页" />
-          <View style={[styles.header, desktop && styles.headerDesktop]}>
+          <View
+            style={[
+              styles.headerCard,
+              { backgroundColor: c.card, borderColor: c.mediaBorder },
+              desktop && styles.headerDesktop,
+            ]}
+          >
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[t.footnote, { color: c.accent, fontWeight: '700' }]}>今晚看什么</Text>
+              <View style={[styles.eyebrowChip, { backgroundColor: c.mediaSoft }]}>
+                <Film color={c.mediaAccent} size={14} />
+                <Text style={[t.footnote, { color: c.mediaAccent, fontWeight: '700' }]}>今晚看什么</Text>
+              </View>
               <Text
                 accessibilityRole="header"
-                style={[desktop ? t.largeTitle : t.title1, { color: c.label, marginTop: 5 }]}
+                style={[desktop ? t.largeTitle : t.title1, { color: c.label, marginTop: 8 }]}
               >
                 家庭观影
               </Text>
-              <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 5 }]}>
-                家庭片单共 {entries?.length ?? 0} 部
+              <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 6 }]}>
+                家庭片单共 {entries?.length ?? 0} 部 · {scheduled.length ? `近期排期 ${scheduled.length} 部` : '准备一场家庭放映'}
               </Text>
             </View>
             <Pressable
@@ -156,7 +165,7 @@ export default function MediaHomeScreen() {
               onPress={() => router.push('/media/watchlist')}
               style={({ pressed }) => [
                 styles.primaryAction,
-                { backgroundColor: pressed ? c.green : c.tint },
+                { backgroundColor: pressed ? c.green : c.mediaAccent },
               ]}
             >
               <ListVideo color="#FFFFFF" size={18} />
@@ -165,7 +174,7 @@ export default function MediaHomeScreen() {
           </View>
 
           {isLoading ? (
-            <ActivityIndicator color={c.tint} style={styles.loader} />
+            <ActivityIndicator color={c.mediaAccent} style={styles.loader} />
           ) : (
             <SummaryBand
               items={[
@@ -200,8 +209,8 @@ export default function MediaHomeScreen() {
             <Text style={[t.footnote, styles.groupLabel, { color: c.secondaryLabel }]}>浏览与管理</Text>
             <GroupedList>
               <GroupedNavigationRow
-                backgroundColor={c.accentSoft}
-                color={c.accent}
+                backgroundColor={c.mediaSoft}
+                color={c.mediaAccent}
                 icon={ListVideo}
                 onPress={() => router.push('/media/watchlist')}
                 subtitle={`${entries?.length ?? 0} 部影视`}
@@ -240,8 +249,8 @@ export default function MediaHomeScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={[t.title2, { color: c.label }]}>近期安排</Text>
                 <Pressable accessibilityRole="link" onPress={() => router.push('/media/watchlist')} style={styles.textLink}>
-                  <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>全部片单</Text>
-                  <ArrowRight color={c.tint} size={15} />
+                  <Text style={[t.footnote, { color: c.mediaAccent, fontWeight: '700' }]}>全部片单</Text>
+                  <ArrowRight color={c.mediaAccent} size={15} />
                 </Pressable>
               </View>
               <GroupedList>
@@ -263,7 +272,7 @@ export default function MediaHomeScreen() {
                         <Text numberOfLines={1} style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
                           {entry.mediaTitle.title}
                         </Text>
-                        <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 3 }]}>
+                        <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}>
                           {formatSchedule(entry.scheduledFor!)}
                         </Text>
                       </View>
@@ -288,8 +297,8 @@ export default function MediaHomeScreen() {
                     onPress={() => router.push('/media/settings')}
                     style={styles.textLink}
                   >
-                    <Settings2 color={c.tint} size={15} />
-                    <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>观影设置</Text>
+                    <Settings2 color={c.mediaAccent} size={15} />
+                    <Text style={[t.footnote, { color: c.mediaAccent, fontWeight: '700' }]}>观影设置</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -315,12 +324,27 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   page: { paddingTop: 10, paddingBottom: 40 },
   pageDesktop: { paddingTop: 30 },
-  header: { gap: 16, marginTop: 18 },
+  headerCard: {
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 20,
+    marginTop: 14,
+    gap: 16,
+  },
   headerDesktop: { flexDirection: 'row', alignItems: 'center', marginTop: 0 },
+  eyebrowChip: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   primaryAction: {
-    height: 44,
+    minHeight: 44,
     borderRadius: radius.md,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
@@ -341,41 +365,41 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  textLink: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  textLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4 },
   scheduleRow: {
-    minHeight: 84,
+    minHeight: 90,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
+    gap: 14,
   },
   schedulePoster: {
-    borderRadius: radius.sm,
-    height: 64,
-    width: 44,
+    borderRadius: radius.md,
+    height: 72,
+    width: 50,
   },
   schedulePosterFallback: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   connectorRow: {
-    minHeight: 68,
+    minHeight: 70,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   connectorIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statusBadge: { borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 5 },
+  statusBadge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 5 },
   emptyRow: {
     minHeight: 82,
     paddingHorizontal: 16,

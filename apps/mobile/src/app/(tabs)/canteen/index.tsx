@@ -41,8 +41,8 @@ function MealRow({ mealType, menu }: { mealType: MealType; menu?: Menu }) {
   const items = menu?.items.filter((item) => item.status !== 'rejected') ?? [];
   return (
     <View style={[styles.mealRow, { borderBottomColor: c.separator }]}>
-      <View style={[styles.mealLabel, { backgroundColor: c.fill }]}>
-        <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '700' }]}>
+      <View style={[styles.mealLabel, { backgroundColor: c.canteenSoft }]}>
+        <Text style={[t.footnote, { color: c.canteenAccent, fontWeight: '700' }]}>
           {mealLabel(mealType)}
         </Text>
       </View>
@@ -58,7 +58,11 @@ function MealRow({ mealType, menu }: { mealType: MealType; menu?: Menu }) {
           <Text style={[t.subhead, { color: c.tertiaryLabel }]}>暂未安排</Text>
         )}
       </View>
-      <Text style={[t.caption, { color: c.secondaryLabel }]}>{items.length} 道</Text>
+      <View style={[styles.mealCountBadge, { backgroundColor: items.length ? c.canteenSoft : c.fill }]}>
+        <Text style={[t.caption, { color: items.length ? c.canteenAccent : c.secondaryLabel, fontWeight: '700' }]}>
+          {items.length} 道
+        </Text>
+      </View>
     </View>
   );
 }
@@ -95,24 +99,28 @@ export default function CanteenHomeScreen() {
           {!consumer ? <ModuleBackButton href="/" label="家庭首页" /> : null}
           <View
             style={[
-              styles.header,
+              styles.headerCard,
+              { backgroundColor: c.card, borderColor: c.canteenBorder },
               adminDesktop && styles.headerDesktop,
             ]}
             testID={consumer ? 'consumer-canteen-header' : undefined}
           >
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '600' }]}>今天吃什么</Text>
+              <View style={[styles.eyebrowChip, { backgroundColor: c.canteenSoft }]}>
+                <CookingPot color={c.canteenAccent} size={14} />
+                <Text style={[t.footnote, { color: c.canteenAccent, fontWeight: '700' }]}>今天吃什么</Text>
+              </View>
               <Text
                 accessibilityRole="header"
                 style={[
                   adminDesktop ? t.largeTitle : t.title1,
-                  { color: c.label, marginTop: 5 },
+                  { color: c.label, marginTop: 8 },
                 ]}
               >
                 家庭食堂
               </Text>
-              <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 5 }]}>
-                今日已安排 {menuItems} 道菜
+              <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 6 }]}>
+                今日已安排 {menuItems} 道菜 · {shoppingPending ? `还缺 ${shoppingPending} 样食材` : '食材充足'}
               </Text>
             </View>
             <PressableScale
@@ -120,7 +128,7 @@ export default function CanteenHomeScreen() {
               accessibilityRole="link"
               haptic
               onPress={() => router.push('/order')}
-              style={[styles.primaryAction, { backgroundColor: c.tint }]}
+              style={[styles.primaryAction, { backgroundColor: c.canteenAccent }]}
             >
               <UtensilsCrossed color="#FFFFFF" size={18} />
               <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>开始点菜</Text>
@@ -135,13 +143,13 @@ export default function CanteenHomeScreen() {
                   <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>早餐、午餐和晚餐</Text>
                 </View>
                 <Pressable accessibilityRole="link" onPress={() => router.push('/kitchen')} style={styles.textLink}>
-                  <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>全部安排</Text>
-                  <ArrowRight color={c.tint} size={15} />
+                  <Text style={[t.footnote, { color: c.canteenAccent, fontWeight: '600' }]}>全部安排</Text>
+                  <ArrowRight color={c.canteenAccent} size={15} />
                 </Pressable>
               </View>
               <GroupedList>
                 {isLoading ? (
-                  <ActivityIndicator color={c.tint} style={styles.loader} />
+                  <ActivityIndicator color={c.canteenAccent} style={styles.loader} />
                 ) : (
                   <>
                     <MealRow mealType="breakfast" menu={menus?.find((menu) => menu.mealType === 'breakfast')} />
@@ -161,8 +169,8 @@ export default function CanteenHomeScreen() {
               </View>
               <GroupedList>
                 <GroupedNavigationRow
-                  backgroundColor={c.tintSoft}
-                  color={c.tint}
+                  backgroundColor={c.canteenSoft}
+                  color={c.canteenAccent}
                   icon={UtensilsCrossed}
                   onPress={() => router.push('/order')}
                   subtitle={`${menuItems} 道已安排`}
@@ -207,12 +215,27 @@ const styles = StyleSheet.create({
   page: { paddingTop: 10, paddingBottom: 40 },
   pageDesktop: { paddingTop: 30 },
   pageConsumer: { paddingTop: 14, paddingBottom: 56 },
-  header: { gap: 16, marginTop: 18 },
+  headerCard: {
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 20,
+    marginTop: 14,
+    gap: 16,
+  },
   headerDesktop: { flexDirection: 'row', alignItems: 'center', marginTop: 0 },
+  eyebrowChip: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   primaryAction: {
-    height: 44,
+    minHeight: 44,
     borderRadius: radius.md,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
@@ -228,21 +251,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  textLink: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  textLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4 },
   mealRow: {
-    minHeight: 68,
+    minHeight: 72,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
   mealLabel: {
-    width: 52,
-    height: 30,
+    width: 56,
+    height: 32,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  mealCountBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radius.full,
   },
   loader: { marginVertical: 34 },
 });
