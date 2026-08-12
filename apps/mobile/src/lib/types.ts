@@ -9,7 +9,14 @@ export type MenuEventType =
   | 'meal_chef_assigned'
   | 'menu_completed';
 export type DishCategory = '荤菜' | '素菜' | '汤' | '主食' | '甜品';
-export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
+export type InventoryCategory =
+  | '调料'
+  | '主食'
+  | '饮料'
+  | '零食'
+  | '日用品'
+  | '药品'
+  | '其他';
 export type BackupScheduleFrequency = 'daily' | 'weekly';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
 export type BackupRunKind = 'backup' | 'restore_drill' | 'capacity_check';
@@ -660,6 +667,7 @@ export type AssetCategory =
   | 'furniture'
   | 'electronics'
   | 'tool'
+  | 'subscription'
   | 'other';
 export type AssetStatus = 'active' | 'retired';
 export type AssetDocumentType = 'receipt' | 'manual' | 'warranty' | 'other';
@@ -755,6 +763,7 @@ export interface HomeAsset {
   purchaseDate: string | null;
   purchasePrice: string | null;
   warrantyExpiresOn: string | null;
+  renewsOn: string | null;
   status: AssetStatus;
   note: string | null;
   createdById: string;

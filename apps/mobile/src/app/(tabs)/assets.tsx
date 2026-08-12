@@ -78,8 +78,15 @@ const CATEGORY_META: Record<AssetCategory, { label: string; short: string }> = {
   furniture: { label: '家具', short: '家' },
   electronics: { label: '数码', short: '数' },
   tool: { label: '工具', short: '工' },
+  subscription: { label: '订阅', short: '续' },
   other: { label: '其他', short: '物' },
 };
+
+const WARRANTY_CATEGORIES: AssetCategory[] = [
+  'appliance',
+  'electronics',
+  'tool',
+];
 
 const DOCUMENT_META: Record<AssetDocumentType, string> = {
   receipt: '购买凭证',
@@ -262,6 +269,12 @@ function AssetEditor({
   const [warrantyExpiresOn, setWarrantyExpiresOn] = useState(
     asset?.warrantyExpiresOn ?? addDays(todayStr(), 365),
   );
+  const [renewalEnabled, setRenewalEnabled] = useState(
+    Boolean(asset?.renewsOn),
+  );
+  const [renewsOn, setRenewsOn] = useState(
+    asset?.renewsOn ?? addDays(todayStr(), 30),
+  );
   const [note, setNote] = useState(asset?.note ?? '');
   const [message, setMessage] = useState<string | null>(null);
   const parsedPrice = purchasePrice.trim() ? Number(purchasePrice) : null;
@@ -283,7 +296,12 @@ function AssetEditor({
         serialNumber: serialNumber.trim() || null,
         purchaseDate: purchaseEnabled ? purchaseDate : null,
         purchasePrice: parsedPrice,
-        warrantyExpiresOn: warrantyEnabled ? warrantyExpiresOn : null,
+        warrantyExpiresOn:
+          WARRANTY_CATEGORIES.includes(category) && warrantyEnabled
+            ? warrantyExpiresOn
+            : null,
+        renewsOn:
+          category === 'subscription' && renewalEnabled ? renewsOn : null,
         status: asset?.status,
         note: note.trim() || null,
       });
@@ -297,7 +315,7 @@ function AssetEditor({
   return (
     <Sheet
       onClose={onClose}
-      subtitle="保修信息、型号和位置只在当前家庭可见"
+      subtitle="日期、型号和位置只在当前家庭可见"
       title={asset ? '编辑家庭资产' : '新增家庭资产'}
     >
       <ScrollView
@@ -408,13 +426,23 @@ function AssetEditor({
             />
           </Field>
         ) : null}
-        <OptionalDateField
-          enabled={warrantyEnabled}
-          label="保修到期日"
-          onEnabledChange={setWarrantyEnabled}
-          onValueChange={setWarrantyExpiresOn}
-          value={warrantyExpiresOn}
-        />
+        {category === 'subscription' ? (
+          <OptionalDateField
+            enabled={renewalEnabled}
+            label="续费日期"
+            onEnabledChange={setRenewalEnabled}
+            onValueChange={setRenewsOn}
+            value={renewsOn}
+          />
+        ) : WARRANTY_CATEGORIES.includes(category) ? (
+          <OptionalDateField
+            enabled={warrantyEnabled}
+            label="保修到期日"
+            onEnabledChange={setWarrantyEnabled}
+            onValueChange={setWarrantyExpiresOn}
+            value={warrantyExpiresOn}
+          />
+        ) : null}
         <Field label="备注">
           <TextInput
             accessibilityLabel="资产备注"
@@ -1163,8 +1191,22 @@ function AssetDetail({
               <Text style={[t.subhead, { color: c.label, fontWeight: '700', marginTop: 3 }]}>{dateLabel(asset.purchaseDate)}</Text>
             </View>
             <View style={styles.infoCell}>
-              <Text style={[t.caption, { color: c.secondaryLabel }]}>保修到期</Text>
-              <Text style={[t.subhead, { color: c.label, fontWeight: '700', marginTop: 3 }]}>{dateLabel(asset.warrantyExpiresOn)}</Text>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>
+                {asset.category === 'subscription'
+                  ? '续费日期'
+                  : WARRANTY_CATEGORIES.includes(asset.category)
+                    ? '保修到期'
+                    : '当前状态'}
+              </Text>
+              <Text style={[t.subhead, { color: c.label, fontWeight: '700', marginTop: 3 }]}>
+                {asset.category === 'subscription'
+                  ? dateLabel(asset.renewsOn)
+                  : WARRANTY_CATEGORIES.includes(asset.category)
+                    ? dateLabel(asset.warrantyExpiresOn)
+                    : asset.status === 'active'
+                      ? '使用中'
+                      : '已停用'}
+              </Text>
             </View>
           </View>
 

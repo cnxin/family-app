@@ -67,7 +67,13 @@ const ASSET_CATEGORIES: AssetCategory[] = [
   'furniture',
   'electronics',
   'tool',
+  'subscription',
   'other',
+];
+const WARRANTY_CATEGORIES: AssetCategory[] = [
+  'appliance',
+  'electronics',
+  'tool',
 ];
 const DOCUMENT_TYPES: AssetDocumentType[] = [
   'receipt',
@@ -142,6 +148,11 @@ class CreateAssetDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(10)
+  renewsOn?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(1000)
   note?: string | null;
 }
@@ -192,6 +203,11 @@ class UpdateAssetDto {
   @IsString()
   @MaxLength(10)
   warrantyExpiresOn?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  renewsOn?: string | null;
 
   @IsOptional()
   @IsIn(['active', 'retired'])
@@ -491,7 +507,13 @@ export class AssetsService {
 
   async create(dto: CreateAssetDto, user: JwtUser) {
     const purchaseDate = dateOnly(dto.purchaseDate, '购买日期');
-    const warrantyExpiresOn = dateOnly(dto.warrantyExpiresOn, '保修到期日');
+    const warrantyExpiresOn = WARRANTY_CATEGORIES.includes(dto.category)
+      ? dateOnly(dto.warrantyExpiresOn, '保修到期日')
+      : null;
+    const renewsOn =
+      dto.category === 'subscription'
+        ? dateOnly(dto.renewsOn, '续费日期')
+        : null;
     this.assertWarrantyDates(purchaseDate, warrantyExpiresOn);
     const assetId = await this.dataSource.transaction(async (manager) => {
       const assets = manager.getRepository(HomeAsset);
@@ -508,6 +530,7 @@ export class AssetsService {
           purchasePrice:
             dto.purchasePrice == null ? null : String(dto.purchasePrice),
           warrantyExpiresOn,
+          renewsOn,
           status: 'active',
           note: nullableText(dto.note),
           createdById: user.memberId,
@@ -544,7 +567,16 @@ export class AssetsService {
       )
         ? dateOnly(dto.warrantyExpiresOn, '保修到期日')
         : asset.warrantyExpiresOn;
-      this.assertWarrantyDates(nextPurchaseDate, nextWarranty);
+      const nextCategory = dto.category ?? asset.category;
+      const nextRenewsOn = Object.prototype.hasOwnProperty.call(dto, 'renewsOn')
+        ? dateOnly(dto.renewsOn, '续费日期')
+        : asset.renewsOn;
+      const effectiveWarranty = WARRANTY_CATEGORIES.includes(nextCategory)
+        ? nextWarranty
+        : null;
+      const effectiveRenewsOn =
+        nextCategory === 'subscription' ? nextRenewsOn : null;
+      this.assertWarrantyDates(nextPurchaseDate, effectiveWarranty);
 
       if (dto.name != null) asset.name = dto.name.trim();
       if (dto.category != null) asset.category = dto.category;
@@ -567,8 +599,17 @@ export class AssetsService {
         asset.purchasePrice =
           dto.purchasePrice == null ? null : String(dto.purchasePrice);
       }
-      if (Object.prototype.hasOwnProperty.call(dto, 'warrantyExpiresOn')) {
-        asset.warrantyExpiresOn = nextWarranty;
+      if (
+        Object.prototype.hasOwnProperty.call(dto, 'warrantyExpiresOn') ||
+        !WARRANTY_CATEGORIES.includes(nextCategory)
+      ) {
+        asset.warrantyExpiresOn = effectiveWarranty;
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(dto, 'renewsOn') ||
+        nextCategory !== 'subscription'
+      ) {
+        asset.renewsOn = effectiveRenewsOn;
       }
       if (Object.prototype.hasOwnProperty.call(dto, 'note')) {
         asset.note = nullableText(dto.note);

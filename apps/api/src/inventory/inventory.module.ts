@@ -62,6 +62,7 @@ const INVENTORY_CATEGORIES: InventoryCategory[] = [
   '饮料',
   '零食',
   '日用品',
+  '药品',
   '其他',
 ];
 

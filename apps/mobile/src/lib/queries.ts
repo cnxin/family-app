@@ -2646,6 +2646,7 @@ export interface AssetUpsertInput {
   purchaseDate?: string | null;
   purchasePrice?: number | null;
   warrantyExpiresOn?: string | null;
+  renewsOn?: string | null;
   status?: 'active' | 'retired';
   note?: string | null;
 }

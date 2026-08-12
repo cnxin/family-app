@@ -63,6 +63,7 @@ const CATEGORIES: InventoryCategory[] = [
   '饮料',
   '零食',
   '日用品',
+  '药品',
   '其他',
 ];
 
@@ -72,6 +73,7 @@ const CATEGORY_EMOJI: Record<InventoryCategory, string> = {
   饮料: '🥛',
   零食: '🍪',
   日用品: '🧻',
+  药品: '💊',
   其他: '📦',
 };
 

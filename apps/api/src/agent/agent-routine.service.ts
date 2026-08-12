@@ -466,6 +466,7 @@ export class AgentRoutineService
     owner: Member,
     now: Date,
   ) {
+    await this.collectExpiryItems(manager, routine.householdId, now);
     const pending = await manager.getRepository(AgentRoutineItem).find({
       where: {
         householdId: routine.householdId,
@@ -504,6 +505,99 @@ export class AgentRoutineService
         .whereInIds(digestedIds)
         .execute();
     }
+  }
+
+  private async collectExpiryItems(
+    manager: EntityManager,
+    householdId: string,
+    now: Date,
+  ) {
+    const today = shanghaiDate(now);
+    const through = addDateDays(today, 14);
+    const { start, end } = shanghaiDayBounds(now);
+
+    await manager.query(
+      `INSERT INTO agent_routine_items (
+         "householdId", "routineKind", "sourceType", "sourceId", summary, status
+       )
+       SELECT candidate."householdId", 'nightly_digest', 'subscription_renewal',
+              candidate.id::text,
+              format(
+                '订阅「%s」将在 %s 天后（%s 月 %s 日）到期',
+                candidate.name,
+                candidate."renewsOn" - $2::date,
+                extract(month FROM candidate."renewsOn")::int,
+                extract(day FROM candidate."renewsOn")::int
+              ),
+              'pending'
+       FROM (
+         SELECT id, "householdId", name, "renewsOn"
+         FROM home_assets
+         WHERE "householdId" = $1
+           AND category = 'subscription'
+           AND status = 'active'
+           AND "renewsOn" IS NOT NULL
+           AND "renewsOn" >= $2::date
+           AND "renewsOn" <= $3::date
+         ORDER BY "renewsOn" ASC, id ASC
+         LIMIT 5
+       ) candidate
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM agent_routine_items existing
+         WHERE existing."householdId" = candidate."householdId"
+           AND existing."routineKind" = 'nightly_digest'
+           AND existing."sourceType" = 'subscription_renewal'
+           AND existing."sourceId" = candidate.id::text
+           AND existing.status IN ('pending', 'digested')
+           AND existing."createdAt" >= $4
+           AND existing."createdAt" < $5
+       )`,
+      [householdId, today, through, start, end],
+    );
+
+    await manager.query(
+      `INSERT INTO agent_routine_items (
+         "householdId", "routineKind", "sourceType", "sourceId", summary, status
+       )
+       SELECT candidate."householdId", 'nightly_digest', 'medicine_expiry',
+              candidate.id::text,
+              format(
+                '药品「%s」将在 %s 天后（%s 月 %s 日）到期',
+                candidate.name,
+                candidate."expiresOn" - $2::date,
+                extract(month FROM candidate."expiresOn")::int,
+                extract(day FROM candidate."expiresOn")::int
+              ),
+              'pending'
+       FROM (
+         SELECT batch.id, batch."householdId", item.name, batch."expiresOn"
+         FROM inventory_batches batch
+         INNER JOIN inventory_items item
+           ON item.id = batch."inventoryItemId"
+          AND item."householdId" = batch."householdId"
+         WHERE batch."householdId" = $1
+           AND item.category = '药品'
+           AND batch.quantity > 0
+           AND batch."expiresOn" IS NOT NULL
+           AND batch."expiresOn" >= $2::date
+           AND batch."expiresOn" <= $3::date
+         ORDER BY batch."expiresOn" ASC, batch.id ASC
+         LIMIT 5
+       ) candidate
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM agent_routine_items existing
+         WHERE existing."householdId" = candidate."householdId"
+           AND existing."routineKind" = 'nightly_digest'
+           AND existing."sourceType" = 'medicine_expiry'
+           AND existing."sourceId" = candidate.id::text
+           AND existing.status IN ('pending', 'digested')
+           AND existing."createdAt" >= $4
+           AND existing."createdAt" < $5
+       )`,
+      [householdId, today, through, start, end],
+    );
   }
 
   private async sendWeeklyReport(

@@ -102,11 +102,22 @@ try {
 
   const invalidWarranty = await request('/assets', token, 'POST', {
     name: '错误保修日期',
-    category: 'other',
+    category: 'appliance',
     purchaseDate: '2026-01-02',
     warrantyExpiresOn: '2026-01-01',
   });
   assert(invalidWarranty.status === 400, '保修到期日不能早于购买日期');
+
+  const assetWithoutWarranty = await request('/assets', token, 'POST', {
+    name: '不适用保修的资产',
+    category: 'other',
+    warrantyExpiresOn: '2027-01-01',
+  });
+  assert(
+    assetWithoutWarranty.status === 201 &&
+      assetWithoutWarranty.data.warrantyExpiresOn === null,
+    '家具与其他分类不保存保修到期日',
+  );
 
   const unsafeDocument = await request(
     `/assets/${asset.data.id}/documents`,

@@ -49,8 +49,15 @@ const CATEGORY_LABELS: Record<AssetCategory, string> = {
   furniture: '家具',
   electronics: '数码',
   tool: '工具',
+  subscription: '订阅',
   other: '其他',
 };
+
+const WARRANTY_CATEGORIES: AssetCategory[] = [
+  'appliance',
+  'electronics',
+  'tool',
+];
 
 const DOCUMENT_LABELS: Record<AssetDocumentType, string> = {
   receipt: '购买凭证',
@@ -108,6 +115,36 @@ function warrantyState(expiresOn: string | null) {
   };
 }
 
+function renewalState(renewsOn: string | null) {
+  if (!renewsOn) {
+    return {
+      label: '未记录续费日期',
+      detail: '可在资产档案中补充下次续费日期',
+      tone: 'neutral' as const,
+    };
+  }
+  const days = dayDifference(renewsOn);
+  if (days < 0) {
+    return {
+      label: '续费日期已过',
+      detail: `已过期 ${Math.abs(days)} 天，请确认订阅状态`,
+      tone: 'expired' as const,
+    };
+  }
+  if (days === 0) {
+    return {
+      label: '今天续费',
+      detail: '请确认是否续费或取消订阅',
+      tone: 'warning' as const,
+    };
+  }
+  return {
+    label: `${days} 天后续费`,
+    detail: days <= 14 ? '订阅即将续费' : '订阅仍在有效期内',
+    tone: days <= 14 ? ('warning' as const) : ('active' as const),
+  };
+}
+
 function maintenanceState(plan: MaintenancePlan) {
   if (!plan.isEnabled) return { label: '已停用', urgent: false };
   const days = dayDifference(plan.nextDueDate);
@@ -149,6 +186,10 @@ export default function AssetDetailScreen() {
     () => warrantyState(asset?.warrantyExpiresOn ?? null),
     [asset?.warrantyExpiresOn],
   );
+  const renewal = useMemo(
+    () => renewalState(asset?.renewsOn ?? null),
+    [asset?.renewsOn],
+  );
 
   if (!ready) return null;
   if (!member) return <Redirect href="/login" />;
@@ -168,20 +209,26 @@ export default function AssetDetailScreen() {
     }
   };
 
-  const warrantyColors =
-    warranty.tone === 'active'
-      ? { background: c.greenSoft, foreground: c.green }
-      : warranty.tone === 'warning'
-        ? { background: c.orangeSoft, foreground: c.orange }
-        : warranty.tone === 'expired'
-          ? { background: c.redSoft, foreground: c.red }
-          : { background: c.fill, foreground: c.secondaryLabel };
   const WarrantyIcon =
     warranty.tone === 'active'
       ? ShieldCheck
       : warranty.tone === 'expired'
         ? ShieldX
         : CircleAlert;
+  const expiry = asset?.category === 'subscription' ? renewal : warranty;
+  const expiryColors =
+    expiry.tone === 'active'
+      ? { background: c.greenSoft, foreground: c.green }
+      : expiry.tone === 'warning'
+        ? { background: c.orangeSoft, foreground: c.orange }
+        : expiry.tone === 'expired'
+          ? { background: c.redSoft, foreground: c.red }
+          : { background: c.fill, foreground: c.secondaryLabel };
+  const showExpiry =
+    asset?.category === 'subscription' ||
+    Boolean(asset && WARRANTY_CATEGORIES.includes(asset.category));
+  const ExpiryIcon =
+    asset?.category === 'subscription' ? CalendarClock : WarrantyIcon;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: c.bg }]} edges={['top', 'bottom']}>
@@ -262,41 +309,53 @@ export default function AssetDetailScreen() {
               </View>
             </View>
 
-            <Card
-              style={[
-                styles.warrantyCard,
-                { backgroundColor: warrantyColors.background },
-              ]}
-            >
-              <View style={styles.warrantyTop}>
-                <View style={[styles.warrantyIcon, { backgroundColor: c.card }]}>
-                  <WarrantyIcon color={warrantyColors.foreground} size={22} />
+            {showExpiry ? (
+              <Card
+                style={[
+                  styles.warrantyCard,
+                  { backgroundColor: expiryColors.background },
+                ]}
+              >
+                <View style={styles.warrantyTop}>
+                  <View style={[styles.warrantyIcon, { backgroundColor: c.card }]}>
+                    <ExpiryIcon color={expiryColors.foreground} size={22} />
+                  </View>
+                  <View style={styles.flexCopy}>
+                    <Text
+                      style={[t.headline, { color: expiryColors.foreground }]}
+                      testID={
+                        asset.category === 'subscription'
+                          ? 'asset-renewal-status'
+                          : 'asset-warranty-status'
+                      }
+                    >
+                      {expiry.label}
+                    </Text>
+                    <Text
+                      style={[
+                        t.footnote,
+                        styles.warrantyDetail,
+                        { color: expiryColors.foreground },
+                      ]}
+                    >
+                      {expiry.detail}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.flexCopy}>
-                  <Text
-                    style={[t.headline, { color: warrantyColors.foreground }]}
-                    testID="asset-warranty-status"
-                  >
-                    {warranty.label}
+                <View style={[styles.warrantyDate, { borderTopColor: c.separator }]}>
+                  <Text style={[t.caption, { color: c.secondaryLabel }]}>
+                    {asset.category === 'subscription' ? '续费日期' : '保修到期日'}
                   </Text>
-                  <Text
-                    style={[
-                      t.footnote,
-                      styles.warrantyDetail,
-                      { color: warrantyColors.foreground },
-                    ]}
-                  >
-                    {warranty.detail}
+                  <Text style={[t.subhead, styles.flexCopy, { color: c.label, fontWeight: '700' }]}>
+                    {dateLabel(
+                      asset.category === 'subscription'
+                        ? asset.renewsOn
+                        : asset.warrantyExpiresOn,
+                    )}
                   </Text>
                 </View>
-              </View>
-              <View style={[styles.warrantyDate, { borderTopColor: c.separator }]}>
-                <Text style={[t.caption, { color: c.secondaryLabel }]}>保修到期日</Text>
-                <Text style={[t.subhead, styles.flexCopy, { color: c.label, fontWeight: '700' }]}>
-                  {dateLabel(asset.warrantyExpiresOn)}
-                </Text>
-              </View>
-            </Card>
+              </Card>
+            ) : null}
 
             <PressableScale
               accessibilityLabel={`向小管家询问${asset.name}`}

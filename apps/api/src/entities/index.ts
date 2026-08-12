@@ -25,7 +25,14 @@ export type MenuEventType =
   | 'item_note_changed'
   | 'meal_chef_assigned'
   | 'menu_completed';
-export type InventoryCategory = '调料' | '主食' | '饮料' | '零食' | '日用品' | '其他';
+export type InventoryCategory =
+  | '调料'
+  | '主食'
+  | '饮料'
+  | '零食'
+  | '日用品'
+  | '药品'
+  | '其他';
 export type InventoryTransactionType =
   | 'receipt'
   | 'consumption'
@@ -179,6 +186,7 @@ export type AssetCategory =
   | 'furniture'
   | 'electronics'
   | 'tool'
+  | 'subscription'
   | 'other';
 export type AssetStatus = 'active' | 'retired';
 export type AssetDocumentType = 'receipt' | 'manual' | 'warranty' | 'other';
@@ -3542,7 +3550,7 @@ export class ReminderRecipient {
 @Entity('home_assets')
 @Check(
   'CHK_home_assets_category',
-  `"category" IN ('appliance', 'furniture', 'electronics', 'tool', 'other')`,
+  `"category" IN ('appliance', 'furniture', 'electronics', 'tool', 'subscription', 'other')`,
 )
 @Check('CHK_home_assets_status', `"status" IN ('active', 'retired')`)
 @Check(
@@ -3595,6 +3603,9 @@ export class HomeAsset {
 
   @Column({ type: 'date', nullable: true })
   warrantyExpiresOn: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  renewsOn: string | null;
 
   @Column({ type: 'varchar', length: 16, default: 'active' })
   status: AssetStatus;

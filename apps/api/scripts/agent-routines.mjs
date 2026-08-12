@@ -55,6 +55,41 @@ async function runMigrationPhase() {
     let latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
+    if (latest[0]?.name === 'AddSubscriptionAsset1785232200000') {
+      const owners = await AppDataSource.query(
+        `SELECT id, "householdId" FROM members
+         WHERE role = 'owner' AND "disabledAt" IS NULL
+         ORDER BY "createdAt" ASC LIMIT 1`,
+      );
+      const owner = owners[0];
+      if (!owner) throw new Error('找不到订阅资产迁移专项所需的家庭 owner');
+      const subscriptionId = randomUUID();
+      await AppDataSource.query(
+        `INSERT INTO home_assets (
+           id, "householdId", name, category, "renewsOn", "createdById"
+         ) VALUES ($1, $2, '迁移回退测试订阅', 'subscription', CURRENT_DATE + 7, $3)`,
+        [subscriptionId, owner.householdId, owner.id],
+      );
+      await AppDataSource.undoLastMigration();
+      latest = await AppDataSource.query(
+        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+      );
+      const subscriptionRows = await AppDataSource.query(
+        `SELECT count(*)::int AS n FROM home_assets WHERE id = $1`,
+        [subscriptionId],
+      );
+      const categoryCheck = await AppDataSource.query(
+        `SELECT pg_get_constraintdef(oid) AS definition
+         FROM pg_constraint
+         WHERE conname = 'CHK_home_assets_category'`,
+      );
+      assert(
+        latest[0]?.name === 'AddFamilyFinance1785232100000' &&
+          subscriptionRows[0].n === 0 &&
+          !categoryCheck[0]?.definition.includes('subscription'),
+        '有 subscription 资产时迁移先删行再还原五类 CHECK',
+      );
+    }
     if (latest[0]?.name === 'AddFamilyFinance1785232100000') {
       await AppDataSource.undoLastMigration();
       latest = await AppDataSource.query(
@@ -567,7 +602,175 @@ async function runApiPhase() {
       '通知正文不包含密钥、对话正文、记忆正文且不超过 500 字',
     );
 
-    console.log('5. 家庭周报聚合、家庭隔离、owner-only 与停用 owner 容错');
+    console.log('5. 订阅与药品临期项、窗口过滤与同日幂等');
+    const expiry = await createHouseholdFixture(db, '临期提醒');
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const dateAfter = (days) => {
+      const value = new Date(`${today}T00:00:00.000Z`);
+      value.setUTCDate(value.getUTCDate() + days);
+      return value.toISOString().slice(0, 10);
+    };
+    const dueSubscriptionId = randomUUID();
+    const farSubscriptionId = randomUUID();
+    const expiredSubscriptionId = randomUUID();
+    const retiredSubscriptionId = randomUUID();
+    await db.query(
+      `INSERT INTO home_assets (
+         id, "householdId", name, category, "renewsOn", status, "createdById"
+       ) VALUES
+         ($1, $5, '家庭影音会员', 'subscription', $6, 'active', $10),
+         ($2, $5, '远期云存储', 'subscription', $7, 'active', $10),
+         ($3, $5, '已过期宽带', 'subscription', $8, 'active', $10),
+         ($4, $5, '已停用会员', 'subscription', $9, 'retired', $10)`,
+      [
+        dueSubscriptionId,
+        farSubscriptionId,
+        expiredSubscriptionId,
+        retiredSubscriptionId,
+        expiry.householdId,
+        dateAfter(7),
+        dateAfter(15),
+        dateAfter(-1),
+        dateAfter(7),
+        expiry.ownerId,
+      ],
+    );
+    const dueMedicineItemId = randomUUID();
+    const farMedicineItemId = randomUUID();
+    const expiredMedicineItemId = randomUUID();
+    await db.query(
+      `INSERT INTO inventory_items (
+         id, "householdId", name, category, quantity, unit,
+         "lowStockThreshold", "restockQuantity"
+       ) VALUES
+         ($1, $4, '家庭感冒药', '药品', 2, '盒', 1, 1),
+         ($2, $4, '远期维生素', '药品', 2, '瓶', 1, 1),
+         ($3, $4, '已过期药品', '药品', 2, '盒', 1, 1)`,
+      [
+        dueMedicineItemId,
+        farMedicineItemId,
+        expiredMedicineItemId,
+        expiry.householdId,
+      ],
+    );
+    const dueMedicineBatchId = randomUUID();
+    const farMedicineBatchId = randomUUID();
+    const expiredMedicineBatchId = randomUUID();
+    await db.query(
+      `INSERT INTO inventory_batches (
+         id, "householdId", "inventoryItemId", quantity, "receivedOn",
+         "expiresOn", "sourceType", "sourceId", "createdById"
+       ) VALUES
+         ($1, $4, $5, 1, $8, $9, 'manual', $11, $12),
+         ($2, $4, $6, 1, $8, $10, 'manual', $13, $12),
+         ($3, $4, $7, 1, $8, $14, 'manual', $15, $12)`,
+      [
+        dueMedicineBatchId,
+        farMedicineBatchId,
+        expiredMedicineBatchId,
+        expiry.householdId,
+        dueMedicineItemId,
+        farMedicineItemId,
+        expiredMedicineItemId,
+        today,
+        dateAfter(7),
+        dateAfter(15),
+        randomUUID(),
+        expiry.ownerId,
+        randomUUID(),
+        dateAfter(-1),
+        randomUUID(),
+      ],
+    );
+    await db.query(
+      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
+       WHERE id = $1`,
+      [expiry.routineId],
+    );
+    await service.dispatchDue();
+    const expiryItems = await db.query(
+      `SELECT "sourceType", "sourceId", summary, status
+       FROM agent_routine_items
+       WHERE "householdId" = $1
+         AND "sourceType" IN ('subscription_renewal', 'medicine_expiry')
+       ORDER BY "sourceType"`,
+      [expiry.householdId],
+    );
+    assert(
+      expiryItems.length === 2 &&
+        expiryItems.some(
+          (item) =>
+            item.sourceType === 'subscription_renewal' &&
+            item.sourceId === dueSubscriptionId &&
+            item.summary.includes('家庭影音会员') &&
+            item.summary.includes('7 天'),
+        ) &&
+        expiryItems.some(
+          (item) =>
+            item.sourceType === 'medicine_expiry' &&
+            item.sourceId === dueMedicineBatchId &&
+            item.summary.includes('家庭感冒药') &&
+            item.summary.includes('7 天'),
+        ),
+      '7 天后续费的订阅和到期的药品批次进入每晚汇总',
+    );
+    assert(
+      !expiryItems.some((item) =>
+        [
+          farSubscriptionId,
+          expiredSubscriptionId,
+          retiredSubscriptionId,
+          farMedicineBatchId,
+          expiredMedicineBatchId,
+        ].includes(item.sourceId),
+      ),
+      '超过 14 天、已过期和已停用的临期来源不进入汇总',
+    );
+    await db.query(
+      `DELETE FROM notifications
+       WHERE "householdId" = $1 AND type = 'agent_nightly_digest'`,
+      [expiry.householdId],
+    );
+    await db.query(
+      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
+       WHERE id = $1`,
+      [expiry.routineId],
+    );
+    await service.dispatchDue();
+    const expiryCounts = await db.query(
+      `SELECT "sourceType", "sourceId", count(*)::int AS n
+       FROM agent_routine_items
+       WHERE "householdId" = $1
+         AND "sourceType" IN ('subscription_renewal', 'medicine_expiry')
+       GROUP BY "sourceType", "sourceId"`,
+      [expiry.householdId],
+    );
+    assert(
+      expiryCounts.length === 2 && expiryCounts.every((item) => item.n === 1),
+      '同一来源当日已有 pending 或 digested 条目时不重复写入',
+    );
+    await db.query(
+      `UPDATE home_assets SET status = 'retired'
+       WHERE id = ANY($1::uuid[])`,
+      [[
+        dueSubscriptionId,
+        farSubscriptionId,
+        expiredSubscriptionId,
+        retiredSubscriptionId,
+      ]],
+    );
+    await db.query(
+      `UPDATE inventory_batches SET quantity = 0
+       WHERE id = ANY($1::uuid[])`,
+      [[dueMedicineBatchId, farMedicineBatchId, expiredMedicineBatchId]],
+    );
+
+    console.log('6. 家庭周报聚合、家庭隔离、owner-only 与停用 owner 容错');
     const weeklyA = await createHouseholdFixture(db, '周报A', {
       kind: 'weekly_report',
       withAdmin: true,
@@ -696,7 +899,7 @@ async function runApiPhase() {
       '周报 worker 不新增 confirmed 操作提案',
     );
 
-    console.log('6. 周级幂等、两种 kind 互不干扰与正文隔离');
+    console.log('7. 周级幂等、两种 kind 互不干扰与正文隔离');
     await db.query(
       `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
        WHERE id = $1`,
@@ -769,7 +972,7 @@ async function runApiPhase() {
       '周报正文不包含密钥、对话或记忆正文且不超过 500 字',
     );
 
-    console.log('A7.4-B 每晚汇总、家庭周报与通知上限回归通过');
+    console.log('A7.4-B 每晚汇总、临期提醒、家庭周报与通知上限回归通过');
   } finally {
     await AppDataSource.destroy();
   }
