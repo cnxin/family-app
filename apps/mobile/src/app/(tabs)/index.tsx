@@ -37,10 +37,13 @@ import { PageContainer, useDesktopLayout } from '../../components/app-shell';
 import { QuickAddDialog } from '../../components/quick-add-dialog';
 import {
   Card,
+  GroupedList,
+  GroupedNavigationRow,
   IconButton,
   PressableScale,
   PressSurface,
   SkeletonRows,
+  SummaryBand,
 } from '../../components/ui';
 import { todayStr } from '../../lib/date';
 import {
@@ -121,11 +124,12 @@ function currencyForHome(value: number) {
   })}`;
 }
 
-function ModuleCard({
+function ModuleRow({
   background,
   color,
   href,
   icon: Icon,
+  last,
   label,
   status,
 }: {
@@ -133,32 +137,21 @@ function ModuleCard({
   color: string;
   href: Href;
   icon: LucideIcon;
+  last?: boolean;
   label: string;
   status: string;
 }) {
-  const c = useTheme();
   const router = useRouter();
   return (
-    <PressableScale
-      accessibilityRole="link"
+    <GroupedNavigationRow
+      backgroundColor={background}
+      color={color}
+      icon={Icon}
+      last={last}
       onPress={() => router.push(href)}
-      style={styles.moduleCell}
-    >
-      <Card style={styles.moduleCard}>
-        <View style={[styles.moduleIcon, { backgroundColor: background }]}>
-          <Icon color={color} size={23} />
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={2} style={[t.headline, { color: c.label }]}>
-            {label}
-          </Text>
-          <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 5 }]}>
-            {status}
-          </Text>
-        </View>
-        <ArrowRight color={c.tertiaryLabel} size={17} />
-      </Card>
-    </PressableScale>
+      subtitle={status}
+      title={label}
+    />
   );
 }
 
@@ -314,7 +307,7 @@ function ConsumerActivityRow({ activity }: { activity: HouseholdActivity }) {
   ) : content;
 }
 
-function ConsumerServiceLink({ entry }: { entry: HomeModuleEntry }) {
+function ConsumerServiceLink({ entry, last = false }: { entry: HomeModuleEntry; last?: boolean }) {
   const c = useTheme();
   const router = useRouter();
   const Icon = entry.icon;
@@ -323,8 +316,14 @@ function ConsumerServiceLink({ entry }: { entry: HomeModuleEntry }) {
       accessibilityLabel={`${entry.label}，${entry.status}`}
       accessibilityRole="link"
       onPress={() => router.push(entry.href)}
-      pressedColor={c.fillStrong}
-      style={[styles.consumerServiceLink, { backgroundColor: c.fill }]}
+      pressedColor={c.cardPressed}
+      style={[
+        styles.consumerServiceLink,
+        !last && {
+          borderBottomColor: c.separator,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+        },
+      ]}
       testID={`consumer-quick-${String(entry.href).replaceAll('/', '')}`}
     >
       <View style={[styles.consumerServiceIcon, { backgroundColor: entry.background }]}>
@@ -338,6 +337,7 @@ function ConsumerServiceLink({ entry }: { entry: HomeModuleEntry }) {
           {entry.status}
         </Text>
       </View>
+      <ArrowRight color={c.tertiaryLabel} size={16} />
     </PressSurface>
   );
 }
@@ -518,8 +518,8 @@ function ConsumerHome({
             </View>
           </View>
 
-          <View style={[styles.consumerHero, { backgroundColor: c.tintSoft }]}>
-            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.tint }]}>今日家庭工作台</Text>
+          <View style={styles.consumerHero}>
+            <Text style={[t.footnote, styles.consumerEyebrow, { color: c.secondaryLabel }]}>今日家庭工作台</Text>
             <Text style={[t.title1, styles.consumerHeroTitle, { color: c.label }]}>
               {attentionCount
                 ? `有 ${attentionCount} 件事等你一起看看`
@@ -529,39 +529,37 @@ function ConsumerHome({
               {menuItems ? `已经安排 ${menuItems} 道菜，` : '今天还没有安排菜单，'}
               {shoppingPending ? `还有 ${shoppingPending} 样东西待买。` : '采购清单也已经清空。'}
             </Text>
-            <View style={[styles.consumerMetrics, { borderTopColor: c.separator }]}>
-              <PressSurface
-                accessibilityLabel={`查看今日菜单，${menuItems}道菜`}
-                accessibilityRole="link"
-                onPress={() => router.push('/canteen')}
-                style={styles.consumerMetric}
-              >
-                <CookingPot color={c.orange} size={18} />
-                <Text style={[t.headline, { color: c.label, marginTop: 7 }]}>{menuItems}</Text>
-                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>今日菜品</Text>
-              </PressSurface>
-              <PressSurface
-                accessibilityLabel={`查看家庭任务，${pendingTasks}项待办`}
-                accessibilityRole="link"
-                onPress={() => router.push('/tasks')}
-                style={styles.consumerMetric}
-              >
-                <ListTodo color={c.tint} size={18} />
-                <Text style={[t.headline, { color: c.label, marginTop: 7 }]}>{pendingTasks}</Text>
-                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>今日待办</Text>
-              </PressSurface>
-              <PressSurface
-                accessibilityLabel={`查看采购清单，${shoppingPending}项待买`}
-                accessibilityRole="link"
-                onPress={() => router.push('/shopping')}
-                style={styles.consumerMetric}
-              >
-                <ShoppingCart color={c.green} size={18} />
-                <Text style={[t.headline, { color: c.label, marginTop: 7 }]}>{shoppingPending}</Text>
-                <Text style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>待买东西</Text>
-              </PressSurface>
-            </View>
           </View>
+
+          <SummaryBand
+            items={[
+              {
+                accessibilityLabel: `查看今日菜单，${menuItems}道菜`,
+                color: c.orange,
+                icon: CookingPot,
+                label: '今日菜品',
+                onPress: () => router.push('/canteen'),
+                value: menuItems,
+              },
+              {
+                accessibilityLabel: `查看家庭任务，${pendingTasks}项待办`,
+                color: c.tint,
+                icon: ListTodo,
+                label: '今日待办',
+                onPress: () => router.push('/tasks'),
+                value: pendingTasks,
+              },
+              {
+                accessibilityLabel: `查看采购清单，${shoppingPending}项待买`,
+                color: c.green,
+                icon: ShoppingCart,
+                label: '待买东西',
+                onPress: () => router.push('/shopping'),
+                value: shoppingPending,
+              },
+            ]}
+            style={styles.consumerSummaryBand}
+          />
 
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>需要我处理</Text>
@@ -597,11 +595,15 @@ function ConsumerHome({
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>常用功能</Text>
           </View>
-          <View style={styles.consumerServiceGrid} testID="consumer-primary-services">
-            {primaryModuleEntries.map((entry) => (
-              <ConsumerServiceLink entry={entry} key={entry.label} />
+          <GroupedList testID="consumer-primary-services">
+            {primaryModuleEntries.map((entry, index) => (
+              <ConsumerServiceLink
+                entry={entry}
+                key={entry.label}
+                last={index === primaryModuleEntries.length - 1}
+              />
             ))}
-          </View>
+          </GroupedList>
 
           <PressableScale
             accessibilityLabel={`${detailsOpen ? '收起' : '展开'}更多家庭内容`}
@@ -757,11 +759,15 @@ function ConsumerHome({
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>其他功能</Text>
           </View>
-          <View style={styles.consumerServiceGrid}>
-            {secondaryModuleEntries.map((entry) => (
-              <ConsumerServiceLink entry={entry} key={entry.label} />
+          <GroupedList>
+            {secondaryModuleEntries.map((entry, index) => (
+              <ConsumerServiceLink
+                entry={entry}
+                key={entry.label}
+                last={index === secondaryModuleEntries.length - 1}
+              />
             ))}
-          </View>
+          </GroupedList>
             </View>
           ) : null}
         </PageContainer>
@@ -1070,7 +1076,7 @@ export default function HomeScreen() {
               <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>家庭日历</Text>
             </Pressable>
           </View>
-          <Card style={[styles.todayCard, desktop && styles.todayCardDesktop]}>
+          <GroupedList style={desktop && styles.todayCardDesktop}>
             {menusLoading || tasksLoading || remindersLoading ? (
               <SkeletonRows />
             ) : (
@@ -1105,18 +1111,22 @@ export default function HomeScreen() {
                 />
               </>
             )}
-          </Card>
+          </GroupedList>
 
           {!desktop ? (
             <>
               <View style={styles.sectionTitle}>
                 <Text style={[t.title2, { color: c.label }]}>功能模块</Text>
               </View>
-              <View style={styles.moduleGrid}>
-                {moduleEntries.map((entry) => (
-                  <ModuleCard key={entry.label} {...entry} />
+              <GroupedList>
+                {moduleEntries.map((entry, index) => (
+                  <ModuleRow
+                    key={entry.label}
+                    {...entry}
+                    last={index === moduleEntries.length - 1}
+                  />
                 ))}
-              </View>
+              </GroupedList>
             </>
           ) : null}
         </PageContainer>
@@ -1144,27 +1154,13 @@ const styles = StyleSheet.create({
   consumerAvatarText: { fontSize: 25 },
   consumerHeaderCopy: { flex: 1, minWidth: 0 },
   consumerHero: {
-    borderRadius: radius.md,
-    marginTop: 20,
-    overflow: 'hidden',
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    marginTop: 24,
+    paddingHorizontal: 4,
   },
   consumerEyebrow: { fontWeight: '700' },
   consumerHeroTitle: { lineHeight: 34, marginTop: 7 },
   consumerHeroSubtitle: { lineHeight: 23, marginTop: 8 },
-  consumerMetrics: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    marginTop: 18,
-    paddingVertical: 10,
-  },
-  consumerMetric: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 78,
-  },
+  consumerSummaryBand: { marginTop: 20 },
   consumerSectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1246,16 +1242,12 @@ const styles = StyleSheet.create({
   consumerMemoryImage: { height: 82, width: 92 },
   consumerMemoryPlaceholder: { alignItems: 'center', borderRadius: radius.sm, height: 54, justifyContent: 'center', width: 54 },
   consumerMemoryCopy: { flex: 1, minWidth: 0 },
-  consumerServiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   consumerServiceLink: {
     alignItems: 'center',
-    borderRadius: radius.md,
     flexDirection: 'row',
-    flexGrow: 1,
-    gap: 10,
+    gap: 11,
     minHeight: 68,
-    paddingHorizontal: 12,
-    width: '47%',
+    paddingHorizontal: 14,
   },
   consumerServiceIcon: {
     alignItems: 'center',
@@ -1305,24 +1297,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  moduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  moduleCell: { width: '47%', minWidth: 0, flexGrow: 1 },
-  moduleCard: {
-    minHeight: 82,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-  },
-  moduleIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   textLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  todayCard: { overflow: 'hidden' },
   todayCardDesktop: { maxWidth: 760 },
   todayRow: {
     minHeight: 70,

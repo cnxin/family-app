@@ -1,4 +1,5 @@
-import { Redirect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import {
   ArrowRight,
   CalendarDays,
@@ -10,7 +11,6 @@ import {
   Server,
   Settings2,
   Vote,
-  type LucideIcon,
 } from 'lucide-react-native';
 import React from 'react';
 import {
@@ -27,7 +27,11 @@ import {
   PageContainer,
   useDesktopLayout,
 } from '../../../components/app-shell';
-import { Card } from '../../../components/ui';
+import {
+  GroupedList,
+  GroupedNavigationRow,
+  SummaryBand,
+} from '../../../components/ui';
 import { parseDate } from '../../../lib/date';
 import {
   useMedia,
@@ -51,74 +55,29 @@ function formatSchedule(value: string) {
   }).format(parseDate(value));
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value,
-  color,
-  background,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: number;
-  color: string;
-  background: string;
-}) {
+function SchedulePoster({ posterUrl, title }: { posterUrl: string | null; title: string }) {
   const c = useTheme();
-  return (
-    <Card style={styles.metricCard}>
-      <View style={[styles.metricIcon, { backgroundColor: background }]}>
-        <Icon color={color} size={19} />
-      </View>
-      <Text style={[styles.metricValue, { color: c.label }]}>{value}</Text>
-      <Text style={[t.caption, { color: c.secondaryLabel }]}>{label}</Text>
-    </Card>
-  );
-}
+  const [failed, setFailed] = React.useState(false);
 
-function ActionCard({
-  href,
-  icon: Icon,
-  label,
-  status,
-  color,
-  background,
-}: {
-  href: Href;
-  icon: LucideIcon;
-  label: string;
-  status: string;
-  color: string;
-  background: string;
-}) {
-  const c = useTheme();
-  const desktop = useDesktopLayout();
-  const router = useRouter();
+  React.useEffect(() => setFailed(false), [posterUrl]);
+
+  if (!posterUrl || failed) {
+    return (
+      <View style={[styles.schedulePoster, styles.schedulePosterFallback, { backgroundColor: c.fill }]}>
+        <Film color={c.tertiaryLabel} size={21} />
+      </View>
+    );
+  }
+
   return (
-    <Pressable
-      accessibilityRole="link"
-      onPress={() => router.push(href)}
-      style={({ pressed }) => [styles.actionCell, { opacity: pressed ? 0.72 : 1 }]}
-    >
-      <Card style={[styles.actionCard, desktop && styles.actionCardDesktop]}>
-        <View style={[styles.actionIcon, { backgroundColor: background }]}>
-          <Icon color={color} size={22} />
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[t.headline, { color: c.label }]}>{label}</Text>
-          <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}>
-            {status}
-          </Text>
-        </View>
-        {desktop ? (
-          <ArrowRight color={c.tertiaryLabel} size={17} />
-        ) : (
-          <View style={styles.actionArrow}>
-            <ArrowRight color={c.tertiaryLabel} size={17} />
-          </View>
-        )}
-      </Card>
-    </Pressable>
+    <Image
+      accessibilityLabel={`${title}海报`}
+      contentFit="cover"
+      onError={() => setFailed(true)}
+      source={{ uri: posterUrl }}
+      style={styles.schedulePoster}
+      transition={160}
+    />
   );
 }
 
@@ -208,52 +167,72 @@ export default function MediaHomeScreen() {
           {isLoading ? (
             <ActivityIndicator color={c.tint} style={styles.loader} />
           ) : (
-            <View style={styles.metrics}>
-              <View style={styles.metricCell}>
-                <Metric background={c.tintSoft} color={c.tint} icon={Film} label="想看" value={watchlistCount} />
-              </View>
-              <View style={styles.metricCell}>
-                <Metric background={c.orangeSoft} color={c.orange} icon={CalendarDays} label="已排期" value={scheduled.length} />
-              </View>
-              <View style={styles.metricCell}>
-                <Metric background={c.blueSoft} color={c.blue} icon={Play} label="观看中" value={watchingCount} />
-              </View>
-            </View>
+            <SummaryBand
+              items={[
+                {
+                  color: c.tint,
+                  icon: Film,
+                  label: '想看',
+                  onPress: () => router.push('/media/watchlist'),
+                  value: watchlistCount,
+                },
+                {
+                  color: c.orange,
+                  icon: CalendarDays,
+                  label: '已排期',
+                  onPress: () => router.push('/media/watchlist'),
+                  value: scheduled.length,
+                },
+                {
+                  color: c.blue,
+                  icon: Play,
+                  label: '观看中',
+                  onPress: () => router.push('/media/watchlist'),
+                  value: watchingCount,
+                },
+              ]}
+              style={styles.summaryBand}
+              testID="media-summary-band"
+            />
           )}
 
-          <View style={styles.actionGrid}>
-            <ActionCard
-              background={c.accentSoft}
-              color={c.accent}
-              href="/media/watchlist"
-              icon={ListVideo}
-              label="家庭片单"
-              status={`${entries?.length ?? 0} 部影视`}
-            />
-            <ActionCard
-              background={c.blueSoft}
-              color={c.blue}
-              href="/media/library"
-              icon={Library}
-              label="我的媒体库"
-              status="Plex 与 Emby"
-            />
-            <ActionCard
-              background={c.blueSoft}
-              color={c.blue}
-              href={{ pathname: '/media/polls', params: { returnTo: 'media' } }}
-              icon={Vote}
-              label="观影投票"
-              status={`${mediaPolls.length} 个进行中`}
-            />
-            <ActionCard
-              background={c.greenSoft}
-              color={c.green}
-              href="/media/history"
-              icon={History}
-              label="观看记录"
-              status={`${viewingSessions?.length ?? 0} 次播放`}
-            />
+          <View style={styles.navigationSection}>
+            <Text style={[t.footnote, styles.groupLabel, { color: c.secondaryLabel }]}>浏览与管理</Text>
+            <GroupedList>
+              <GroupedNavigationRow
+                backgroundColor={c.accentSoft}
+                color={c.accent}
+                icon={ListVideo}
+                onPress={() => router.push('/media/watchlist')}
+                subtitle={`${entries?.length ?? 0} 部影视`}
+                title="家庭片单"
+              />
+              <GroupedNavigationRow
+                backgroundColor={c.blueSoft}
+                color={c.blue}
+                icon={Library}
+                onPress={() => router.push('/media/library')}
+                subtitle="Plex 与 Emby"
+                title="我的媒体库"
+              />
+              <GroupedNavigationRow
+                backgroundColor={c.tintSoft}
+                color={c.tint}
+                icon={Vote}
+                onPress={() => router.push({ pathname: '/media/polls', params: { returnTo: 'media' } })}
+                subtitle={`${mediaPolls.length} 个进行中`}
+                title="观影投票"
+              />
+              <GroupedNavigationRow
+                backgroundColor={c.greenSoft}
+                color={c.green}
+                icon={History}
+                last
+                onPress={() => router.push('/media/history')}
+                subtitle={`${viewingSessions?.length ?? 0} 次播放`}
+                title="观看记录"
+              />
+            </GroupedList>
           </View>
 
           <View style={[styles.contentGrid, desktop && styles.contentGridDesktop]}>
@@ -265,7 +244,7 @@ export default function MediaHomeScreen() {
                   <ArrowRight color={c.tint} size={15} />
                 </Pressable>
               </View>
-              <Card style={styles.listCard}>
+              <GroupedList>
                 {scheduled.length ? (
                   scheduled.slice(0, 4).map((entry) => (
                     <Pressable
@@ -276,9 +255,10 @@ export default function MediaHomeScreen() {
                       }
                       style={[styles.scheduleRow, { borderBottomColor: c.separator }]}
                     >
-                      <View style={[styles.scheduleDate, { backgroundColor: c.orangeSoft }]}>
-                        <CalendarDays color={c.orange} size={18} />
-                      </View>
+                      <SchedulePoster
+                        posterUrl={entry.mediaTitle.posterUrl}
+                        title={entry.mediaTitle.title}
+                      />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text numberOfLines={1} style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
                           {entry.mediaTitle.title}
@@ -296,7 +276,7 @@ export default function MediaHomeScreen() {
                     <Text style={[t.subhead, { color: c.secondaryLabel }]}>暂无观影排期</Text>
                   </View>
                 )}
-              </Card>
+              </GroupedList>
             </View>
 
             <View style={styles.contentColumn}>
@@ -313,7 +293,7 @@ export default function MediaHomeScreen() {
                   </Pressable>
                 ) : null}
               </View>
-              <Card style={styles.listCard}>
+              <GroupedList>
                 {connectors?.length ? (
                   connectors.map((connector) => <Connector connector={connector} key={connector.key} />)
                 ) : (
@@ -322,7 +302,7 @@ export default function MediaHomeScreen() {
                     <Text style={[t.subhead, { color: c.secondaryLabel }]}>暂无媒体服务</Text>
                   </View>
                 )}
-              </Card>
+              </GroupedList>
             </View>
           </View>
         </PageContainer>
@@ -347,38 +327,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loader: { marginTop: 34 },
-  metrics: { flexDirection: 'row', gap: 10, marginTop: 26 },
-  metricCell: { flex: 1, minWidth: 0 },
-  metricCard: { minHeight: 104, padding: 13 },
-  metricIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metricValue: { fontSize: 24, fontWeight: '700', marginTop: 10 },
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 18 },
-  actionCell: { width: '48%', minWidth: 0, flexGrow: 1 },
-  actionCard: {
-    minHeight: 122,
-    padding: 14,
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  actionCardDesktop: {
-    minHeight: 96,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionArrow: { position: 'absolute', top: 25, right: 13 },
+  summaryBand: { marginTop: 24 },
+  navigationSection: { marginTop: 24 },
+  groupLabel: { fontWeight: '600', marginBottom: 8, paddingHorizontal: 4 },
   contentGrid: { gap: 26, marginTop: 32 },
   contentGridDesktop: { flexDirection: 'row', alignItems: 'flex-start' },
   contentColumn: { flex: 1, minWidth: 0 },
@@ -391,19 +342,21 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   textLink: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  listCard: { overflow: 'hidden' },
   scheduleRow: {
-    minHeight: 68,
+    minHeight: 84,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 11,
   },
-  scheduleDate: {
-    width: 38,
-    height: 38,
+  schedulePoster: {
     borderRadius: radius.sm,
+    height: 64,
+    width: 44,
+  },
+  schedulePosterFallback: {
     alignItems: 'center',
     justifyContent: 'center',
   },

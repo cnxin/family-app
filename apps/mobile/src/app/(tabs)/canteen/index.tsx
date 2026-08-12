@@ -4,9 +4,8 @@ import {
   CookingPot,
   ShoppingCart,
   UtensilsCrossed,
-  type LucideIcon,
 } from 'lucide-react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +21,11 @@ import {
   PageContainer,
   useDesktopLayout,
 } from '../../../components/app-shell';
-import { Card, PressableScale } from '../../../components/ui';
+import {
+  GroupedList,
+  GroupedNavigationRow,
+  PressableScale,
+} from '../../../components/ui';
 import { mealLabel, todayStr } from '../../../lib/date';
 import {
   useDishes,
@@ -30,59 +33,8 @@ import {
   useShoppingList,
 } from '../../../lib/queries';
 import { useSession } from '../../../lib/session';
-import { CATEGORY_EMOJI, radius, type as t, useTheme } from '../../../lib/theme';
+import { radius, type as t, useTheme } from '../../../lib/theme';
 import type { MealType, Menu } from '../../../lib/types';
-
-function ActionCard({
-  href,
-  icon: Icon,
-  label,
-  status,
-  color,
-  background,
-}: {
-  href: Href;
-  icon: LucideIcon;
-  label: string;
-  status: string;
-  color: string;
-  background: string;
-}) {
-  const c = useTheme();
-  const desktop = useDesktopLayout();
-  const { member } = useSession();
-  const consumer = member?.role === 'member';
-  const adminDesktop = desktop && !consumer;
-  const router = useRouter();
-  return (
-    <PressableScale
-      accessibilityLabel={`${label}，${status}`}
-      accessibilityRole="link"
-      haptic
-      onPress={() => router.push(href)}
-      style={styles.actionCell}
-    >
-      <Card style={[styles.actionCard, adminDesktop && styles.actionCardDesktop]}>
-        <View style={[styles.actionIcon, { backgroundColor: background }]}>
-          <Icon color={color} size={22} />
-        </View>
-        <View style={styles.actionText}>
-          <Text style={[t.headline, { color: c.label }]}>{label}</Text>
-          <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 4 }]}>
-            {status}
-          </Text>
-        </View>
-        {adminDesktop ? (
-          <ArrowRight color={c.tertiaryLabel} size={17} />
-        ) : (
-          <View style={styles.actionArrow}>
-            <ArrowRight color={c.tertiaryLabel} size={17} />
-          </View>
-        )}
-      </Card>
-    </PressableScale>
-  );
-}
 
 function MealRow({ mealType, menu }: { mealType: MealType; menu?: Menu }) {
   const c = useTheme();
@@ -99,8 +51,8 @@ function MealRow({ mealType, menu }: { mealType: MealType; menu?: Menu }) {
           <Text numberOfLines={2} style={[t.subhead, { color: c.label, fontWeight: '600' }]}>
             {items
               .slice(0, 4)
-              .map((item) => `${CATEGORY_EMOJI[item.dish.category] ?? '🍽️'} ${item.dish.name}`)
-              .join('  ')}
+              .map((item) => item.dish.name)
+              .join(' · ')}
           </Text>
         ) : (
           <Text style={[t.subhead, { color: c.tertiaryLabel }]}>暂未安排</Text>
@@ -145,13 +97,11 @@ export default function CanteenHomeScreen() {
             style={[
               styles.header,
               adminDesktop && styles.headerDesktop,
-              consumer && { backgroundColor: c.orangeSoft },
-              consumer && styles.headerConsumer,
             ]}
             testID={consumer ? 'consumer-canteen-header' : undefined}
           >
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[t.footnote, { color: c.orange, fontWeight: '700' }]}>今天吃什么</Text>
+              <Text style={[t.footnote, { color: c.secondaryLabel, fontWeight: '600' }]}>今天吃什么</Text>
               <Text
                 accessibilityRole="header"
                 style={[
@@ -177,62 +127,75 @@ export default function CanteenHomeScreen() {
             </PressableScale>
           </View>
 
-          <View style={[styles.actionGrid, adminDesktop && styles.actionGridDesktop]}>
-            <ActionCard
-              background={c.tintSoft}
-              color={c.tint}
-              href="/order"
-              icon={UtensilsCrossed}
-              label="点菜"
-              status={`${menuItems} 道已安排`}
-            />
-            <ActionCard
-              background={c.accentSoft}
-              color={c.accent}
-              href="/recipes"
-              icon={BookOpenText}
-              label="家庭菜谱"
-              status={`${dishes?.length ?? 0} 道菜`}
-            />
-            <ActionCard
-              background={c.blueSoft}
-              color={c.blue}
-              href="/kitchen"
-              icon={CookingPot}
-              label="菜单安排"
-              status="查看制作进度"
-            />
-            <ActionCard
-              background={c.orangeSoft}
-              color={c.orange}
-              href="/shopping"
-              icon={ShoppingCart}
-              label="食材采购"
-              status={`${shoppingPending} 项待购买`}
-            />
-          </View>
-
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={[t.title2, { color: c.label }]}>今日菜单</Text>
-              <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>早餐、午餐和晚餐</Text>
+          <View style={[styles.contentGrid, adminDesktop && styles.contentGridDesktop]}>
+            <View style={styles.contentColumn}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={[t.title2, { color: c.label }]}>今日菜单</Text>
+                  <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>早餐、午餐和晚餐</Text>
+                </View>
+                <Pressable accessibilityRole="link" onPress={() => router.push('/kitchen')} style={styles.textLink}>
+                  <Text style={[t.footnote, { color: c.tint, fontWeight: '600' }]}>全部安排</Text>
+                  <ArrowRight color={c.tint} size={15} />
+                </Pressable>
+              </View>
+              <GroupedList>
+                {isLoading ? (
+                  <ActivityIndicator color={c.tint} style={styles.loader} />
+                ) : (
+                  <>
+                    <MealRow mealType="breakfast" menu={menus?.find((menu) => menu.mealType === 'breakfast')} />
+                    <MealRow mealType="lunch" menu={menus?.find((menu) => menu.mealType === 'lunch')} />
+                    <MealRow mealType="dinner" menu={menus?.find((menu) => menu.mealType === 'dinner')} />
+                  </>
+                )}
+              </GroupedList>
             </View>
-            <Pressable accessibilityRole="link" onPress={() => router.push('/kitchen')} style={styles.textLink}>
-              <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>菜单安排</Text>
-              <ArrowRight color={c.tint} size={15} />
-            </Pressable>
+
+            <View style={styles.contentColumn}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={[t.title2, { color: c.label }]}>食堂管理</Text>
+                  <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 3 }]}>点菜、菜谱与采购</Text>
+                </View>
+              </View>
+              <GroupedList>
+                <GroupedNavigationRow
+                  backgroundColor={c.tintSoft}
+                  color={c.tint}
+                  icon={UtensilsCrossed}
+                  onPress={() => router.push('/order')}
+                  subtitle={`${menuItems} 道已安排`}
+                  title="点菜"
+                />
+                <GroupedNavigationRow
+                  backgroundColor={c.accentSoft}
+                  color={c.accent}
+                  icon={BookOpenText}
+                  onPress={() => router.push('/recipes')}
+                  subtitle={`${dishes?.length ?? 0} 道家庭菜谱`}
+                  title="家庭菜谱"
+                />
+                <GroupedNavigationRow
+                  backgroundColor={c.blueSoft}
+                  color={c.blue}
+                  icon={CookingPot}
+                  onPress={() => router.push('/kitchen')}
+                  subtitle="查看制作进度"
+                  title="菜单安排"
+                />
+                <GroupedNavigationRow
+                  backgroundColor={c.orangeSoft}
+                  color={c.orange}
+                  icon={ShoppingCart}
+                  last
+                  onPress={() => router.push('/shopping')}
+                  subtitle={`${shoppingPending} 项待购买`}
+                  title="食材采购"
+                />
+              </GroupedList>
+            </View>
           </View>
-          <Card style={styles.mealCard}>
-            {isLoading ? (
-              <ActivityIndicator color={c.tint} style={styles.loader} />
-            ) : (
-              <>
-                <MealRow mealType="breakfast" menu={menus?.find((menu) => menu.mealType === 'breakfast')} />
-                <MealRow mealType="lunch" menu={menus?.find((menu) => menu.mealType === 'lunch')} />
-                <MealRow mealType="dinner" menu={menus?.find((menu) => menu.mealType === 'dinner')} />
-              </>
-            )}
-          </Card>
         </PageContainer>
       </ScrollView>
     </SafeAreaView>
@@ -246,11 +209,6 @@ const styles = StyleSheet.create({
   pageConsumer: { paddingTop: 14, paddingBottom: 56 },
   header: { gap: 16, marginTop: 18 },
   headerDesktop: { flexDirection: 'row', alignItems: 'center', marginTop: 0 },
-  headerConsumer: {
-    borderRadius: radius.md,
-    marginTop: 0,
-    padding: 20,
-  },
   primaryAction: {
     height: 44,
     borderRadius: radius.md,
@@ -260,31 +218,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 24 },
-  actionGridDesktop: { marginTop: 30 },
-  actionCell: { width: '48%', minWidth: 0, flexGrow: 1 },
-  actionCard: {
-    minHeight: 132,
-    padding: 14,
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  actionCardDesktop: {
-    minHeight: 106,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionText: { flex: 1, minWidth: 0 },
-  actionArrow: { position: 'absolute', top: 25, right: 13 },
+  contentGrid: { gap: 26, marginTop: 28 },
+  contentGridDesktop: { alignItems: 'flex-start', flexDirection: 'row' },
+  contentColumn: { flex: 1, minWidth: 0 },
   sectionHeader: {
-    marginTop: 32,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -292,7 +229,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   textLink: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  mealCard: { overflow: 'hidden' },
   mealRow: {
     minHeight: 68,
     borderBottomWidth: StyleSheet.hairlineWidth,

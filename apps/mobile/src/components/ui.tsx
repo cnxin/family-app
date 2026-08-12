@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { type LucideIcon } from 'lucide-react-native';
+import { ChevronRight, type LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import {
   type AccessibilityRole,
@@ -283,6 +283,153 @@ export function Card({
     >
       {children}
     </View>
+  );
+}
+
+export function GroupedList({
+  children,
+  style,
+  testID,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  const c = useTheme();
+  return (
+    <View
+      style={[styles.groupedList, { backgroundColor: c.card }, style]}
+      testID={testID}
+    >
+      {children}
+    </View>
+  );
+}
+
+export function GroupedNavigationRow({
+  accessibilityLabel,
+  backgroundColor,
+  color,
+  icon: Icon,
+  last = false,
+  onPress,
+  subtitle,
+  testID,
+  title,
+  trailing,
+}: {
+  accessibilityLabel?: string;
+  backgroundColor?: string;
+  color?: string;
+  icon: LucideIcon;
+  last?: boolean;
+  onPress: () => void;
+  subtitle?: string;
+  testID?: string;
+  title: string;
+  trailing?: React.ReactNode;
+}) {
+  const c = useTheme();
+  return (
+    <PressSurface
+      accessibilityLabel={accessibilityLabel ?? `${title}${subtitle ? `，${subtitle}` : ''}`}
+      accessibilityRole="link"
+      onPress={onPress}
+      pressedColor={c.cardPressed}
+      style={[
+        styles.groupedNavigationRow,
+        !last && {
+          borderBottomColor: c.separator,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+        },
+      ]}
+      testID={testID}
+    >
+      <View
+        style={[
+          styles.groupedNavigationIcon,
+          { backgroundColor: backgroundColor ?? c.fill },
+        ]}
+      >
+        <Icon color={color ?? c.tint} size={19} strokeWidth={2} />
+      </View>
+      <View style={styles.groupedNavigationCopy}>
+        <Text style={[t.body, styles.groupedNavigationTitle, { color: c.label }]}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text
+            numberOfLines={2}
+            style={[t.footnote, styles.groupedNavigationSubtitle, { color: c.secondaryLabel }]}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {trailing}
+      <ChevronRight color={c.tertiaryLabel} size={18} strokeWidth={2} />
+    </PressSurface>
+  );
+}
+
+export function SummaryBand({
+  items,
+  style,
+  testID,
+}: {
+  items: {
+    accessibilityLabel?: string;
+    color?: string;
+    icon?: LucideIcon;
+    label: string;
+    onPress?: () => void;
+    value: React.ReactNode;
+  }[];
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  const c = useTheme();
+  return (
+    <GroupedList style={[styles.summaryBand, style]} testID={testID}>
+      {items.map((item, index) => {
+        const Icon = item.icon;
+        const content = (
+          <>
+            {Icon ? <Icon color={item.color ?? c.tint} size={18} strokeWidth={2} /> : null}
+            <Text style={[t.headline, styles.summaryValue, { color: c.label }]}>
+              {item.value}
+            </Text>
+            <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel }]}>
+              {item.label}
+            </Text>
+          </>
+        );
+        const itemStyle = [
+          styles.summaryItem,
+          index > 0 && {
+            borderLeftColor: c.separator,
+            borderLeftWidth: StyleSheet.hairlineWidth,
+          },
+        ];
+
+        return item.onPress ? (
+          <PressSurface
+            accessibilityLabel={item.accessibilityLabel ?? `${item.label}，${String(item.value)}`}
+            accessibilityRole="link"
+            key={item.label}
+            onPress={item.onPress}
+            pressedColor={c.cardPressed}
+            style={itemStyle}
+          >
+            {content}
+          </PressSurface>
+        ) : (
+          <View key={item.label} style={itemStyle}>
+            {content}
+          </View>
+        );
+      })}
+    </GroupedList>
   );
 }
 
@@ -936,6 +1083,40 @@ const styles = StyleSheet.create({
   },
   switchThumbOff: { left: 2 },
   switchThumbOn: { right: 2 },
+  groupedList: {
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  groupedNavigationRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 68,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  groupedNavigationIcon: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  groupedNavigationCopy: { flex: 1, minWidth: 0 },
+  groupedNavigationTitle: { fontWeight: '600' },
+  groupedNavigationSubtitle: { lineHeight: 18, marginTop: 2 },
+  summaryBand: { flexDirection: 'row' },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 4,
+    justifyContent: 'center',
+    minHeight: 88,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  summaryValue: { marginTop: 1 },
   segmented: {
     flexDirection: 'row',
     borderRadius: 9,
