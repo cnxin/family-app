@@ -270,130 +270,138 @@ export default function OrderScreen() {
     );
   };
 
+  const headerElement = (
+    <View style={styles.headerContainer}>
+      <ModuleBackButton href="/canteen" label="家庭食堂" />
+      <View style={[styles.header, !desktop && styles.headerMobile, desktop && styles.headerDesktop]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[t.title1, { color: c.label }]}>点菜</Text>
+          <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 2 }]}>
+            {member?.name}，这顿想吃点什么？
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.push('/recipes')}
+          style={({ pressed }) => [
+            styles.recipeLink,
+            {
+              backgroundColor: pressed ? c.fill : c.card,
+              borderColor: c.separator,
+            },
+          ]}
+        >
+          <BookOpenText color={c.tint} size={16} />
+          <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>菜谱</Text>
+        </Pressable>
+        <View style={[styles.dishCount, { backgroundColor: c.card, borderColor: c.separator }]}>
+          <UtensilsCrossed color={c.tint} size={16} />
+          <Text style={[t.caption, { color: c.secondaryLabel }]}>共 {dishes?.length ?? 0} 道</Text>
+        </View>
+      </View>
+
+      <View style={[styles.controls, desktop && styles.controlsDesktop]}>
+        <DateSelector
+          value={cart.date}
+          onChange={(date) => cart.setTarget(date, cart.mealType)}
+        />
+        <View style={styles.mealGroup}>
+          <Segmented
+            options={[
+              { label: '早餐', value: 'breakfast' as const },
+              { label: '午餐', value: 'lunch' as const },
+              { label: '晚餐', value: 'dinner' as const },
+            ]}
+            value={cart.mealType}
+            onChange={(mealType) => cart.setTarget(cart.date, mealType)}
+          />
+        </View>
+        <View
+          style={[
+            styles.searchBox,
+            { backgroundColor: c.card, borderColor: c.separator },
+            desktop && styles.searchBoxDesktop,
+          ]}
+        >
+          <Search color={c.tertiaryLabel} size={17} />
+          <TextInput
+            style={[styles.searchInput, { color: c.label }]}
+            placeholder="搜索菜名"
+            placeholderTextColor={c.tertiaryLabel}
+            value={search}
+            onChangeText={setSearch}
+            clearButtonMode="while-editing"
+          />
+        </View>
+      </View>
+
+      {menuLocked ? (
+        <View
+          style={[
+            styles.lockNotice,
+            { backgroundColor: c.fill, borderColor: c.separator },
+          ]}
+        >
+          <LockKeyhole color={c.secondaryLabel} size={16} />
+          <Text style={[t.footnote, { color: c.secondaryLabel }]}>
+            这餐已经结束，菜单仅供查看
+          </Text>
+        </View>
+      ) : null}
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categories}
+        style={styles.categoriesScroll}
+      >
+        {CATEGORIES.map((item) => {
+          const active = item === category;
+          return (
+            <Pressable
+              key={item}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                setCategory(item);
+              }}
+              style={({ pressed }) => [
+                styles.categoryButton,
+                {
+                  backgroundColor: active ? c.tint : pressed ? c.fillStrong : c.card,
+                  borderColor: active ? c.tint : c.separator,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  t.caption,
+                  { color: active ? '#FFFFFF' : c.label, fontWeight: active ? '700' : '600' },
+                ]}
+              >
+                {item}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]} edges={['top']}>
       <PageContainer style={[styles.content, desktop && styles.contentDesktop]}>
-        <ModuleBackButton href="/canteen" label="家庭食堂" />
-        <View style={[styles.header, !desktop && styles.headerMobile, desktop && styles.headerDesktop]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[t.largeTitle, { color: c.label }]}>点菜</Text>
-            <Text style={[t.subhead, { color: c.secondaryLabel, marginTop: 4 }]}>
-              {member?.name}，这顿想吃点什么？
-            </Text>
-          </View>
-          <Pressable
-            accessibilityRole="link"
-            onPress={() => router.push('/recipes')}
-            style={({ pressed }) => [
-              styles.recipeLink,
-              {
-                backgroundColor: pressed ? c.fill : c.card,
-                borderColor: c.separator,
-              },
-            ]}
-          >
-            <BookOpenText color={c.tint} size={17} />
-            <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>菜谱</Text>
-          </Pressable>
-          <View style={[styles.dishCount, { backgroundColor: c.card, borderColor: c.separator }]}>
-            <UtensilsCrossed color={c.tint} size={17} />
-            <Text style={[t.footnote, { color: c.secondaryLabel }]}>共 {dishes?.length ?? 0} 道家常菜</Text>
-          </View>
-        </View>
-
-        <View style={[styles.controls, desktop && styles.controlsDesktop]}>
-          <DateSelector
-            value={cart.date}
-            onChange={(date) => cart.setTarget(date, cart.mealType)}
-          />
-          <View style={styles.mealGroup}>
-            <Segmented
-              options={[
-                { label: '早餐', value: 'breakfast' as const },
-                { label: '午餐', value: 'lunch' as const },
-                { label: '晚餐', value: 'dinner' as const },
-              ]}
-              value={cart.mealType}
-              onChange={(mealType) => cart.setTarget(cart.date, mealType)}
-            />
-          </View>
-          <View
-            style={[
-              styles.searchBox,
-              { backgroundColor: c.card, borderColor: c.separator },
-              desktop && styles.searchBoxDesktop,
-            ]}
-          >
-            <Search color={c.tertiaryLabel} size={18} />
-            <TextInput
-              style={[styles.searchInput, { color: c.label }]}
-              placeholder="搜索菜名"
-              placeholderTextColor={c.tertiaryLabel}
-              value={search}
-              onChangeText={setSearch}
-              clearButtonMode="while-editing"
-            />
-          </View>
-        </View>
-
-        {menuLocked ? (
-          <View
-            style={[
-              styles.lockNotice,
-              { backgroundColor: c.fill, borderColor: c.separator },
-            ]}
-          >
-            <LockKeyhole color={c.secondaryLabel} size={17} />
-            <Text style={[t.subhead, { color: c.secondaryLabel }]}>
-              这餐已经结束，菜单仅供查看
-            </Text>
-          </View>
-        ) : null}
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categories}
-          style={styles.categoriesScroll}
-        >
-          {CATEGORIES.map((item) => {
-            const active = item === category;
-            return (
-              <Pressable
-                key={item}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => {
-                  void Haptics.selectionAsync();
-                  setCategory(item);
-                }}
-                style={({ pressed }) => [
-                  styles.categoryButton,
-                  {
-                    backgroundColor: active ? c.tint : pressed ? c.fillStrong : c.card,
-                    borderColor: active ? c.tint : c.separator,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    t.footnote,
-                    { color: active ? '#FFFFFF' : c.label, fontWeight: active ? '700' : '600' },
-                  ]}
-                >
-                  {item}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
         <View style={[styles.workspace, desktop && styles.workspaceDesktop]}>
           <View style={styles.dishList}>
             {isLoading ? (
-              <ActivityIndicator color={c.tint} style={{ marginTop: 80 }} />
+              <View>
+                {headerElement}
+                <ActivityIndicator color={c.tint} style={{ marginTop: 40 }} />
+              </View>
             ) : error ? (
               <View style={styles.listMessage}>
+                {headerElement}
                 <Text style={[t.headline, { color: c.red }]}>菜品加载失败</Text>
                 <Text style={[t.footnote, { color: c.secondaryLabel, marginTop: 5 }]}>请检查 API 服务</Text>
               </View>
@@ -407,6 +415,7 @@ export default function OrderScreen() {
                 columnWrapperStyle={styles.gridRow}
                 contentContainerStyle={{ gap: 12, paddingBottom: desktop ? 20 : 120 }}
                 showsVerticalScrollIndicator={false}
+                ListHeaderComponent={headerElement}
                 ListEmptyComponent={
                   <View style={styles.listMessage}>
                     <Search color={c.tertiaryLabel} size={25} />
@@ -480,54 +489,55 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { flex: 1, paddingTop: 8 },
   contentDesktop: { paddingTop: 22, paddingBottom: 20 },
-  header: { gap: 12 },
-  headerMobile: { marginTop: 12 },
+  headerContainer: { gap: 6, paddingBottom: 4 },
+  header: { gap: 10 },
+  headerMobile: { marginTop: 4 },
   headerDesktop: { flexDirection: 'row', alignItems: 'center' },
   recipeLink: {
-    height: 36,
+    height: 34,
     borderRadius: radius.sm,
     borderWidth: 1,
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+  },
+  dishCount: {
+    height: 34,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
   },
-  dishCount: {
-    height: 36,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 7,
-  },
-  controls: { gap: 10, marginTop: 16 },
+  controls: { gap: 8, marginTop: 10 },
   controlsDesktop: { flexDirection: 'row', alignItems: 'center' },
   lockNotice: {
-    minHeight: 42,
+    minHeight: 38,
     borderWidth: 1,
     borderRadius: radius.sm,
-    marginTop: 12,
-    paddingHorizontal: 12,
+    marginTop: 8,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  mealGroup: { width: 270, maxWidth: '100%' },
+  mealGroup: { width: 250, maxWidth: '100%' },
   searchBox: {
-    height: 40,
+    height: 38,
     borderRadius: radius.sm,
     borderWidth: 1,
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
   },
   searchBoxDesktop: { flex: 1, maxWidth: 360 },
-  searchInput: { flex: 1, height: '100%', fontSize: 15, paddingVertical: 0 },
-  categoriesScroll: { flexGrow: 0, marginTop: 14, marginBottom: 14 },
+  searchInput: { flex: 1, height: '100%', fontSize: 14, paddingVertical: 0 },
+  categoriesScroll: { flexGrow: 0, marginTop: 8, marginBottom: 8 },
   categories: { gap: 8, paddingRight: 8 },
   categoryButton: {
     minWidth: 62,

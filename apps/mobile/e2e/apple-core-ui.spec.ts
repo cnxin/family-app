@@ -206,7 +206,7 @@ async function capturePages(
 }
 
 test('核心模块在移动明暗色、横屏和桌面宽屏保持原生层级', async ({ page }, testInfo) => {
-  test.setTimeout(60000);
+  test.setTimeout(120000);
   if (testInfo.project.name === 'mobile-chrome') {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });

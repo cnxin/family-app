@@ -1053,7 +1053,7 @@ export function ConfirmDialog({
 }
 
 const styles = StyleSheet.create({
-  webInteractive: { cursor: 'pointer' },
+  webInteractive: { cursor: 'pointer', ...(Platform.OS === 'web' ? ({ boxSizing: 'border-box' } as ViewStyle) : {}) },
   disabledInteractive: { cursor: 'auto' as const, opacity: 0.48 },
   sectionHeader: {
     flexDirection: 'row',
@@ -1106,6 +1106,7 @@ const styles = StyleSheet.create({
   groupedList: {
     borderRadius: radius.md,
     overflow: 'hidden',
+    maxWidth: '100%',
   },
   groupedNavigationRow: {
     alignItems: 'center',
@@ -1141,15 +1142,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 9,
     padding: 2,
+    maxWidth: '100%',
+    overflow: 'hidden',
   },
   segment: {
     flex: 1,
-    minHeight: 46,
+    minWidth: 0,
+    minHeight: 40,
     paddingVertical: 6,
+    paddingHorizontal: 4,
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 7,
     borderWidth: 1,
     borderColor: 'transparent',
+    ...(Platform.OS === 'web' ? ({ boxSizing: 'border-box' } as ViewStyle) : {}),
   },
   primaryButton: {
     height: 50,

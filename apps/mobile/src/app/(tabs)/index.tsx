@@ -38,7 +38,6 @@ import { QuickAddDialog } from '../../components/quick-add-dialog';
 import {
   Card,
   GroupedList,
-  GroupedNavigationRow,
   IconButton,
   PressableScale,
   PressSurface,
@@ -122,37 +121,6 @@ function currencyForHome(value: number) {
   return `¥${value.toLocaleString('zh-CN', {
     maximumFractionDigits: 0,
   })}`;
-}
-
-function ModuleRow({
-  background,
-  color,
-  href,
-  icon: Icon,
-  last,
-  label,
-  status,
-}: {
-  background: string;
-  color: string;
-  href: Href;
-  icon: LucideIcon;
-  last?: boolean;
-  label: string;
-  status: string;
-}) {
-  const router = useRouter();
-  return (
-    <GroupedNavigationRow
-      backgroundColor={background}
-      color={color}
-      icon={Icon}
-      last={last}
-      onPress={() => router.push(href)}
-      subtitle={status}
-      title={label}
-    />
-  );
 }
 
 function TodayRow({
@@ -307,38 +275,32 @@ function ConsumerActivityRow({ activity }: { activity: HouseholdActivity }) {
   ) : content;
 }
 
-function ConsumerServiceLink({ entry, last = false }: { entry: HomeModuleEntry; last?: boolean }) {
+function ModuleTileItem({ entry }: { entry: HomeModuleEntry }) {
   const c = useTheme();
   const router = useRouter();
   const Icon = entry.icon;
   return (
-    <PressSurface
+    <PressableScale
       accessibilityLabel={`${entry.label}，${entry.status}`}
       accessibilityRole="link"
       onPress={() => router.push(entry.href)}
-      pressedColor={c.cardPressed}
-      style={[
-        styles.consumerServiceLink,
-        !last && {
-          borderBottomColor: c.separator,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-        },
-      ]}
+      style={styles.moduleTileItem}
       testID={`consumer-quick-${String(entry.href).replaceAll('/', '')}`}
     >
-      <View style={[styles.consumerServiceIcon, { backgroundColor: entry.background }]}>
-        <Icon color={entry.color} size={18} strokeWidth={2} />
-      </View>
-      <View style={styles.consumerServiceCopy}>
-        <Text style={[t.subhead, styles.consumerServiceTitle, { color: c.label }]}>
-          {entry.label}
-        </Text>
-        <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
-          {entry.status}
-        </Text>
-      </View>
-      <ArrowRight color={c.tertiaryLabel} size={16} />
-    </PressSurface>
+      <Card style={styles.moduleTileCard}>
+        <View style={[styles.moduleTileIcon, { backgroundColor: entry.background }]}>
+          <Icon color={entry.color} size={18} strokeWidth={2} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={[t.subhead, { color: c.label, fontWeight: '700' }]}>
+            {entry.label}
+          </Text>
+          <Text numberOfLines={1} style={[t.caption, { color: c.secondaryLabel, marginTop: 2 }]}>
+            {entry.status}
+          </Text>
+        </View>
+      </Card>
+    </PressableScale>
   );
 }
 
@@ -595,15 +557,11 @@ function ConsumerHome({
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>常用功能</Text>
           </View>
-          <GroupedList testID="consumer-primary-services">
-            {primaryModuleEntries.map((entry, index) => (
-              <ConsumerServiceLink
-                entry={entry}
-                key={entry.label}
-                last={index === primaryModuleEntries.length - 1}
-              />
+          <View style={styles.moduleTileGrid} testID="consumer-primary-services">
+            {primaryModuleEntries.map((entry) => (
+              <ModuleTileItem entry={entry} key={entry.label} />
             ))}
-          </GroupedList>
+          </View>
 
           <PressableScale
             accessibilityLabel={`${detailsOpen ? '收起' : '展开'}更多家庭内容`}
@@ -759,15 +717,11 @@ function ConsumerHome({
           <View style={styles.consumerSectionHeader}>
             <Text style={[t.title2, styles.consumerSectionTitle, { color: c.label }]}>其他功能</Text>
           </View>
-          <GroupedList>
-            {secondaryModuleEntries.map((entry, index) => (
-              <ConsumerServiceLink
-                entry={entry}
-                key={entry.label}
-                last={index === secondaryModuleEntries.length - 1}
-              />
+          <View style={styles.moduleTileGrid}>
+            {secondaryModuleEntries.map((entry) => (
+              <ModuleTileItem entry={entry} key={entry.label} />
             ))}
-          </GroupedList>
+          </View>
             </View>
           ) : null}
         </PageContainer>
@@ -1006,6 +960,13 @@ export default function HomeScreen() {
     },
   ];
 
+  const primaryModuleEntries = moduleEntries.filter((entry) =>
+    ['/assistant', '/canteen', '/tasks', '/shopping'].includes(String(entry.href)),
+  );
+  const secondaryModuleEntries = moduleEntries.filter(
+    (entry) => !primaryModuleEntries.includes(entry),
+  );
+
   if (member?.role === 'member') {
     return (
       <ConsumerHome
@@ -1116,17 +1077,22 @@ export default function HomeScreen() {
           {!desktop ? (
             <>
               <View style={styles.sectionTitle}>
-                <Text style={[t.title2, { color: c.label }]}>功能模块</Text>
+                <Text style={[t.title2, { color: c.label }]}>核心日常</Text>
               </View>
-              <GroupedList>
-                {moduleEntries.map((entry, index) => (
-                  <ModuleRow
-                    key={entry.label}
-                    {...entry}
-                    last={index === moduleEntries.length - 1}
-                  />
+              <View style={styles.moduleTileGrid}>
+                {primaryModuleEntries.map((entry) => (
+                  <ModuleTileItem entry={entry} key={entry.label} />
                 ))}
-              </GroupedList>
+              </View>
+
+              <View style={styles.sectionTitle}>
+                <Text style={[t.title2, { color: c.label }]}>家庭服务</Text>
+              </View>
+              <View style={styles.moduleTileGrid}>
+                {secondaryModuleEntries.map((entry) => (
+                  <ModuleTileItem entry={entry} key={entry.label} />
+                ))}
+              </View>
             </>
           ) : null}
         </PageContainer>
@@ -1175,9 +1141,10 @@ const styles = StyleSheet.create({
   consumerAgendaRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 11,
-    minHeight: 70,
+    gap: 12,
+    minHeight: 64,
     paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   consumerAgendaIcon: {
     alignItems: 'center',
@@ -1220,10 +1187,10 @@ const styles = StyleSheet.create({
   consumerActivityRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 11,
-    minHeight: 68,
+    gap: 12,
+    minHeight: 64,
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   consumerActivityAvatar: {
     alignItems: 'center',
@@ -1232,29 +1199,64 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 36,
   },
-  consumerActivityEmoji: { fontSize: 18 },
-  consumerOverviewGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  consumerOverviewCell: { flexGrow: 1, minWidth: 0, width: '47%' },
-  consumerOverviewCard: { minHeight: 112, padding: 15 },
-  consumerMemories: { gap: 9 },
-  consumerMemoryCard: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 82, overflow: 'hidden', paddingRight: 14 },
-  consumerMemoryEmpty: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 92, padding: 14 },
-  consumerMemoryImage: { height: 82, width: 92 },
-  consumerMemoryPlaceholder: { alignItems: 'center', borderRadius: radius.sm, height: 54, justifyContent: 'center', width: 54 },
+  consumerActivityEmoji: { fontSize: 19 },
+  consumerOverviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  consumerOverviewCell: {
+    width: '48.5%',
+  },
+  consumerOverviewCard: {
+    minHeight: 96,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  consumerMemories: { gap: 10 },
+  consumerMemoryCard: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 78,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  consumerMemoryImage: {
+    borderRadius: radius.md,
+    height: 52,
+    width: 52,
+  },
+  consumerMemoryPlaceholder: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
   consumerMemoryCopy: { flex: 1, minWidth: 0 },
+  consumerMemoryEmpty: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 78,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
   consumerServiceLink: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 11,
+    gap: 12,
     minHeight: 68,
     paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   consumerServiceIcon: {
     alignItems: 'center',
-    borderRadius: 17,
-    height: 34,
+    borderRadius: radius.sm,
+    height: 36,
     justifyContent: 'center',
-    width: 34,
+    width: 36,
   },
   consumerServiceCopy: { flex: 1, minWidth: 0 },
   consumerServiceTitle: { fontWeight: '600' },
@@ -1310,6 +1312,29 @@ const styles = StyleSheet.create({
   todayIcon: {
     width: 38,
     height: 38,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moduleTileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  moduleTileItem: {
+    width: '48.5%',
+  },
+  moduleTileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+    minHeight: 64,
+  },
+  moduleTileIcon: {
+    width: 36,
+    height: 36,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
