@@ -86,8 +86,17 @@ test('管理员可用鼠标或触控使用小管家并查看运行时设置', as
     .getByText('本地家庭摘要可用', { exact: true })
     .isVisible();
   if (localRuntime) {
+    const conversationCreated = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === 'POST'
+        && url.pathname === '/agent/conversations'
+        && response.ok();
+    });
     await activate(newConversation, testInfo.project.name === 'mobile-chrome');
+    await conversationCreated;
+    await expect(newConversation).toBeEnabled();
     await input.fill('这周还有哪些家庭任务？');
+    await expect(send).toBeEnabled();
     await send.click();
     const taskResult = page.getByTestId('agent-result-tasks').last();
     await expect(taskResult).toBeVisible({ timeout: 60_000 });

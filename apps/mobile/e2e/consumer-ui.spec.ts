@@ -85,10 +85,20 @@ test('普通成员默认进入温和的移动首页并可用鼠标操作核心�
   await expect(page).toHaveURL(/\/assistant$/);
   const assistantInput = page.getByTestId('agent-message-input');
   const assistantSend = page.getByTestId('agent-send-button');
+  const newConversation = page.getByTestId('agent-new-conversation');
   await expectTouchTarget(assistantSend, '小管家发送按钮');
-  await page.getByTestId('agent-new-conversation').click();
+  const conversationCreated = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST'
+      && url.pathname === '/agent/conversations'
+      && response.ok();
+  });
+  await newConversation.click();
+  await conversationCreated;
+  await expect(newConversation).toBeEnabled();
   await assistantInput.fill('今天三餐吃什么？');
   await expect(assistantInput).toHaveValue('今天三餐吃什么？');
+  await expect(assistantSend).toBeEnabled();
   await assistantSend.click();
   await expect(page.getByText(/今天|早餐|午餐|晚餐/).last()).toBeVisible({ timeout: 60_000 });
   await expectNoHorizontalOverflow(page);

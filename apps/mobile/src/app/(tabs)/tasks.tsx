@@ -39,6 +39,7 @@ import {
   PressableScale,
   PrimaryButton,
   Segmented,
+  SummaryBand,
 } from '../../components/ui';
 import { dateStr, formatPlanDate, parseDate, todayStr } from '../../lib/date';
 import {
@@ -623,6 +624,9 @@ export default function TasksScreen() {
   );
   const pendingCount = tasks?.filter((entry) => entry.status === 'pending').length ?? 0;
   const doneCount = tasks?.filter((entry) => entry.status === 'done').length ?? 0;
+  const unassignedCount = tasks?.filter(
+    (entry) => entry.status === 'pending' && !entry.assigneeId,
+  ).length ?? 0;
 
   const changeOccurrence = (
     entry: TaskOccurrence,
@@ -683,6 +687,31 @@ export default function TasksScreen() {
             <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>添加任务</Text>
           </PressableScale>
         </View>
+
+        <SummaryBand
+          items={[
+            {
+              color: c.tint,
+              icon: ClipboardList,
+              label: '待完成',
+              value: pendingCount,
+            },
+            {
+              color: c.green,
+              icon: CircleCheckBig,
+              label: '已完成',
+              value: doneCount,
+            },
+            {
+              color: c.orange,
+              icon: UserRound,
+              label: '待认领',
+              value: unassignedCount,
+            },
+          ]}
+          style={styles.summaryBand}
+          testID="tasks-summary"
+        />
 
         <View style={[styles.toolbar, adminDesktop && styles.toolbarDesktop]}>
           <DateSelector allowPast onChange={setSelectedDate} value={selectedDate} />
@@ -836,6 +865,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
+  summaryBand: { marginTop: 18 },
   toolbar: { gap: 12, marginTop: 20 },
   toolbarDesktop: {
     flexDirection: 'row',

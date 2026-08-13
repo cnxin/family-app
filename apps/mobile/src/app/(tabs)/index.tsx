@@ -275,7 +275,13 @@ function ConsumerActivityRow({ activity }: { activity: HouseholdActivity }) {
   ) : content;
 }
 
-function ModuleTileItem({ entry }: { entry: HomeModuleEntry }) {
+function ModuleTileItem({
+  entry,
+  wide = false,
+}: {
+  entry: HomeModuleEntry;
+  wide?: boolean;
+}) {
   const c = useTheme();
   const router = useRouter();
   const Icon = entry.icon;
@@ -284,7 +290,7 @@ function ModuleTileItem({ entry }: { entry: HomeModuleEntry }) {
       accessibilityLabel={`${entry.label}，${entry.status}`}
       accessibilityRole="link"
       onPress={() => router.push(entry.href)}
-      style={styles.moduleTileItem}
+      style={[styles.moduleTileItem, wide && styles.moduleTileItemWide]}
       testID={`consumer-quick-${String(entry.href).replaceAll('/', '')}`}
     >
       <Card style={styles.moduleTileCard}>
@@ -1026,75 +1032,78 @@ export default function HomeScreen() {
             ) : null}
           </View>
 
-          <View style={styles.sectionTitle}>
-            <Text style={[t.title2, { color: c.label }]}>今天需要关注</Text>
-            <Pressable
-              accessibilityRole="link"
-              onPress={() => router.push('/calendar')}
-              style={styles.textLink}
-            >
-              <CalendarDays color={c.tint} size={16} />
-              <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>家庭日历</Text>
-            </Pressable>
-          </View>
-          <GroupedList style={desktop && styles.todayCardDesktop}>
-            {menusLoading || tasksLoading || remindersLoading ? (
-              <SkeletonRows />
-            ) : (
-              <>
-                <TodayRow
-                  background={c.orangeSoft}
-                  color={c.orange}
-                  href="/canteen"
-                  icon={CookingPot}
-                  label="今日菜单"
-                  value={menuItems ? `${menuItems} 道菜已安排` : '还没有安排菜品'}
-                />
-                <TodayRow
-                  background={c.tintSoft}
-                  color={c.tint}
-                  href="/tasks"
-                  icon={ListTodo}
-                  label="今日任务"
-                  value={pendingTasks.length ? `${pendingTasks.length} 项待完成` : '今天没有待办'}
-                />
-                <TodayRow
-                  background={c.blueSoft}
-                  color={c.blue}
-                  href="/reminders"
-                  icon={BellRing}
-                  label="近期提醒"
-                  value={
-                    upcomingReminder
-                      ? `${reminderTime(upcomingReminder.remindAt)} · ${upcomingReminder.source?.title ?? '家庭事项'}`
-                      : '暂无待发送提醒'
-                  }
-                />
-              </>
-            )}
-          </GroupedList>
+          <View style={[styles.adminDashboard, desktop && styles.adminDashboardDesktop]}>
+            <View style={styles.adminFocusColumn}>
+              <View style={styles.sectionTitle}>
+                <Text style={[t.title2, { color: c.label }]}>今天需要关注</Text>
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => router.push('/calendar')}
+                  style={styles.textLink}
+                >
+                  <CalendarDays color={c.tint} size={16} />
+                  <Text style={[t.footnote, { color: c.tint, fontWeight: '700' }]}>家庭日历</Text>
+                </Pressable>
+              </View>
+              <GroupedList>
+                {menusLoading || tasksLoading || remindersLoading ? (
+                  <SkeletonRows />
+                ) : (
+                  <>
+                    <TodayRow
+                      background={c.orangeSoft}
+                      color={c.orange}
+                      href="/canteen"
+                      icon={CookingPot}
+                      label="今日菜单"
+                      value={menuItems ? `${menuItems} 道菜已安排` : '还没有安排菜品'}
+                    />
+                    <TodayRow
+                      background={c.tintSoft}
+                      color={c.tint}
+                      href="/tasks"
+                      icon={ListTodo}
+                      label="今日任务"
+                      value={pendingTasks.length ? `${pendingTasks.length} 项待完成` : '今天没有待办'}
+                    />
+                    <TodayRow
+                      background={c.blueSoft}
+                      color={c.blue}
+                      href="/reminders"
+                      icon={BellRing}
+                      label="近期提醒"
+                      value={
+                        upcomingReminder
+                          ? `${reminderTime(upcomingReminder.remindAt)} · ${upcomingReminder.source?.title ?? '家庭事项'}`
+                          : '暂无待发送提醒'
+                      }
+                    />
+                  </>
+                )}
+              </GroupedList>
+            </View>
 
-          {!desktop ? (
-            <>
+            <View style={styles.adminCoreColumn}>
               <View style={styles.sectionTitle}>
                 <Text style={[t.title2, { color: c.label }]}>核心日常</Text>
               </View>
-              <View style={styles.moduleTileGrid}>
+              <View style={styles.moduleTileGrid} testID="admin-core-modules">
                 {primaryModuleEntries.map((entry) => (
                   <ModuleTileItem entry={entry} key={entry.label} />
                 ))}
               </View>
+            </View>
+          </View>
 
-              <View style={styles.sectionTitle}>
-                <Text style={[t.title2, { color: c.label }]}>家庭服务</Text>
-              </View>
-              <View style={styles.moduleTileGrid}>
-                {secondaryModuleEntries.map((entry) => (
-                  <ModuleTileItem entry={entry} key={entry.label} />
-                ))}
-              </View>
-            </>
-          ) : null}
+          <View style={styles.sectionTitle}>
+            <Text style={[t.title2, { color: c.label }]}>家庭服务</Text>
+            <Text style={[t.caption, { color: c.secondaryLabel }]}>按需要进入，不打扰今天</Text>
+          </View>
+          <View style={styles.moduleTileGrid} testID="admin-family-services">
+            {secondaryModuleEntries.map((entry) => (
+              <ModuleTileItem entry={entry} key={entry.label} wide={desktop} />
+            ))}
+          </View>
         </PageContainer>
       </ScrollView>
     </SafeAreaView>
@@ -1300,7 +1309,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   textLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  todayCardDesktop: { maxWidth: 760 },
+  adminDashboard: { minWidth: 0 },
+  adminDashboardDesktop: { flexDirection: 'row', gap: 24 },
+  adminFocusColumn: { flex: 1.15, minWidth: 0 },
+  adminCoreColumn: { flex: 1, minWidth: 0 },
   todayRow: {
     minHeight: 70,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1323,6 +1335,9 @@ const styles = StyleSheet.create({
   },
   moduleTileItem: {
     width: '48.5%',
+  },
+  moduleTileItemWide: {
+    width: '23.8%',
   },
   moduleTileCard: {
     flexDirection: 'row',

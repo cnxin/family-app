@@ -1148,7 +1148,7 @@ const styles = StyleSheet.create({
   segment: {
     flex: 1,
     minWidth: 0,
-    minHeight: 40,
+    minHeight: 44,
     paddingVertical: 6,
     paddingHorizontal: 4,
     alignItems: 'center',

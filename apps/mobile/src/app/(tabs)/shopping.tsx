@@ -6,6 +6,8 @@ import {
   PackageCheck,
   PackageOpen,
   Plus,
+  AlertTriangle,
+  Boxes,
   Trash2,
   X,
 } from 'lucide-react-native';
@@ -445,6 +447,7 @@ export default function ShoppingScreen() {
   );
   const [date, setDate] = useState(todayStr());
   const { data: items, isLoading } = useShoppingList(date);
+  const { data: inventory } = useInventory();
   const addManual = useAddManualShoppingItem();
   const removeItem = useDeleteShoppingItem();
   const [pendingDelete, setPendingDelete] = useState<ShoppingItem | null>(null);
@@ -472,7 +475,7 @@ export default function ShoppingScreen() {
       const key =
         item.source === 'maintenance'
           ? '维护耗材'
-          : (item.ingredient?.category ?? '手动添加');
+          : (item.ingredient?.category ?? '临时采购');
       map.set(key, [...(map.get(key) ?? []), item]);
     }
     return [...map.entries()];
@@ -480,6 +483,9 @@ export default function ShoppingScreen() {
 
   const total = items?.length ?? 0;
   const done = items?.filter((i) => i.checked).length ?? 0;
+  const lowStock = inventory?.filter(
+    (item) => Number(item.quantity) <= Number(item.lowStockThreshold),
+  ).length ?? 0;
 
   const parsedManualQty = Number(manualQty);
   const manualValid =
@@ -545,6 +551,53 @@ export default function ShoppingScreen() {
           />
         </View>
 
+        <View style={styles.overview} testID="shopping-inventory-overview">
+          <PressableScale
+            accessibilityLabel={`购物清单，${Math.max(total - done, 0)}项待买`}
+            haptic={false}
+            onPress={() => setView('shopping')}
+            style={styles.overviewItem}
+          >
+            <View style={[styles.overviewIcon, { backgroundColor: c.greenSoft }]}>
+              <PackageCheck color={c.green} size={19} />
+            </View>
+            <View style={styles.overviewCopy}>
+              <Text style={[t.title2, { color: c.label }]}>{Math.max(total - done, 0)}</Text>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>待购买</Text>
+            </View>
+          </PressableScale>
+          <View style={[styles.overviewDivider, { backgroundColor: c.separator }]} />
+          <PressableScale
+            accessibilityLabel={`家庭库存，${inventory?.length ?? 0}种`}
+            haptic={false}
+            onPress={() => setView('inventory')}
+            style={styles.overviewItem}
+          >
+            <View style={[styles.overviewIcon, { backgroundColor: c.tintSoft }]}>
+              <Boxes color={c.tint} size={19} />
+            </View>
+            <View style={styles.overviewCopy}>
+              <Text style={[t.title2, { color: c.label }]}>{inventory?.length ?? 0}</Text>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>库存种类</Text>
+            </View>
+          </PressableScale>
+          <View style={[styles.overviewDivider, { backgroundColor: c.separator }]} />
+          <PressableScale
+            accessibilityLabel={`待补货，${lowStock}项`}
+            haptic={false}
+            onPress={() => setView('inventory')}
+            style={styles.overviewItem}
+          >
+            <View style={[styles.overviewIcon, { backgroundColor: c.orangeSoft }]}>
+              <AlertTriangle color={c.orange} size={19} />
+            </View>
+            <View style={styles.overviewCopy}>
+              <Text style={[t.title2, { color: lowStock ? c.orange : c.label }]}>{lowStock}</Text>
+              <Text style={[t.caption, { color: c.secondaryLabel }]}>待补货</Text>
+            </View>
+          </PressableScale>
+        </View>
+
         {view === 'shopping' ? (
           <>
             <View style={styles.dateControl}>
@@ -594,7 +647,7 @@ export default function ShoppingScreen() {
           </View>
         ) : null}
 
-        <SectionHeader title="手动添加" />
+        <SectionHeader title="快速添加" />
         <Card
           style={[styles.manualForm, desktop && styles.manualFormDesktop]}
         >
@@ -737,10 +790,34 @@ export default function ShoppingScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, paddingTop: 8 },
+  page: { flex: 1, paddingTop: 12 },
   pageDesktop: { paddingTop: 22 },
   header: { paddingTop: 0 },
   viewControl: { width: 390, maxWidth: '100%', marginTop: 14 },
+  overview: {
+    backgroundColor: 'transparent',
+    flexDirection: 'row',
+    marginTop: 16,
+    minHeight: 78,
+  },
+  overviewItem: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 9,
+    minHeight: 78,
+    minWidth: 0,
+    paddingHorizontal: 10,
+  },
+  overviewIcon: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  overviewCopy: { minWidth: 0 },
+  overviewDivider: { alignSelf: 'center', height: 42, width: StyleSheet.hairlineWidth },
   dateControl: { marginTop: 14 },
   scrollContent: { paddingBottom: 32 },
   itemRow: {

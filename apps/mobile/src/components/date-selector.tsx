@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   quickButton: {
-    height: 40,
+    height: 44,
     minWidth: 54,
     borderRadius: radius.sm,
     borderWidth: 1,
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   calendarButton: {
-    height: 40,
+    height: 44,
     borderRadius: radius.sm,
     borderWidth: 1,
     paddingHorizontal: 11,

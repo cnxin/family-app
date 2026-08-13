@@ -246,6 +246,85 @@ function MemoryCard({
   );
 }
 
+function FeaturedMemory({
+  memory,
+  onPress,
+  wide,
+}: {
+  memory: FamilyMemory;
+  onPress: () => void;
+  wide: boolean;
+}) {
+  const c = useTheme();
+  const category = categoryInfo(memory.category);
+  const CategoryIcon = category.icon;
+  const cover = memory.photos[0];
+
+  return (
+    <PressableScale
+      accessibilityLabel={`打开回忆${memory.title}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.featuredPressable}
+    >
+      <Card style={[styles.featuredCard, wide && styles.featuredCardWide]}>
+        {cover ? (
+          <Image
+            accessibilityLabel={cover.caption || memory.title}
+            contentFit="cover"
+            source={{ uri: photoUri(cover.contentUrl) ?? undefined }}
+            style={[styles.featuredImage, wide && styles.featuredImageWide]}
+            testID="memory-featured-image"
+            transition={180}
+          />
+        ) : (
+          <View
+            style={[
+              styles.featuredPlaceholder,
+              wide && styles.featuredImageWide,
+              { backgroundColor: c.tintSoft },
+            ]}
+          >
+            <CategoryIcon color={c.tint} size={40} strokeWidth={1.6} />
+          </View>
+        )}
+        <View style={styles.featuredCopy}>
+          <View style={[styles.categoryBadge, { backgroundColor: c.tintSoft }]}>
+            <CategoryIcon color={c.tint} size={14} />
+            <Text style={[t.caption, { color: c.tint, fontWeight: '700' }]}>
+              {category.label}
+            </Text>
+          </View>
+          <Text numberOfLines={2} style={[t.title1, styles.featuredTitle, { color: c.label }]}>
+            {memory.title}
+          </Text>
+          {memory.story ? (
+            <Text
+              numberOfLines={3}
+              style={[t.body, styles.featuredStory, { color: c.secondaryLabel }]}
+            >
+              {memory.story}
+            </Text>
+          ) : null}
+          <View style={styles.featuredFooter}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[t.footnote, { color: c.secondaryLabel }]}>
+                {memoryDate(memory.happenedOn)}
+              </Text>
+              <Text numberOfLines={1} style={[t.caption, { color: c.tertiaryLabel, marginTop: 3 }]}>
+                {memory.createdBy.name}记录{memory.photos.length ? ` · ${memory.photos.length} 张照片` : ''}
+              </Text>
+            </View>
+            <View style={[styles.featuredOpen, { backgroundColor: c.fill }]}>
+              <ArrowRight color={c.tint} size={18} />
+            </View>
+          </View>
+        </View>
+      </Card>
+    </PressableScale>
+  );
+}
+
 export default function MemoriesScreen() {
   const c = useTheme();
   const router = useRouter();
@@ -272,6 +351,9 @@ export default function MemoriesScreen() {
   const restoreMemory = useRestoreMemory();
   const uploadPhoto = useUploadMemoryPhoto();
   const memories = useMemo(() => memoriesQuery.data ?? [], [memoriesQuery.data]);
+  const showFeatured = status === 'active' && category === 'all' && !search;
+  const featuredMemory = showFeatured ? memories[0] : undefined;
+  const remainingMemories = featuredMemory ? memories.slice(1) : memories;
   const selectedId = selected?.id;
   const busy = createMemory.isPending || updateMemory.isPending;
 
@@ -540,16 +622,39 @@ export default function MemoriesScreen() {
           ) : memoriesQuery.isError ? (
             <EmptyState icon={Images} title="暂时无法读取回忆" hint={errorMessage(memoriesQuery.error)} />
           ) : memories.length ? (
-            <View style={[styles.memoryGrid, layout !== 'compact' && styles.memoryGridWide]}>
-              {memories.map((memory) => (
-                <MemoryCard
-                  key={memory.id}
-                  memory={memory}
-                  onPress={() => setSelected(memory)}
-                  wide={layout !== 'compact'}
-                />
-              ))}
-            </View>
+            <>
+              {featuredMemory ? (
+                <View style={styles.featuredSection} testID="memory-featured">
+                  <Text style={[t.footnote, styles.featuredEyebrow, { color: c.secondaryLabel }]}>
+                    最近记录
+                  </Text>
+                  <FeaturedMemory
+                    memory={featuredMemory}
+                    onPress={() => setSelected(featuredMemory)}
+                    wide={layout !== 'compact'}
+                  />
+                </View>
+              ) : null}
+              {remainingMemories.length ? (
+                <View style={styles.memorySection}>
+                  {featuredMemory ? (
+                    <Text style={[t.footnote, styles.featuredEyebrow, { color: c.secondaryLabel }]}>
+                      更多回忆
+                    </Text>
+                  ) : null}
+                  <View style={[styles.memoryGrid, layout !== 'compact' && styles.memoryGridWide]}>
+                    {remainingMemories.map((memory) => (
+                      <MemoryCard
+                        key={memory.id}
+                        memory={memory}
+                        onPress={() => setSelected(memory)}
+                        wide={layout !== 'compact'}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+            </>
           ) : (
             <EmptyState
               icon={Images}
@@ -844,6 +949,20 @@ const styles = StyleSheet.create({
   categoryFilters: { gap: 8, paddingBottom: 18 },
   filterButton: { alignItems: 'center', borderRadius: radius.sm, borderWidth: 1, flexDirection: 'row', gap: 6, minHeight: 44, paddingHorizontal: 13 },
   loading: { alignItems: 'center', justifyContent: 'center', minHeight: 220 },
+  featuredSection: { gap: 9 },
+  featuredEyebrow: { fontWeight: '700', paddingHorizontal: 4 },
+  featuredPressable: { width: '100%' },
+  featuredCard: { overflow: 'hidden' },
+  featuredCardWide: { flexDirection: 'row', minHeight: 286 },
+  featuredImage: { aspectRatio: 16 / 10, width: '100%' },
+  featuredImageWide: { aspectRatio: undefined, minHeight: 286, width: '56%' },
+  featuredPlaceholder: { alignItems: 'center', aspectRatio: 16 / 10, justifyContent: 'center', width: '100%' },
+  featuredCopy: { flex: 1, minWidth: 0, padding: 20 },
+  featuredTitle: { lineHeight: 34, marginTop: 13 },
+  featuredStory: { lineHeight: 24, marginTop: 9 },
+  featuredFooter: { alignItems: 'center', flexDirection: 'row', gap: 12, marginTop: 'auto', paddingTop: 18 },
+  featuredOpen: { alignItems: 'center', borderRadius: radius.md, height: 44, justifyContent: 'center', width: 44 },
+  memorySection: { gap: 9, marginTop: 22 },
   memoryGrid: { gap: 12 },
   memoryGridWide: { flexDirection: 'row', flexWrap: 'wrap' },
   cardPressable: { flexGrow: 1, minWidth: 0 },

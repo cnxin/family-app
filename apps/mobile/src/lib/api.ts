@@ -229,5 +229,5 @@ export async function uploadMemoryPhoto(
 
 export function photoUri(url: string | null): string | null {
   if (!url) return null;
-  return url.startsWith('http') ? url : `${BASE_URL}${url}`;
+  return /^(https?:|data:|blob:)/.test(url) ? url : `${BASE_URL}${url}`;
 }

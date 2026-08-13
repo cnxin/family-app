@@ -43,6 +43,7 @@ import {
   ConfirmDialog,
   PressableScale,
   PrimaryButton,
+  SummaryBand,
 } from '../../components/ui';
 import { formatPlanDate, parseDate, todayStr } from '../../lib/date';
 import {
@@ -563,6 +564,12 @@ export default function CalendarScreen() {
     () => entries?.filter((entry) => entry.date === selectedDate) ?? [],
     [entries, selectedDate],
   );
+  const selectedTaskCount = selectedEntries.filter(
+    (entry) => entry.module === 'task' && entry.status === 'pending',
+  ).length;
+  const selectedFamilyCount = selectedEntries.filter(
+    (entry) => entry.module === 'menu' || entry.module === 'guest',
+  ).length;
 
   const openCreate = () => {
     setEditingEntry(null);
@@ -626,6 +633,31 @@ export default function CalendarScreen() {
               <Text style={[t.subhead, { color: '#FFFFFF', fontWeight: '700' }]}>添加事件</Text>
             </PressableScale>
           </View>
+
+          <SummaryBand
+            items={[
+              {
+                color: c.tint,
+                icon: CalendarDays,
+                label: '当天安排',
+                value: selectedEntries.length,
+              },
+              {
+                color: c.blue,
+                icon: ListTodo,
+                label: '待办任务',
+                value: selectedTaskCount,
+              },
+              {
+                color: c.orange,
+                icon: UsersRound,
+                label: '共同安排',
+                value: selectedFamilyCount,
+              },
+            ]}
+            style={styles.summaryBand}
+            testID="calendar-day-summary"
+          />
 
           <View style={[styles.main, adminDesktop && styles.mainDesktop]}>
             <Card style={[styles.calendarCard, adminDesktop && styles.calendarCardDesktop]}>
@@ -795,7 +827,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
   },
-  main: { gap: 24, marginTop: 24 },
+  summaryBand: { marginTop: 18 },
+  main: { gap: 24, marginTop: 20 },
   mainDesktop: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
   calendarCard: { padding: 14, minHeight: 370 },
   calendarCardDesktop: { flex: 1, minWidth: 0 },
