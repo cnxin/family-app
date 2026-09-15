@@ -62,6 +62,7 @@ import {
 import { InventoryModule } from '../inventory/inventory.module';
 import { InventoryTransactionsService } from '../inventory/inventory-transactions.service';
 import { PRIVATE_ASSET_UPLOAD_DIR, UPLOAD_DIR } from '../upload/upload.module';
+import { addDays, isUniqueViolation, todayInShanghai } from '@family/shared';
 
 const ASSET_CATEGORIES: AssetCategory[] = [
   'appliance',
@@ -397,21 +398,6 @@ function dateOnly(value: string | null | undefined, label: string) {
   return value;
 }
 
-function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function shanghaiDate() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
 function addMonths(value: string, months: number) {
   const source = new Date(`${value}T00:00:00.000Z`);
   const day = source.getUTCDate();
@@ -484,10 +470,6 @@ function legacyAssetFilePath(url: string) {
     throw new ForbiddenException('资产资料存储路径无效');
   }
   return path;
-}
-
-function isUniqueViolation(error: unknown) {
-  return (error as { code?: string })?.code === '23505';
 }
 
 @Injectable()
@@ -708,7 +690,7 @@ export class AssetsService {
     dto: RenewSubscriptionDto,
     user: JwtUser,
   ) {
-    const renewedOn = dateOnly(dto.renewedOn ?? shanghaiDate(), '续费完成日期')!;
+    const renewedOn = dateOnly(dto.renewedOn ?? todayInShanghai(), '续费完成日期')!;
     await this.dataSource.transaction(async (manager) => {
       const asset = await this.lockAsset(id, user.householdId, manager);
       if (asset.category !== 'subscription' || asset.status !== 'active') {

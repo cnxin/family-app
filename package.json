@@ -9,15 +9,17 @@
     "backup:dev": "sh scripts/backup-dev.sh",
     "backup:prod": "sh scripts/backup-prod.sh",
     "backup:worker:check": "sh -n scripts/backup-worker.sh && sh -n scripts/backup-worker-entrypoint.sh && sh -n scripts/restore-prod.sh",
+    "build:packages": "node scripts/build-packages.mjs",
     "lint": "corepack pnpm --filter api lint && corepack pnpm --filter mobile lint",
     "lint:api": "corepack pnpm --filter api lint",
     "lint:mobile": "corepack pnpm --filter mobile lint",
     "mobile": "corepack pnpm --filter mobile start",
+    "postinstall": "node scripts/build-packages.mjs",
     "restore:dev": "sh scripts/restore-dev.sh",
     "restore:prod": "sh scripts/restore-prod.sh",
     "seed": "corepack pnpm --filter api seed",
     "test:api": "corepack pnpm --filter api test:api",
     "test:web": "corepack pnpm --filter api test:web",
-    "typecheck": "corepack pnpm --filter api exec tsc --noEmit && corepack pnpm --filter mobile typecheck"
+    "typecheck": "node scripts/build-packages.mjs --check && corepack pnpm --filter api exec tsc --noEmit && corepack pnpm --filter mobile typecheck"
   }
 }

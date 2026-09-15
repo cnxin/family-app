@@ -148,7 +148,8 @@ corepack pnpm typecheck
 # ESLint 静态检查（API + 客户端）
 corepack pnpm lint
 
-# 端点清单是否与 Controller 一致（清单本身由 `corepack pnpm api:inventory` 生成）
+# 端点清单是否与 Controller 一致（清单本身由 `corepack pnpm api:inventory` 生成，
+# 其中"契约"列依赖已构建的 packages/contracts：corepack pnpm build:packages）
 corepack pnpm api:inventory:check
 
 # Expo 依赖版本检查
@@ -186,7 +187,9 @@ corepack pnpm test:web
 
 Playwright 回归使用随机命名的临时 PostgreSQL 数据库和随机测试密码，不读取或修改当前开发账号。它直接使用本机安装的 Google Chrome，不会额外下载浏览器；失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。测试进程无论成功或失败都会终止隔离 API 并删除临时数据库。
 
-以上检查在 `.github/workflows/ci.yml` 中对每个 PR 自动执行：静态检查 → API 黑盒测试（临时 PostgreSQL）→ Playwright 回归。
+以上检查在 `.github/workflows/ci.yml` 中对每个 PR 自动执行：静态检查 → API 黑盒测试（临时 PostgreSQL）→ Playwright 回归 → Docker 镜像构建。
+
+API 在 `NODE_ENV=test`（或 `CONTRACT_CHECK=1`）下会按 `packages/contracts` 校验每个已定义契约端点的响应，不符合时返回 500 `CONTRACT_VIOLATION`，因此跑一遍黑盒测试就等于验证了契约。`docker-compose.dev.yml` 把 `packages/*` 构建进镜像，修改它们后需要 `--build` 重建。
 
 ## 构建与编排文件
 
@@ -205,6 +208,9 @@ Playwright 回归使用随机命名的临时 PostgreSQL 数据库和随机测试
 ## 项目结构
 
 ```text
+packages/
+├── shared/            # 框架无关的公共工具：领域错误、日期、文本、唯一约束判断、角色判断
+└── contracts/         # 每个端点的 Zod 请求/响应契约与 contractIndex（API 测试模式校验响应，客户端取类型）
 apps/
 ├── api/
 │   ├── src/auth/          # JWT 登录与全局守卫

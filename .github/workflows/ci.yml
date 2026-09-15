@@ -133,3 +133,18 @@ jobs:
             apps/mobile/test-results
             apps/mobile/playwright-report
           retention-days: 7
+
+  # 镜像构建：验证 Dockerfile 与工作区包（packages/*）的复制/构建顺序没有坏掉
+  docker-build:
+    name: 镜像构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - name: 构建 API 生产镜像
+        run: docker build -f Dockerfile.prod -t family-app-api:ci .
+      - name: 构建 API 开发镜像
+        run: docker build -f Dockerfile -t family-app-api:dev-ci .
+      - name: 生产镜像能加载入口
+        run: docker run --rm family-app-api:ci node -e "require('@family/shared'); require('@family/contracts'); console.log('workspace packages ok')"

@@ -41,6 +41,7 @@ import {
 import { encryptAgentContent } from './agent.crypto';
 import { AgentMemoryService } from './agent-memory.service';
 import { AgentProposalGroupsService } from './agent-proposal-groups.service';
+import { addDays, daysBetween, todayInShanghai } from '@family/shared';
 
 const MAX_RESULT_ITEMS = 20;
 const MAX_EXTENDED_RESULT_ITEMS = 50;
@@ -89,27 +90,6 @@ function normalizedTerms(value: unknown, maximum: number) {
     .map((entry) => entry.trim().toLocaleLowerCase('zh-CN'))
     .filter(Boolean)
     .slice(0, maximum);
-}
-
-function today() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-function addDays(date: string, days: number) {
-  const value = new Date(`${date}T00:00:00.000Z`);
-  value.setUTCDate(value.getUTCDate() + days);
-  return value.toISOString().slice(0, 10);
-}
-
-function daysBetween(from: string, to: string) {
-  const fromDate = new Date(`${from}T00:00:00.000Z`);
-  const toDate = new Date(`${to}T00:00:00.000Z`);
-  return Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000);
 }
 
 function userFor(run: AgentRun, member: Member): JwtUser {
@@ -568,7 +548,7 @@ export class AgentToolsService {
       );
     }
     if (toolName === 'get_today_summary') {
-      const date = today();
+      const date = todayInShanghai();
       const [entries, alerts] = await Promise.all([
         this.calendar.list(date, date, user),
         this.inventoryAlerts(user.householdId, 8),
@@ -587,7 +567,7 @@ export class AgentToolsService {
       };
     }
     if (toolName === 'get_calendar') {
-      const start = dateOnly(input.start, today());
+      const start = dateOnly(input.start, todayInShanghai());
       const end = dateOnly(input.end, addDays(start, 6));
       const days = Math.round(
         (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) /
@@ -607,7 +587,7 @@ export class AgentToolsService {
       }));
     }
     if (toolName === 'get_tasks') {
-      const start = dateOnly(input.start, today());
+      const start = dateOnly(input.start, todayInShanghai());
       const end = dateOnly(input.end, addDays(start, 6));
       const days = Math.round(
         (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) /
@@ -646,8 +626,8 @@ export class AgentToolsService {
         MAX_EXTENDED_RESULT_ITEMS,
         '返回条数',
       );
-      const start = addDays(today(), -90);
-      const end = addDays(today(), 90);
+      const start = addDays(todayInShanghai(), -90);
+      const end = addDays(todayInShanghai(), 90);
       const rows = await this.tasks.list(start, end, user);
       const matched = rows.filter((row) => {
         if (row.assigneeId !== member.id) return false;
@@ -672,7 +652,7 @@ export class AgentToolsService {
       };
     }
     if (toolName === 'get_family_schedule') {
-      const startDate = dateOnly(input.startDate, today());
+      const startDate = dateOnly(input.startDate, todayInShanghai());
       const days = boundedInteger(input.days, 7, 30, '查询天数');
       const endDate = addDays(startDate, days - 1);
       const entries = await this.calendar.list(startDate, endDate, user);
@@ -711,7 +691,7 @@ export class AgentToolsService {
       return this.inventorySummary(user.householdId, String(filter));
     }
     if (toolName === 'get_shopping_list') {
-      const date = dateOnly(input.date, today());
+      const date = dateOnly(input.date, todayInShanghai());
       const status = input.status;
       if (
         status != null &&
@@ -759,7 +739,7 @@ export class AgentToolsService {
       return this.searchRecipes(input, user);
     }
     if (toolName === 'get_dish_plan') {
-      const startDate = dateOnly(input.startDate, today());
+      const startDate = dateOnly(input.startDate, todayInShanghai());
       const days = boundedInteger(input.days, 7, 30, '查询天数');
       const dates = Array.from({ length: days }, (_, index) =>
         addDays(startDate, index),
@@ -827,7 +807,7 @@ export class AgentToolsService {
       const asset = await this.assets.get(assetId, user.householdId);
       const expiresAt = asset.warrantyExpiresOn;
       const warrantyDelta = expiresAt
-        ? daysBetween(today(), expiresAt)
+        ? daysBetween(todayInShanghai(), expiresAt)
         : null;
       const nextMaintenanceAt = asset.maintenancePlans
         .filter((plan) => plan.isEnabled)
@@ -868,7 +848,7 @@ export class AgentToolsService {
       return this.finance.summary(month, user);
     }
     if (toolName === 'get_meal_plan') {
-      const date = dateOnly(input.date, today());
+      const date = dateOnly(input.date, todayInShanghai());
       const menus = await this.menus.listExistingByDate(user.householdId, date);
       const mealOrder = { breakfast: 0, lunch: 1, dinner: 2 } as const;
       return menus
@@ -995,7 +975,7 @@ export class AgentToolsService {
       .where('item.householdId = :householdId', { householdId })
       .orderBy('item.name', 'ASC')
       .getMany();
-    const expiryBoundary = addDays(today(), 7);
+    const expiryBoundary = addDays(todayInShanghai(), 7);
     const matched = rows
       .map((item) => {
         const expiryDates = (item.batches ?? [])

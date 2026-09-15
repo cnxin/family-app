@@ -1,3 +1,16 @@
+// 已迁移到 packages/contracts 的域：类型从契约包导入再 re-export，本文件不再手工维护它们
+import type {
+  HouseholdPoll,
+  HouseholdTask,
+  PollCategory,
+  PollOptionResult,
+  PollStatus,
+  PollVoteMode,
+  TaskInstanceStatus,
+  TaskOccurrence,
+  TaskRecurrence,
+} from '@family/contracts';
+
 export type MemberRole = 'owner' | 'admin' | 'member';
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
 export type MenuItemStatus = 'pending' | 'accepted' | 'cooking' | 'done' | 'rejected';
@@ -1373,42 +1386,13 @@ export interface GuestMoviePoll {
   }[];
 }
 
-export type TaskRecurrence = 'once' | 'daily' | 'weekly' | 'monthly';
-export type TaskInstanceStatus = 'pending' | 'done' | 'skipped';
-
-export interface HouseholdTask {
-  id: string;
-  title: string;
-  note: string | null;
-  startsOn: string;
-  recurrence: TaskRecurrence;
-  repeatInterval: number;
-  endsOn: string | null;
-  createdById: string;
-  createdBy: Member;
-  defaultAssigneeId: string | null;
-  defaultAssignee: Member | null;
-  rewardPoints: number;
-  isArchived: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TaskOccurrence {
-  id: string;
-  taskId: string;
-  dueDate: string;
-  status: TaskInstanceStatus;
-  assigneeId: string | null;
-  assignee: Member | null;
-  resolvedById: string | null;
-  resolvedBy: Member | null;
-  resolvedAt: string | null;
-  canManageTask: boolean;
-  canUpdate: boolean;
-  pointsAwarded: boolean;
-  task: HouseholdTask;
-}
+// 任务域类型已迁到 packages/contracts（Zod schema 推导），这里只做 re-export
+export type {
+  HouseholdTask,
+  TaskInstanceStatus,
+  TaskOccurrence,
+  TaskRecurrence,
+};
 
 export type NotificationModule =
   | 'menu'
@@ -1705,54 +1689,14 @@ export interface NotificationDelivery {
   updatedAt: string;
 }
 
-export type PollCategory = 'general' | 'meal' | 'activity' | 'movie' | 'shopping';
-export type PollVoteMode = 'single' | 'multiple';
-export type PollStatus = 'open' | 'closed';
-
-export interface PollOptionResult {
-  id: string;
-  label: string;
-  description: string | null;
-  mediaId: string | null;
-  media: {
-    id: string;
-    status: HouseholdMediaStatus;
-    mediaTitle: Pick<
-      MediaTitle,
-      'id' | 'type' | 'title' | 'originalTitle' | 'year' | 'posterUrl'
-    >;
-  } | null;
-  sortOrder: number;
-  voteCount: number;
-  percentage: number;
-  voters: Member[];
-}
-
-export interface HouseholdPoll {
-  id: string;
-  title: string;
-  description: string | null;
-  category: PollCategory;
-  voteMode: PollVoteMode;
-  maxChoices: number;
-  closesAt: string | null;
-  status: PollStatus;
-  sourceModule: string | null;
-  sourceId: string | null;
-  createdById: string;
-  createdBy: Member;
-  closedById: string | null;
-  closedBy: Member | null;
-  closedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  canManage: boolean;
-  canVote: boolean;
-  totalVoters: number;
-  totalVotes: number;
-  selectedOptionIds: string[];
-  options: PollOptionResult[];
-}
+// 投票域类型已迁到 packages/contracts（Zod schema 推导），这里只做 re-export
+export type {
+  HouseholdPoll,
+  PollCategory,
+  PollOptionResult,
+  PollStatus,
+  PollVoteMode,
+};
 
 export type ReminderSourceModule =
   | 'menu'

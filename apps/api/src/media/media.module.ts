@@ -90,6 +90,7 @@ import {
   MediaSourceSettingsService,
   UpdateMediaSourceSettingsInput,
 } from './media-source-settings.service';
+import { isUniqueViolation } from '@family/shared';
 
 const MEDIA_STATUSES: HouseholdMediaStatus[] = [
   'watchlist',
@@ -443,15 +444,6 @@ function normalizeExternalRefs(refs: MediaExternalRefDto[] = []) {
     throw new BadRequestException('外部编号不能重复');
   }
   return normalized;
-}
-
-function isUniqueViolation(error: unknown) {
-  if (!error || typeof error !== 'object') return false;
-  const candidate = error as {
-    code?: string;
-    driverError?: { code?: string };
-  };
-  return candidate.code === '23505' || candidate.driverError?.code === '23505';
 }
 
 function connectorErrorMessage(error: unknown) {

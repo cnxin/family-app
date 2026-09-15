@@ -9,7 +9,9 @@
 - `apps/api` — NestJS 10 + TypeORM + PostgreSQL 16。每个模块目前是单文件 `xxx.module.ts`（DTO + Service + Controller），实体集中在 `src/entities/index.ts`，schema 由 `src/database/migrations` 管理（不用 synchronize）
 - `apps/mobile` — Expo SDK 57 + expo-router + React Query；`lib/queries.ts` 是全部数据 hook，`lib/types.ts` 是手工维护的 API 类型
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
-- `scripts/api-inventory.mjs` — 从 Controller 生成端点清单，CI 用 `--check` 保证不过期
+- `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数
+- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应，客户端 `lib/types.ts` 从这里 re-export 类型。目前覆盖 tasks、polls
+- `scripts/api-inventory.mjs` — 从 Controller 生成端点清单（含"契约"列），CI 用 `--check` 保证不过期
 - `.github/workflows/ci.yml` — typecheck → lint → 端点清单 → API 黑盒 → Playwright
 
 ## 约定
@@ -18,14 +20,15 @@
 - API 统一响应 `{data}` / `{error:{code,message}}`；请求日志不得包含请求体、姓名、IP、令牌
 - **UI 开发遵循 `.claude/skills/` 的 emilkowalski 技能包**：`apple-design`、`emil-design-eng`；enter 动画 ease-out、确认操作配 haptics、暗色模式必须支持
 - Git 提交信息用中文
-- 新增或修改端点后运行 `node scripts/api-inventory.mjs` 重新生成清单并一起提交
+- 新增或修改端点后运行 `node scripts/api-inventory.mjs` 重新生成清单并一起提交（需先 `corepack pnpm build:packages`，否则契约列为空）
+- 改了 `packages/*` 后要重新构建（`corepack pnpm build:packages`，即 `node scripts/build-packages.mjs`；`pnpm install` 的 postinstall 也会构建）
 
 ## 重构期约束（来自 docs/refactor-plan.md 第 6 节）
 
 - 每个 PR 只碰一个业务域
 - 新代码禁止直接 import 旧模块的 Service；跨域调用走接口或事件
 - 任何业务规则必须能在不起数据库的情况下被单测覆盖（放 `packages/core`，不放 React 组件）
-- 改 `packages/contracts` 或端点契约时，必须同步更新对应的 `apps/api/scripts/*.mjs` 黑盒脚本
+- 改 `packages/contracts` 或端点契约时，必须同步更新对应的 `apps/api/scripts/*.mjs` 黑盒脚本；给一个域补契约的标准动作是：写 schema → `defineEndpoint` 注册 → 跑 `test:api -- --only <域>` 看 `CONTRACT_VIOLATION` → 客户端 `types.ts` 改为 re-export
 - 新文件不超过 400 行（API 侧 ESLint `max-lines` 会告警）
 - 旧 Expo 端与 Hermes 在新实现跑通对应 Playwright / `agent*.mjs` 之前不删
 

@@ -35,6 +35,7 @@ import {
 } from './agent.types';
 import { AgentPageContextService } from './agent-page-context.service';
 import { AgentProposalsService } from './agent-proposals.service';
+import { isUniqueViolation } from '@family/shared';
 
 interface UpdateAgentSettingsInput {
   enabled?: boolean;
@@ -57,15 +58,6 @@ interface UpdateAgentProfileInput {
   memorySuggestionEnabled?: boolean;
   proactiveRoutinesEnabled?: boolean;
   expectedVersion: number;
-}
-
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === '23505'
-  );
 }
 
 function trimmed(value: string, fallback: string) {

@@ -6,6 +6,7 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/mobile/package.json ./apps/mobile/package.json
+COPY packages ./packages
 
 RUN pnpm install --frozen-lockfile --filter mobile...
 

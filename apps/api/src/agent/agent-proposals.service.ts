@@ -38,6 +38,7 @@ import {
   AGENT_PROPOSAL_TOOLS,
   AgentProposalToolName,
 } from './agent.types';
+import { isUniqueViolation } from '@family/shared';
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const optionalText = (max: number) => z.string().trim().max(max).optional();
@@ -200,15 +201,6 @@ const MEAL_LABELS = {
   lunch: '午餐',
   dinner: '晚餐',
 } as const;
-
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === '23505'
-  );
-}
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);

@@ -25,6 +25,7 @@ import {
   encryptAgentMemoryContent,
 } from './agent.crypto';
 import { AGENT_MEMORY_KEYS, AgentMemoryKey } from './agent.types';
+import { isUniqueViolation } from '@family/shared';
 
 const CANDIDATE_TTL_MS = 14 * 86_400_000;
 const EPISODIC_SUMMARY_TTL_MS = 60 * 86_400_000;
@@ -71,14 +72,6 @@ export interface AgentMemoryProvider {
     user: JwtUser,
   ): Promise<unknown>;
   forget(id: string, expectedVersion: number, user: JwtUser): Promise<unknown>;
-}
-
-function isUniqueViolation(error: unknown) {
-  const candidate = error as {
-    code?: string;
-    driverError?: { code?: string };
-  };
-  return candidate?.code === '23505' || candidate?.driverError?.code === '23505';
 }
 
 function boundedInteger(value: number | undefined, fallback: number, maximum: number) {

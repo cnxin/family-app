@@ -1,0 +1,19 @@
+{
+  "name": "@family/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "小管家 HTTP 契约：每个端点的请求/响应 Zod schema 与路由注册表。API 用它校验，客户端用 z.infer 取类型。",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

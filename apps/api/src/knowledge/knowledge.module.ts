@@ -38,6 +38,7 @@ import {
   KnowledgeArticleRevision,
   KnowledgeRevisionChangeType,
 } from '../entities';
+import { isHouseholdManager, normalizedRequiredText, normalizedText } from '@family/shared';
 
 const KNOWLEDGE_CATEGORIES: KnowledgeArticleCategory[] = [
   'procedure',
@@ -173,16 +174,6 @@ class KnowledgeVersionOperationDto {
   idempotencyKey: string;
 }
 
-function normalizedText(value?: string | null) {
-  return value?.trim() || null;
-}
-
-function normalizedRequiredText(value: string, label: string) {
-  const normalized = value.trim();
-  if (!normalized) throw new BadRequestException(`${label}不能为空`);
-  return normalized;
-}
-
 function normalizedTags(values?: string[]) {
   const result: string[] = [];
   const seen = new Set<string>();
@@ -194,10 +185,6 @@ function normalizedTags(values?: string[]) {
     result.push(tag);
   }
   return result;
-}
-
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
 }
 
 function fingerprint(value: Record<string, unknown>) {
@@ -268,7 +255,7 @@ export class KnowledgeService {
   }
 
   async create(dto: CreateKnowledgeArticleDto, user: JwtUser) {
-    if (dto.isPinned && !isAdmin(user)) {
+    if (dto.isPinned && !isHouseholdManager(user)) {
       throw new ForbiddenException('只有家庭管理员可以置顶知识文章');
     }
     const payload = {
@@ -372,7 +359,7 @@ export class KnowledgeService {
         if (article.archivedAt) {
           throw new ConflictException('已归档文章需要先恢复再编辑');
         }
-        if (dto.isPinned !== undefined && !isAdmin(user)) {
+        if (dto.isPinned !== undefined && !isHouseholdManager(user)) {
           throw new ForbiddenException('只有家庭管理员可以调整置顶状态');
         }
         Object.assign(article, fields);
@@ -624,7 +611,7 @@ export class KnowledgeService {
   }
 
   private assertCanManage(article: KnowledgeArticle, user: JwtUser) {
-    if (!isAdmin(user) && article.createdById !== user.memberId) {
+    if (!isHouseholdManager(user) && article.createdById !== user.memberId) {
       throw new ForbiddenException('只能维护自己创建的知识文章');
     }
   }
@@ -653,8 +640,8 @@ export class KnowledgeService {
       archivedAt: article.archivedAt,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
-      canEdit: isAdmin(user) || article.createdById === user.memberId,
-      canPin: isAdmin(user),
+      canEdit: isHouseholdManager(user) || article.createdById === user.memberId,
+      canPin: isHouseholdManager(user),
     };
   }
 

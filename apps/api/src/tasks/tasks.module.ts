@@ -46,6 +46,7 @@ import {
   TaskInstanceStatus,
   TaskRecurrence,
 } from '../entities';
+import { isHouseholdManager, parseDateOnly } from '@family/shared';
 
 class TaskRangeDto {
   @IsISO8601({ strict: true })
@@ -149,26 +150,8 @@ class UpdateTaskInstanceDto {
 
 const DAY_MS = 86_400_000;
 
-function parseDateOnly(value: string, fieldName: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new BadRequestException(`${fieldName}必须使用 YYYY-MM-DD 格式`);
-  }
-  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
-  if (
-    !Number.isFinite(timestamp) ||
-    new Date(timestamp).toISOString().slice(0, 10) !== value
-  ) {
-    throw new BadRequestException(`${fieldName}不是有效日期`);
-  }
-  return timestamp;
-}
-
 function dateString(timestamp: number) {
   return new Date(timestamp).toISOString().slice(0, 10);
-}
-
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
 }
 
 export function taskOccursOn(task: HouseholdTask, date: string) {
@@ -331,7 +314,7 @@ export class TasksService {
     user: JwtUser,
     manager: EntityManager,
   ) {
-    if ((dto.rewardPoints ?? 0) > 0 && !isAdmin(user)) {
+    if ((dto.rewardPoints ?? 0) > 0 && !isHouseholdManager(user)) {
       throw new ForbiddenException('只有家庭管理员可以设置任务积分');
     }
     const input = normalizeTaskInput(dto);
@@ -384,7 +367,7 @@ export class TasksService {
         .getOne();
       if (!task) throw new NotFoundException('家庭任务不存在');
       this.assertTaskManageable(task, user);
-      if (dto.rewardPoints !== undefined && !isAdmin(user)) {
+      if (dto.rewardPoints !== undefined && !isHouseholdManager(user)) {
         throw new ForbiddenException('只有家庭管理员可以修改任务积分');
       }
 
@@ -504,7 +487,7 @@ export class TasksService {
         dto,
         'assigneeId',
       );
-      const canManage = task.createdById === user.memberId || isAdmin(user);
+      const canManage = task.createdById === user.memberId || isHouseholdManager(user);
       if (
         assignmentProvided &&
         !canManage &&
@@ -617,7 +600,7 @@ export class TasksService {
   ) {
     const assigneeId = instance?.assigneeId ?? task.defaultAssigneeId;
     const assignee = instance ? instance.assignee : task.defaultAssignee;
-    const canManageTask = task.createdById === user.memberId || isAdmin(user);
+    const canManageTask = task.createdById === user.memberId || isHouseholdManager(user);
     return {
       id: instance?.id ?? `task:${task.id}:${dueDate}`,
       taskId: task.id,
@@ -653,7 +636,7 @@ export class TasksService {
   }
 
   private assertTaskManageable(task: HouseholdTask, user: JwtUser) {
-    if (task.createdById !== user.memberId && !isAdmin(user)) {
+    if (task.createdById !== user.memberId && !isHouseholdManager(user)) {
       throw new ForbiddenException('只能管理自己创建的任务');
     }
   }

@@ -55,6 +55,7 @@ import {
   TravelPlan,
 } from '../entities';
 import { taskOccursOn, TasksModule } from '../tasks/tasks.module';
+import { isHouseholdManager } from '@family/shared';
 
 class ReminderSourceRangeDto {
   @IsISO8601({ strict: true })
@@ -123,10 +124,6 @@ const MEAL_LABELS: Record<MealType, string> = {
   lunch: '午餐',
   dinner: '晚餐',
 };
-
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
-}
 
 function normalizedDate(value: string | Date) {
   return value instanceof Date
@@ -454,7 +451,7 @@ export class RemindersService
       sentAt: reminder.sentAt?.toISOString() ?? null,
       cancelledAt: reminder.cancelledAt?.toISOString() ?? null,
       cancelReason: reminder.cancelReason,
-      canManage: reminder.createdById === user.memberId || isAdmin(user),
+      canManage: reminder.createdById === user.memberId || isHouseholdManager(user),
       createdAt: reminder.createdAt,
       updatedAt: reminder.updatedAt,
     };
@@ -641,7 +638,7 @@ export class RemindersService
   }
 
   private assertManageable(reminder: Reminder, user: JwtUser) {
-    if (reminder.createdById !== user.memberId && !isAdmin(user)) {
+    if (reminder.createdById !== user.memberId && !isHouseholdManager(user)) {
       throw new ForbiddenException('只能管理自己创建的提醒');
     }
   }

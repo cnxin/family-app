@@ -32,6 +32,7 @@ import {
   Visit,
 } from '../entities';
 import { TasksModule, TasksService } from '../tasks/tasks.module';
+import { parseDateOnly } from '@family/shared';
 
 class CalendarRangeDto {
   @IsISO8601({ strict: true })
@@ -106,17 +107,6 @@ const MEAL_ORDER: Record<MealType, number> = {
   lunch: 1,
   dinner: 2,
 };
-
-function parseDateOnly(value: string, fieldName: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new BadRequestException(`${fieldName}必须使用 YYYY-MM-DD 格式`);
-  }
-  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
-  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== value) {
-    throw new BadRequestException(`${fieldName}不是有效日期`);
-  }
-  return timestamp;
-}
 
 function normalizeEventInput(
   input: CreateCalendarEventDto | UpdateCalendarEventDto,

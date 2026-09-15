@@ -42,6 +42,7 @@ import {
   RewardRedemption,
   RewardRedemptionStatus,
 } from '../entities';
+import { isHouseholdManager, normalizedText } from '@family/shared';
 
 class LedgerQueryDto {
   @IsOptional()
@@ -182,14 +183,6 @@ interface DeltaInput {
   reversesLedgerId?: string | null;
 }
 
-function normalizedText(value?: string | null) {
-  return value?.trim() || null;
-}
-
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
-}
-
 @Injectable()
 export class PointsService {
   constructor(
@@ -312,7 +305,7 @@ export class PointsService {
     return this.rewards.find({
       where: {
         householdId: user.householdId,
-        ...(!includeInactive || !isAdmin(user) ? { isActive: true } : {}),
+        ...(!includeInactive || !isHouseholdManager(user) ? { isActive: true } : {}),
       },
       order: { isActive: 'DESC', cost: 'ASC', createdAt: 'ASC' },
     });
@@ -476,7 +469,7 @@ export class PointsService {
   }
 
   listRedemptions(query: RedemptionQueryDto, user: JwtUser) {
-    const memberId = isAdmin(user) ? query.memberId : user.memberId;
+    const memberId = isHouseholdManager(user) ? query.memberId : user.memberId;
     return this.redemptions.find({
       where: {
         householdId: user.householdId,

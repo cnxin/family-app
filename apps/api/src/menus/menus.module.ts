@@ -42,6 +42,7 @@ import {
   Notification,
 } from '../entities';
 import { buildRecipeSnapshot } from '../recipes/recipe.snapshot';
+import { isUniqueViolation } from '@family/shared';
 
 export class OrderItemDto {
   @IsUUID()
@@ -122,15 +123,6 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
   done: [],
   rejected: ['pending'],
 };
-
-function isUniqueViolation(error: unknown) {
-  if (!error || typeof error !== 'object') return false;
-  const candidate = error as {
-    code?: string;
-    driverError?: { code?: string };
-  };
-  return candidate.code === '23505' || candidate.driverError?.code === '23505';
-}
 
 function assertMenuOpen(menu: Menu) {
   if (menu.status === 'done') {

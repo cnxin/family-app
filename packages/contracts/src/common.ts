@@ -1,0 +1,57 @@
+import { z } from 'zod';
+
+// ---- 基础标量 ---------------------------------------------------------------
+
+/** UUID 主键。 */
+export const uuid = z.uuid();
+/** YYYY-MM-DD。 */
+export const dateOnly = z.iso.date();
+/** ISO 8601 时间戳（API 序列化 Date 后的形态）。 */
+export const isoDateTime = z.iso.datetime({ offset: true });
+/** 可为 null 的 ISO 时间戳。 */
+export const nullableDateTime = isoDateTime.nullable();
+/** 请求里允许只传日期或完整时间戳（对应 class-validator 的 IsISO8601）。 */
+export const isoDateOrDateTime = z.union([dateOnly, isoDateTime]);
+
+// ---- 家庭成员 ---------------------------------------------------------------
+
+export const MEMBER_ROLES = ['owner', 'admin', 'member'] as const;
+export const memberRole = z.enum(MEMBER_ROLES);
+export type MemberRole = z.infer<typeof memberRole>;
+
+/**
+ * 成员公开档案。目前 API 直接回传实体，可能带有额外字段（accountId 等），
+ * 所以用 loose object：只约束客户端依赖的字段，不拒绝多余字段。
+ */
+export const memberSchema = z
+  .object({
+    id: uuid,
+    householdId: uuid,
+    name: z.string(),
+    avatarEmoji: z.string(),
+    role: memberRole,
+    prefersCooking: z.boolean(),
+    disabledAt: nullableDateTime.optional(),
+    createdAt: isoDateTime.optional(),
+  })
+  .loose();
+export type Member = z.infer<typeof memberSchema>;
+
+// ---- 通用响应 ---------------------------------------------------------------
+
+/** 归档类端点的统一响应：`{ id, archived: true }`。 */
+export const archivedResponse = z.object({
+  id: uuid,
+  archived: z.literal(true),
+});
+export type ArchivedResponse = z.infer<typeof archivedResponse>;
+
+/** API 错误响应体。 */
+export const errorResponse = z.object({
+  error: z.object({ code: z.string(), message: z.string() }),
+  requestId: z.string().optional(),
+});
+export type ErrorResponse = z.infer<typeof errorResponse>;
+
+/** 路径参数 `:id`。 */
+export const idParams = z.object({ id: uuid });

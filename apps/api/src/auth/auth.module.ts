@@ -62,6 +62,7 @@ import {
   hashRefreshToken,
   refreshTokenExpiresAt,
 } from './session.tokens';
+import { isUniqueViolation } from '@family/shared';
 
 const AUTH_ACCOUNT_SELECT = {
   id: true,
@@ -285,15 +286,6 @@ function invitationProfile(invitation: HouseholdInvitation) {
     revokedAt: invitation.revokedAt,
     createdAt: invitation.createdAt,
   };
-}
-
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'driverError' in error &&
-    (error as { driverError?: { code?: string } }).driverError?.code === '23505'
-  );
 }
 
 function validTimezone(value: string) {

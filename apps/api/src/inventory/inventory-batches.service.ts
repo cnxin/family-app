@@ -16,6 +16,7 @@ import {
   InventoryItem,
   InventoryTransaction,
 } from '../entities';
+import { addDays, daysBetween, todayInShanghai } from '@family/shared';
 
 const MAX_QUANTITY = 99_999_999.99;
 
@@ -49,15 +50,6 @@ function quantityString(value: number) {
   return String(roundQuantity(value));
 }
 
-function today() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
 function validDate(value: string | null | undefined, label: string) {
   if (!value) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -70,23 +62,9 @@ function validDate(value: string | null | undefined, label: string) {
   return value;
 }
 
-function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function daysBetween(start: string, end: string) {
-  return Math.round(
-    (new Date(`${end}T00:00:00.000Z`).getTime() -
-      new Date(`${start}T00:00:00.000Z`).getTime()) /
-      86_400_000,
-  );
-}
-
 function normalizeDates(input: BatchDatesInput) {
   const dates = {
-    receivedOn: validDate(input.receivedOn, '入库日期') ?? today(),
+    receivedOn: validDate(input.receivedOn, '入库日期') ?? todayInShanghai(),
     productionDate: validDate(input.productionDate, '生产日期'),
     expiresOn: validDate(input.expiresOn, '到期日期'),
     openedOn: validDate(input.openedOn, '开封日期'),
@@ -102,7 +80,7 @@ function normalizeDates(input: BatchDatesInput) {
 }
 
 function statusFor(batch: InventoryBatch, warningDays: number) {
-  const current = today();
+  const current = todayInShanghai();
   if (Number(batch.quantity) <= 0) return 'consumed' as const;
   if (!batch.expiresOn) return 'undated' as const;
   if (batch.expiresOn < current) return 'expired' as const;
@@ -570,7 +548,7 @@ export class InventoryBatchesService {
       ...batch,
       status,
       daysRemaining: batch.expiresOn
-        ? daysBetween(today(), batch.expiresOn)
+        ? daysBetween(todayInShanghai(), batch.expiresOn)
         : null,
     };
   }

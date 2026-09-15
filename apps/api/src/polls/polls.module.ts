@@ -46,6 +46,7 @@ import {
   PollVote,
   PollVoteMode,
 } from '../entities';
+import { isHouseholdManager } from '@family/shared';
 
 class PollQueryDto {
   @IsOptional()
@@ -157,10 +158,6 @@ class VoteDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   optionIds: string[];
-}
-
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
 }
 
 function effectiveStatus(poll: Poll) {
@@ -603,7 +600,7 @@ export class PollsService {
       closedAt: poll.closedAt?.toISOString() ?? null,
       createdAt: poll.createdAt,
       updatedAt: poll.updatedAt,
-      canManage: poll.createdById === user.memberId || isAdmin(user),
+      canManage: poll.createdById === user.memberId || isHouseholdManager(user),
       canVote: status === 'open',
       totalVoters,
       totalVotes: options.reduce((sum, option) => sum + option.votes.length + option.guestVotes.length, 0),
@@ -656,7 +653,7 @@ export class PollsService {
   }
 
   private assertManageable(poll: Poll, user: JwtUser) {
-    if (poll.createdById !== user.memberId && !isAdmin(user)) {
+    if (poll.createdById !== user.memberId && !isHouseholdManager(user)) {
       throw new ForbiddenException('只能管理自己发起的投票');
     }
   }

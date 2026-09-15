@@ -27,6 +27,7 @@ import {
   NotificationDeliveryStatus,
   NotificationModule,
 } from '../entities';
+import { isHouseholdManager, isUniqueViolation } from '@family/shared';
 
 const ALL_NOTIFICATION_MODULES: NotificationModule[] = [
   'menu',
@@ -74,10 +75,6 @@ interface SendResult {
   finishedAt: Date;
 }
 
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
-}
-
 function normalizedName(value: string) {
   const name = value.trim();
   if (!name || name.length > 120) {
@@ -116,15 +113,6 @@ function normalizedCredential(value: string) {
     throw new BadRequestException('渠道凭据长度需要在 4 到 2000 字之间');
   }
   return credential;
-}
-
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === '23505'
-  );
 }
 
 @Injectable()
@@ -436,7 +424,7 @@ export class ExternalNotificationsService
     const rows = await this.deliveries.find({
       where: {
         householdId: user.householdId,
-        ...(isAdmin(user) ? {} : { recipientId: user.memberId }),
+        ...(isHouseholdManager(user) ? {} : { recipientId: user.memberId }),
         ...(!status || status === 'all' ? {} : { status }),
       },
       order: { createdAt: 'DESC' },
@@ -460,7 +448,7 @@ export class ExternalNotificationsService
       canRetry:
         row.status === 'failed' &&
         Boolean(row.channelId) &&
-        (isAdmin(user) || row.recipientId === user.memberId),
+        (isHouseholdManager(user) || row.recipientId === user.memberId),
     }));
   }
 
@@ -477,7 +465,7 @@ export class ExternalNotificationsService
         .setLock('pessimistic_write', undefined, ['delivery'])
         .getOne();
       if (!delivery) throw new NotFoundException('外部通知投递不存在');
-      if (!isAdmin(user) && delivery.recipientId !== user.memberId) {
+      if (!isHouseholdManager(user) && delivery.recipientId !== user.memberId) {
         throw new NotFoundException('外部通知投递不存在');
       }
       if (delivery.status !== 'failed') {
