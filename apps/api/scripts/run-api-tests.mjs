@@ -4,9 +4,7 @@ import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import pg from 'pg';
 
-const { Client } = pg;
 const API_PORT = Number(process.env.TEST_API_PORT || 3199);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const TEST_DATABASE = `family_app_test_${randomUUID().replaceAll('-', '')}`;
@@ -84,9 +82,102 @@ async function runProcess(command, args) {
   if (code !== 0) throw new Error(`${command} 执行失败，状态码 ${code}`);
 }
 
-function runScript(path, ...args) {
-  return runProcess(process.execPath, [path, ...args]);
+const timings = [];
+
+async function runScript(path, ...args) {
+  const startedAt = Date.now();
+  try {
+    await runProcess(process.execPath, [path, ...args]);
+  } finally {
+    timings.push({ script: path.replace(/^scripts\//, ''), ms: Date.now() - startedAt });
+  }
 }
+
+// 业务黑盒脚本，按依赖顺序排列；--only 过滤时保持这个顺序。
+const BUSINESS_SCRIPTS = [
+  'observability',
+  'smoke',
+  'recipes',
+  'calendar',
+  'guests',
+  'tasks',
+  'points',
+  'finance',
+  'polls',
+  'reminders',
+  'external-notifications',
+  'backups',
+  'knowledge',
+  'memories',
+  'agent',
+  'agent-retention',
+  'agent-profiles',
+  'agent-memory',
+  'agent-tools',
+  'agent-page-context',
+  'agent-routines',
+  'agent-proposal-groups',
+  'travel',
+  'members-activities',
+  'media',
+  'media-source-settings',
+  'media-connector-settings',
+  'moviepilot-webhook',
+  'media-library',
+  'playback-webhook',
+  'household-isolation',
+  'security-consistency',
+  'shopping-inventory',
+  'food-batches-smart-menu',
+  'assets',
+];
+
+function parseCliOptions(argv) {
+  const options = { only: null, list: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === '--list') options.list = true;
+    else if (argument === '--only') {
+      options.only = (argv[index + 1] ?? '').split(',');
+      index += 1;
+    } else if (argument.startsWith('--only=')) {
+      options.only = argument.slice('--only='.length).split(',');
+    }
+  }
+  if (options.only) {
+    options.only = options.only.map((name) => name.trim().replace(/\.mjs$/, '')).filter(Boolean);
+    const unknown = options.only.filter((name) => !BUSINESS_SCRIPTS.includes(name));
+    if (unknown.length) {
+      throw new Error(
+        `--only 包含未知脚本：${unknown.join(', ')}。可用脚本见 --list。`,
+      );
+    }
+  }
+  return options;
+}
+
+function printTimings() {
+  if (!timings.length) return;
+  const width = Math.max(...timings.map((item) => item.script.length));
+  console.log('\n脚本耗时（毫秒）：');
+  for (const item of timings) {
+    console.log(`  ${item.script.padEnd(width)}  ${String(item.ms).padStart(7)}`);
+  }
+  const total = timings.reduce((sum, item) => sum + item.ms, 0);
+  console.log(`  ${'合计'.padEnd(width)}  ${String(total).padStart(7)}`);
+}
+
+const cliOptions = parseCliOptions(process.argv.slice(2));
+if (cliOptions.list) {
+  console.log(BUSINESS_SCRIPTS.join('\n'));
+  process.exit(0);
+}
+// pg 延迟加载，让 --list / 参数错误在没有 node_modules 时也能工作
+const { Client } = (await import('pg')).default;
+const selectedScripts = cliOptions.only
+  ? BUSINESS_SCRIPTS.filter((name) => cliOptions.only.includes(name))
+  : BUSINESS_SCRIPTS;
+const fullRun = !cliOptions.only;
 
 function startApi() {
   activeApiOutput = '';
@@ -200,107 +291,95 @@ let databaseCreated = false;
 let activeApiOutput = '';
 
 try {
-  await runScript('scripts/hermes-config-contract.mjs');
-  await runProcess(process.execPath, [
-    '-r',
-    'ts-node/register',
-    'scripts/agent-runtime.contract.ts',
-  ]);
+  if (fullRun) {
+    await runScript('scripts/hermes-config-contract.mjs');
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      'scripts/agent-runtime.contract.ts',
+    ]);
+  }
   await admin.connect();
-  await runProcess(process.execPath, [
-    '-r',
-    'ts-node/register',
-    'scripts/media-connectors.contract.ts',
-  ]);
-  await runProcess(process.execPath, [
-    '-r',
-    'ts-node/register',
-    'scripts/moviepilot-reconciliation.contract.ts',
-  ]);
-  await runProcess(process.execPath, [
-    '-r',
-    'ts-node/register',
-    'scripts/media-metadata.contract.ts',
-  ]);
+  if (fullRun) {
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      'scripts/media-connectors.contract.ts',
+    ]);
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      'scripts/moviepilot-reconciliation.contract.ts',
+    ]);
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      'scripts/media-metadata.contract.ts',
+    ]);
+  }
   await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
   databaseCreated = true;
   console.log(`临时测试数据库：${TEST_DATABASE}`);
 
+  if (fullRun) {
+    api = startApi();
+    await waitForApi(api);
+    await runScript('scripts/bootstrap-invitations.mjs');
+    await stopApi();
+    await admin.query(
+      'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',
+      [TEST_DATABASE],
+    );
+    await admin.query(`DROP DATABASE "${TEST_DATABASE}"`);
+    await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
+    console.log('  ✓ 全新数据库初始化演练完成，已重建业务测试库');
+
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      'scripts/prepare-legacy-pin-migration.ts',
+    ]);
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+    await runScript('scripts/verify-legacy-pin-migration.mjs');
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+    await runScript('scripts/agent-proposal-groups.mjs', '--migration');
+    await runScript('scripts/agent-routines.mjs', '--migration');
+    await runScript('scripts/agent-profiles.mjs', '--migration');
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      'scripts/check-schema-drift.ts',
+    ]);
+  } else {
+    // --only：跳过契约、初始化演练与旧 PIN 迁移，只灌种子后直接跑选中的业务脚本
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+    console.log(`  ✓ --only 模式，只运行：${selectedScripts.join(', ')}`);
+  }
+
   api = startApi();
   await waitForApi(api);
-  await runScript('scripts/bootstrap-invitations.mjs');
-  await stopApi();
-  await admin.query(
-    'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',
-    [TEST_DATABASE],
-  );
-  await admin.query(`DROP DATABASE "${TEST_DATABASE}"`);
-  await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
-  console.log('  ✓ 全新数据库初始化演练完成，已重建业务测试库');
+  for (const name of selectedScripts) {
+    await runScript(`scripts/${name}.mjs`);
+  }
+  // 日志断言依赖 observability.mjs 与 security-consistency.mjs 两个脚本发出的请求 ID
+  if (
+    fullRun ||
+    (selectedScripts.includes('observability') &&
+      selectedScripts.includes('security-consistency'))
+  ) {
+    await wait(50);
+    assertApiLogs(activeApiOutput);
+  }
 
-  await runProcess(process.execPath, [
-    '-r',
-    'ts-node/register',
-    'scripts/prepare-legacy-pin-migration.ts',
-  ]);
-  await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
-  await runScript('scripts/verify-legacy-pin-migration.mjs');
-  await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
-  await runScript('scripts/agent-proposal-groups.mjs', '--migration');
-  await runScript('scripts/agent-routines.mjs', '--migration');
-  await runScript('scripts/agent-profiles.mjs', '--migration');
-  await runProcess(process.execPath, [
-    '-r',
-    'ts-node/register',
-    'scripts/check-schema-drift.ts',
-  ]);
-
-  api = startApi();
-  await waitForApi(api);
-  await runScript('scripts/observability.mjs');
-  await runScript('scripts/smoke.mjs');
-  await runScript('scripts/recipes.mjs');
-  await runScript('scripts/calendar.mjs');
-  await runScript('scripts/guests.mjs');
-  await runScript('scripts/tasks.mjs');
-  await runScript('scripts/points.mjs');
-  await runScript('scripts/finance.mjs');
-  await runScript('scripts/polls.mjs');
-  await runScript('scripts/reminders.mjs');
-  await runScript('scripts/external-notifications.mjs');
-  await runScript('scripts/backups.mjs');
-  await runScript('scripts/knowledge.mjs');
-  await runScript('scripts/memories.mjs');
-  await runScript('scripts/agent.mjs');
-  await runScript('scripts/agent-retention.mjs');
-  await runScript('scripts/agent-profiles.mjs');
-  await runScript('scripts/agent-memory.mjs');
-  await runScript('scripts/agent-tools.mjs');
-  await runScript('scripts/agent-page-context.mjs');
-  await runScript('scripts/agent-routines.mjs');
-  await runScript('scripts/agent-proposal-groups.mjs');
-  await runScript('scripts/travel.mjs');
-  await runScript('scripts/members-activities.mjs');
-  await runScript('scripts/media.mjs');
-  await runScript('scripts/media-source-settings.mjs');
-  await runScript('scripts/media-connector-settings.mjs');
-  await runScript('scripts/moviepilot-webhook.mjs');
-  await runScript('scripts/media-library.mjs');
-  await runScript('scripts/playback-webhook.mjs');
-  await runScript('scripts/household-isolation.mjs');
-  await runScript('scripts/security-consistency.mjs');
-  await runScript('scripts/shopping-inventory.mjs');
-  await runScript('scripts/food-batches-smart-menu.mjs');
-  await runScript('scripts/assets.mjs');
-  await wait(50);
-  assertApiLogs(activeApiOutput);
-
-  await stopApi();
-  testEnvironment.LOGIN_RATE_LIMIT = '3';
-  api = startApi();
-  await waitForApi(api);
-  await runScript('scripts/login-rate-limit.mjs');
+  if (fullRun) {
+    await stopApi();
+    testEnvironment.LOGIN_RATE_LIMIT = '3';
+    api = startApi();
+    await waitForApi(api);
+    await runScript('scripts/login-rate-limit.mjs');
+  }
 } finally {
+  printTimings();
   await stopApi();
   if (databaseCreated) {
     await admin.query(

@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  # 静态检查：类型、lint、端点清单、Compose 与脚本语法
+  check:
+    name: 静态检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 启用 pnpm（corepack）
+        run: corepack enable
+      - name: 缓存 pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - name: 安装依赖
+        run: corepack pnpm install --frozen-lockfile
+      - name: 类型检查（API + 客户端 + Playwright）
+        run: corepack pnpm typecheck
+      - name: Lint（客户端 + API）
+        run: corepack pnpm lint
+      - name: 端点清单与代码一致
+        run: node scripts/api-inventory.mjs --check
+      - name: 备份脚本语法
+        run: corepack pnpm backup:worker:check
+      - name: Compose 配置
+        run: docker compose -f docker-compose.dev.yml config --quiet
+
+  # API 黑盒测试：临时 PostgreSQL + 临时 API 进程
+  api-tests:
+    name: API 黑盒测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: check
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: family
+          POSTGRES_PASSWORD: family123
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U family"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: corepack pnpm install --frozen-lockfile
+      - name: 运行全部 API 脚本
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5433'
+          DB_USER: family
+          DB_PASSWORD: family123
+        run: corepack pnpm --filter api test:api
+
+  # Web 回归：Playwright 双视口（使用 runner 自带的 Google Chrome）
+  web-tests:
+    name: Web 回归（Playwright）
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: check
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: family
+          POSTGRES_PASSWORD: family123
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U family"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: corepack pnpm install --frozen-lockfile
+      - name: 运行 Playwright 回归
+        env:
+          CI: '1'
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5433'
+          DB_USER: family
+          DB_PASSWORD: family123
+        run: corepack pnpm test:web
+      - name: 上传失败截图与 trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            apps/mobile/test-results
+            apps/mobile/playwright-report
+          retention-days: 7

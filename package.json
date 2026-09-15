@@ -4,14 +4,19 @@
   "packageManager": "pnpm@10.34.5",
   "scripts": {
     "api": "corepack pnpm --filter api start:dev",
+    "api:inventory": "node scripts/api-inventory.mjs",
+    "api:inventory:check": "node scripts/api-inventory.mjs --check",
     "backup:dev": "sh scripts/backup-dev.sh",
     "backup:prod": "sh scripts/backup-prod.sh",
     "backup:worker:check": "sh -n scripts/backup-worker.sh && sh -n scripts/backup-worker-entrypoint.sh && sh -n scripts/restore-prod.sh",
-    "lint": "corepack pnpm --filter mobile lint",
+    "lint": "corepack pnpm --filter api lint && corepack pnpm --filter mobile lint",
+    "lint:api": "corepack pnpm --filter api lint",
+    "lint:mobile": "corepack pnpm --filter mobile lint",
     "mobile": "corepack pnpm --filter mobile start",
     "restore:dev": "sh scripts/restore-dev.sh",
     "restore:prod": "sh scripts/restore-prod.sh",
     "seed": "corepack pnpm --filter api seed",
+    "test:api": "corepack pnpm --filter api test:api",
     "test:web": "corepack pnpm --filter api test:web",
     "typecheck": "corepack pnpm --filter api exec tsc --noEmit && corepack pnpm --filter mobile typecheck"
   }

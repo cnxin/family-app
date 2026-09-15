@@ -145,8 +145,11 @@ npx pnpm --filter mobile start
 # API、客户端和 Playwright 测试代码的类型检查
 corepack pnpm typecheck
 
-# Expo 官方规则静态检查
+# ESLint 静态检查（API + 客户端）
 corepack pnpm lint
+
+# 端点清单是否与 Controller 一致（清单本身由 `corepack pnpm api:inventory` 生成）
+corepack pnpm api:inventory:check
 
 # Expo 依赖版本检查
 (cd apps/mobile && ./node_modules/.bin/expo install --check)
@@ -172,12 +175,32 @@ npx pnpm --filter api test:schema
 docker compose -f docker-compose.dev.yml run --rm --no-deps api \
   pnpm --filter api test:api
 
+# 只跑部分业务脚本（跳过契约测试与初始化演练，适合改动单个模块时快速回归）
+corepack pnpm --filter api test:api -- --only tasks,points
+corepack pnpm --filter api test:api -- --list
+
 # 隔离 Chrome 回归：自动创建临时数据库及专用账号，覆盖鼠标登录、
 # 390px 移动视口、1440px 桌面视口和核心导航，结束后删除临时数据库
 corepack pnpm test:web
 ```
 
 Playwright 回归使用随机命名的临时 PostgreSQL 数据库和随机测试密码，不读取或修改当前开发账号。它直接使用本机安装的 Google Chrome，不会额外下载浏览器；失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。测试进程无论成功或失败都会终止隔离 API 并删除临时数据库。
+
+以上检查在 `.github/workflows/ci.yml` 中对每个 PR 自动执行：静态检查 → API 黑盒测试（临时 PostgreSQL）→ Playwright 回归。
+
+## 构建与编排文件
+
+| 文件 | 用途 |
+| --- | --- |
+| `Dockerfile` | API 开发镜像（`docker-compose.dev.yml` 使用） |
+| `Dockerfile.prod` | API 生产镜像 |
+| `Dockerfile.web` | Expo Web 静态站点镜像 |
+| `Dockerfile.backup-worker` | 备份 worker 镜像（`scripts/backup-worker.sh`） |
+| `docker-compose.yml` | 只起 PostgreSQL，配合本机 `npx pnpm api` |
+| `docker-compose.dev.yml` | 本地演示：PostgreSQL + 种子 + API + 备份 worker |
+| `docker-compose.prod.yml` | 家庭长期运行：db / api / web / backup-worker + Caddy |
+| `docker-compose.agent.yml` | 在 prod 基础上追加 Hermes 智能体运行时 |
+| `docker-compose.local-agent.yml` | 开发覆盖：让容器内 API 连接宿主机上运行的 Hermes |
 
 ## 项目结构
 

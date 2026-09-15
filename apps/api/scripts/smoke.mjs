@@ -28,7 +28,6 @@ function assert(cond, msg) {
 }));
 const members = await api('/members');
 const mom = members.find((m) => m.name === '妈妈');
-const dad = members.find((m) => m.prefersCooking) ?? members[0];
 
 console.log('0. 清场：划掉今天已有的菜（保证可重复跑）');
 ({ token } = await api('/auth/login', 'POST', {

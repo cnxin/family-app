@@ -172,7 +172,7 @@ services:
   backup-worker:
     build:
       context: .
-      dockerfile: Dockerfile.backup
+      dockerfile: Dockerfile.backup-worker
     image: family-app-backup-worker:${APP_VERSION:-latest}
     restart: unless-stopped
     environment:

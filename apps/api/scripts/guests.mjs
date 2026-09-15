@@ -166,7 +166,7 @@ assert(
     typeof preview.body.data.wifi?.qrPayload === 'string' &&
     !('hostMember' in preview.body.data) &&
     !('householdId' in preview.body.data) &&
-    !('password' in preview.body.data.wifi ?? {}) &&
+    !('password' in (preview.body.data.wifi ?? {})) &&
     !('tokenHash' in preview.body.data),
   '公开邀请页只返回本次来访的 Wi-Fi 二维码载荷，不返回密码字段、家庭成员或令牌摘要',
 );

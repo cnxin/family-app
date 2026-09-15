@@ -105,7 +105,7 @@ services:
   backup-worker:
     build:
       context: .
-      dockerfile: Dockerfile.backup
+      dockerfile: Dockerfile.backup-worker
     image: family-app-backup-worker:dev
     restart: unless-stopped
     environment:

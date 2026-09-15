@@ -204,7 +204,6 @@ try {
     '家庭成员可以通过测试 MoviePilot 建立待处理订阅',
   );
 
-  const householdId = owner.member.householdId;
   const titleId = created.body.data.mediaTitle.id;
   otherHouseholdId = randomUUID();
   const otherMemberId = randomUUID();
