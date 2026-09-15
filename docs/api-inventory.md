@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 34 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 64 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -13,10 +13,10 @@
 | assets | 18 | 0 |
 | auth | 16 | 0 |
 | calendar | 4 | 4 |
-| dishes | 5 | 0 |
+| dishes | 5 | 5 |
 | finance | 13 | 0 |
 | guests | 21 | 0 |
-| inventory | 13 | 0 |
+| inventory | 13 | 13 |
 | knowledge | 8 | 0 |
 | media | 32 | 0 |
 | memories | 8 | 0 |
@@ -24,9 +24,9 @@
 | notifications | 11 | 0 |
 | points | 12 | 12 |
 | polls | 8 | 8 |
-| recipes | 7 | 0 |
+| recipes | 7 | 7 |
 | reminders | 5 | 5 |
-| shopping | 5 | 0 |
+| shopping | 5 | 5 |
 | smart-menu | 4 | 0 |
 | system | 8 | 0 |
 | tasks | 5 | 5 |
@@ -141,11 +141,11 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/dishes` | `DishesController.list` | 登录 |  | `apps/api/src/dishes/dishes.module.ts` |
-| POST | `/dishes` | `DishesController.create` | `manage_recipes` |  | `apps/api/src/dishes/dishes.module.ts` |
-| PATCH | `/dishes/:id` | `DishesController.update` | `manage_recipes` |  | `apps/api/src/dishes/dishes.module.ts` |
-| DELETE | `/dishes/:id` | `DishesController.remove` | `manage_recipes` |  | `apps/api/src/dishes/dishes.module.ts` |
-| GET | `/ingredients` | `DishesController.listIngredients` | 登录 |  | `apps/api/src/dishes/dishes.module.ts` |
+| GET | `/dishes` | `DishesController.list` | 登录 | ✓ | `apps/api/src/dishes/dishes.module.ts` |
+| POST | `/dishes` | `DishesController.create` | `manage_recipes` | ✓ | `apps/api/src/dishes/dishes.module.ts` |
+| PATCH | `/dishes/:id` | `DishesController.update` | `manage_recipes` | ✓ | `apps/api/src/dishes/dishes.module.ts` |
+| DELETE | `/dishes/:id` | `DishesController.remove` | `manage_recipes` | ✓ | `apps/api/src/dishes/dishes.module.ts` |
+| GET | `/ingredients` | `DishesController.listIngredients` | 登录 | ✓ | `apps/api/src/dishes/dishes.module.ts` |
 
 ## finance（13）
 
@@ -195,19 +195,19 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/inventory` | `InventoryController.list` | 登录 |  | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/inventory-batches` | `InventoryController.batches` | 登录 |  | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/inventory-batches` | `InventoryController.createBatch` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| PATCH | `/inventory-batches/:id` | `InventoryController.updateBatch` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/inventory-items` | `InventoryController.create` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| PATCH | `/inventory-items/:id` | `InventoryController.update` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| DELETE | `/inventory-items/:id` | `InventoryController.remove` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/inventory-transactions` | `InventoryController.transactions` | 登录 |  | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/inventory-transactions/:id/reverse` | `InventoryController.reverse` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/menus/:id/confirm-consumption` | `InventoryController.confirmMenuConsumption` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/menus/:id/inventory-preview` | `InventoryController.menuPreview` | 登录 |  | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/shopping-items/:id/confirm-stock` | `InventoryController.confirmShoppingReceipt` | `manage_inventory` |  | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/shopping-items/:id/inventory-preview` | `InventoryController.shoppingPreview` | 登录 |  | `apps/api/src/inventory/inventory.module.ts` |
+| GET | `/inventory` | `InventoryController.list` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| GET | `/inventory-batches` | `InventoryController.batches` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| POST | `/inventory-batches` | `InventoryController.createBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| PATCH | `/inventory-batches/:id` | `InventoryController.updateBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| POST | `/inventory-items` | `InventoryController.create` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| PATCH | `/inventory-items/:id` | `InventoryController.update` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| DELETE | `/inventory-items/:id` | `InventoryController.remove` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| GET | `/inventory-transactions` | `InventoryController.transactions` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| POST | `/inventory-transactions/:id/reverse` | `InventoryController.reverse` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| POST | `/menus/:id/confirm-consumption` | `InventoryController.confirmMenuConsumption` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| GET | `/menus/:id/inventory-preview` | `InventoryController.menuPreview` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| POST | `/shopping-items/:id/confirm-stock` | `InventoryController.confirmShoppingReceipt` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| GET | `/shopping-items/:id/inventory-preview` | `InventoryController.shoppingPreview` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
 
 ## knowledge（8）
 
@@ -336,13 +336,13 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| POST | `/dishes/:dishId/recipe-variants` | `RecipesController.createVariant` | 登录 |  | `apps/api/src/recipes/recipes.module.ts` |
-| POST | `/member-dish-skills` | `RecipesController.upsertSkill` | 登录 |  | `apps/api/src/recipes/recipes.module.ts` |
-| DELETE | `/members/:memberId/dish-skills/:dishId` | `RecipesController.removeSkill` | 登录 |  | `apps/api/src/recipes/recipes.module.ts` |
-| PATCH | `/recipe-variants/:id` | `RecipesController.updateVariant` | 登录 |  | `apps/api/src/recipes/recipes.module.ts` |
-| DELETE | `/recipe-variants/:id` | `RecipesController.archiveVariant` | 登录 |  | `apps/api/src/recipes/recipes.module.ts` |
-| GET | `/recipes` | `RecipesController.list` | 登录 |  | `apps/api/src/recipes/recipes.module.ts` |
-| GET | `/recipes/:dishId` | `RecipesController.get` | 登录 |  | `apps/api/src/recipes/recipes.module.ts` |
+| POST | `/dishes/:dishId/recipe-variants` | `RecipesController.createVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
+| POST | `/member-dish-skills` | `RecipesController.upsertSkill` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
+| DELETE | `/members/:memberId/dish-skills/:dishId` | `RecipesController.removeSkill` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
+| PATCH | `/recipe-variants/:id` | `RecipesController.updateVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
+| DELETE | `/recipe-variants/:id` | `RecipesController.archiveVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
+| GET | `/recipes` | `RecipesController.list` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
+| GET | `/recipes/:dishId` | `RecipesController.get` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
 
 ## reminders（5）
 
@@ -358,11 +358,11 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| POST | `/shopping-items` | `ShoppingController.addManual` | `manage_shopping` |  | `apps/api/src/shopping/shopping.module.ts` |
-| PATCH | `/shopping-items/:id` | `ShoppingController.check` | `manage_shopping` |  | `apps/api/src/shopping/shopping.module.ts` |
-| DELETE | `/shopping-items/:id` | `ShoppingController.remove` | `manage_shopping` |  | `apps/api/src/shopping/shopping.module.ts` |
-| GET | `/shopping-list` | `ShoppingController.list` | 登录 |  | `apps/api/src/shopping/shopping.module.ts` |
-| POST | `/shopping-list/generate` | `ShoppingController.generate` | `manage_shopping` |  | `apps/api/src/shopping/shopping.module.ts` |
+| POST | `/shopping-items` | `ShoppingController.addManual` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
+| PATCH | `/shopping-items/:id` | `ShoppingController.check` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
+| DELETE | `/shopping-items/:id` | `ShoppingController.remove` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
+| GET | `/shopping-list` | `ShoppingController.list` | 登录 | ✓ | `apps/api/src/shopping/shopping.module.ts` |
+| POST | `/shopping-list/generate` | `ShoppingController.generate` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 
 ## smart-menu（4）
 

@@ -6,6 +6,7 @@ import {
   isoDateTime,
   memberSchema,
   nullableDateTime,
+  removedResponse,
   uuid,
 } from './common';
 import { defineEndpoint } from './registry';
@@ -126,11 +127,6 @@ export type CreateCalendarEventBody = z.infer<typeof createCalendarEventBody>;
 
 export const updateCalendarEventBody = createCalendarEventBody.partial();
 export type UpdateCalendarEventBody = z.infer<typeof updateCalendarEventBody>;
-
-export const removedResponse = z.object({
-  id: uuid,
-  removed: z.literal(true),
-});
 
 export const calendar = {
   list: defineEndpoint({

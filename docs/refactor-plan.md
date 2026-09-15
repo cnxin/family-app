@@ -187,7 +187,15 @@
 
 验收：`types.ts` 行数归零；`grep -c "function isUniqueViolation"` 全仓为 1；contracts 对 275 个端点覆盖率 100%。
 
-进度（2026-09-15）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks / polls / calendar / reminders / points 共 34 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这五个域改为 re-export（少 240 行）。剩余：其余 19 个域的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
+进度（2026-09-15）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks / polls / calendar / reminders / points / dishes / recipes / shopping / inventory 共 64 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这九个域改为 re-export（从 2,140 行降到约 1,690 行）。剩余：其余 15 个域的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
+
+本地全量验收（临时 PostgreSQL + `test:api` 725 个断言 + 三步 `docker build`）已绿；GitHub Actions 因账户层面原因（run 0 秒 `startup_failure`、0 job）尚未跑起来，恢复前以本地全量为准。
+
+第一批契约落地时记下的三条经验：
+
+1. **契约会逼出没人写下来的事实。** `ReminderSource.status` 在 API 和客户端都声明为 `string`，"提醒挂在已结束投票上时 status 是 `closed`"这个事实哪里都没写，直到 `GET /reminders` 触发 `CONTRACT_VIOLATION`。修法是给 reminders 单独的状态枚举，不放宽 `/calendar`。以后遇到契约违规，先判断是"契约推窄了"还是"API 行为错了"，再决定改哪边。
+2. **`--only` 用来迭代，验收必须全量。** 单跑 `--only travel` 是绿的，因为临时库里没有 polls 脚本留下的已关闭投票；只有全量串行跑、前面脚本的数据落进同一个库，那条才会被撞出来。
+3. **改了 `packages/*` 必须重建再测。** `apps/api` 通过 workspace 链接吃的是 `packages/contracts/dist`，不跑 `node scripts/build-packages.mjs` 就是在拿旧 schema 测试，绿了也是假绿。同理，任何依赖 `scripts/` 或 `packages/` 的构建步骤（如 Dockerfile 的 postinstall）都要检查复制顺序。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

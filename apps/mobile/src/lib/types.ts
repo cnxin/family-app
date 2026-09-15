@@ -2,6 +2,29 @@
 import type {
   CalendarEntry,
   CalendarEvent,
+  Dish,
+  DishCategory,
+  DishIngredient,
+  DishRecipeStep,
+  DishRecipeVariant,
+  DishRecipeVariantIngredient,
+  DishRecipeVariantLink,
+  DishRecipeVariantStep,
+  DishReferenceLink,
+  DishSkillLevel,
+  Ingredient,
+  InventoryActionResult,
+  InventoryBatch,
+  InventoryBatchStatus,
+  InventoryCategory,
+  InventoryItem,
+  InventoryTransaction,
+  InventoryTransactionType,
+  MemberDishSkill,
+  MenuInventoryPreview,
+  RecipeDish,
+  ShoppingInventoryPreview,
+  ShoppingItem,
   HouseholdPoll,
   HouseholdReminder,
   HouseholdTask,
@@ -24,6 +47,33 @@ import type {
   TaskRecurrence,
 } from '@family/contracts';
 
+// 菜品 / 菜谱 / 购物 / 库存域类型已迁到 packages/contracts
+export type {
+  Dish,
+  DishCategory,
+  DishIngredient,
+  DishRecipeStep,
+  DishRecipeVariant,
+  DishRecipeVariantIngredient,
+  DishRecipeVariantLink,
+  DishRecipeVariantStep,
+  DishReferenceLink,
+  DishSkillLevel,
+  Ingredient,
+  InventoryActionResult,
+  InventoryBatch,
+  InventoryBatchStatus,
+  InventoryCategory,
+  InventoryItem,
+  InventoryTransaction,
+  InventoryTransactionType,
+  MemberDishSkill,
+  MenuInventoryPreview,
+  RecipeDish,
+  ShoppingInventoryPreview,
+  ShoppingItem,
+};
+
 export type MemberRole = 'owner' | 'admin' | 'member';
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
 export type MenuItemStatus = 'pending' | 'accepted' | 'cooking' | 'done' | 'rejected';
@@ -34,15 +84,6 @@ export type MenuEventType =
   | 'item_note_changed'
   | 'meal_chef_assigned'
   | 'menu_completed';
-export type DishCategory = '荤菜' | '素菜' | '汤' | '主食' | '甜品';
-export type InventoryCategory =
-  | '调料'
-  | '主食'
-  | '饮料'
-  | '零食'
-  | '日用品'
-  | '药品'
-  | '其他';
 export type BackupScheduleFrequency = 'daily' | 'weekly';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
 export type BackupRunKind = 'backup' | 'restore_drill' | 'capacity_check';
@@ -284,16 +325,6 @@ export interface BackupDashboard {
   runs: BackupRun[];
 }
 
-export interface DishRecipeStep {
-  text: string;
-  imageUrl?: string | null;
-}
-
-export interface DishReferenceLink {
-  title?: string;
-  url: string;
-}
-
 export interface Member {
   id: string;
   householdId: string;
@@ -384,91 +415,6 @@ export interface InvitationPreview {
   expiresAt: string;
 }
 
-export interface Ingredient {
-  id: string;
-  name: string;
-  category: string;
-  defaultUnit: string;
-  isPantryStaple: boolean;
-}
-
-export interface DishIngredient {
-  id: string;
-  ingredientId: string;
-  ingredient: Ingredient;
-  quantity: string;
-  unit: string;
-}
-
-export type DishSkillLevel = 'learning' | 'can_cook' | 'signature';
-
-export interface DishRecipeVariantStep {
-  id: string;
-  position: number;
-  text: string;
-  imageUrl: string | null;
-}
-
-export interface DishRecipeVariantLink {
-  id: string;
-  position: number;
-  title: string | null;
-  url: string;
-}
-
-export interface DishRecipeVariantIngredient {
-  id: string;
-  ingredientId: string;
-  ingredient: Ingredient;
-  quantity: string;
-  unit: string;
-}
-
-export interface DishRecipeVariant {
-  id: string;
-  dishId: string;
-  name: string;
-  authorMemberId: string | null;
-  author: Member | null;
-  isDefault: boolean;
-  note: string | null;
-  estMinutes: number | null;
-  ingredients: DishRecipeVariantIngredient[];
-  steps: DishRecipeVariantStep[];
-  referenceLinks: DishRecipeVariantLink[];
-  canManage: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MemberDishSkill {
-  id: string;
-  memberId: string;
-  member: Member;
-  dishId: string;
-  preferredRecipeId: string | null;
-  level: DishSkillLevel;
-  note: string | null;
-}
-
-export interface Dish {
-  id: string;
-  name: string;
-  photoUrl: string | null;
-  category: DishCategory;
-  difficulty: number;
-  estMinutes: number | null;
-  note: string | null;
-  recipeSteps: DishRecipeStep[];
-  referenceLinks: DishReferenceLink[];
-  ingredients: DishIngredient[];
-}
-
-export interface RecipeDish extends Dish {
-  recipeVariants: DishRecipeVariant[];
-  skills: MemberDishSkill[];
-}
-
 export interface DishRecipeSnapshot {
   variantId: string;
   name: string;
@@ -529,121 +475,6 @@ export interface MenuEvent {
   reason: string | null;
   readAt: string | null;
   createdAt: string;
-}
-
-export interface ShoppingItem {
-  id: string;
-  date: string;
-  ingredientId: string | null;
-  ingredient: Ingredient | null;
-  customName: string | null;
-  totalQty: string | null;
-  requiredQty: string | null;
-  availableQty: string | null;
-  unit: string | null;
-  checked: boolean;
-  source: 'auto' | 'manual' | 'maintenance';
-  inventoryItemId: string | null;
-  inventoryItem: InventoryItem | null;
-  maintenanceConsumableId: string | null;
-  inventoryConfirmation: {
-    transactionId: string;
-    inventoryItemId: string;
-    inventoryItemName: string;
-    quantityBefore: string;
-    delta: string;
-    quantityAfter: string;
-    unit: string;
-    actorName: string;
-    createdAt: string;
-    reversedAt: string | null;
-  } | null;
-}
-
-export interface InventoryItem {
-  id: string;
-  ingredientId: string | null;
-  ingredient: Ingredient | null;
-  name: string;
-  category: InventoryCategory;
-  quantity: string;
-  unit: string;
-  lowStockThreshold: string;
-  restockQuantity: string;
-  batchSummary: {
-    trackedQuantity: number;
-    untrackedQuantity: number;
-    activeBatchCount: number;
-    earliestExpiresOn: string | null;
-    expiringCount: number;
-    expiredCount: number;
-  };
-  updatedAt: string;
-}
-
-export type InventoryBatchStatus =
-  | 'fresh'
-  | 'expiring'
-  | 'expired'
-  | 'undated'
-  | 'consumed';
-
-export interface InventoryBatch {
-  id: string;
-  inventoryItemId: string;
-  inventoryItem: InventoryItem;
-  quantity: string;
-  receivedOn: string;
-  productionDate: string | null;
-  expiresOn: string | null;
-  openedOn: string | null;
-  sourceType: 'manual' | 'shopping_item';
-  sourceId: string;
-  version: number;
-  createdById: string;
-  createdBy: Member;
-  status: InventoryBatchStatus;
-  daysRemaining: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type InventoryTransactionType =
-  | 'receipt'
-  | 'consumption'
-  | 'adjustment'
-  | 'reversal';
-
-export interface InventoryTransaction {
-  id: string;
-  operationId: string;
-  type: InventoryTransactionType;
-  inventoryItemId: string;
-  inventoryItem: InventoryItem;
-  quantityBefore: string;
-  delta: string;
-  quantityAfter: string;
-  unit: string;
-  actorName: string;
-  sourceType:
-    | 'shopping_item'
-    | 'menu'
-    | 'maintenance_record'
-    | 'inventory_item'
-    | 'manual_adjustment'
-    | 'inventory_transaction';
-  sourceId: string;
-  reversesTransactionId: string | null;
-  createdAt: string;
-  reversedAt: string | null;
-  reversalTransactionId: string | null;
-  canReverse: boolean;
-}
-
-export interface InventoryActionResult {
-  alreadyConfirmed?: boolean;
-  alreadyReversed?: boolean;
-  transactions: InventoryTransaction[];
 }
 
 export interface SmartMenuCandidate {
@@ -837,74 +668,6 @@ export interface MaintenanceShoppingResult {
   existingCount: number;
   satisfiedCount: number;
   items: ShoppingItem[];
-}
-
-export interface ShoppingInventoryPreview {
-  shoppingItem: {
-    id: string;
-    name: string;
-    ingredientId: string | null;
-    quantity: string | null;
-    unit: string | null;
-    checked: boolean;
-  };
-  candidates: {
-    id: string;
-    name: string;
-    ingredientId: string | null;
-    quantity: string;
-    unit: string;
-  }[];
-  selectedInventoryItem: {
-    id: string;
-    name: string;
-    ingredientId: string | null;
-    quantity: string;
-    unit: string;
-  } | null;
-  quantityBefore: number | null;
-  quantityAfter: number | null;
-  canConfirm: boolean;
-  confirmation: {
-    id: string;
-    reversedAt: string | null;
-  } | null;
-}
-
-export interface MenuInventoryPreview {
-  menuId: string;
-  menuStatus: 'open' | 'done';
-  confirmed: boolean;
-  reversed: boolean;
-  canConfirm: boolean;
-  rows: {
-    ingredientId: string;
-    ingredientName: string;
-    unit: string;
-    quantity: number;
-    status: 'ready' | 'missing_inventory' | 'unit_mismatch' | 'insufficient';
-    inventoryItemId: string | null;
-    inventoryItemName: string | null;
-    quantityBefore: number | null;
-    quantityAfter: number | null;
-    availableUnits: string[];
-    batchAllocations: {
-      batchId: string;
-      receivedOn: string;
-      productionDate: string | null;
-      expiresOn: string | null;
-      openedOn: string | null;
-      status: InventoryBatchStatus;
-      quantityBefore: number;
-      quantity: number;
-      quantityAfter: number;
-    }[];
-    untrackedQuantity: number;
-  }[];
-  transactions: {
-    id: string;
-    reversedAt: string | null;
-  }[];
 }
 
 export interface MenuDateCount {

@@ -46,6 +46,13 @@ export const archivedResponse = z.object({
 });
 export type ArchivedResponse = z.infer<typeof archivedResponse>;
 
+/** 删除类端点的统一响应：`{ id, removed: true }`。 */
+export const removedResponse = z.object({
+  id: uuid,
+  removed: z.literal(true),
+});
+export type RemovedResponse = z.infer<typeof removedResponse>;
+
 /** API 错误响应体。 */
 export const errorResponse = z.object({
   error: z.object({ code: z.string(), message: z.string() }),

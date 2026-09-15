@@ -10,7 +10,7 @@
 - `apps/mobile` — Expo SDK 57 + expo-router + React Query；`lib/queries.ts` 是全部数据 hook，`lib/types.ts` 是手工维护的 API 类型
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
 - `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数
-- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应，客户端 `lib/types.ts` 从这里 re-export 类型。目前覆盖 tasks、polls、calendar、reminders、points
+- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应，客户端 `lib/types.ts` 从这里 re-export 类型。目前覆盖 tasks、polls、calendar、reminders、points、dishes、recipes、shopping、inventory（64/275）
 - `scripts/api-inventory.mjs` — 从 Controller 生成端点清单（含"契约"列），CI 用 `--check` 保证不过期
 - `.github/workflows/ci.yml` — typecheck → lint → 端点清单 → API 黑盒 → Playwright
 
@@ -21,7 +21,8 @@
 - **UI 开发遵循 `.claude/skills/` 的 emilkowalski 技能包**：`apple-design`、`emil-design-eng`；enter 动画 ease-out、确认操作配 haptics、暗色模式必须支持
 - Git 提交信息用中文
 - 新增或修改端点后运行 `node scripts/api-inventory.mjs` 重新生成清单并一起提交（需先 `corepack pnpm build:packages`，否则契约列为空）
-- 改了 `packages/*` 后要重新构建（`corepack pnpm build:packages`，即 `node scripts/build-packages.mjs`；`pnpm install` 的 postinstall 也会构建）
+- 改了 `packages/*` 后必须先重新构建再跑测试（`corepack pnpm build:packages`，即 `node scripts/build-packages.mjs`；`pnpm install` 的 postinstall 也会构建）——API 吃的是 `dist`，不重建就是在用旧 schema 测试
+- `test:api -- --only <域>` 只用于迭代；提交前的验收必须全量跑，有些契约违规只在前面脚本的数据落库后才会出现
 
 ## 重构期约束（来自 docs/refactor-plan.md 第 6 节）
 
