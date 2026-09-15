@@ -8,7 +8,7 @@ import {
   nullableDateTime,
   uuid,
 } from './common';
-import { calendarEntryStatus } from './calendar';
+import { CALENDAR_ENTRY_STATUSES } from './calendar';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/reminders/reminders.module.ts 与 docs/m3-reminders-acceptance.md
@@ -28,6 +28,18 @@ export const REMINDER_STATUSES = ['scheduled', 'sent', 'cancelled'] as const;
 export const reminderStatus = z.enum(REMINDER_STATUSES);
 export type ReminderStatus = z.infer<typeof reminderStatus>;
 
+/**
+ * 提醒关联事项的状态：日历条目状态的并集，再加投票的 `closed`
+ * （提醒挂在已结束/归档/过期的投票上时，resolveSource 返回 status: 'closed'；
+ * 日历本身不产出这个值，所以不放进 CALENDAR_ENTRY_STATUSES）。
+ */
+export const REMINDER_SOURCE_STATUSES = [
+  ...CALENDAR_ENTRY_STATUSES,
+  'closed',
+] as const;
+export const reminderSourceStatus = z.enum(REMINDER_SOURCE_STATUSES);
+export type ReminderSourceStatus = z.infer<typeof reminderSourceStatus>;
+
 /** 可被提醒的事项（来自日历条目、开放投票或启用的维护计划）。 */
 export const reminderSourceSchema = z
   .object({
@@ -39,7 +51,7 @@ export const reminderSourceSchema = z
     date: dateOnly.nullable(),
     startsAt: nullableDateTime,
     targetPath: z.string(),
-    status: calendarEntryStatus,
+    status: reminderSourceStatus,
   })
   .loose();
 export type ReminderSource = z.infer<typeof reminderSourceSchema>;
