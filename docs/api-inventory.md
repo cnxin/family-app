@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 13 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 34 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -12,7 +12,7 @@
 | agent | 40 | 0 |
 | assets | 18 | 0 |
 | auth | 16 | 0 |
-| calendar | 4 | 0 |
+| calendar | 4 | 4 |
 | dishes | 5 | 0 |
 | finance | 13 | 0 |
 | guests | 21 | 0 |
@@ -22,10 +22,10 @@
 | memories | 8 | 0 |
 | menus | 9 | 0 |
 | notifications | 11 | 0 |
-| points | 12 | 0 |
+| points | 12 | 12 |
 | polls | 8 | 8 |
 | recipes | 7 | 0 |
-| reminders | 5 | 0 |
+| reminders | 5 | 5 |
 | shopping | 5 | 0 |
 | smart-menu | 4 | 0 |
 | system | 8 | 0 |
@@ -132,10 +132,10 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/calendar` | `CalendarController.list` | 登录 |  | `apps/api/src/calendar/calendar.module.ts` |
-| POST | `/calendar-events` | `CalendarController.create` | 登录 |  | `apps/api/src/calendar/calendar.module.ts` |
-| PATCH | `/calendar-events/:id` | `CalendarController.update` | 登录 |  | `apps/api/src/calendar/calendar.module.ts` |
-| DELETE | `/calendar-events/:id` | `CalendarController.remove` | 登录 |  | `apps/api/src/calendar/calendar.module.ts` |
+| GET | `/calendar` | `CalendarController.list` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
+| POST | `/calendar-events` | `CalendarController.create` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
+| PATCH | `/calendar-events/:id` | `CalendarController.update` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
+| DELETE | `/calendar-events/:id` | `CalendarController.remove` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
 
 ## dishes（5）
 
@@ -306,18 +306,18 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/points/accounts` | `PointsController.accounts` | 登录 |  | `apps/api/src/points/points.module.ts` |
-| POST | `/points/adjustments` | `PointsController.adjust` | `manage_points` |  | `apps/api/src/points/points.module.ts` |
-| GET | `/points/ledger` | `PointsController.ledger` | 登录 |  | `apps/api/src/points/points.module.ts` |
-| POST | `/points/ledger/:id/reverse` | `PointsController.reverseLedger` | `manage_points` |  | `apps/api/src/points/points.module.ts` |
-| GET | `/reward-redemptions` | `PointsController.redemptions` | 登录 |  | `apps/api/src/points/points.module.ts` |
-| POST | `/reward-redemptions/:id/cancel` | `PointsController.cancel` | 登录 |  | `apps/api/src/points/points.module.ts` |
-| POST | `/reward-redemptions/:id/decision` | `PointsController.decide` | `manage_points` |  | `apps/api/src/points/points.module.ts` |
-| POST | `/reward-redemptions/:id/reverse` | `PointsController.reverseRedemption` | `manage_points` |  | `apps/api/src/points/points.module.ts` |
-| GET | `/rewards` | `PointsController.rewards` | 登录 |  | `apps/api/src/points/points.module.ts` |
-| POST | `/rewards` | `PointsController.createReward` | `manage_points` |  | `apps/api/src/points/points.module.ts` |
-| PATCH | `/rewards/:id` | `PointsController.updateReward` | `manage_points` |  | `apps/api/src/points/points.module.ts` |
-| POST | `/rewards/:id/redemptions` | `PointsController.redeem` | 登录 |  | `apps/api/src/points/points.module.ts` |
+| GET | `/points/accounts` | `PointsController.accounts` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
+| POST | `/points/adjustments` | `PointsController.adjust` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
+| GET | `/points/ledger` | `PointsController.ledger` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
+| POST | `/points/ledger/:id/reverse` | `PointsController.reverseLedger` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
+| GET | `/reward-redemptions` | `PointsController.redemptions` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
+| POST | `/reward-redemptions/:id/cancel` | `PointsController.cancel` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
+| POST | `/reward-redemptions/:id/decision` | `PointsController.decide` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
+| POST | `/reward-redemptions/:id/reverse` | `PointsController.reverseRedemption` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
+| GET | `/rewards` | `PointsController.rewards` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
+| POST | `/rewards` | `PointsController.createReward` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
+| PATCH | `/rewards/:id` | `PointsController.updateReward` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
+| POST | `/rewards/:id/redemptions` | `PointsController.redeem` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
 
 ## polls（8）
 
@@ -348,11 +348,11 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/reminder-sources` | `RemindersController.listSources` | 登录 |  | `apps/api/src/reminders/reminders.module.ts` |
-| GET | `/reminders` | `RemindersController.list` | 登录 |  | `apps/api/src/reminders/reminders.module.ts` |
-| POST | `/reminders` | `RemindersController.create` | 登录 |  | `apps/api/src/reminders/reminders.module.ts` |
-| PATCH | `/reminders/:id` | `RemindersController.update` | 登录 |  | `apps/api/src/reminders/reminders.module.ts` |
-| DELETE | `/reminders/:id` | `RemindersController.cancel` | 登录 |  | `apps/api/src/reminders/reminders.module.ts` |
+| GET | `/reminder-sources` | `RemindersController.listSources` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
+| GET | `/reminders` | `RemindersController.list` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
+| POST | `/reminders` | `RemindersController.create` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
+| PATCH | `/reminders/:id` | `RemindersController.update` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
+| DELETE | `/reminders/:id` | `RemindersController.cancel` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
 
 ## shopping（5）
 

@@ -1,11 +1,24 @@
 // 已迁移到 packages/contracts 的域：类型从契约包导入再 re-export，本文件不再手工维护它们
 import type {
+  CalendarEntry,
+  CalendarEvent,
   HouseholdPoll,
+  HouseholdReminder,
   HouseholdTask,
+  PointsAccount,
+  PointsLedger,
+  PointsLedgerType,
   PollCategory,
   PollOptionResult,
   PollStatus,
   PollVoteMode,
+  ReminderRecipient,
+  ReminderSource,
+  ReminderSourceModule,
+  ReminderStatus,
+  Reward,
+  RewardRedemption,
+  RewardRedemptionStatus,
   TaskInstanceStatus,
   TaskOccurrence,
   TaskRecurrence,
@@ -1201,71 +1214,8 @@ export interface MediaRequest {
   updatedAt: string;
 }
 
-export interface CalendarEvent {
-  id: string;
-  householdId: string;
-  date: string;
-  startsAt: string | null;
-  endsAt: string | null;
-  title: string;
-  note: string | null;
-  createdById: string;
-  createdBy?: Member;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CalendarEntry {
-  id: string;
-  sourceId: string;
-  module:
-    | 'menu'
-    | 'calendar'
-    | 'task'
-    | 'media'
-    | 'guest'
-    | 'maintenance'
-    | 'travel';
-  date: string;
-  startsAt: string | null;
-  endsAt: string | null;
-  title: string;
-  summary: string | null;
-  status:
-    | 'open'
-    | 'done'
-    | 'scheduled'
-    | 'pending'
-    | 'skipped'
-    | 'cancelled'
-    | 'completed'
-    | 'planned'
-    | HouseholdMediaStatus;
-  targetPath: string;
-  metadata: {
-    mealType?: MealType;
-    itemCount?: number;
-    createdById?: string;
-    createdByName?: string;
-    canManage?: boolean;
-    canUpdate?: boolean;
-    assigneeId?: string | null;
-    assigneeName?: string | null;
-    recurrence?: TaskRecurrence;
-    mediaType?: MediaType;
-    year?: number | null;
-    hostMemberId?: string;
-    hostMemberName?: string;
-    guestCount?: number;
-    assetId?: string;
-    assetName?: string;
-    frequencyDays?: number;
-    endDate?: string;
-    destination?: string | null;
-    completedItems?: number;
-    totalItems?: number;
-  };
-}
+// 日历域类型已迁到 packages/contracts
+export type { CalendarEntry, CalendarEvent };
 
 export interface Guest {
   id: string;
@@ -1406,41 +1356,15 @@ export type NotificationModule =
   | 'agent'
   | 'system';
 
-export type PointsLedgerType =
-  | 'award'
-  | 'adjustment'
-  | 'redemption'
-  | 'reversal';
-
-export interface PointsAccount {
-  id: string;
-  householdId: string;
-  memberId: string;
-  member: Member;
-  balance: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PointsLedger {
-  id: string;
-  householdId: string;
-  accountId: string;
-  memberId: string;
-  member: Member;
-  type: PointsLedgerType;
-  pointsBefore: number;
-  delta: number;
-  pointsAfter: number;
-  actorId: string;
-  actor: Member;
-  actorName: string;
-  sourceType: 'manual' | 'task' | 'reward_redemption' | 'points_ledger';
-  sourceId: string;
-  note: string | null;
-  reversesLedgerId: string | null;
-  createdAt: string;
-}
+// 积分与奖励域类型已迁到 packages/contracts
+export type {
+  PointsAccount,
+  PointsLedger,
+  PointsLedgerType,
+  Reward,
+  RewardRedemption,
+  RewardRedemptionStatus,
+};
 
 export type FinanceAccountType =
   | 'cash'
@@ -1559,51 +1483,6 @@ export interface FinanceSummary {
   }[];
 }
 
-export interface Reward {
-  id: string;
-  householdId: string;
-  name: string;
-  description: string | null;
-  cost: number;
-  isActive: boolean;
-  createdById: string;
-  createdBy: Member;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type RewardRedemptionStatus =
-  | 'pending'
-  | 'approved'
-  | 'rejected'
-  | 'cancelled'
-  | 'reversed';
-
-export interface RewardRedemption {
-  id: string;
-  householdId: string;
-  rewardId: string;
-  reward: Reward;
-  memberId: string;
-  member: Member;
-  rewardName: string;
-  cost: number;
-  status: RewardRedemptionStatus;
-  requestNote: string | null;
-  debitLedgerId: string;
-  handledById: string | null;
-  handledBy: Member | null;
-  handledAt: string | null;
-  decisionNote: string | null;
-  restoreLedgerId: string | null;
-  reversedById: string | null;
-  reversedBy: Member | null;
-  reversedAt: string | null;
-  reversalNote: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface AppNotification {
   id: string;
   householdId: string;
@@ -1698,51 +1577,14 @@ export type {
   PollVoteMode,
 };
 
-export type ReminderSourceModule =
-  | 'menu'
-  | 'task'
-  | 'calendar'
-  | 'poll'
-  | 'maintenance'
-  | 'travel';
-export type ReminderStatus = 'scheduled' | 'sent' | 'cancelled';
-
-export interface ReminderSource {
-  module: ReminderSourceModule;
-  sourceId: string;
-  occurrenceDate: string | null;
-  title: string;
-  summary: string | null;
-  date: string | null;
-  startsAt: string | null;
-  targetPath: string;
-  status: string;
-}
-
-export interface ReminderRecipient {
-  id: string;
-  member: Member;
-  deliveredAt: string | null;
-}
-
-export interface HouseholdReminder {
-  id: string;
-  sourceModule: ReminderSourceModule;
-  sourceId: string;
-  occurrenceDate: string | null;
-  remindAt: string;
-  status: ReminderStatus;
-  source: ReminderSource | null;
-  createdById: string;
-  createdBy: Member;
-  recipients: ReminderRecipient[];
-  sentAt: string | null;
-  cancelledAt: string | null;
-  cancelReason: string | null;
-  canManage: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+// 提醒域类型已迁到 packages/contracts
+export type {
+  HouseholdReminder,
+  ReminderRecipient,
+  ReminderSource,
+  ReminderSourceModule,
+  ReminderStatus,
+};
 
 export type AgentRuntimeKind = 'fake' | 'hermes';
 export type AgentPageEntityType =

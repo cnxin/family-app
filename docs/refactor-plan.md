@@ -187,7 +187,7 @@
 
 验收：`types.ts` 行数归零；`grep -c "function isUniqueViolation"` 全仓为 1；contracts 对 275 个端点覆盖率 100%。
 
-进度（2026-09-15）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks + polls 共 13 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这两个域改为 re-export。剩余：其余 22 个域的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
+进度（2026-09-15）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks / polls / calendar / reminders / points 共 34 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这五个域改为 re-export（少 240 行）。剩余：其余 19 个域的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

@@ -10,7 +10,7 @@
 - `apps/mobile` — Expo SDK 57 + expo-router + React Query；`lib/queries.ts` 是全部数据 hook，`lib/types.ts` 是手工维护的 API 类型
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
 - `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数
-- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应，客户端 `lib/types.ts` 从这里 re-export 类型。目前覆盖 tasks、polls
+- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应，客户端 `lib/types.ts` 从这里 re-export 类型。目前覆盖 tasks、polls、calendar、reminders、points
 - `scripts/api-inventory.mjs` — 从 Controller 生成端点清单（含"契约"列），CI 用 `--check` 保证不过期
 - `.github/workflows/ci.yml` — typecheck → lint → 端点清单 → API 黑盒 → Playwright
 
