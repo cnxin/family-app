@@ -1091,10 +1091,10 @@ export default function AssistantScreen() {
 
   const newConversation = async () => {
     setLocalError(null);
-    // 清空必须在 await 之前：创建请求一落地，输入框就重新可编辑，而 setDraft('') 还要等
-    // 这个 then 继续执行——中间这一帧里用户（或自动化）敲进去的字会被随后清掉，
-    // 表现是输入框有字但发送按钮永远是禁用的。
-    setDraft('');
+    // 这里**不清空** draft。草稿属于输入框，不属于某一次会话：点「新对话」时清空，会把
+    // 用户在这一刻正打的字吞掉——onPress 在 RN Web 里经 PressResponder 派发，可能比一次
+    // 快速输入晚一两拍，先输入后清空的顺序完全可能发生，表现是输入框有字、发送按钮永远灰着。
+    // 发送成功后由 submit() 清空，那才是草稿真正用完的时刻。
     try {
       const created = await createConversation.mutateAsync(undefined);
       setConversationId(created.id);

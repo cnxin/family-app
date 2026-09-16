@@ -1218,7 +1218,7 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await page.getByRole('button', { name: '添加任务', exact: true }).first().click();
   await expect(page.getByText('新建家庭任务', { exact: true })).toBeVisible();
   await page.getByLabel('任务名称').fill(taskTitle);
-  await page.getByLabel('任务备注').fill('浏览器端新增任务');
+  await page.getByLabel('任务备注').fill(`浏览器端新增任务-${fixtureSuffix}`);
   await page.getByRole('button', { name: '添加任务', exact: true }).last().click();
   await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toBeVisible();
 
@@ -1230,9 +1230,12 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toBeVisible();
 
   await page.getByRole('button', { name: `编辑${taskTitle}` }).click();
-  await page.getByLabel('任务备注').fill('浏览器端已编辑任务');
+  // 备注文案必须带 fixtureSuffix：三个 project 共用同一个隔离库，写死的文案会在第二、
+  // 第三个 project 跑到这里时匹配到 2～3 个元素，strict mode 直接判失败。
+  const editedNote = `浏览器端已编辑任务-${fixtureSuffix}`;
+  await page.getByLabel('任务备注').fill(editedNote);
   await page.getByRole('button', { name: '保存修改', exact: true }).click();
-  await expect(page.getByText('浏览器端已编辑任务', { exact: true })).toBeVisible();
+  await expect(page.getByText(editedNote, { exact: true })).toBeVisible();
 
   await page.getByRole('checkbox', { name: `完成${taskTitle}` }).click();
   await page.getByRole('button', { name: '已处理', exact: true }).click();

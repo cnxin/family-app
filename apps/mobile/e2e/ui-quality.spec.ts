@@ -41,6 +41,10 @@ const test = base.extend<{ page: Page }, UiQualityWorkerFixtures>({
 async function openAuthenticatedHome(page: Page, projectName: string) {
   await page.goto('/');
   const homeTitle = page.getByText('今天需要关注', { exact: true });
+  const loginTitle = page.getByText('欢迎回家', { exact: true });
+  // 先等"已登录首页"或"登录页"其中之一真正出现再分支。直接 isVisible() 是不等待的：
+  // 机器慢一点首页还没渲染完就会读到 false，于是走进登录分支去找永远不会出现的「欢迎回家」。
+  await expect(homeTitle.or(loginTitle).first()).toBeVisible();
   if (!(await homeTitle.isVisible())) {
     await expect(page.getByText('欢迎回家', { exact: true })).toBeVisible();
     const password = process.env.E2E_ACCOUNT_PASSWORD;
