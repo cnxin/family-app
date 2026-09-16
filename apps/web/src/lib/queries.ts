@@ -7,8 +7,10 @@ import type {
   MealType,
   Menu,
   MenuDateCount,
+  MenuEvent,
   MenuItem,
   MemberProfile,
+  RecipeDish,
   TaskOccurrence,
   UpdateMenuItemBody,
   UpdateTaskInstanceBody,
@@ -144,5 +146,23 @@ export function useCreateDish() {
   return useMutation({
     mutationFn: (body: UpsertDishBody) => api<Dish>('/dishes', { method: 'POST', body }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['dishes'] }),
+  });
+}
+
+export function useMenuEvents(menuId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['menu-events', menuId],
+    queryFn: () => api<MenuEvent[]>(`/menus/${menuId}/events`),
+    enabled: Boolean(menuId) && enabled,
+  });
+}
+
+/** 单个菜品的菜谱视图（做法版本 + 食材 + 步骤）。只在展开那一行时才拉。 */
+export function useRecipe(dishId: string | null) {
+  return useQuery({
+    queryKey: ['recipe', dishId],
+    queryFn: () => api<RecipeDish>(`/recipes/${dishId}`),
+    enabled: Boolean(dishId),
+    staleTime: 5 * 60_000,
   });
 }
