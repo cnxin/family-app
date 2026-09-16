@@ -42,6 +42,30 @@ try {
   );
   assert(invalidRange.status === 400, '任务列表拒绝倒置日期范围');
 
+  // 以下三条守的是请求校验管道（tasks 已从 class-validator DTO 换成契约 schema）。
+  // 日期原先由 @IsISO8601 + 服务里的 parseDateOnly 两道把关，现在契约 dateOnly 直接拦在最前面，
+  // 状态码仍是 400。
+  const badDate = await request(
+    `/tasks?start=2026-13-40&end=${END_DATE}`,
+    mom.token,
+  );
+  assert(badDate.status === 400, '任务列表拒绝非法日期');
+
+  const badRecurrence = await request('/tasks', mom.token, 'POST', {
+    title: '未知周期测试',
+    startsOn: START_DATE,
+    recurrence: '每小时',
+  });
+  assert(badRecurrence.status === 400, '未知周期类型被请求校验拒绝');
+
+  const badInterval = await request('/tasks', mom.token, 'POST', {
+    title: '间隔越界测试',
+    startsOn: START_DATE,
+    recurrence: 'daily',
+    repeatInterval: 0,
+  });
+  assert(badInterval.status === 400, '重复间隔小于 1 被请求校验拒绝');
+
   const repeating = await request('/tasks', mom.token, 'POST', {
     title: '测试每日整理厨房',
     note: '完成后擦干台面',

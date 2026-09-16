@@ -23,13 +23,13 @@ import {
 } from '../entities';
 import { AddItemsDto, MenusService } from '../menus/menus.module';
 import { PollsService } from '../polls/polls.module';
-import type { CreatePollBody } from '@family/contracts';
+import type { CreatePollBody, CreateTaskBody } from '@family/contracts';
 import {
   CreateReminderDto,
   RemindersService,
 } from '../reminders/reminders.module';
 import { ManualItemDto, ShoppingService } from '../shopping/shopping.module';
-import { CreateTaskDto, TasksService } from '../tasks/tasks.module';
+import { TasksService } from '../tasks/tasks.module';
 import {
   CreateFinanceTransactionDto,
   FinanceService,
@@ -644,7 +644,7 @@ export class AgentProposalsService {
       return {
         module: 'task',
         id: await this.tasks.createWithinTransaction(
-          payload as CreateTaskDto,
+          payload as CreateTaskBody,
           user,
           manager,
         ),
