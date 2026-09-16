@@ -10,7 +10,10 @@ COPY apps/mobile/package.json ./apps/mobile/package.json
 COPY packages ./packages
 COPY scripts/build-packages.mjs ./scripts/build-packages.mjs
 
-RUN pnpm install --frozen-lockfile --filter mobile...
+# 过滤器要额外带上 ./packages/*：mobile 只依赖 @family/contracts，`--filter mobile...` 不会把
+# @family/shared 拉进来，而根 postinstall 的 build-packages.mjs 会构建 packages 下的每一个包，
+# 少装一个的 typescript 就会「找不到 typescript」直接失败。
+RUN pnpm install --frozen-lockfile --filter mobile... --filter "./packages/*"
 
 COPY apps/mobile ./apps/mobile
 
