@@ -8,6 +8,7 @@ import {
   nullableDateTime,
   uuid,
 } from './common';
+import { householdMediaStatus, mediaType } from './media';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/polls/polls.module.ts 与 docs/m3-polls-acceptance.md
@@ -30,24 +31,15 @@ export const POLL_STATUSES = ['open', 'closed'] as const;
 export const pollStatus = z.enum(POLL_STATUSES);
 export type PollStatus = z.infer<typeof pollStatus>;
 
-/** 片单条目在投票选项里的精简投影（完整定义在 media 契约里，等 media 域迁移时合并）。 */
-export const HOUSEHOLD_MEDIA_STATUSES = [
-  'watchlist',
-  'voting',
-  'scheduled',
-  'watching',
-  'completed',
-  'dropped',
-] as const;
-
+/** 片单条目在投票选项里的精简投影：只 join 了 mediaTitle 的几列，没有 overview / externalRefs。 */
 export const pollOptionMediaSchema = z
   .object({
     id: uuid,
-    status: z.enum(HOUSEHOLD_MEDIA_STATUSES),
+    status: householdMediaStatus,
     mediaTitle: z
       .object({
         id: uuid,
-        type: z.enum(['movie', 'series']),
+        type: mediaType,
         title: z.string(),
         originalTitle: z.string().nullable(),
         year: z.number().int().nullable(),

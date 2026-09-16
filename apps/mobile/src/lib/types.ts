@@ -38,6 +38,34 @@ import type {
   PollStatus,
   PollVoteMode,
   ReminderRecipient,
+  MediaType,
+  MediaMetadataSource,
+  MediaMetadataExternalProvider,
+  MediaSourceSearchStatus,
+  HouseholdMediaStatus,
+  MediaExternalRef,
+  MediaSearchResult,
+  MediaSearchResponse,
+  MediaSourceConfig,
+  MediaTitle,
+  HouseholdMedia,
+  MediaConnectorKind,
+  MediaConnectorState,
+  MediaConnectorSummary,
+  MediaConnectorSettings,
+  MediaPlaybackUserDirectory,
+  MoviePilotWebhookResult,
+  PlaybackWebhookResult,
+  ViewingSessionStatus,
+  ViewingSession,
+  ViewingProgress,
+  MediaLibraryMatch,
+  MediaLibraryAvailability,
+  MediaLibraryItem,
+  MediaLibraryResponse,
+  MediaLibrarySyncResponse,
+  MediaRequestStatus,
+  MediaRequest,
   BackupScheduleFrequency,
   BackupCapacityStatus,
   BackupRunKind,
@@ -260,307 +288,37 @@ export type {
   MaintenanceShoppingResult,
 };
 
-export type MediaType = 'movie' | 'series';
-export type MediaMetadataSource = 'tmdb' | 'douban' | 'bangumi';
-export type MediaMetadataExternalProvider =
-  | MediaMetadataSource
-  | 'imdb';
-export type HouseholdMediaStatus =
-  | 'watchlist'
-  | 'voting'
-  | 'scheduled'
-  | 'watching'
-  | 'completed'
-  | 'dropped';
-
-export interface MediaExternalRef {
-  id: string;
-  provider:
-    | MediaMetadataExternalProvider
-    | 'plex'
-    | 'emby'
-    | 'moviepilot';
-  externalId: string;
-  connectorKey: string | null;
-}
-
-export interface MediaSearchResult {
-  key: string;
-  type: MediaType;
-  title: string;
-  originalTitle: string | null;
-  year: number | null;
-  overview: string | null;
-  posterUrl: string | null;
-  sources: MediaMetadataSource[];
-  externalRefs: {
-    provider: MediaMetadataExternalProvider;
-    mediaType: MediaType;
-    externalId: string;
-  }[];
-  metadata: Record<string, unknown>;
-}
-
-export interface MediaSourceSearchStatus {
-  provider: MediaMetadataSource;
-  name: string;
-  state: 'not_configured' | 'online' | 'offline';
-  resultCount: number;
-  message: string;
-}
-
-export interface MediaSearchResponse {
-  query: string;
-  results: MediaSearchResult[];
-  sources: MediaSourceSearchStatus[];
-}
-
-export interface MediaSourceConfig {
-  provider: MediaMetadataSource;
-  name: string;
-  mode: 'household' | 'server_default';
-  isEnabled: boolean;
-  baseUrl: string | null;
-  credentialKind: 'token' | 'api_key';
-  credentialConfigured: boolean;
-  credentialHint: string | null;
-  configured: boolean;
-  settings: {
-    imageBaseUrl?: string;
-    userAgent?: string;
-  };
-  updatedAt: string | null;
-}
-
-export interface MediaTitle {
-  id: string;
-  type: MediaType;
-  title: string;
-  originalTitle: string | null;
-  year: number | null;
-  overview: string | null;
-  posterUrl: string | null;
-  externalRefs: MediaExternalRef[];
-}
-
-export interface HouseholdMedia {
-  id: string;
-  householdId: string;
-  status: HouseholdMediaStatus;
-  scheduledFor: string | null;
-  note: string | null;
-  mediaTitle: MediaTitle;
-  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type MediaConnectorKind = 'plex' | 'emby' | 'moviepilot';
-export type MediaConnectorState =
-  | 'disabled'
-  | 'not_configured'
-  | 'needs_credential'
-  | 'online'
-  | 'offline';
-
-export interface MediaConnectorSummary {
-  key: string;
-  kind: MediaConnectorKind;
-  name: string;
-  role: 'library' | 'automation';
-  primary: boolean;
-  state: MediaConnectorState;
-  available: boolean;
-  message: string;
-  checkedAt: string | null;
-}
-
-export interface MediaConnectorSettings {
-  kind: MediaConnectorKind;
-  name: string;
-  role: 'library' | 'automation';
-  mode: 'server_default' | 'household';
-  isEnabled: boolean;
-  baseUrl: string | null;
-  credentialConfigured: boolean;
-  credentialHint: string | null;
-  isPrimary: boolean;
-  configured: boolean;
-  capabilities: string[];
-  webhookConfigured: boolean;
-  webhookSourceIp: string | null;
-  webhookUpdatedAt: string | null;
-  playbackServerId: string | null;
-  updatedAt: string | null;
-}
-
-export interface MediaPlaybackUserDirectory {
-  connectorKey: string;
-  provider: 'plex' | 'emby';
-  name: string;
-  state: MediaConnectorState;
-  message: string;
-  serverId: string | null;
-  users: {
-    serverId: string | null;
-    externalUserId: string;
-    name: string;
-    isDisabled: boolean;
-    isStale: boolean;
-    mapping: {
-      id: string;
-      member: Pick<Member, 'id' | 'name' | 'avatarEmoji' | 'disabledAt'>;
-    } | null;
-  }[];
-}
-
-export interface MoviePilotWebhookResult {
-  callbackPath: string;
-  sourceIp: string;
-  updatedAt: string;
-}
-
-export interface PlaybackWebhookResult extends MoviePilotWebhookResult {
-  serverId: string;
-}
-
-export type ViewingSessionStatus =
-  | 'active'
-  | 'paused'
-  | 'stopped'
-  | 'completed';
-
-export interface ViewingSession {
-  id: string;
-  provider: 'plex' | 'emby';
-  connectorName: string;
-  mediaLibraryItemId: string | null;
-  mediaTitleId: string | null;
-  libraryItemId: string;
-  contentItemId: string;
-  mediaType: MediaType;
-  title: string;
-  deviceName: string | null;
-  status: ViewingSessionStatus;
-  positionMs: number;
-  durationMs: number | null;
-  percentage: number;
-  startedAt: string;
-  endedAt: string | null;
-  lastEventAt: string;
-  posterUrl: string | null;
-  playbackUrl: string | null;
-  participants: {
-    id: string;
-    member: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-    joinedAt: string;
-    lastSeenAt: string;
-  }[];
-}
-
-export interface ViewingProgress {
-  id: string;
-  provider: 'plex' | 'emby';
-  mediaLibraryItemId: string | null;
-  mediaTitleId: string | null;
-  contentItemId: string;
-  title: string;
-  positionMs: number;
-  durationMs: number | null;
-  percentage: number;
-  completed: boolean;
-  lastWatchedAt: string;
-  posterUrl: string | null;
-  playbackUrl: string | null;
-  member: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-}
-
-export interface MediaLibraryMatch {
-  connectorKey: string;
-  provider: 'plex' | 'emby';
-  name: string;
-  primary: boolean;
-  libraryItemId: string;
-  playbackUrl: string | null;
-  seasons: {
-    season: number;
-    // Number reported by the media server; it is not an expected total.
-    episodeCount: number | null;
-  }[];
-}
-
-export type MediaLibraryAvailability = Record<string, MediaLibraryMatch[]>;
-
-export interface MediaLibraryItem {
-  id: string;
-  connectorKey: string;
-  provider: 'plex' | 'emby';
-  connectorName: string;
-  libraryItemId: string;
-  type: MediaType;
-  title: string;
-  originalTitle: string | null;
-  year: number | null;
-  overview: string | null;
-  posterUrl: string | null;
-  externalRefs: {
-    provider: 'tmdb' | 'imdb';
-    mediaType: MediaType;
-    externalId: string;
-  }[];
-  playbackUrl: string | null;
-  householdMediaId: string | null;
-  lastSeenAt: string;
-}
-
-export interface MediaLibraryResponse {
-  items: MediaLibraryItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  pages: number;
-  lastSyncedAt: string | null;
-  connectors: {
-    connectorKey: 'plex' | 'emby';
-    name: string;
-    provider: 'plex' | 'emby';
-    lastSyncedAt: string | null;
-  }[];
-}
-
-export interface MediaLibrarySyncResponse {
-  results: {
-    connectorKey: string;
-    name: string;
-    provider: 'plex' | 'emby';
-    itemCount: number;
-    matchedCount: number;
-    syncedAt: string;
-  }[];
-}
-
-export type MediaRequestStatus =
-  | 'pending'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
-
-export interface MediaRequest {
-  id: string;
-  householdMediaId: string;
-  connectorKey: string;
-  season: number;
-  status: MediaRequestStatus;
-  externalRequestId: string | null;
-  message: string | null;
-  requestedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  cancelledBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
-  canCancel: boolean;
-  lastSyncedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+// 观影与媒体域类型已迁到 packages/contracts
+export type {
+  MediaType,
+  MediaMetadataSource,
+  MediaMetadataExternalProvider,
+  MediaSourceSearchStatus,
+  HouseholdMediaStatus,
+  MediaExternalRef,
+  MediaSearchResult,
+  MediaSearchResponse,
+  MediaSourceConfig,
+  MediaTitle,
+  HouseholdMedia,
+  MediaConnectorKind,
+  MediaConnectorState,
+  MediaConnectorSummary,
+  MediaConnectorSettings,
+  MediaPlaybackUserDirectory,
+  MoviePilotWebhookResult,
+  PlaybackWebhookResult,
+  ViewingSessionStatus,
+  ViewingSession,
+  ViewingProgress,
+  MediaLibraryMatch,
+  MediaLibraryAvailability,
+  MediaLibraryItem,
+  MediaLibraryResponse,
+  MediaLibrarySyncResponse,
+  MediaRequestStatus,
+  MediaRequest,
+};
 
 // 日历域类型已迁到 packages/contracts
 export type { CalendarEntry, CalendarEvent };

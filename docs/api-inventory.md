@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 203 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 235 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -18,7 +18,7 @@
 | guests | 21 | 21 |
 | inventory | 13 | 13 |
 | knowledge | 8 | 8 |
-| media | 32 | 0 |
+| media | 32 | 32 |
 | memories | 8 | 8 |
 | menus | 9 | 9 |
 | notifications | 11 | 11 |
@@ -226,38 +226,38 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/media` | `MediaController.list` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media` | `MediaController.create` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| PATCH | `/media/:id` | `MediaController.update` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| DELETE | `/media/:id` | `MediaController.remove` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/:id/external-refs` | `MediaController.addExternalRefs` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/:mediaId/requests` | `MediaController.createMediaRequest` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/connector-settings` | `MediaController.connectorSettings` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| PUT | `/media/connector-settings/:kind` | `MediaController.updateConnectorSettings` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| DELETE | `/media/connector-settings/:kind` | `MediaController.resetConnectorSettings` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/connector-settings/:kind/test` | `MediaController.testConnectorSettings` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/connector-settings/:provider/playback-webhook` | `MediaController.rotatePlaybackWebhook` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/connector-settings/moviepilot/webhook` | `MediaController.rotateMoviePilotWebhook` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/connectors` | `MediaController.connectors` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/library` | `MediaController.mediaLibrary` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/library-availability` | `MediaController.libraryAvailability` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/library/:libraryItemId/add` | `MediaController.addLibraryItem` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/library/:libraryItemId/poster` | `MediaController.mediaLibraryPoster` | 公开 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/library/sync` | `MediaController.syncMediaLibrary` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/metadata-sources` | `MediaController.metadataSources` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| PUT | `/media/metadata-sources/:provider` | `MediaController.updateMetadataSource` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| DELETE | `/media/metadata-sources/:provider` | `MediaController.resetMetadataSource` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| DELETE | `/media/playback-user-mappings/:mappingId` | `MediaController.unmapPlaybackUser` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/playback-users` | `MediaController.playbackUsers` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| PUT | `/media/playback-users/:provider/:externalUserId/mapping` | `MediaController.mapPlaybackUser` | `manage_integrations` |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/requests` | `MediaController.mediaRequests` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| DELETE | `/media/requests/:requestId` | `MediaController.cancelMediaRequest` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/requests/:requestId/refresh` | `MediaController.refreshMediaRequest` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/search` | `MediaController.search` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/viewing-progress` | `MediaController.viewingProgress` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| GET | `/media/viewing-sessions` | `MediaController.viewingSessions` | 登录 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/webhooks/moviepilot/:integrationId/:secret` | `MediaController.receiveMoviePilotWebhook` | 公开 |  | `apps/api/src/media/media.module.ts` |
-| POST | `/media/webhooks/playback/:provider/:integrationId/:secret` | `MediaController.AnyFilesInterceptor` | 公开 |  | `apps/api/src/media/media.module.ts` |
+| GET | `/media` | `MediaController.list` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media` | `MediaController.create` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| PATCH | `/media/:id` | `MediaController.update` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| DELETE | `/media/:id` | `MediaController.remove` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/:id/external-refs` | `MediaController.addExternalRefs` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/:mediaId/requests` | `MediaController.createMediaRequest` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/connector-settings` | `MediaController.connectorSettings` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| PUT | `/media/connector-settings/:kind` | `MediaController.updateConnectorSettings` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| DELETE | `/media/connector-settings/:kind` | `MediaController.resetConnectorSettings` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/connector-settings/:kind/test` | `MediaController.testConnectorSettings` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/connector-settings/:provider/playback-webhook` | `MediaController.rotatePlaybackWebhook` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/connector-settings/moviepilot/webhook` | `MediaController.rotateMoviePilotWebhook` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/connectors` | `MediaController.connectors` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/library` | `MediaController.mediaLibrary` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/library-availability` | `MediaController.libraryAvailability` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/library/:libraryItemId/add` | `MediaController.addLibraryItem` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/library/:libraryItemId/poster` | `MediaController.mediaLibraryPoster` | 公开 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/library/sync` | `MediaController.syncMediaLibrary` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/metadata-sources` | `MediaController.metadataSources` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| PUT | `/media/metadata-sources/:provider` | `MediaController.updateMetadataSource` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| DELETE | `/media/metadata-sources/:provider` | `MediaController.resetMetadataSource` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| DELETE | `/media/playback-user-mappings/:mappingId` | `MediaController.unmapPlaybackUser` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/playback-users` | `MediaController.playbackUsers` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| PUT | `/media/playback-users/:provider/:externalUserId/mapping` | `MediaController.mapPlaybackUser` | `manage_integrations` | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/requests` | `MediaController.mediaRequests` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| DELETE | `/media/requests/:requestId` | `MediaController.cancelMediaRequest` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/requests/:requestId/refresh` | `MediaController.refreshMediaRequest` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/search` | `MediaController.search` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/viewing-progress` | `MediaController.viewingProgress` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| GET | `/media/viewing-sessions` | `MediaController.viewingSessions` | 登录 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/webhooks/moviepilot/:integrationId/:secret` | `MediaController.receiveMoviePilotWebhook` | 公开 | ✓ | `apps/api/src/media/media.module.ts` |
+| POST | `/media/webhooks/playback/:provider/:integrationId/:secret` | `MediaController.AnyFilesInterceptor` | 公开 | ✓ | `apps/api/src/media/media.module.ts` |
 
 ## memories（8）
 
