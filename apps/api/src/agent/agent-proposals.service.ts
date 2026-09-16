@@ -7,7 +7,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { assertCapability } from '../auth/capabilities';
@@ -38,6 +37,7 @@ import {
   AGENT_PROPOSAL_TOOLS,
   AgentProposalToolName,
 } from './agent.types';
+import { fingerprint as proposalFingerprint } from '../common/fingerprint';
 import { isUniqueViolation } from '@family/shared';
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -202,22 +202,8 @@ const MEAL_LABELS = {
   dinner: '晚餐',
 } as const;
 
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonical(entry)]),
-    );
-  }
-  return value;
-}
-
 function fingerprint(actionType: AgentActionType, payload: ProposalPayload) {
-  return createHash('sha256')
-    .update(JSON.stringify(canonical({ actionType, payload })))
-    .digest('hex');
+  return proposalFingerprint({ actionType, payload });
 }
 
 function parsePayload(actionType: AgentActionType, value: unknown) {

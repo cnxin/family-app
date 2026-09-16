@@ -189,7 +189,7 @@
 
 验收结果（2026-09-16）：三条都达成。`types.ts` 只剩 import + re-export，手写类型声明为 0；`isUniqueViolation` 全仓单一定义在 `packages/shared`；契约覆盖 275/275。
 
-进度（2026-09-16）：**Phase 1 的契约部分已完成**。`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；24 个域 275 个端点全部有契约并在测试模式下自动校验响应（`docs/api-inventory.md` 的"契约"列全满）；客户端 `types.ts` 从 2,140 行手写类型降到 444 行纯 re-export，**已无任何手写类型声明**。剩余：`fingerprint` 等依赖 node:crypto 的工具下沉、Zod 校验管道替换 class-validator。
+进度（2026-09-16）：**Phase 1 的契约部分已完成**。`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；24 个域 275 个端点全部有契约并在测试模式下自动校验响应（`docs/api-inventory.md` 的"契约"列全满）；客户端 `types.ts` 从 2,140 行手写类型降到 444 行纯 re-export，**已无任何手写类型声明**。剩余：Zod 校验管道替换 class-validator。（`fingerprint` 已下沉，见下方第 9 条。）
 
 本地全量验收（临时 PostgreSQL + `test:api` 725 个断言 + 三步 `docker build`）已绿；GitHub Actions 因账户层面原因（run 0 秒 `startup_failure`、0 job）尚未跑起来，恢复前以本地全量为准。
 
@@ -215,6 +215,10 @@
 7. **契约能覆盖形状，覆盖不了"这一行有没有被跑到"。** 契约只在端点被真实调用时才校验，所以覆盖率 275/275 说的是"都写了"，不是"都验过了"。实测下来有三类端点在全量测试里基本没被触发：需要外部服务的（media 的 sync / webhook / requests / 海报，全量里只出现过 1 次 502）、异常分支（各种 409/502 的错误路径）、以及内部凭据端点。给这些端点写契约仍然有价值——它把当时读代码得到的结论固定下来了——但"绿"不等于"验过"，回头改这些端点时不能指望契约兜底。想真正覆盖，得给黑盒脚本补对应的调用。
 
 8. **`@Res()` 端点的契约是 `z.undefined()`，且这是准确的而非将就。** 二进制流（资产资料、回忆照片、媒体海报）和内部渠道 / MCP 这类自己写响应体的端点，处理函数不返回值，拦截器拿到的就是 `undefined`。把它们注册成 `z.undefined()` 而不是留空，是为了让清单里"没有契约"只表示"还没做"；代价是这些端点的实际 wire 格式不受契约保护，要覆盖得另写黑盒断言。同样地，agent 域里依赖后台 worker 时机的字段（run 状态、消息数组）被刻意放宽，换来的是不再偶发失败、失去的是对这些字段的约束——Phase 3 把调度抽成测试可控之后应该收回来。
+
+9. **依赖 node: 的工具不进 `packages/shared`，进 `apps/api/src/common/`。** `fingerprint` 在仓库里有 5 份副本、`canonical` 有 3 份，原计划下沉到 `packages/shared`，但 shared 的定位是「纯 TypeScript、不依赖任何框架」，而这些函数要 `node:crypto`；客户端现在只依赖 `@family/contracts` 不依赖 shared，将来迁小程序时 shared 里混进 node: 会直接炸打包。想保持 shared 纯净又暴露子路径（`@family/shared/node`）则要求 `moduleResolution: node16`，改动面远超收益。所以落在 `apps/api/src/common/fingerprint.ts`——它本来就是 API 级公共代码的位置。
+
+   下沉时发现这 5 份副本**不是同一个算法**：finance 与 agent 提案先递归按键名排序再序列化（键顺序无关），knowledge / memories / travel 直接序列化（**键顺序敏感**）。指纹会落库（`TravelOperation.requestFingerprint` 等）并在幂等键重放时比对，所以统一算法等于让历史行作废——跨部署复用同一把键会从「重放」变成 409。因此这次只做零行为变更的合并：`fingerprint()` 保留规范化版、`rawFingerprint()` 保留非规范化版，两者都在同一个文件里带注释共存，把分歧从五个模块里的隐性差异变成一处显性记录。统一成一种算法是一次独立的、有数据影响的变更，留给 Phase 3。media 的 webhook 去重（`canonicalizeWebhookValue`）排序用默认 `Array.sort()` 而非 `localeCompare`，对非 ASCII 键名结果不同，也没有并进来。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

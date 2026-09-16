@@ -56,7 +56,13 @@ import {
   FamilyMemorySourceModule,
 } from '../entities';
 import { UPLOAD_DIR } from '../upload/upload.module';
-import { isHouseholdManager, normalizedRequiredText, normalizedText } from '@family/shared';
+import { rawFingerprint as fingerprint } from '../common/fingerprint';
+import {
+  isHouseholdManager,
+  isUniqueViolation,
+  normalizedRequiredText,
+  normalizedText,
+} from '@family/shared';
 
 const MEMORY_CATEGORIES: FamilyMemoryCategory[] = [
   'daily',
@@ -258,17 +264,6 @@ function validDate(value: string) {
     throw new BadRequestException('回忆日期不是有效日期');
   }
   return value;
-}
-
-function fingerprint(value: Record<string, unknown>) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
-}
-
-function uniqueViolation(error: unknown) {
-  return (
-    (error as { driverError?: { code?: string } })?.driverError?.code ??
-    (error as { code?: string })?.code
-  ) === '23505';
 }
 
 function photoExtension(mimeType: string) {
@@ -589,7 +584,7 @@ export class MemoriesService {
       return this.presentPhoto(photo);
     } catch (error) {
       await unlink(path).catch(() => undefined);
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         const duplicate = await this.findIdempotentPhoto(
           idempotencyKey,
           requestFingerprint,
@@ -812,7 +807,7 @@ export class MemoriesService {
     requestFingerprint: string,
     user: JwtUser,
   ) {
-    if (uniqueViolation(error)) {
+    if (isUniqueViolation(error)) {
       const existing = await this.findIdempotent(
         idempotencyKey,
         requestFingerprint,

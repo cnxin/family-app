@@ -30,7 +30,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { fingerprint } from '../common/fingerprint';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import {
@@ -284,24 +285,6 @@ function money(value: number | string | null | undefined) {
 
 function normalized(value?: string | null) {
   return value?.trim() || null;
-}
-
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonical(entry)]),
-    );
-  }
-  return value;
-}
-
-function fingerprint(value: unknown) {
-  return createHash('sha256')
-    .update(JSON.stringify(canonical(value)))
-    .digest('hex');
 }
 
 function currentMonth() {

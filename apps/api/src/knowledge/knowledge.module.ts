@@ -28,7 +28,6 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { createHash } from 'node:crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
@@ -38,6 +37,7 @@ import {
   KnowledgeArticleRevision,
   KnowledgeRevisionChangeType,
 } from '../entities';
+import { rawFingerprint as fingerprint } from '../common/fingerprint';
 import { isHouseholdManager, normalizedRequiredText, normalizedText } from '@family/shared';
 
 const KNOWLEDGE_CATEGORIES: KnowledgeArticleCategory[] = [
@@ -185,10 +185,6 @@ function normalizedTags(values?: string[]) {
     result.push(tag);
   }
   return result;
-}
-
-function fingerprint(value: Record<string, unknown>) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 @Injectable()

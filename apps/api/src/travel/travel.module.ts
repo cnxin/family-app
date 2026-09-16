@@ -31,7 +31,6 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { createHash } from 'node:crypto';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
@@ -48,6 +47,7 @@ import {
   TravelPlanStatus,
   TravelTemplateApplication,
 } from '../entities';
+import { rawFingerprint as fingerprint } from '../common/fingerprint';
 import { isHouseholdManager, normalizedRequiredText, normalizedText } from '@family/shared';
 
 const TRAVEL_CATEGORIES: TravelChecklistCategory[] = [
@@ -328,10 +328,6 @@ function assertDateRange(startDate: string, endDate: string) {
   }
   const days = (Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) / 86_400_000;
   if (days > 730) throw new BadRequestException('单个出行计划最长为 731 天');
-}
-
-function fingerprint(value: Record<string, unknown>) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 function normalizedTemplateItems(items: TravelTemplateItemDto[]) {
