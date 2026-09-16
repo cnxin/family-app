@@ -305,6 +305,28 @@ async function runApiPhase() {
     inventory,
     db,
   );
+  // 让本脚本这个使用 stub 数据的 service 独占派发：在同一事务里把例行任务置为到期，
+  // 事务持有这些行的锁，API 进程自己的轮询器（FOR UPDATE SKIP LOCKED）会跳过它们，
+  // 不会用真实库数据抢先生成周报/晚报，导致断言里的聚合文案对不上（之前是偶发失败）。
+  async function dispatchExclusively(routineIds) {
+    await db.transaction(async (manager) => {
+      await manager.query(
+        `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
+         WHERE id = ANY($1::uuid[])`,
+        [routineIds],
+      );
+      const scoped = new AgentRoutineService(
+        manager.getRepository(AgentRoutine),
+        manager.getRepository(AgentRoutineItem),
+        manager.getRepository(AgentSetting),
+        calendar,
+        shopping,
+        inventory,
+        { transaction: (callback) => callback(manager) },
+      );
+      await scoped.dispatchDue();
+    });
+  }
   try {
     const owner = await login('爸爸');
     const member = await login('妈妈');
@@ -517,16 +539,6 @@ async function runApiPhase() {
          ($3, 'nightly_digest', 'test_fact', $4, '仅家庭B可见的事项')`,
       [familyA.householdId, randomUUID(), familyB.householdId, randomUUID()],
     );
-    await db.query(
-      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
-       WHERE id = ANY($1::uuid[])`,
-      [[
-        familyA.routineId,
-        familyB.routineId,
-        noOwner.routineId,
-        healthy.routineId,
-      ]],
-    );
     const confirmedBefore = await db.query(
       `SELECT count(*)::int AS n FROM agent_action_proposals
        WHERE status = 'confirmed'`,
@@ -566,7 +578,12 @@ async function runApiPhase() {
        )`,
       [familyA.householdId, familyA.ownerId],
     );
-    await service.dispatchDue();
+    await dispatchExclusively([
+      familyA.routineId,
+      familyB.routineId,
+      noOwner.routineId,
+      healthy.routineId,
+    ]);
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const delivered = await db.query(
         `SELECT count(*)::int AS n FROM notifications
@@ -635,12 +652,7 @@ async function runApiPhase() {
        ) VALUES ($1, 'nightly_digest', 'test_fact', $2, '同日首次汇总后的晚到事项')`,
       [familyA.householdId, randomUUID()],
     );
-    await db.query(
-      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
-       WHERE id = $1`,
-      [familyA.routineId],
-    );
-    await service.dispatchDue();
+    await dispatchExclusively([familyA.routineId]);
     const idempotent = await db.query(
       `SELECT
          (SELECT count(*)::int FROM notifications
@@ -751,12 +763,7 @@ async function runApiPhase() {
         randomUUID(),
       ],
     );
-    await db.query(
-      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
-       WHERE id = $1`,
-      [expiry.routineId],
-    );
-    await service.dispatchDue();
+    await dispatchExclusively([expiry.routineId]);
     const expiryItems =
       (await waitFor(async () => {
         const rows = await db.query(
@@ -804,12 +811,7 @@ async function runApiPhase() {
        WHERE "householdId" = $1 AND type = 'agent_nightly_digest'`,
       [expiry.householdId],
     );
-    await db.query(
-      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
-       WHERE id = $1`,
-      [expiry.routineId],
-    );
-    await service.dispatchDue();
+    await dispatchExclusively([expiry.routineId]);
     const expiryCounts = await db.query(
       `SELECT "sourceType", "sourceId", count(*)::int AS n
        FROM agent_routine_items
@@ -903,21 +905,16 @@ async function runApiPhase() {
         randomUUID(),
       ],
     );
-    await db.query(
-      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
-       WHERE id = ANY($1::uuid[])`,
-      [[
-        weeklyA.routineId,
-        weeklyB.routineId,
-        weeklyNoOwner.routineId,
-        weeklyHealthy.routineId,
-      ]],
-    );
     const weeklyConfirmedBefore = await db.query(
       `SELECT count(*)::int AS n FROM agent_action_proposals
        WHERE status = 'confirmed'`,
     );
-    await service.dispatchDue();
+    await dispatchExclusively([
+      weeklyA.routineId,
+      weeklyB.routineId,
+      weeklyNoOwner.routineId,
+      weeklyHealthy.routineId,
+    ]);
     const weeklyConfirmedAfter = await db.query(
       `SELECT count(*)::int AS n FROM agent_action_proposals
        WHERE status = 'confirmed'`,
@@ -968,12 +965,7 @@ async function runApiPhase() {
     );
 
     console.log('7. 周级幂等、两种 kind 互不干扰与正文隔离');
-    await db.query(
-      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
-       WHERE id = $1`,
-      [weeklyA.routineId],
-    );
-    await service.dispatchDue();
+    await dispatchExclusively([weeklyA.routineId]);
     const weeklyIdempotent = await db.query(
       `SELECT count(*)::int AS n FROM notifications
        WHERE "householdId" = $1 AND module = 'agent'
@@ -1000,12 +992,7 @@ async function runApiPhase() {
        ) VALUES ($1, 'weekly_report', false, 20, 0, now() - interval '1 minute')`,
       [nightlyOnly.householdId],
     );
-    await db.query(
-      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute'
-       WHERE id = ANY($1::uuid[])`,
-      [[weeklyOnly.routineId, nightlyOnly.routineId]],
-    );
-    await service.dispatchDue();
+    await dispatchExclusively([weeklyOnly.routineId, nightlyOnly.routineId]);
     const separatedKinds = await db.query(
       `SELECT "householdId", type FROM notifications
        WHERE "householdId" = ANY($1::uuid[]) AND module = 'agent'`,
