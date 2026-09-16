@@ -3,11 +3,13 @@ import { useAuth } from './lib/auth';
 import { LoginPage } from './pages/login';
 import { TodayPage } from './pages/today';
 import { TasksPage } from './pages/tasks';
+import { OrderPage } from './pages/order';
 import { Button } from './components/ui';
 
 const tabs = [
   { to: '/', label: '今天' },
   { to: '/tasks', label: '任务' },
+  { to: '/order', label: '点菜' },
 ];
 
 export function App() {
@@ -43,6 +45,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<TodayPage />} />
           <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/order" element={<OrderPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

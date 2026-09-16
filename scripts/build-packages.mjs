@@ -42,5 +42,18 @@ for (const name of packages) {
   console.log(`packages/${name}: tsc${checkOnly ? ' --noEmit' : ''}`);
   const result = spawnSync(process.execPath, args, { cwd: dir, stdio: 'inherit' });
   if (result.status !== 0) process.exit(result.status ?? 1);
+
+  // 有 tsconfig.esm.json 的包再出一份 ESM：API（CommonJS）走 main，
+  // Vite 打包的新客户端走 package.json 的 module 字段——CJS 的 `export *`
+  // 链在 rollup 里做不出具名导出，contracts 的常量数组会整片消失。
+  const esmConfig = join(dir, 'tsconfig.esm.json');
+  if (!checkOnly && existsSync(esmConfig)) {
+    console.log(`packages/${name}: tsc (esm)`);
+    const esm = spawnSync(process.execPath, [tsc, '-p', 'tsconfig.esm.json'], {
+      cwd: dir,
+      stdio: 'inherit',
+    });
+    if (esm.status !== 0) process.exit(esm.status ?? 1);
+  }
 }
 console.log(`工作区包${checkOnly ? '类型检查' : '构建'}完成：${packages.join(', ')}`);

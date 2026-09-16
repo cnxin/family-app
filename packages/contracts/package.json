@@ -4,8 +4,11 @@
   "private": true,
   "description": "小管家 HTTP 契约：每个端点的请求/响应 Zod schema 与路由注册表。API 用它校验，客户端用 z.infer 取类型。",
   "main": "dist/index.js",
+  "module": "dist/esm/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

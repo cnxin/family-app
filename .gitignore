@@ -13,3 +13,7 @@ deploy/secrets/
 *.log
 .env
 .DS_Store
+
+# Vite/tsc 增量构建信息
+apps/web/tsconfig.tsbuildinfo
+apps/web/dist/
