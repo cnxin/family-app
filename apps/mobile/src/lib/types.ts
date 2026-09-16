@@ -38,6 +38,34 @@ import type {
   PollStatus,
   PollVoteMode,
   ReminderRecipient,
+  BackupScheduleFrequency,
+  BackupCapacityStatus,
+  BackupRunKind,
+  BackupRunStatus,
+  BackupPolicy,
+  BackupRun,
+  BackupDashboard,
+  KnowledgeArticleCategory,
+  KnowledgeRevisionChangeType,
+  KnowledgeArticle,
+  KnowledgeArticleRevision,
+  FamilyMemoryCategory,
+  FamilyMemorySourceModule,
+  FamilyMemoryPhoto,
+  FamilyMemory,
+  AssetCategory,
+  AssetRenewalIntervalMonths,
+  AssetStatus,
+  AssetDocumentType,
+  AssetDocument,
+  MaintenancePlan,
+  MaintenanceConsumable,
+  MaintenanceConsumableSnapshot,
+  MaintenanceRecord,
+  HomeAsset,
+  MaintenanceCompletionResult,
+  MaintenanceConsumablesPreview,
+  MaintenanceShoppingResult,
   Guest,
   VisitStatus,
   GuestWifiSecurity,
@@ -170,111 +198,6 @@ export type {
 };
 
 export type MemberRole = 'owner' | 'admin' | 'member';
-export type BackupScheduleFrequency = 'daily' | 'weekly';
-export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
-export type BackupRunKind = 'backup' | 'restore_drill' | 'capacity_check';
-export type BackupRunStatus =
-  | 'queued'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
-export type KnowledgeArticleCategory =
-  | 'procedure'
-  | 'appliance'
-  | 'contact'
-  | 'home'
-  | 'other';
-export type KnowledgeRevisionChangeType =
-  | 'create'
-  | 'update'
-  | 'archive'
-  | 'restore'
-  | 'restore_revision';
-
-export type FamilyMemoryCategory =
-  | 'daily'
-  | 'celebration'
-  | 'travel'
-  | 'meal'
-  | 'visit'
-  | 'milestone'
-  | 'other';
-
-export type FamilyMemorySourceModule =
-  | 'calendar'
-  | 'travel'
-  | 'menu'
-  | 'media'
-  | 'visit';
-
-export interface FamilyMemoryPhoto {
-  id: string;
-  caption: string | null;
-  mimeType: string;
-  sizeBytes: number;
-  contentUrl: string;
-  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
-  createdAt: string;
-}
-
-export interface FamilyMemory {
-  id: string;
-  title: string;
-  happenedOn: string;
-  category: FamilyMemoryCategory;
-  story: string | null;
-  tags: string[];
-  source: {
-    module: FamilyMemorySourceModule;
-    id: string;
-    targetPath: string;
-  } | null;
-  version: number;
-  photos: FamilyMemoryPhoto[];
-  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  updatedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  canEdit: boolean;
-}
-
-export interface KnowledgeArticle {
-  id: string;
-  title: string;
-  category: KnowledgeArticleCategory;
-  summary: string | null;
-  content: string;
-  referenceUrl: string | null;
-  tags: string[];
-  isPinned: boolean;
-  version: number;
-  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  updatedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  canEdit: boolean;
-  canPin: boolean;
-}
-
-export interface KnowledgeArticleRevision {
-  id: string;
-  version: number;
-  changeType: KnowledgeRevisionChangeType;
-  title: string;
-  category: KnowledgeArticleCategory;
-  summary: string | null;
-  content: string;
-  referenceUrl: string | null;
-  tags: string[];
-  isPinned: boolean;
-  archivedAt: string | null;
-  changedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  createdAt: string;
-}
-
 // 出行域类型已迁到 packages/contracts
 export type {
   TravelPlanStatus,
@@ -286,65 +209,24 @@ export type {
   TravelPackingTemplate,
 };
 
-export interface BackupPolicy {
-  id: string;
-  scheduleEnabled: boolean;
-  frequency: BackupScheduleFrequency;
-  weeklyDay: number | null;
-  scheduledHour: number;
-  scheduledMinute: number;
-  retentionDays: number;
-  retentionCount: number;
-  capacityWarningPercent: number;
-  capacityCriticalPercent: number;
-  restoreDrillEnabled: boolean;
-  restoreDrillDay: number;
-  restoreDrillHour: number;
-  nextBackupAt: string | null;
-  nextRestoreDrillAt: string | null;
-  lastStorageCheckedAt: string | null;
-  storageTotalBytes: string | null;
-  storageAvailableBytes: string | null;
-  storageUsedBytes: string | null;
-  capacityStatus: BackupCapacityStatus;
-  capacityAlertedAt: string | null;
-  workerLastSeenAt: string | null;
-  updatedAt: string;
-}
-
-export interface BackupRun {
-  id: string;
-  kind: BackupRunKind;
-  status: BackupRunStatus;
-  trigger: 'manual' | 'scheduled';
-  sourceBackupRunId: string | null;
-  requestedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
-  scheduledFor: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
-  heartbeatAt: string | null;
-  databaseBytes: string | null;
-  uploadsBytes: string | null;
-  totalBytes: string | null;
-  checksumVerified: boolean | null;
-  restoredMigrationCount: number | null;
-  retentionDeletedCount: number;
-  retained: boolean;
-  purgedAt: string | null;
-  artifactAvailable: boolean;
-  errorCode: string | null;
-  errorMessage: string | null;
-  resultSummary: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface BackupDashboard {
-  policy: BackupPolicy;
-  workerOnline: boolean;
-  activeRun: BackupRun | null;
-  runs: BackupRun[];
-}
+// 备份运维 / 知识库 / 家庭回忆 域类型已迁到 packages/contracts
+export type {
+  BackupScheduleFrequency,
+  BackupCapacityStatus,
+  BackupRunKind,
+  BackupRunStatus,
+  BackupPolicy,
+  BackupRun,
+  BackupDashboard,
+  KnowledgeArticleCategory,
+  KnowledgeRevisionChangeType,
+  KnowledgeArticle,
+  KnowledgeArticleRevision,
+  FamilyMemoryCategory,
+  FamilyMemorySourceModule,
+  FamilyMemoryPhoto,
+  FamilyMemory,
+};
 
 export interface Member {
   id: string;
@@ -361,156 +243,22 @@ export interface AuthSetupStatus {
   initialized: boolean;
 }
 
-export type AssetCategory =
-  | 'appliance'
-  | 'furniture'
-  | 'electronics'
-  | 'tool'
-  | 'subscription'
-  | 'other';
-export type AssetRenewalIntervalMonths = 1 | 3 | 6 | 12;
-export type AssetStatus = 'active' | 'retired';
-export type AssetDocumentType = 'receipt' | 'manual' | 'warranty' | 'other';
-
-export interface AssetDocument {
-  id: string;
-  assetId: string;
-  type: AssetDocumentType;
-  title: string;
-  url: string | null;
-  createdById: string;
-  createdBy: Member;
-  createdAt: string;
-}
-
-export interface MaintenancePlan {
-  id: string;
-  assetId: string;
-  title: string;
-  frequencyDays: number;
-  nextDueDate: string;
-  isEnabled: boolean;
-  note: string | null;
-  consumables: MaintenanceConsumable[];
-  createdById: string;
-  createdBy: Member;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MaintenanceConsumable {
-  id: string;
-  planId: string;
-  inventoryItemId: string;
-  inventoryItem: InventoryItem;
-  quantity: string;
-  unit: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MaintenanceConsumableSnapshot {
-  consumableId: string;
-  inventoryItemId: string;
-  inventoryItemName: string;
-  quantity: number;
-  unit: string;
-  consumed: boolean;
-  quantityBefore: number | null;
-  quantityAfter: number | null;
-  transactionId: string | null;
-}
-
-export interface MaintenanceRecord {
-  id: string;
-  assetId: string;
-  planId: string;
-  performedById: string;
-  performedBy: Member;
-  performedAt: string;
-  cost: string | null;
-  note: string | null;
-  idempotencyKey: string;
-  nextDueDateBefore: string;
-  nextDueDateAfter: string;
-  consumablesSnapshot: MaintenanceConsumableSnapshot[];
-  inventoryOperationId: string | null;
-  inventoryConfirmation: {
-    operationId: string | null;
-    reversed: boolean;
-    transactions: {
-      id: string;
-      inventoryItemId: string;
-      inventoryItemName: string;
-      quantityBefore: string;
-      delta: string;
-      quantityAfter: string;
-      unit: string;
-      reversedAt: string | null;
-    }[];
-  } | null;
-  createdAt: string;
-}
-
-export interface HomeAsset {
-  id: string;
-  name: string;
-  category: AssetCategory;
-  location: string | null;
-  brand: string | null;
-  model: string | null;
-  serialNumber: string | null;
-  purchaseDate: string | null;
-  purchasePrice: string | null;
-  warrantyExpiresOn: string | null;
-  renewsOn: string | null;
-  renewalIntervalMonths: AssetRenewalIntervalMonths | null;
-  status: AssetStatus;
-  note: string | null;
-  createdById: string;
-  createdBy: Member;
-  documents: AssetDocument[];
-  maintenancePlans: MaintenancePlan[];
-  maintenanceRecords: MaintenanceRecord[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MaintenanceCompletionResult {
-  alreadyCompleted: boolean;
-  record: MaintenanceRecord;
-  plan: MaintenancePlan;
-  transactions: InventoryTransaction[];
-}
-
-export interface MaintenanceConsumablesPreview {
-  planId: string;
-  assetId: string;
-  assetName: string;
-  planTitle: string;
-  canConsume: boolean;
-  hasShortage: boolean;
-  rows: {
-    consumableId: string;
-    inventoryItemId: string;
-    inventoryItemName: string;
-    quantity: number;
-    unit: string;
-    currentUnit: string;
-    quantityBefore: number;
-    quantityAfter: number | null;
-    shortage: number;
-    status: 'ready' | 'unit_mismatch' | 'insufficient';
-  }[];
-}
-
-export interface MaintenanceShoppingResult {
-  date: string;
-  createdCount: number;
-  existingCount: number;
-  satisfiedCount: number;
-  items: ShoppingItem[];
-}
+// 资产维护域类型已迁到 packages/contracts
+export type {
+  AssetCategory,
+  AssetRenewalIntervalMonths,
+  AssetStatus,
+  AssetDocumentType,
+  AssetDocument,
+  MaintenancePlan,
+  MaintenanceConsumable,
+  MaintenanceConsumableSnapshot,
+  MaintenanceRecord,
+  HomeAsset,
+  MaintenanceCompletionResult,
+  MaintenanceConsumablesPreview,
+  MaintenanceShoppingResult,
+};
 
 export type MediaType = 'movie' | 'series';
 export type MediaMetadataSource = 'tmdb' | 'douban' | 'bangumi';

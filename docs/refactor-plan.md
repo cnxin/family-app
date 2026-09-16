@@ -187,7 +187,7 @@
 
 验收：`types.ts` 行数归零；`grep -c "function isUniqueViolation"` 全仓为 1；contracts 对 275 个端点覆盖率 100%。
 
-进度（2026-09-16）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks / polls / calendar / reminders / points / dishes / recipes / shopping / inventory / menus / notifications / activities / auth / finance / smart-menu / upload / guests / travel 共 18 个域 161 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这十八个域改为 re-export（从 2,140 行降到约 1,210 行）。剩余：assets / media / knowledge / memories / system / agent 6 个域（114 个端点）的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
+进度（2026-09-16）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks / polls / calendar / reminders / points / dishes / recipes / shopping / inventory / menus / notifications / activities / auth / finance / smart-menu / upload / guests / travel / assets / knowledge / memories / system 共 22 个域 203 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这二十二个域改为 re-export（从 2,140 行降到约 960 行）。剩余：media（32）/ agent（40）两个域的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
 
 本地全量验收（临时 PostgreSQL + `test:api` 725 个断言 + 三步 `docker build`）已绿；GitHub Actions 因账户层面原因（run 0 秒 `startup_failure`、0 job）尚未跑起来，恢复前以本地全量为准。
 
@@ -205,6 +205,8 @@
    补契约时要按端点逐个看 Service 的加载方式，写端点专门看 `return save(...)` 还是 `return findOne(...)`；必要时拆成"记录版 / 完整版 / 新建版"多个 schema（`xxxRecordSchema` / `xxxSchema` / `createdXxxSchema`），不要用 `.loose()` 糊过去——`.loose()` 会让 `z.infer` 变成带索引签名的类型，客户端类型立刻失去意义。Phase 1 只改契约不改 API；到 Phase 3 迁移时应让写端点统一回传重新加载的实体，把这些分裂收掉。
 
    反过来，guests 与 travel 两个域所有响应都经 `profile*()` / `planResponse()` 逐字段挑选，不直接回传实体，42 个端点只有 8 种响应形状，加载路径完全不会漏到响应里——这是"写端点回传重新加载的实体 + presenter 挑字段"两条都做对的样子，Phase 3 新代码照这个写。
+
+   两类端点还有一种共存形态：二进制流端点（`/asset-documents/:id/content`、`/memories/:memoryId/photos/:photoId/content`）用 `@Res()` 直接写响应，处理函数返回 undefined，契约 response 写成 `z.undefined()`，拦截器照常放行；签名 URL（`contentUrl` / `access.url`）是响应里唯一每次都变的字段，用正则约束形状而不是比对值。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

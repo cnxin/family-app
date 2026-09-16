@@ -22,6 +22,10 @@ export * from './smart-menu';
 export * from './upload';
 export * from './guests';
 export * from './travel';
+export * from './assets';
+export * from './knowledge';
+export * from './memories';
+export * from './system';
 
 import { buildContractIndex } from './registry';
 import { activities } from './activities';
@@ -31,6 +35,10 @@ import { smartMenu } from './smart-menu';
 import { upload } from './upload';
 import { guests } from './guests';
 import { travel } from './travel';
+import { assets } from './assets';
+import { knowledge } from './knowledge';
+import { memories } from './memories';
+import { system } from './system';
 import { calendar } from './calendar';
 import { dishes } from './dishes';
 import { inventory } from './inventory';
@@ -63,6 +71,10 @@ export const contracts = {
   upload,
   guests,
   travel,
+  assets,
+  knowledge,
+  memories,
+  system,
 };
 
 /** `METHOD /path` → 契约。API 测试模式下的响应校验用它查表。 */

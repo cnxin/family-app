@@ -4,22 +4,22 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 161 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 203 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
 | activities | 1 | 1 |
 | agent | 40 | 0 |
-| assets | 18 | 0 |
+| assets | 18 | 18 |
 | auth | 16 | 16 |
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
 | finance | 13 | 13 |
 | guests | 21 | 21 |
 | inventory | 13 | 13 |
-| knowledge | 8 | 0 |
+| knowledge | 8 | 8 |
 | media | 32 | 0 |
-| memories | 8 | 0 |
+| memories | 8 | 8 |
 | menus | 9 | 9 |
 | notifications | 11 | 11 |
 | points | 12 | 12 |
@@ -28,7 +28,7 @@
 | reminders | 5 | 5 |
 | shopping | 5 | 5 |
 | smart-menu | 4 | 4 |
-| system | 8 | 0 |
+| system | 8 | 8 |
 | tasks | 5 | 5 |
 | travel | 21 | 21 |
 | upload | 1 | 1 |
@@ -88,24 +88,24 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| DELETE | `/asset-documents/:id` | `AssetsController.removeDocument` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| GET | `/asset-documents/:id/access` | `AssetsController.documentAccess` | 登录 |  | `apps/api/src/assets/assets.module.ts` |
-| GET | `/asset-documents/:id/content` | `AssetsController.documentContent` | 公开 |  | `apps/api/src/assets/assets.module.ts` |
-| GET | `/assets` | `AssetsController.list` | 登录 |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets` | `AssetsController.create` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| GET | `/assets/:id` | `AssetsController.get` | 登录 |  | `apps/api/src/assets/assets.module.ts` |
-| PATCH | `/assets/:id` | `AssetsController.update` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/documents` | `AssetsController.createDocument` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/documents/upload` | `AssetsController.FileInterceptor` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/maintenance-plans` | `AssetsController.createPlan` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/renew` | `AssetsController.renewSubscription` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| PATCH | `/maintenance-consumables/:id` | `AssetsController.updateConsumable` | `manage_assets` `manage_inventory` |  | `apps/api/src/assets/assets.module.ts` |
-| DELETE | `/maintenance-consumables/:id` | `AssetsController.removeConsumable` | `manage_assets` `manage_inventory` |  | `apps/api/src/assets/assets.module.ts` |
-| PATCH | `/maintenance-plans/:id` | `AssetsController.updatePlan` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/maintenance-plans/:id/complete` | `AssetsController.completePlan` | `manage_assets` |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/maintenance-plans/:id/consumables` | `AssetsController.createConsumable` | `manage_assets` `manage_inventory` |  | `apps/api/src/assets/assets.module.ts` |
-| GET | `/maintenance-plans/:id/consumables-preview` | `AssetsController.consumablesPreview` | 登录 |  | `apps/api/src/assets/assets.module.ts` |
-| POST | `/maintenance-plans/:id/shopping-items` | `AssetsController.addConsumablesToShopping` | `manage_assets` `manage_shopping` |  | `apps/api/src/assets/assets.module.ts` |
+| DELETE | `/asset-documents/:id` | `AssetsController.removeDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| GET | `/asset-documents/:id/access` | `AssetsController.documentAccess` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
+| GET | `/asset-documents/:id/content` | `AssetsController.documentContent` | 公开 | ✓ | `apps/api/src/assets/assets.module.ts` |
+| GET | `/assets` | `AssetsController.list` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/assets` | `AssetsController.create` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| GET | `/assets/:id` | `AssetsController.get` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
+| PATCH | `/assets/:id` | `AssetsController.update` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/assets/:id/documents` | `AssetsController.createDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/assets/:id/documents/upload` | `AssetsController.FileInterceptor` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/assets/:id/maintenance-plans` | `AssetsController.createPlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/assets/:id/renew` | `AssetsController.renewSubscription` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| PATCH | `/maintenance-consumables/:id` | `AssetsController.updateConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| DELETE | `/maintenance-consumables/:id` | `AssetsController.removeConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| PATCH | `/maintenance-plans/:id` | `AssetsController.updatePlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/maintenance-plans/:id/complete` | `AssetsController.completePlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/maintenance-plans/:id/consumables` | `AssetsController.createConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| GET | `/maintenance-plans/:id/consumables-preview` | `AssetsController.consumablesPreview` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
+| POST | `/maintenance-plans/:id/shopping-items` | `AssetsController.addConsumablesToShopping` | `manage_assets` `manage_shopping` | ✓ | `apps/api/src/assets/assets.module.ts` |
 
 ## auth（16）
 
@@ -213,14 +213,14 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/knowledge-articles` | `KnowledgeController.list` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles` | `KnowledgeController.create` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
-| GET | `/knowledge-articles/:id` | `KnowledgeController.detail` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
-| PATCH | `/knowledge-articles/:id` | `KnowledgeController.update` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles/:id/archive` | `KnowledgeController.archive` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles/:id/restore` | `KnowledgeController.restore` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
-| GET | `/knowledge-articles/:id/revisions` | `KnowledgeController.revisions` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles/:id/revisions/:version/restore` | `KnowledgeController.restoreRevision` | 登录 |  | `apps/api/src/knowledge/knowledge.module.ts` |
+| GET | `/knowledge-articles` | `KnowledgeController.list` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| POST | `/knowledge-articles` | `KnowledgeController.create` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| GET | `/knowledge-articles/:id` | `KnowledgeController.detail` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| PATCH | `/knowledge-articles/:id` | `KnowledgeController.update` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| POST | `/knowledge-articles/:id/archive` | `KnowledgeController.archive` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| POST | `/knowledge-articles/:id/restore` | `KnowledgeController.restore` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| GET | `/knowledge-articles/:id/revisions` | `KnowledgeController.revisions` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| POST | `/knowledge-articles/:id/revisions/:version/restore` | `KnowledgeController.restoreRevision` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
 
 ## media（32）
 
@@ -263,14 +263,14 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/memories` | `MemoriesController.list` | 登录 |  | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories` | `MemoriesController.create` | 登录 |  | `apps/api/src/memories/memories.module.ts` |
-| GET | `/memories/:id` | `MemoriesController.detail` | 登录 |  | `apps/api/src/memories/memories.module.ts` |
-| PATCH | `/memories/:id` | `MemoriesController.update` | 登录 |  | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories/:id/archive` | `MemoriesController.archive` | 登录 |  | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories/:id/photos` | `MemoriesController.FileInterceptor` | 登录 |  | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories/:id/restore` | `MemoriesController.restore` | 登录 |  | `apps/api/src/memories/memories.module.ts` |
-| GET | `/memories/:memoryId/photos/:photoId/content` | `MemoriesController.photoContent` | 公开 |  | `apps/api/src/memories/memories.module.ts` |
+| GET | `/memories` | `MemoriesController.list` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| POST | `/memories` | `MemoriesController.create` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| GET | `/memories/:id` | `MemoriesController.detail` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| PATCH | `/memories/:id` | `MemoriesController.update` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| POST | `/memories/:id/archive` | `MemoriesController.archive` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| POST | `/memories/:id/photos` | `MemoriesController.FileInterceptor` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| POST | `/memories/:id/restore` | `MemoriesController.restore` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| GET | `/memories/:memoryId/photos/:photoId/content` | `MemoriesController.photoContent` | 公开 | ✓ | `apps/api/src/memories/memories.module.ts` |
 
 ## menus（9）
 
@@ -377,14 +377,14 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/health/live` | `HealthController.live` | 公开 |  | `apps/api/src/system/system.module.ts` |
-| GET | `/health/ready` | `HealthController.ready` | 公开 |  | `apps/api/src/system/system.module.ts` |
-| GET | `/system/backups` | `SystemBackupController.dashboard` | 登录 |  | `apps/api/src/system/system.module.ts` |
-| POST | `/system/backups/capacity-checks` | `SystemBackupController.queueCapacityCheck` | 登录 |  | `apps/api/src/system/system.module.ts` |
-| PUT | `/system/backups/policy` | `SystemBackupController.updatePolicy` | 登录 |  | `apps/api/src/system/system.module.ts` |
-| POST | `/system/backups/runs` | `SystemBackupController.queueBackup` | 登录 |  | `apps/api/src/system/system.module.ts` |
-| PATCH | `/system/backups/runs/:id/cancel` | `SystemBackupController.cancelRun` | 登录 |  | `apps/api/src/system/system.module.ts` |
-| POST | `/system/backups/runs/:id/restore-drills` | `SystemBackupController.queueRestoreDrill` | 登录 |  | `apps/api/src/system/system.module.ts` |
+| GET | `/health/live` | `HealthController.live` | 公开 | ✓ | `apps/api/src/system/system.module.ts` |
+| GET | `/health/ready` | `HealthController.ready` | 公开 | ✓ | `apps/api/src/system/system.module.ts` |
+| GET | `/system/backups` | `SystemBackupController.dashboard` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
+| POST | `/system/backups/capacity-checks` | `SystemBackupController.queueCapacityCheck` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
+| PUT | `/system/backups/policy` | `SystemBackupController.updatePolicy` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
+| POST | `/system/backups/runs` | `SystemBackupController.queueBackup` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
+| PATCH | `/system/backups/runs/:id/cancel` | `SystemBackupController.cancelRun` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
+| POST | `/system/backups/runs/:id/restore-drills` | `SystemBackupController.queueRestoreDrill` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
 
 ## tasks（5）
 
