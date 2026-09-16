@@ -30,8 +30,12 @@ export default defineConfig({
   },
   projects: [
     {
+      // setup 的第一次 page.goto 要等 Metro 首次打包整个应用，干净 runner 上能超过 30 秒。
+      // webServer.timeout 只管"端口起没起"，打包是第一次请求时才发生的，所以单独放宽这个
+      // project 的用例超时；后面的 project 吃的是已经打好的包，30 秒够用。
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
+      timeout: 120_000,
       use: { ...devices['Desktop Chrome'] },
     },
     {
