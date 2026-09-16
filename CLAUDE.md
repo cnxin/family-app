@@ -7,10 +7,10 @@
 ## 结构
 
 - `apps/api` — NestJS 10 + TypeORM + PostgreSQL 16。每个模块目前是单文件 `xxx.module.ts`（DTO + Service + Controller），实体集中在 `src/entities/index.ts`，schema 由 `src/database/migrations` 管理（不用 synchronize）
-- `apps/mobile` — Expo SDK 57 + expo-router + React Query；`lib/queries.ts` 是全部数据 hook，`lib/types.ts` 是手工维护的 API 类型
+- `apps/mobile` — Expo SDK 57 + expo-router + React Query；`lib/queries.ts` 是全部数据 hook，`lib/types.ts` 只做 `@family/contracts` 的 re-export（不要在里面新增手写类型）
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
 - `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数
-- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应，客户端 `lib/types.ts` 从这里 re-export 类型。目前覆盖 tasks、polls、calendar、reminders、points、dishes、recipes、shopping、inventory、menus、notifications、activities、auth、finance、smart-menu、upload、guests、travel、assets、knowledge、memories、system、media（235/275，只剩 agent）
+- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应。**24 个域 275 个端点已全部覆盖（275/275）**，客户端 `lib/types.ts` 不再手写任何类型，只从这里 re-export。新增端点必须同时加契约，否则 `docs/api-inventory.md` 的"契约"列会出现空缺
 - `scripts/api-inventory.mjs` — 从 Controller 生成端点清单（含"契约"列），CI 用 `--check` 保证不过期
 - `.github/workflows/ci.yml` — typecheck → lint → 端点清单 → API 黑盒 → Playwright
 

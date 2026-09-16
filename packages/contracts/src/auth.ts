@@ -87,6 +87,9 @@ export const invitationPreviewSchema = z.object({
 });
 export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
 
+export const authSetupStatusSchema = z.object({ initialized: z.boolean() });
+export type AuthSetupStatus = z.infer<typeof authSetupStatusSchema>;
+
 // ---- 请求体 -----------------------------------------------------------------
 
 export const loginBody = z.object({
@@ -142,7 +145,7 @@ export const auth = {
     method: 'GET',
     path: '/auth/setup/status',
     summary: '是否已完成首户初始化（公开）',
-    response: z.object({ initialized: z.boolean() }),
+    response: authSetupStatusSchema,
   }),
   bootstrap: defineEndpoint({
     method: 'POST',

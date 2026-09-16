@@ -27,6 +27,7 @@ export * from './knowledge';
 export * from './memories';
 export * from './system';
 export * from './media';
+export * from './agent';
 
 import { buildContractIndex } from './registry';
 import { activities } from './activities';
@@ -41,6 +42,7 @@ import { knowledge } from './knowledge';
 import { memories } from './memories';
 import { system } from './system';
 import { media } from './media';
+import { agent } from './agent';
 import { calendar } from './calendar';
 import { dishes } from './dishes';
 import { inventory } from './inventory';
@@ -78,6 +80,7 @@ export const contracts = {
   memories,
   system,
   media,
+  agent,
 };
 
 /** `METHOD /path` → 契约。API 测试模式下的响应校验用它查表。 */

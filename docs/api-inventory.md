@@ -4,12 +4,12 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 235 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 275 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
 | activities | 1 | 1 |
-| agent | 40 | 0 |
+| agent | 40 | 40 |
 | assets | 18 | 18 |
 | auth | 16 | 16 |
 | calendar | 4 | 4 |
@@ -43,46 +43,46 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/agent/channel-pairings` | `AgentController.pairings` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/channel-pairings` | `AgentController.createPairing` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/channel-pairings/:id/revoke` | `AgentController.revokePairing` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/channels` | `AgentController.channelsList` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/channels/:id/revoke` | `AgentController.revokeChannel` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/conversations` | `AgentController.conversations` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/conversations` | `AgentController.createConversation` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/conversations/:id` | `AgentController.conversation` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| DELETE | `/agent/conversations/:id` | `AgentController.archive` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/conversations/:id/messages` | `AgentController.send` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/memories` | `AgentController.memories` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| DELETE | `/agent/memories` | `AgentController.clearMemories` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| PATCH | `/agent/memories/:id` | `AgentController.correctMemory` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| DELETE | `/agent/memories/:id` | `AgentController.forgetMemory` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/memories/:id/confirm` | `AgentController.confirmMemory` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/memories/:id/share` | `AgentController.shareMemory` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/memories/candidates` | `AgentController.createMemoryCandidate` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/profile` | `AgentController.profile` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| PATCH | `/agent/profile` | `AgentController.updateProfile` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/proposal-groups` | `AgentController.proposalGroupList` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/proposal-groups/:id` | `AgentController.proposalGroup` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/proposal-groups/:id/confirm` | `AgentController.confirmProposalGroup` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/proposal-groups/:id/reject` | `AgentController.rejectProposalGroup` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/proposals/:id/confirm` | `AgentController.confirmProposal` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/proposals/:id/reject` | `AgentController.rejectProposal` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/routines` | `AgentController.routinesList` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| PATCH | `/agent/routines/:kind` | `AgentController.updateRoutine` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| PUT | `/agent/routines/nightly_digest/delivery` | `AgentController.configureNightlyDelivery` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/runs/:id/cancel` | `AgentController.cancel` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/agent/runs/:id/retry` | `AgentController.retry` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/settings` | `AgentController.settings` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| PUT | `/agent/settings` | `AgentController.updateSettings` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| PATCH | `/agent/settings` | `AgentController.patchSettings` | `use_agent` `manage_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| GET | `/agent/status` | `AgentController.status` | `use_agent` |  | `apps/api/src/agent/agent.controller.ts` |
-| POST | `/internal/agent/channels/:channelId/messages` | `AgentChannelInternalController.message` | 公开 |  | `apps/api/src/agent/agent-channel-internal.controller.ts` |
-| GET | `/internal/agent/channels/:channelId/runs/:runId` | `AgentChannelInternalController.run` | 公开 |  | `apps/api/src/agent/agent-channel-internal.controller.ts` |
-| POST | `/internal/agent/channels/pair` | `AgentChannelInternalController.pair` | 公开 |  | `apps/api/src/agent/agent-channel-internal.controller.ts` |
-| GET | `/internal/agent/mcp` | `AgentMcpController.methodNotAllowedGet` | 公开 |  | `apps/api/src/agent/agent-mcp.controller.ts` |
-| POST | `/internal/agent/mcp` | `AgentMcpController.handle` | 公开 |  | `apps/api/src/agent/agent-mcp.controller.ts` |
-| DELETE | `/internal/agent/mcp` | `AgentMcpController.methodNotAllowedDelete` | 公开 |  | `apps/api/src/agent/agent-mcp.controller.ts` |
+| GET | `/agent/channel-pairings` | `AgentController.pairings` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/channel-pairings` | `AgentController.createPairing` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/channel-pairings/:id/revoke` | `AgentController.revokePairing` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/channels` | `AgentController.channelsList` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/channels/:id/revoke` | `AgentController.revokeChannel` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/conversations` | `AgentController.conversations` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/conversations` | `AgentController.createConversation` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/conversations/:id` | `AgentController.conversation` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| DELETE | `/agent/conversations/:id` | `AgentController.archive` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/conversations/:id/messages` | `AgentController.send` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/memories` | `AgentController.memories` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| DELETE | `/agent/memories` | `AgentController.clearMemories` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| PATCH | `/agent/memories/:id` | `AgentController.correctMemory` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| DELETE | `/agent/memories/:id` | `AgentController.forgetMemory` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/memories/:id/confirm` | `AgentController.confirmMemory` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/memories/:id/share` | `AgentController.shareMemory` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/memories/candidates` | `AgentController.createMemoryCandidate` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/profile` | `AgentController.profile` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| PATCH | `/agent/profile` | `AgentController.updateProfile` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/proposal-groups` | `AgentController.proposalGroupList` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/proposal-groups/:id` | `AgentController.proposalGroup` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/proposal-groups/:id/confirm` | `AgentController.confirmProposalGroup` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/proposal-groups/:id/reject` | `AgentController.rejectProposalGroup` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/proposals/:id/confirm` | `AgentController.confirmProposal` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/proposals/:id/reject` | `AgentController.rejectProposal` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/routines` | `AgentController.routinesList` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| PATCH | `/agent/routines/:kind` | `AgentController.updateRoutine` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| PUT | `/agent/routines/nightly_digest/delivery` | `AgentController.configureNightlyDelivery` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/runs/:id/cancel` | `AgentController.cancel` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/runs/:id/retry` | `AgentController.retry` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/settings` | `AgentController.settings` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| PUT | `/agent/settings` | `AgentController.updateSettings` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| PATCH | `/agent/settings` | `AgentController.patchSettings` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| GET | `/agent/status` | `AgentController.status` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/internal/agent/channels/:channelId/messages` | `AgentChannelInternalController.message` | 公开 | ✓ | `apps/api/src/agent/agent-channel-internal.controller.ts` |
+| GET | `/internal/agent/channels/:channelId/runs/:runId` | `AgentChannelInternalController.run` | 公开 | ✓ | `apps/api/src/agent/agent-channel-internal.controller.ts` |
+| POST | `/internal/agent/channels/pair` | `AgentChannelInternalController.pair` | 公开 | ✓ | `apps/api/src/agent/agent-channel-internal.controller.ts` |
+| GET | `/internal/agent/mcp` | `AgentMcpController.methodNotAllowedGet` | 公开 | ✓ | `apps/api/src/agent/agent-mcp.controller.ts` |
+| POST | `/internal/agent/mcp` | `AgentMcpController.handle` | 公开 | ✓ | `apps/api/src/agent/agent-mcp.controller.ts` |
+| DELETE | `/internal/agent/mcp` | `AgentMcpController.methodNotAllowedDelete` | 公开 | ✓ | `apps/api/src/agent/agent-mcp.controller.ts` |
 
 ## assets（18）
 

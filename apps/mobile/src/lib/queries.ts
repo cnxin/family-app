@@ -23,6 +23,7 @@ import type {
   AgentProposalGroup,
   AgentProposalGroupStatus,
   AgentChannelPairing,
+  CreatedAgentChannelPairing,
   AgentMemberChannel,
   CreateAgentMemoryCandidateDto,
   AppNotification,
@@ -563,7 +564,7 @@ export function useCreateAgentChannelPairing() {
       expiresInMinutes?: number;
       idempotencyKey?: string;
     }) =>
-      api<AgentChannelPairing>('/agent/channel-pairings', {
+      api<CreatedAgentChannelPairing>('/agent/channel-pairings', {
         method: 'POST',
         body: {
           ...input,

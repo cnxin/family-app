@@ -187,7 +187,9 @@
 
 验收：`types.ts` 行数归零；`grep -c "function isUniqueViolation"` 全仓为 1；contracts 对 275 个端点覆盖率 100%。
 
-进度（2026-09-16）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；除 agent 外的 23 个域共 235 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这二十三个域改为 re-export（从 2,140 行降到约 715 行）。剩余：agent（40 个端点）的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
+验收结果（2026-09-16）：三条都达成。`types.ts` 只剩 import + re-export，手写类型声明为 0；`isUniqueViolation` 全仓单一定义在 `packages/shared`；契约覆盖 275/275。
+
+进度（2026-09-16）：**Phase 1 的契约部分已完成**。`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；24 个域 275 个端点全部有契约并在测试模式下自动校验响应（`docs/api-inventory.md` 的"契约"列全满）；客户端 `types.ts` 从 2,140 行手写类型降到 444 行纯 re-export，**已无任何手写类型声明**。剩余：`fingerprint` 等依赖 node:crypto 的工具下沉、Zod 校验管道替换 class-validator。
 
 本地全量验收（临时 PostgreSQL + `test:api` 725 个断言 + 三步 `docker build`）已绿；GitHub Actions 因账户层面原因（run 0 秒 `startup_failure`、0 job）尚未跑起来，恢复前以本地全量为准。
 
@@ -209,6 +211,10 @@
    两类端点还有一种共存形态：二进制流端点（`/asset-documents/:id/content`、`/memories/:memoryId/photos/:photoId/content`）用 `@Res()` 直接写响应，处理函数返回 undefined，契约 response 写成 `z.undefined()`，拦截器照常放行；签名 URL（`contentUrl` / `access.url`）是响应里唯一每次都变的字段，用正则约束形状而不是比对值。
 
 6. **外部依赖不改变响应的键集。** media 域的 Plex / Emby / MoviePilot 连接器与 TMDB / 豆瓣 / Bangumi 元数据源在测试环境里全是空配置。空配置不会让响应少字段，只会让值变成 null、数组变空、`state` 落到 `not_configured` / `needs_credential` / `disabled` / `offline` 这几个字面量上；真正依赖外部服务才能完成的端点（`/media/library/sync`、`playback-webhook`、三个 `requests` 端点、海报）在空配置下直接抛 502，根本不产生成功响应。所以每个端点写一份 schema 就够，但可空字段要写满、枚举要把"没配置"那几个字面量也列上。代价是：全量测试只验证了"未配置"分支，接上真实连接器后要回来复核"已配置"分支的取值范围——contracts 里 media.ts 的文件头记了这一条。
+
+7. **契约能覆盖形状，覆盖不了"这一行有没有被跑到"。** 契约只在端点被真实调用时才校验，所以覆盖率 275/275 说的是"都写了"，不是"都验过了"。实测下来有三类端点在全量测试里基本没被触发：需要外部服务的（media 的 sync / webhook / requests / 海报，全量里只出现过 1 次 502）、异常分支（各种 409/502 的错误路径）、以及内部凭据端点。给这些端点写契约仍然有价值——它把当时读代码得到的结论固定下来了——但"绿"不等于"验过"，回头改这些端点时不能指望契约兜底。想真正覆盖，得给黑盒脚本补对应的调用。
+
+8. **`@Res()` 端点的契约是 `z.undefined()`，且这是准确的而非将就。** 二进制流（资产资料、回忆照片、媒体海报）和内部渠道 / MCP 这类自己写响应体的端点，处理函数不返回值，拦截器拿到的就是 `undefined`。把它们注册成 `z.undefined()` 而不是留空，是为了让清单里"没有契约"只表示"还没做"；代价是这些端点的实际 wire 格式不受契约保护，要覆盖得另写黑盒断言。同样地，agent 域里依赖后台 worker 时机的字段（run 状态、消息数组）被刻意放宽，换来的是不再偶发失败、失去的是对这些字段的约束——Phase 3 把调度抽成测试可控之后应该收回来。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 
