@@ -36,6 +36,14 @@ export const memberSchema = z
   });
 export type Member = z.infer<typeof memberSchema>;
 
+/** presenter 手工挑出的成员摘要（guests / travel 等域用）。 */
+export const memberBriefSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  avatarEmoji: z.string(),
+});
+export type MemberBrief = z.infer<typeof memberBriefSchema>;
+
 // ---- 通用响应 ---------------------------------------------------------------
 
 /** 归档类端点的统一响应：`{ id, archived: true }`。 */

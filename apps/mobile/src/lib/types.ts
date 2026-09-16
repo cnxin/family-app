@@ -38,6 +38,25 @@ import type {
   PollStatus,
   PollVoteMode,
   ReminderRecipient,
+  Guest,
+  VisitStatus,
+  GuestWifiSecurity,
+  GuestMealRequestStatus,
+  GuestWifiProfile,
+  GuestInvitation,
+  CreatedGuestInvitation,
+  Visit,
+  GuestInvitationPreview,
+  GuestMealRequest,
+  GuestMealOption,
+  GuestMoviePoll,
+  TravelPlanStatus,
+  TravelChecklistStatus,
+  TravelChecklistCategory,
+  TravelChecklistItem,
+  TravelPlan,
+  TravelTemplateItem,
+  TravelPackingTemplate,
   ReminderSource,
   ReminderSourceModule,
   ReminderStatus,
@@ -256,81 +275,16 @@ export interface KnowledgeArticleRevision {
   createdAt: string;
 }
 
-export type TravelPlanStatus = 'planned' | 'completed' | 'cancelled';
-export type TravelChecklistStatus = 'pending' | 'completed' | 'skipped';
-export type TravelChecklistCategory =
-  | 'documents'
-  | 'clothing'
-  | 'toiletries'
-  | 'electronics'
-  | 'supplies'
-  | 'other';
-
-export interface TravelChecklistItem {
-  id: string;
-  title: string;
-  category: TravelChecklistCategory;
-  quantity: number;
-  note: string | null;
-  sortOrder: number;
-  status: TravelChecklistStatus;
-  version: number;
-  assignedMember: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
-  completedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
-  completedAt: string | null;
-  fromTemplate: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TravelPlan {
-  id: string;
-  title: string;
-  destination: string | null;
-  startDate: string;
-  endDate: string;
-  note: string | null;
-  status: TravelPlanStatus;
-  version: number;
-  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  updatedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  completedBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
-  completedAt: string | null;
-  archivedAt: string | null;
-  items: TravelChecklistItem[];
-  counts: {
-    total: number;
-    pending: number;
-    completed: number;
-    skipped: number;
-  };
-  appliedTemplateIds: string[];
-  canManage: boolean;
-  canEditChecklist: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TravelTemplateItem {
-  id: string;
-  title: string;
-  category: TravelChecklistCategory;
-  quantity: number;
-  sortOrder: number;
-}
-
-export interface TravelPackingTemplate {
-  id: string;
-  title: string;
-  description: string | null;
-  version: number;
-  items: TravelTemplateItem[];
-  createdBy: Pick<Member, 'id' | 'name' | 'avatarEmoji'>;
-  archivedAt: string | null;
-  canManage: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+// 出行域类型已迁到 packages/contracts
+export type {
+  TravelPlanStatus,
+  TravelChecklistStatus,
+  TravelChecklistCategory,
+  TravelChecklistItem,
+  TravelPlan,
+  TravelTemplateItem,
+  TravelPackingTemplate,
+};
 
 export interface BackupPolicy {
   id: string;
@@ -863,124 +817,21 @@ export interface MediaRequest {
 // 日历域类型已迁到 packages/contracts
 export type { CalendarEntry, CalendarEvent };
 
-export interface Guest {
-  id: string;
-  name: string;
-  avatarEmoji: string;
-  note: string | null;
-  isActive: boolean;
-  anonymizedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type VisitStatus = 'scheduled' | 'cancelled' | 'completed';
-export type GuestWifiSecurity = 'WPA' | 'nopass';
-export type GuestMealRequestStatus = 'pending' | 'accepted' | 'rejected';
-
-export interface GuestWifiProfile {
-  id: string;
-  name: string;
-  ssid: string;
-  security: GuestWifiSecurity;
-  passwordConfigured: boolean;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface GuestInvitation {
-  id: string;
-  guestId: string;
-  expiresAt: string;
-  acceptedAt: string | null;
-  allowsMovieVoting: boolean;
-  allowsMealRequests: boolean;
-  revokedAt: string | null;
-  createdAt: string;
-}
-
-export interface CreatedGuestInvitation extends GuestInvitation {
-  invitationToken: string;
-}
-
-export interface Visit {
-  id: string;
-  title: string;
-  startsAt: string;
-  endsAt: string | null;
-  note: string | null;
-  status: VisitStatus;
-  guestWifiProfile: GuestWifiProfile | null;
-  hostMember: Pick<Member, 'id' | 'name' | 'avatarEmoji'> | null;
-  guests: {
-    id: string;
-    guest: Guest;
-    isAttending: boolean | null;
-    respondedAt: string | null;
-    invitation: GuestInvitation | null;
-  }[];
-  mealRequests: GuestMealRequest[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface GuestInvitationPreview {
-  guest: Pick<Guest, 'name' | 'avatarEmoji'>;
-  householdName: string;
-  visit: Pick<Visit, 'title' | 'startsAt' | 'endsAt' | 'note'>;
-  response: { attending: boolean | null; respondedAt: string | null };
-  capabilities: { movieVoting: boolean; mealRequests: boolean };
-  mealRequestDates: string[];
-  wifi: { ssid: string; security: GuestWifiSecurity; qrPayload: string } | null;
-  expiresAt: string;
-}
-
-export interface GuestMealRequest {
-  id: string;
-  menuItemId: string | null;
-  mealDate: string;
-  mealType: MealType;
-  dishName: string;
-  note: string | null;
-  status: GuestMealRequestStatus;
-  reviewNote: string | null;
-  reviewedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  guest?: Pick<Guest, 'id' | 'name' | 'avatarEmoji'> | null;
-}
-
-export interface GuestMealOption {
-  id: string;
-  mealDate: string;
-  mealType: MealType;
-  items: {
-    id: string;
-    dishName: string;
-    dishCategory: DishCategory;
-    photoUrl: string | null;
-    request: GuestMealRequest | null;
-  }[];
-}
-
-export interface GuestMoviePoll {
-  id: string;
-  title: string;
-  description: string | null;
-  voteMode: PollVoteMode;
-  maxChoices: number;
-  closesAt: string | null;
-  totalVoters: number;
-  selectedOptionIds: string[];
-  options: {
-    id: string;
-    label: string;
-    description: string | null;
-    voteCount: number;
-    media: { title: string; originalTitle: string | null; year: number | null; posterUrl: string | null } | null;
-  }[];
-}
+// 访客域类型已迁到 packages/contracts
+export type {
+  Guest,
+  VisitStatus,
+  GuestWifiSecurity,
+  GuestMealRequestStatus,
+  GuestWifiProfile,
+  GuestInvitation,
+  CreatedGuestInvitation,
+  Visit,
+  GuestInvitationPreview,
+  GuestMealRequest,
+  GuestMealOption,
+  GuestMoviePoll,
+};
 
 // 任务域类型已迁到 packages/contracts（Zod schema 推导），这里只做 re-export
 export type {

@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 119 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 161 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -15,7 +15,7 @@
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
 | finance | 13 | 13 |
-| guests | 21 | 0 |
+| guests | 21 | 21 |
 | inventory | 13 | 13 |
 | knowledge | 8 | 0 |
 | media | 32 | 0 |
@@ -30,7 +30,7 @@
 | smart-menu | 4 | 4 |
 | system | 8 | 0 |
 | tasks | 5 | 5 |
-| travel | 21 | 0 |
+| travel | 21 | 21 |
 | upload | 1 | 1 |
 
 ## activities（1）
@@ -169,27 +169,27 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| DELETE | `/guest-invitations/:id` | `GuestsController.revokeInvitation` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token` | `GuestsController.publicInvitation` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token/meal-options` | `GuestsController.publicMealOptions` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/meal-options/:menuItemId/request` | `GuestsController.claimMealOption` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token/meal-requests` | `GuestsController.publicMealRequests` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/meal-requests` | `GuestsController.submitMealRequest` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token/movie-polls` | `GuestsController.publicMoviePolls` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/movie-polls/:pollId/votes` | `GuestsController.voteMoviePoll` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/response` | `GuestsController.respond` | 公开 |  | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/guest-meal-requests/:id` | `GuestsController.reviewMealRequest` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-wifi-profiles` | `GuestsController.listGuestWifiProfiles` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-wifi-profiles` | `GuestsController.createGuestWifiProfile` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/guest-wifi-profiles/:id` | `GuestsController.updateGuestWifiProfile` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guests` | `GuestsController.listGuests` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guests` | `GuestsController.createGuest` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/guests/:id` | `GuestsController.updateGuest` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guests/:id/anonymize` | `GuestsController.anonymizeGuest` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| GET | `/visits` | `GuestsController.listVisits` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/visits` | `GuestsController.createVisit` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/visits/:id` | `GuestsController.updateVisit` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
-| POST | `/visits/:id/invitations` | `GuestsController.createInvitation` | `manage_guests` |  | `apps/api/src/guests/guests.module.ts` |
+| DELETE | `/guest-invitations/:id` | `GuestsController.revokeInvitation` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| GET | `/guest-invitations/:token` | `GuestsController.publicInvitation` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| GET | `/guest-invitations/:token/meal-options` | `GuestsController.publicMealOptions` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/guest-invitations/:token/meal-options/:menuItemId/request` | `GuestsController.claimMealOption` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| GET | `/guest-invitations/:token/meal-requests` | `GuestsController.publicMealRequests` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/guest-invitations/:token/meal-requests` | `GuestsController.submitMealRequest` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| GET | `/guest-invitations/:token/movie-polls` | `GuestsController.publicMoviePolls` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/guest-invitations/:token/movie-polls/:pollId/votes` | `GuestsController.voteMoviePoll` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/guest-invitations/:token/response` | `GuestsController.respond` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
+| PATCH | `/guest-meal-requests/:id` | `GuestsController.reviewMealRequest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| GET | `/guest-wifi-profiles` | `GuestsController.listGuestWifiProfiles` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/guest-wifi-profiles` | `GuestsController.createGuestWifiProfile` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| PATCH | `/guest-wifi-profiles/:id` | `GuestsController.updateGuestWifiProfile` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| GET | `/guests` | `GuestsController.listGuests` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/guests` | `GuestsController.createGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| PATCH | `/guests/:id` | `GuestsController.updateGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/guests/:id/anonymize` | `GuestsController.anonymizeGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| GET | `/visits` | `GuestsController.listVisits` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/visits` | `GuestsController.createVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| PATCH | `/visits/:id` | `GuestsController.updateVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| POST | `/visits/:id/invitations` | `GuestsController.createInvitation` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
 
 ## inventory（13）
 
@@ -400,27 +400,27 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/travel-plans` | `TravelController.listPlans` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans` | `TravelController.createPlan` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| GET | `/travel-plans/:id` | `TravelController.detail` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| PATCH | `/travel-plans/:id` | `TravelController.updatePlan` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/archive` | `TravelController.archivePlan` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/cancel` | `TravelController.cancelPlan` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/complete` | `TravelController.completePlan` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/reopen` | `TravelController.reopenPlan` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/restore` | `TravelController.restorePlan` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items` | `TravelController.createItem` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| PATCH | `/travel-plans/:planId/items/:itemId` | `TravelController.updateItem` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/archive` | `TravelController.archiveItem` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/complete` | `TravelController.completeItem` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/restore` | `TravelController.restoreItem` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/skip` | `TravelController.skipItem` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/templates/:templateId/apply` | `TravelController.applyTemplate` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| GET | `/travel-templates` | `TravelController.listTemplates` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-templates` | `TravelController.createTemplate` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| PATCH | `/travel-templates/:id` | `TravelController.updateTemplate` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-templates/:id/archive` | `TravelController.archiveTemplate` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-templates/:id/restore` | `TravelController.restoreTemplate` | 登录 |  | `apps/api/src/travel/travel.module.ts` |
+| GET | `/travel-plans` | `TravelController.listPlans` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans` | `TravelController.createPlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| GET | `/travel-plans/:id` | `TravelController.detail` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| PATCH | `/travel-plans/:id` | `TravelController.updatePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:id/archive` | `TravelController.archivePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:id/cancel` | `TravelController.cancelPlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:id/complete` | `TravelController.completePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:id/reopen` | `TravelController.reopenPlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:id/restore` | `TravelController.restorePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:planId/items` | `TravelController.createItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| PATCH | `/travel-plans/:planId/items/:itemId` | `TravelController.updateItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/archive` | `TravelController.archiveItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/complete` | `TravelController.completeItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/restore` | `TravelController.restoreItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/skip` | `TravelController.skipItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-plans/:planId/templates/:templateId/apply` | `TravelController.applyTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| GET | `/travel-templates` | `TravelController.listTemplates` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-templates` | `TravelController.createTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| PATCH | `/travel-templates/:id` | `TravelController.updateTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-templates/:id/archive` | `TravelController.archiveTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| POST | `/travel-templates/:id/restore` | `TravelController.restoreTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
 
 ## upload（1）
 

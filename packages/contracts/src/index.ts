@@ -20,6 +20,8 @@ export * from './auth';
 export * from './finance';
 export * from './smart-menu';
 export * from './upload';
+export * from './guests';
+export * from './travel';
 
 import { buildContractIndex } from './registry';
 import { activities } from './activities';
@@ -27,6 +29,8 @@ import { auth } from './auth';
 import { finance } from './finance';
 import { smartMenu } from './smart-menu';
 import { upload } from './upload';
+import { guests } from './guests';
+import { travel } from './travel';
 import { calendar } from './calendar';
 import { dishes } from './dishes';
 import { inventory } from './inventory';
@@ -57,6 +61,8 @@ export const contracts = {
   finance,
   smartMenu,
   upload,
+  guests,
+  travel,
 };
 
 /** `METHOD /path` → 契约。API 测试模式下的响应校验用它查表。 */
