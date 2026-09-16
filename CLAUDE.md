@@ -10,13 +10,13 @@
 - `apps/mobile` — Expo SDK 57 + expo-router + React Query；`lib/queries.ts` 是全部数据 hook，`lib/types.ts` 只做 `@family/contracts` 的 re-export（不要在里面新增手写类型）
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
 - `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数。**依赖 `node:` 的公共函数不要放这里**（shared 要保持纯 TS，客户端将来可能直接吃它），放 `apps/api/src/common/`，比如 `fingerprint.ts`（幂等指纹，注意有规范化/非规范化两种算法，改算法会让落库指纹作废）
-- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应。**24 个域 275 个端点已全部覆盖（275/275）**，客户端 `lib/types.ts` 不再手写任何类型，只从这里 re-export。新增端点必须同时加契约，否则 `docs/api-inventory.md` 的"契约"列会出现空缺
+- `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应、`ContractsRequestInterceptor` 校验请求（只判 API 已经接受了的请求；`CONTRACT_REQUEST_CHECK=report` 可只记日志不拦截，用来一次性收集全部不一致）。**24 个域 275 个端点已全部覆盖（275/275）**，客户端 `lib/types.ts` 不再手写任何类型，只从这里 re-export。新增端点必须同时加契约，否则 `docs/api-inventory.md` 的"契约"列会出现空缺
 - `scripts/api-inventory.mjs` — 从 Controller 生成端点清单（含"契约"列），CI 用 `--check` 保证不过期
 - `.github/workflows/ci.yml` — typecheck → lint → 端点清单 → API 黑盒 → Playwright
 
 ## 约定
 
-- pnpm 通过 `npx pnpm` 或 `corepack pnpm` 调用（不在 PATH）
+- pnpm 用 `corepack pnpm` 调用（不在 PATH）。**不要用 `npx pnpm`**：它会拉最新版 pnpm，和 `packageManager` 钉的 10.34.5 对不上，`expo lint` 内部再 spawn 一次 pnpm 时直接 `ERR_PNPM_BAD_PM_VERSION`，mobile lint 会假红
 - API 统一响应 `{data}` / `{error:{code,message}}`；请求日志不得包含请求体、姓名、IP、令牌
 - **UI 开发遵循 `.claude/skills/` 的 emilkowalski 技能包**：`apple-design`、`emil-design-eng`；enter 动画 ease-out、确认操作配 haptics、暗色模式必须支持
 - Git 提交信息用中文

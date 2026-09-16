@@ -312,9 +312,13 @@ export const createMaintenanceConsumableBody = z.object({
 export const updateMaintenanceConsumableBody = createMaintenanceConsumableBody.partial();
 export const addMaintenanceShoppingBody = z.object({ date: isoDateOrDateTime });
 
+// signDocumentAccess() 是 HMAC-SHA256 的 base64url（43 字符），不是十六进制——
+// 和 memories 的照片签名（同样 HMAC-SHA256，但 digest('hex') 是 64 字符）不一样。
+// assetDocumentAccessSchema.url 因为要兼容外链只能是 z.string()，约束不到这里，
+// 所以这条正则是签名格式唯一的契约表达。
 export const assetDocumentContentQuery = z.object({
   expires: z.coerce.number().int(),
-  signature: z.string().regex(/^[0-9a-f]{64}$/),
+  signature: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
 });
 
 // ---- 端点 -------------------------------------------------------------------

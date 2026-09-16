@@ -189,7 +189,7 @@
 
 验收结果（2026-09-16）：三条都达成。`types.ts` 只剩 import + re-export，手写类型声明为 0；`isUniqueViolation` 全仓单一定义在 `packages/shared`；契约覆盖 275/275。
 
-进度（2026-09-16）：**Phase 1 的契约部分已完成**。`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；24 个域 275 个端点全部有契约并在测试模式下自动校验响应（`docs/api-inventory.md` 的"契约"列全满）；客户端 `types.ts` 从 2,140 行手写类型降到 444 行纯 re-export，**已无任何手写类型声明**。剩余：Zod 校验管道替换 class-validator。（`fingerprint` 已下沉，见下方第 9 条。）
+进度（2026-09-16）：**Phase 1 的契约部分已完成**。`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；24 个域 275 个端点全部有契约并在测试模式下自动校验响应（`docs/api-inventory.md` 的"契约"列全满）；客户端 `types.ts` 从 2,140 行手写类型降到 444 行纯 re-export，**已无任何手写类型声明**。剩余：Zod 校验管道替换 class-validator——请求侧契约守卫已先行接上并跑通（见下方第 10 条），换管道前"契约比 API 窄"的风险已排空。（`fingerprint` 已下沉，见下方第 9 条。）
 
 本地全量验收（临时 PostgreSQL + `test:api` 725 个断言 + 三步 `docker build`）已绿；GitHub Actions 因账户层面原因（run 0 秒 `startup_failure`、0 job）尚未跑起来，恢复前以本地全量为准。
 
@@ -219,6 +219,19 @@
 9. **依赖 node: 的工具不进 `packages/shared`，进 `apps/api/src/common/`。** `fingerprint` 在仓库里有 5 份副本、`canonical` 有 3 份，原计划下沉到 `packages/shared`，但 shared 的定位是「纯 TypeScript、不依赖任何框架」，而这些函数要 `node:crypto`；客户端现在只依赖 `@family/contracts` 不依赖 shared，将来迁小程序时 shared 里混进 node: 会直接炸打包。想保持 shared 纯净又暴露子路径（`@family/shared/node`）则要求 `moduleResolution: node16`，改动面远超收益。所以落在 `apps/api/src/common/fingerprint.ts`——它本来就是 API 级公共代码的位置。
 
    下沉时发现这 5 份副本**不是同一个算法**：finance 与 agent 提案先递归按键名排序再序列化（键顺序无关），knowledge / memories / travel 直接序列化（**键顺序敏感**）。指纹会落库（`TravelOperation.requestFingerprint` 等）并在幂等键重放时比对，所以统一算法等于让历史行作废——跨部署复用同一把键会从「重放」变成 409。因此这次只做零行为变更的合并：`fingerprint()` 保留规范化版、`rawFingerprint()` 保留非规范化版，两者都在同一个文件里带注释共存，把分歧从五个模块里的隐性差异变成一处显性记录。统一成一种算法是一次独立的、有数据影响的变更，留给 Phase 3。media 的 webhook 去重（`canonicalizeWebhookValue`）排序用默认 `Array.sort()` 而非 `localeCompare`，对非 ASCII 键名结果不同，也没有并进来。
+
+10. **请求侧也要有契约守卫，而且只在请求被 API 接受之后才判。** 换 Zod 管道之前要先回答一个问题：现有的 `params` / `query` / `body` 契约，比真实 API **窄**到什么程度？窄了就意味着换上管道那天会开始拒掉本来合法的请求。做法是加一个和响应侧对称的 `ContractsRequestInterceptor`（`apps/api/src/common/contracts.ts`），两个设计点都是刻意的：
+
+    - **在 `tap` 里、处理函数成功返回之后才校验。** 黑盒脚本里有大量故意发非法载荷、断言 400/409 的用例，它们本来就不该符合契约；只有"API 已经接受了、契约却拒绝"才是要找的东西。契约比 API 宽只会漏过，不会拒真，那个方向留给后面的管道本身去收。
+    - **违规抛 500 `CONTRACT_REQUEST_VIOLATION` 而不是 400。** 400 会被那些期待校验失败的用例当成预期结果吞掉，契约错了反而显得是绿的。
+
+    另外请求数据要在 `tap` 里读、不能在拦截器前置阶段拍快照：multipart 的 body 由路由级 `FileInterceptor`（multer）解析，全局拦截器的前置阶段跑在它之前，那时 body 还是空的——第一版就是这么误报了两个上传端点。用 `CONTRACT_REQUEST_CHECK=report` 先跑一遍全量收集全部不一致，再切回 enforce，比红一次修一次快得多。
+
+    第一次跑出 10 条、去重后 2 个真问题，都是响应侧盖不到的：
+    - `GET /asset-documents/:id/content` 的 `signature` 契约写成 `[0-9a-f]{64}`，实际 `signDocumentAccess()` 是 `digest('base64url')`（43 字符）。同为 HMAC-SHA256，memories 的照片签名是 `digest('hex')`（64 字符）——两个域的签名编码不一样，逆向时按 memories 抄了过来。`assetDocumentAccessSchema.url` 为了兼容外链只能是 `z.string()`，约束不到，所以响应侧一直没发现。
+    - `POST /agent/conversations/:id/messages` 的 `pageContext.entityType`，API 对未知值（recipe / task / menu / media）是**静默忽略**而不是 400（老客户端发新页面类型时不至于整条消息失败），契约却是五值枚举。修法是 `agentPageEntityType.optional().catch(undefined)`：类型上客户端仍只该发这五种，运行时收到别的就当没传——把"容忍"写进契约本身，而不是靠管道以后网开一面。
+
+    收尾状态：report 与 enforce 各跑一遍全量，725 个断言全绿、请求与响应违规均为 0。**换管道的前置风险到此清零**，剩下的是把 165 个 class-validator DTO 换成契约 schema 的机械工作。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

@@ -546,7 +546,10 @@ export const agentChannelRunSchema = agentRunSchema.extend({
 
 export const agentPageContextInput = z.object({
   route: z.string().max(120),
-  entityType: agentPageEntityType.optional(),
+  // API 对未知 entityType（recipe / task / menu / media…）是**静默忽略**而不是 400，
+  // 好让老客户端发新页面类型时不至于整条消息失败。`.catch(undefined)` 把这个行为写进
+  // 契约本身：类型上客户端仍只该发这五种，运行时收到别的就当没传。
+  entityType: agentPageEntityType.optional().catch(undefined),
   entityId: uuid.optional(),
   selectedDate: z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/).optional(),
 });
