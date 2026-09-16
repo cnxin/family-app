@@ -1,23 +1,5 @@
 import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  ArrayUnique,
-  IsArray,
-  IsIn,
-  IsInt,
-  IsISO8601,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  MaxLength,
-  Min,
-  ValidateNested,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-import {
   BadRequestException,
-  Body,
   ConflictException,
   Controller,
   Delete,
@@ -29,7 +11,6 @@ import {
   Param,
   Patch,
   Post,
-  Query,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -41,124 +22,23 @@ import {
   Member,
   Notification,
   Poll,
-  PollCategory,
   PollOption,
   PollVote,
   PollVoteMode,
 } from '../entities';
 import { isHouseholdManager } from '@family/shared';
-
-class PollQueryDto {
-  @IsOptional()
-  @IsIn(['open', 'closed', 'all'])
-  status?: 'open' | 'closed' | 'all';
-}
-
-export class PollOptionDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  label?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  description?: string | null;
-
-  @IsOptional()
-  @IsUUID('4')
-  mediaId?: string;
-}
-
-export class CreatePollDto {
-  @IsString()
-  @MaxLength(120)
-  title: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  description?: string | null;
-
-  @IsOptional()
-  @IsIn(['general', 'meal', 'activity', 'movie', 'shopping'])
-  category?: PollCategory;
-
-  @IsOptional()
-  @IsIn(['single', 'multiple'])
-  voteMode?: PollVoteMode;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(12)
-  maxChoices?: number;
-
-  @IsOptional()
-  @IsISO8601({ strict: true })
-  closesAt?: string | null;
-
-  @IsArray()
-  @ArrayMinSize(2)
-  @ArrayMaxSize(12)
-  @ValidateNested({ each: true })
-  @Type(() => PollOptionDto)
-  options: PollOptionDto[];
-
-  @IsOptional()
-  @IsIn(['media'])
-  sourceModule?: 'media';
-
-  @IsOptional()
-  @IsUUID('4')
-  sourceId?: string;
-}
-
-class UpdatePollDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  title?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  description?: string | null;
-
-  @IsOptional()
-  @IsIn(['general', 'meal', 'activity', 'movie', 'shopping'])
-  category?: PollCategory;
-
-  @IsOptional()
-  @IsIn(['single', 'multiple'])
-  voteMode?: PollVoteMode;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(12)
-  maxChoices?: number;
-
-  @IsOptional()
-  @IsISO8601({ strict: true })
-  closesAt?: string | null;
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMinSize(2)
-  @ArrayMaxSize(12)
-  @ValidateNested({ each: true })
-  @Type(() => PollOptionDto)
-  options?: PollOptionDto[];
-}
-
-class VoteDto {
-  @IsArray()
-  @ArrayMaxSize(12)
-  @ArrayUnique()
-  @IsUUID('4', { each: true })
-  optionIds: string[];
-}
+import {
+  createPollBody,
+  pollListQuery,
+  updatePollBody,
+  voteBody,
+  type CreatePollBody,
+  type PollListQuery,
+  type PollOptionInput,
+  type UpdatePollBody,
+  type VoteBody,
+} from '@family/contracts';
+import { ZodBody, ZodQuery } from '../common/zod';
 
 function effectiveStatus(poll: Poll) {
   if (poll.status === 'closed') return 'closed' as const;
@@ -168,7 +48,7 @@ function effectiveStatus(poll: Poll) {
   return 'open' as const;
 }
 
-function normalizeOptions(options: PollOptionDto[]) {
+function normalizeOptions(options: PollOptionInput[]) {
   const normalized = options.map((option) => ({
     label: option.label?.trim() || '',
     description: option.description?.trim() || null,
@@ -214,7 +94,7 @@ export class PollsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async list(query: PollQueryDto, user: JwtUser) {
+  async list(query: PollListQuery, user: JwtUser) {
     const polls = await this.polls.find({
       where: { householdId: user.householdId, isArchived: false },
       relations: {
@@ -228,7 +108,7 @@ export class PollsService {
     return rows.filter((poll) => poll.status === query.status);
   }
 
-  async create(dto: CreatePollDto, user: JwtUser) {
+  async create(dto: CreatePollBody, user: JwtUser) {
     const id = await this.dataSource.transaction((manager) =>
       this.createWithinTransaction(dto, user, manager),
     );
@@ -236,7 +116,7 @@ export class PollsService {
   }
 
   async createWithinTransaction(
-    dto: CreatePollDto,
+    dto: CreatePollBody,
     user: JwtUser,
     manager: EntityManager,
   ) {
@@ -347,7 +227,7 @@ export class PollsService {
     return poll.id;
   }
 
-  async update(id: string, dto: UpdatePollDto, user: JwtUser) {
+  async update(id: string, dto: UpdatePollBody, user: JwtUser) {
     if (!Object.keys(dto).length) {
       throw new BadRequestException('至少需要修改一个字段');
     }
@@ -424,7 +304,7 @@ export class PollsService {
     return this.get(id, user);
   }
 
-  async vote(id: string, dto: VoteDto, user: JwtUser) {
+  async vote(id: string, dto: VoteBody, user: JwtUser) {
     await this.dataSource.transaction(async (manager) => {
       const poll = await this.lockPoll(id, user, manager);
       if (effectiveStatus(poll) !== 'open') {
@@ -659,7 +539,7 @@ export class PollsService {
   }
 
   private async prepareSource(
-    dto: CreatePollDto,
+    dto: CreatePollBody,
     user: JwtUser,
     manager: EntityManager,
   ) {
@@ -951,7 +831,7 @@ export class PollsController {
   constructor(private readonly service: PollsService) {}
 
   @Get('polls')
-  list(@Query() query: PollQueryDto, @CurrentUser() user: JwtUser) {
+  list(@ZodQuery(pollListQuery) query: PollListQuery, @CurrentUser() user: JwtUser) {
     return this.service.list(query, user);
   }
 
@@ -961,14 +841,14 @@ export class PollsController {
   }
 
   @Post('polls')
-  create(@Body() dto: CreatePollDto, @CurrentUser() user: JwtUser) {
+  create(@ZodBody(createPollBody) dto: CreatePollBody, @CurrentUser() user: JwtUser) {
     return this.service.create(dto, user);
   }
 
   @Patch('polls/:id')
   update(
     @Param('id') id: string,
-    @Body() dto: UpdatePollDto,
+    @ZodBody(updatePollBody) dto: UpdatePollBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.update(id, dto, user);
@@ -977,7 +857,7 @@ export class PollsController {
   @Post('polls/:id/votes')
   vote(
     @Param('id') id: string,
-    @Body() dto: VoteDto,
+    @ZodBody(voteBody) dto: VoteBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.vote(id, dto, user);

@@ -21,6 +21,7 @@
 - **UI 开发遵循 `.claude/skills/` 的 emilkowalski 技能包**：`apple-design`、`emil-design-eng`；enter 动画 ease-out、确认操作配 haptics、暗色模式必须支持
 - Git 提交信息用中文
 - 新增或修改端点后运行 `node scripts/api-inventory.mjs` 重新生成清单并一起提交（需先 `corepack pnpm build:packages`，否则契约列为空）
+- 请求校验正在从 class-validator DTO 换成契约 schema：新端点直接用 `@ZodBody(schema)` / `@ZodQuery(schema)` / `@ZodParam(name, schema)`（`src/common/zod.ts`），不要再写 DTO 类。**换旧域时逐条对照 DTO 的装饰器**——契约里缺的约束要补进契约（不是在管道上开口子），并给黑盒脚本补一条断言；目前只有 polls 换完
 - 改了 `packages/*` 后必须先重新构建再跑测试（`corepack pnpm build:packages`，即 `node scripts/build-packages.mjs`；`pnpm install` 的 postinstall 也会构建）——API 吃的是 `dist`，不重建就是在用旧 schema 测试
 - `test:api -- --only <域>` 只用于迭代；提交前的验收必须全量跑，有些契约违规只在前面脚本的数据落库后才会出现
 

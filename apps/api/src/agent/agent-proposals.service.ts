@@ -22,7 +22,8 @@ import {
   Menu,
 } from '../entities';
 import { AddItemsDto, MenusService } from '../menus/menus.module';
-import { CreatePollDto, PollsService } from '../polls/polls.module';
+import { PollsService } from '../polls/polls.module';
+import type { CreatePollBody } from '@family/contracts';
 import {
   CreateReminderDto,
   RemindersService,
@@ -663,7 +664,7 @@ export class AgentProposalsService {
       return {
         module: 'poll',
         id: await this.polls.createWithinTransaction(
-          payload as CreatePollDto,
+          payload as CreatePollBody,
           user,
           manager,
         ),

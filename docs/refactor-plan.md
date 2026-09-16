@@ -189,7 +189,7 @@
 
 验收结果（2026-09-16）：三条都达成。`types.ts` 只剩 import + re-export，手写类型声明为 0；`isUniqueViolation` 全仓单一定义在 `packages/shared`；契约覆盖 275/275。
 
-进度（2026-09-16）：**Phase 1 的契约部分已完成**。`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；24 个域 275 个端点全部有契约并在测试模式下自动校验响应（`docs/api-inventory.md` 的"契约"列全满）；客户端 `types.ts` 从 2,140 行手写类型降到 444 行纯 re-export，**已无任何手写类型声明**。剩余：Zod 校验管道替换 class-validator——请求侧契约守卫已先行接上并跑通（见下方第 10 条），换管道前"契约比 API 窄"的风险已排空。（`fingerprint` 已下沉，见下方第 9 条。）
+进度（2026-09-16）：**Phase 1 的契约部分已完成**。`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；24 个域 275 个端点全部有契约并在测试模式下自动校验响应（`docs/api-inventory.md` 的"契约"列全满）；客户端 `types.ts` 从 2,140 行手写类型降到 444 行纯 re-export，**已无任何手写类型声明**。剩余：Zod 校验管道替换 class-validator——请求侧契约守卫已先行接上并跑通（见下方第 10 条），管道与三个装饰器已落地、**polls 域已作为试点换完**（见下方第 11 条），剩 23 个域、约 160 个 DTO 类按域逐个搬。（`fingerprint` 已下沉，见下方第 9 条。）
 
 本地全量验收（临时 PostgreSQL + `test:api` 725 个断言 + 三步 `docker build`）已绿；GitHub Actions 因账户层面原因（run 0 秒 `startup_failure`、0 job）尚未跑起来，恢复前以本地全量为准。
 
@@ -232,6 +232,12 @@
     - `POST /agent/conversations/:id/messages` 的 `pageContext.entityType`，API 对未知值（recipe / task / menu / media）是**静默忽略**而不是 400（老客户端发新页面类型时不至于整条消息失败），契约却是五值枚举。修法是 `agentPageEntityType.optional().catch(undefined)`：类型上客户端仍只该发这五种，运行时收到别的就当没传——把"容忍"写进契约本身，而不是靠管道以后网开一面。
 
     收尾状态：report 与 enforce 各跑一遍全量，725 个断言全绿、请求与响应违规均为 0。**换管道的前置风险到此清零**，剩下的是把 165 个 class-validator DTO 换成契约 schema 的机械工作。
+
+11. **换 Zod 管道不是删 DTO，是逐条搬约束。** `ZodValidationPipe` 加 `@ZodBody` / `@ZodQuery` / `@ZodParam` 三个装饰器（`apps/api/src/common/zod.ts`）能平替 class-validator，前提是三件事对得上：全局 `ValidationPipe` 的 `whitelist: true` 丢未声明字段——`z.object` 默认同样丢；`@IsOptional()` 同时放过 undefined 和 null——对应 `.nullish()`；参数类型换成 `z.infer` 的类型别名后 metatype 是 Object，全局管道直接放行，不会校验两遍。错误形状也不用改：`BadRequestException(string)` 出来仍是 `{ error: { code: 'Bad Request', message } }`。
+
+    真正的工作量在**契约不等于 DTO** 的地方。polls 试点就撞到一处：`VoteDto.optionIds` 有 `@ArrayUnique()`，契约 `voteBody` 没有——直接换过去，重复选项 ID 会从 400 变成被接受。这个方向第 10 条的请求侧守卫**照不到**（它只看 API 已接受的请求，而这类请求 API 本来就拒绝），只能逐个 DTO 和契约对读。所以每换一个域，标准动作是：把 DTO 的每条装饰器和契约字段逐条对照 → 缺的补进契约（补在契约侧，不是在管道上开口子）→ 给黑盒脚本补上验证这条约束的断言，否则换完没人知道它还在不在。
+
+    polls（8 端点、5 个 DTO 类）换完：新增 3 条断言（选项下限、未知枚举、重复选项 ID），全量 728 个断言全绿。剩下 23 个域按同样方式逐个来，`CreatePollDto` 这种被别的域 import 的 DTO 顺带换成契约类型（agent 提案里那处）。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

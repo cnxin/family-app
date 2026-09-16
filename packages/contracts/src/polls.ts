@@ -120,7 +120,12 @@ export const updatePollBody = createPollBody
 export type UpdatePollBody = z.infer<typeof updatePollBody>;
 
 export const voteBody = z.object({
-  optionIds: z.array(uuid).max(12),
+  // 去重约束来自原 VoteDto 的 `@ArrayUnique()`，换 Zod 管道时必须一起搬过来，
+  // 否则同一个选项 ID 重复提交会从 400 变成被接受。
+  optionIds: z
+    .array(uuid)
+    .max(12)
+    .refine((ids) => new Set(ids).size === ids.length, '选项不能重复'),
 });
 export type VoteBody = z.infer<typeof voteBody>;
 
