@@ -187,16 +187,22 @@
 
 验收：`types.ts` 行数归零；`grep -c "function isUniqueViolation"` 全仓为 1；contracts 对 275 个端点覆盖率 100%。
 
-进度（2026-09-15）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks / polls / calendar / reminders / points / dishes / recipes / shopping / inventory / menus / notifications / activities 共 85 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这十二个域改为 re-export（从 2,140 行降到约 1,520 行）。剩余：其余 12 个域的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
+进度（2026-09-16）：`packages/shared` 与 `packages/contracts` 已建立；9 个重复工具函数（42 处定义）已合并；tasks / polls / calendar / reminders / points / dishes / recipes / shopping / inventory / menus / notifications / activities / auth / finance / smart-menu / upload 共 16 个域 119 个端点有契约并在测试模式下自动校验响应；`docs/api-inventory.md` 增加"契约"列跟踪覆盖率；客户端 `types.ts` 已对这十六个域改为 re-export（从 2,140 行降到约 1,360 行）。剩余：guests / travel / assets / media / knowledge / memories / system / agent 8 个域（156 个端点）的契约、`fingerprint` 等依赖 node:crypto 的工具、Zod 校验管道替换 class-validator。
 
 本地全量验收（临时 PostgreSQL + `test:api` 725 个断言 + 三步 `docker build`）已绿；GitHub Actions 因账户层面原因（run 0 秒 `startup_failure`、0 job）尚未跑起来，恢复前以本地全量为准。
 
-第一批契约落地时记下的三条经验：
+契约落地过程中记下的经验：
 
 1. **契约会逼出没人写下来的事实。** `ReminderSource.status` 在 API 和客户端都声明为 `string`，"提醒挂在已结束投票上时 status 是 `closed`"这个事实哪里都没写，直到 `GET /reminders` 触发 `CONTRACT_VIOLATION`。修法是给 reminders 单独的状态枚举，不放宽 `/calendar`。以后遇到契约违规，先判断是"契约推窄了"还是"API 行为错了"，再决定改哪边。
 2. **`--only` 用来迭代，验收必须全量。** 单跑 `--only travel` 是绿的，因为临时库里没有 polls 脚本留下的已关闭投票；只有全量串行跑、前面脚本的数据落进同一个库，那条才会被撞出来。
 3. **改了 `packages/*` 必须重建再测。** `apps/api` 通过 workspace 链接吃的是 `packages/contracts/dist`，不跑 `node scripts/build-packages.mjs` 就是在拿旧 schema 测试，绿了也是假绿。同理，任何依赖 `scripts/` 或 `packages/` 的构建步骤（如 Dockerfile 的 postinstall）都要检查复制顺序。
 4. **共享数据库的两个派发器必须把归属划清楚。** `agent-routines.mjs` 自己 `new` 了一个喂 stub 数据的 `AgentRoutineService`，而测试运行器起的 API 进程里还有一个每 100 毫秒轮询的同类服务；两者用 `FOR UPDATE SKIP LOCKED` 抢同一批到期例行任务，谁先拿到谁生成周报，API 拿到就按真实库数据生成、断言文案对不上——单跑必绿、全量约三分之一概率红。修法是测试在一个事务里"置为到期 + 派发"，事务持有行锁让轮询器跳过。Phase 3 抽 `jobs/` 调度层时新旧调度器会并存一段时间，同样的竞争会再出现，届时用同样的办法：要么锁行，要么让其中一个明确退出。
+5. **响应形状取决于加载路径，不是实体定义。** 同一个实体在不同端点里长得不一样，目前撞到三种成因：
+   - `find({ relations })` 显式指定关系：eager 递归在指定层之下只走一层，再深就缺席。同一条 `Dish → ingredients → ingredient` 链，`/menus` 的 relations 到 `items` 为止，`items.dish` 有、`dish.ingredients` 没有；`/smart-menu-plans` 的 relations 到 `candidates.dish` 为止，`dish.ingredients` 有、`ingredients[].ingredient` 没有——起点差一层，断点就差一层。写契约前先看 relations 写到哪一层，能吃到的 eager 只到下一层；
+   - QueryBuilder：完全无视 eager，只有显式 join 的才有（`GET /finance/transactions` 嵌套的 `createdBy`）；
+   - `save()` / `create()` 的返回值：不触发任何 eager，一层都没有（`POST /finance/accounts`、`POST /finance/categories` 的 `createdBy`）。这一种只出现在**写端点**上，把读端点核得再仔细也覆盖不到；而 `findOneBy` 再 `save` 的 PATCH 返回的是加载过的实体，形状又和 GET 一致。
+
+   补契约时要按端点逐个看 Service 的加载方式，写端点专门看 `return save(...)` 还是 `return findOne(...)`；必要时拆成"记录版 / 完整版 / 新建版"多个 schema（`xxxRecordSchema` / `xxxSchema` / `createdXxxSchema`），不要用 `.loose()` 糊过去——`.loose()` 会让 `z.infer` 变成带索引签名的类型，客户端类型立刻失去意义。Phase 1 只改契约不改 API；到 Phase 3 迁移时应让写端点统一回传重新加载的实体，把这些分裂收掉。
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

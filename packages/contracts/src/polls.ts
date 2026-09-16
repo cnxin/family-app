@@ -52,10 +52,8 @@ export const pollOptionMediaSchema = z
         originalTitle: z.string().nullable(),
         year: z.number().int().nullable(),
         posterUrl: z.string().nullable(),
-      })
-      .loose(),
-  })
-  .loose();
+      }),
+  });
 
 export const pollOptionResultSchema = z
   .object({
@@ -68,8 +66,7 @@ export const pollOptionResultSchema = z
     voteCount: z.number().int(),
     percentage: z.number(),
     voters: z.array(memberSchema),
-  })
-  .loose();
+  });
 export type PollOptionResult = z.infer<typeof pollOptionResultSchema>;
 
 export const householdPollSchema = z
@@ -97,8 +94,7 @@ export const householdPollSchema = z
     totalVotes: z.number().int(),
     selectedOptionIds: z.array(uuid),
     options: z.array(pollOptionResultSchema),
-  })
-  .loose();
+  });
 export type HouseholdPoll = z.infer<typeof householdPollSchema>;
 
 export const pollListQuery = z.object({

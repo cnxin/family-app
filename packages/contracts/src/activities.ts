@@ -45,8 +45,7 @@ export const householdActivitySchema = z
     targetPath: z.string().nullable(),
     metadata: z.record(z.string(), z.unknown()),
     occurredAt: isoDateTime,
-  })
-  .loose();
+  });
 export type HouseholdActivity = z.infer<typeof householdActivitySchema>;
 
 export const activityListQuery = z.object({

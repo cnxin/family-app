@@ -31,8 +31,7 @@ export const ingredientSchema = z
     category: z.string(),
     defaultUnit: z.string(),
     isPantryStaple: z.boolean(),
-  })
-  .loose();
+  });
 export type Ingredient = z.infer<typeof ingredientSchema>;
 
 export const dishIngredientSchema = z
@@ -43,8 +42,7 @@ export const dishIngredientSchema = z
     ingredient: ingredientSchema,
     quantity: numericString,
     unit: z.string(),
-  })
-  .loose();
+  });
 export type DishIngredient = z.infer<typeof dishIngredientSchema>;
 
 export const dishRecipeStepSchema = z.object({
@@ -74,8 +72,7 @@ export const dishSchema = z
     isActive: z.boolean(),
     createdBy: uuid.nullable(),
     ingredients: z.array(dishIngredientSchema),
-  })
-  .loose();
+  });
 export type Dish = z.infer<typeof dishSchema>;
 
 export const dishIngredientInput = z.object({

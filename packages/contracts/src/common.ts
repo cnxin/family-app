@@ -20,8 +20,8 @@ export const memberRole = z.enum(MEMBER_ROLES);
 export type MemberRole = z.infer<typeof memberRole>;
 
 /**
- * 成员公开档案。目前 API 直接回传实体，可能带有额外字段（accountId 等），
- * 所以用 loose object：只约束客户端依赖的字段，不拒绝多余字段。
+ * 成员公开档案。目前 API 直接回传实体，可能带有额外字段（accountId 等）；
+ * Zod 4 的 z.object 默认忽略未知字段，所以只约束客户端依赖的字段即可。
  */
 export const memberSchema = z
   .object({
@@ -33,8 +33,7 @@ export const memberSchema = z
     prefersCooking: z.boolean(),
     disabledAt: nullableDateTime.optional(),
     createdAt: isoDateTime.optional(),
-  })
-  .loose();
+  });
 export type Member = z.infer<typeof memberSchema>;
 
 // ---- 通用响应 ---------------------------------------------------------------

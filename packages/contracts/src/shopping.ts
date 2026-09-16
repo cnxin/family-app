@@ -31,8 +31,7 @@ export const shoppingInventoryConfirmationSchema = z
     actorName: z.string(),
     createdAt: isoDateTime,
     reversedAt: nullableDateTime,
-  })
-  .loose();
+  });
 export type ShoppingInventoryConfirmation = z.infer<
   typeof shoppingInventoryConfirmationSchema
 >;
@@ -55,8 +54,7 @@ export const shoppingItemRecordSchema = z
     inventoryItemId: uuid.nullish(),
     inventoryItem: inventoryItemSchema.nullish(),
     maintenanceConsumableId: uuid.nullish(),
-  })
-  .loose();
+  });
 export type ShoppingItemRecord = z.infer<typeof shoppingItemRecordSchema>;
 
 /** 清单行：完整实体（find 出来的所有列都在）+ 入库确认摘要。 */

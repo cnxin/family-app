@@ -87,8 +87,7 @@ export const inventoryItemSchema = z
     batchSummary: inventoryBatchSummarySchema.optional(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type InventoryItem = z.infer<typeof inventoryItemSchema>;
 
 export const inventoryItemWithSummarySchema = inventoryItemSchema.extend({
@@ -133,8 +132,7 @@ export const inventoryTransactionRecordSchema = z
     sourceId: uuid,
     reversesTransactionId: uuid.nullable(),
     createdAt: isoDateTime,
-  })
-  .loose();
+  });
 export type InventoryTransactionRecord = z.infer<
   typeof inventoryTransactionRecordSchema
 >;
@@ -183,8 +181,7 @@ export const inventoryBatchSchema = z
     daysRemaining: z.number().int().nullable(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type InventoryBatch = z.infer<typeof inventoryBatchSchema>;
 
 export const inventoryBatchesQuery = z.object({
@@ -238,8 +235,7 @@ export const inventoryConfirmationSummarySchema = z
     createdAt: isoDateTime,
     reversedAt: nullableDateTime,
     reversalTransactionId: uuid.nullable(),
-  })
-  .loose();
+  });
 
 export const shoppingInventoryPreviewSchema = z
   .object({
@@ -257,8 +253,7 @@ export const shoppingInventoryPreviewSchema = z
     quantityAfter: z.number().nullable(),
     canConfirm: z.boolean(),
     confirmation: inventoryConfirmationSummarySchema.nullable(),
-  })
-  .loose();
+  });
 export type ShoppingInventoryPreview = z.infer<
   typeof shoppingInventoryPreviewSchema
 >;
@@ -296,8 +291,7 @@ export const menuInventoryPreviewRowSchema = z
     availableUnits: z.array(z.string()),
     batchAllocations: z.array(batchAllocationSchema),
     untrackedQuantity: z.number(),
-  })
-  .loose();
+  });
 
 export const menuInventoryPreviewSchema = z
   .object({
@@ -308,8 +302,7 @@ export const menuInventoryPreviewSchema = z
     canConfirm: z.boolean(),
     rows: z.array(menuInventoryPreviewRowSchema),
     transactions: z.array(inventoryConfirmationSummarySchema),
-  })
-  .loose();
+  });
 export type MenuInventoryPreview = z.infer<typeof menuInventoryPreviewSchema>;
 
 export const confirmShoppingReceiptBody = z.object({

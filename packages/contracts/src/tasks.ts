@@ -36,8 +36,7 @@ export const householdTaskSchema = z
     isArchived: z.boolean(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type HouseholdTask = z.infer<typeof householdTaskSchema>;
 
 export const taskOccurrenceSchema = z
@@ -55,8 +54,7 @@ export const taskOccurrenceSchema = z
     canUpdate: z.boolean(),
     pointsAwarded: z.boolean(),
     task: householdTaskSchema,
-  })
-  .loose();
+  });
 export type TaskOccurrence = z.infer<typeof taskOccurrenceSchema>;
 
 export const taskRangeQuery = z.object({

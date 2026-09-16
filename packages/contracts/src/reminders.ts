@@ -52,8 +52,7 @@ export const reminderSourceSchema = z
     startsAt: nullableDateTime,
     targetPath: z.string(),
     status: reminderSourceStatus,
-  })
-  .loose();
+  });
 export type ReminderSource = z.infer<typeof reminderSourceSchema>;
 
 export const reminderRecipientSchema = z
@@ -61,8 +60,7 @@ export const reminderRecipientSchema = z
     id: uuid,
     member: memberSchema,
     deliveredAt: nullableDateTime,
-  })
-  .loose();
+  });
 export type ReminderRecipient = z.infer<typeof reminderRecipientSchema>;
 
 export const householdReminderSchema = z
@@ -83,8 +81,7 @@ export const householdReminderSchema = z
     canManage: z.boolean(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type HouseholdReminder = z.infer<typeof householdReminderSchema>;
 
 export const reminderSourceRangeQuery = z.object({

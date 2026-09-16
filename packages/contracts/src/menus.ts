@@ -67,13 +67,11 @@ export const dishRecipeSnapshotSchema = z
           isPantryStaple: z.boolean(),
           quantity: z.number(),
           unit: z.string(),
-        })
-        .loose(),
+        }),
     ),
     steps: z.array(dishRecipeStepSchema),
     referenceLinks: z.array(dishReferenceLinkSchema),
-  })
-  .loose();
+  });
 export type DishRecipeSnapshot = z.infer<typeof dishRecipeSnapshotSchema>;
 
 /**
@@ -104,8 +102,7 @@ export const menuItemSchema = z
     recipeVariant: dishRecipeVariantSchema.nullish(),
     recipeSnapshot: dishRecipeSnapshotSchema.nullable(),
     createdAt: isoDateTime,
-  })
-  .loose();
+  });
 export type MenuItem = z.infer<typeof menuItemSchema>;
 
 /** 菜单实体（作为 MenuEvent.menu 嵌套时 items 未加载）。 */
@@ -122,8 +119,7 @@ export const menuRecordSchema = z
     completedById: uuid.nullable(),
     completedBy: memberSchema.nullable(),
     items: z.array(menuItemSchema).optional(),
-  })
-  .loose();
+  });
 export type MenuRecord = z.infer<typeof menuRecordSchema>;
 
 /** /menus 系列端点返回的菜单：一定带 items。 */
@@ -151,8 +147,7 @@ export const menuEventSchema = z
     reason: z.string().nullable(),
     readAt: nullableDateTime,
     createdAt: isoDateTime,
-  })
-  .loose();
+  });
 export type MenuEvent = z.infer<typeof menuEventSchema>;
 
 export const menuDateCountSchema = z.object({

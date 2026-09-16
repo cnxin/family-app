@@ -51,8 +51,7 @@ export const pointsAccountSchema = z
     balance: z.number().int(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type PointsAccount = z.infer<typeof pointsAccountSchema>;
 
 export const pointsLedgerSchema = z
@@ -74,8 +73,7 @@ export const pointsLedgerSchema = z
     note: z.string().nullable(),
     reversesLedgerId: uuid.nullable(),
     createdAt: isoDateTime,
-  })
-  .loose();
+  });
 export type PointsLedger = z.infer<typeof pointsLedgerSchema>;
 
 export const rewardSchema = z
@@ -90,8 +88,7 @@ export const rewardSchema = z
     createdBy: memberSchema,
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type Reward = z.infer<typeof rewardSchema>;
 
 export const rewardRedemptionSchema = z
@@ -118,8 +115,7 @@ export const rewardRedemptionSchema = z
     reversalNote: z.string().nullable(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type RewardRedemption = z.infer<typeof rewardRedemptionSchema>;
 
 export const ledgerQuery = z.object({

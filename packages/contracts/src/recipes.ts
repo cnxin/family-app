@@ -16,8 +16,7 @@ export const dishRecipeVariantStepSchema = z
     position: z.number().int(),
     text: z.string(),
     imageUrl: z.string().nullable(),
-  })
-  .loose();
+  });
 export type DishRecipeVariantStep = z.infer<typeof dishRecipeVariantStepSchema>;
 
 export const dishRecipeVariantLinkSchema = z
@@ -27,8 +26,7 @@ export const dishRecipeVariantLinkSchema = z
     position: z.number().int(),
     title: z.string().nullable(),
     url: z.string(),
-  })
-  .loose();
+  });
 export type DishRecipeVariantLink = z.infer<typeof dishRecipeVariantLinkSchema>;
 
 export const dishRecipeVariantIngredientSchema = z
@@ -39,8 +37,7 @@ export const dishRecipeVariantIngredientSchema = z
     ingredient: ingredientSchema,
     quantity: numericString,
     unit: z.string(),
-  })
-  .loose();
+  });
 export type DishRecipeVariantIngredient = z.infer<
   typeof dishRecipeVariantIngredientSchema
 >;
@@ -63,8 +60,7 @@ export const dishRecipeVariantSchema = z
     canManage: z.boolean(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type DishRecipeVariant = z.infer<typeof dishRecipeVariantSchema>;
 
 /**
@@ -83,8 +79,7 @@ export const memberDishSkillRecordSchema = z
     note: z.string().nullable(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type MemberDishSkillRecord = z.infer<typeof memberDishSkillRecordSchema>;
 
 /** 成员厨艺记录（列表/详情形态，member 总是带出）。 */

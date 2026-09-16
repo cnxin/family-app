@@ -63,6 +63,22 @@ import type {
   NotificationDeliveryAttempt,
   NotificationDeliveryStatus,
   NotificationModule,
+  AccountProfile,
+  CreatedHouseholdInvitation,
+  FinanceAccount,
+  FinanceAccountType,
+  FinanceBudget,
+  FinanceCategory,
+  FinanceCategoryKind,
+  FinancePosting,
+  FinanceSummary,
+  FinanceTransaction,
+  FinanceTransactionType,
+  HouseholdInvitation,
+  InvitationPreview,
+  ManagedMember,
+  SmartMenuCandidate,
+  SmartMenuPlan,
 } from '@family/contracts';
 
 // 菜品 / 菜谱 / 购物 / 库存域类型已迁到 packages/contracts
@@ -112,6 +128,26 @@ export type {
   NotificationDeliveryAttempt,
   NotificationDeliveryStatus,
   NotificationModule,
+};
+
+// 账号 / 财务 / 智能菜单域类型已迁到 packages/contracts
+export type {
+  AccountProfile,
+  CreatedHouseholdInvitation,
+  FinanceAccount,
+  FinanceAccountType,
+  FinanceBudget,
+  FinanceCategory,
+  FinanceCategoryKind,
+  FinancePosting,
+  FinanceSummary,
+  FinanceTransaction,
+  FinanceTransactionType,
+  HouseholdInvitation,
+  InvitationPreview,
+  ManagedMember,
+  SmartMenuCandidate,
+  SmartMenuPlan,
 };
 
 export type MemberRole = 'owner' | 'admin' | 'member';
@@ -367,87 +403,8 @@ export interface Member {
   createdAt?: string;
 }
 
-export interface ManagedMember extends Member {
-  disabledAt: string | null;
-  account: {
-    loginName: string;
-    disabledAt: string | null;
-  } | null;
-}
-
-export interface AccountProfile {
-  id: string;
-  loginName: string;
-  requiresPasswordSetup: boolean;
-}
-
 export interface AuthSetupStatus {
   initialized: boolean;
-}
-
-export interface HouseholdInvitation {
-  id: string;
-  memberName: string;
-  avatarEmoji: string;
-  role: Exclude<MemberRole, 'owner'>;
-  expiresAt: string;
-  acceptedAt: string | null;
-  revokedAt: string | null;
-  createdAt: string;
-}
-
-export interface CreatedHouseholdInvitation extends HouseholdInvitation {
-  invitationToken: string;
-}
-
-export interface InvitationPreview {
-  householdName: string;
-  memberName: string;
-  avatarEmoji: string;
-  role: Exclude<MemberRole, 'owner'>;
-  expiresAt: string;
-}
-
-export interface SmartMenuCandidate {
-  id: string;
-  dishId: string;
-  dish: Dish;
-  recipeVariantId: string;
-  recipeVariant: DishRecipeVariant;
-  targetDate: string;
-  mealType: MealType;
-  score: number;
-  reasons: string[];
-  expiringIngredients: {
-    ingredientId: string;
-    name: string;
-    expiresOn: string;
-    daysRemaining: number;
-  }[];
-  pollOptionId: string | null;
-  adoptedMenuId: string | null;
-  sortOrder: number;
-  voteCount: number;
-}
-
-export interface SmartMenuPlan {
-  id: string;
-  startsOn: string;
-  endsOn: string;
-  status: 'draft' | 'voting' | 'adopted';
-  pollId: string | null;
-  pollStatus: 'open' | 'closed' | null;
-  candidates: SmartMenuCandidate[];
-  createdById: string;
-  createdBy: Member;
-  adoptedById: string | null;
-  adoptedBy: Member | null;
-  adoptedAt: string | null;
-  canCreatePoll: boolean;
-  canAdopt: boolean;
-  adoptedCount: number;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export type AssetCategory =
@@ -1042,123 +999,6 @@ export type {
   RewardRedemption,
   RewardRedemptionStatus,
 };
-
-export type FinanceAccountType =
-  | 'cash'
-  | 'bank'
-  | 'alipay'
-  | 'wechat'
-  | 'other';
-export type FinanceCategoryKind = 'expense' | 'income';
-export type FinanceTransactionType =
-  | 'expense'
-  | 'income'
-  | 'transfer'
-  | 'reversal';
-
-export interface FinanceAccount {
-  id: string;
-  householdId: string;
-  name: string;
-  type: FinanceAccountType;
-  openingBalance: number;
-  balance: number;
-  currency: 'CNY';
-  isActive: boolean;
-  version: number;
-  createdById: string;
-  createdBy: Member;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface FinanceCategory {
-  id: string;
-  householdId: string;
-  name: string;
-  kind: FinanceCategoryKind;
-  systemKey: string | null;
-  icon: string;
-  color: string;
-  sortOrder: number;
-  isActive: boolean;
-  version: number;
-  createdById: string;
-  createdBy: Member;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface FinancePosting {
-  id: string;
-  transactionId: string;
-  accountId: string;
-  account: FinanceAccount;
-  delta: number;
-  createdAt: string;
-}
-
-export interface FinanceTransaction {
-  id: string;
-  householdId: string;
-  type: FinanceTransactionType;
-  amount: number;
-  currency: 'CNY';
-  title: string;
-  note: string | null;
-  occurredOn: string;
-  categoryId: string | null;
-  category: FinanceCategory | null;
-  actorId: string;
-  actor: Member;
-  actorName: string;
-  sourceType:
-    | 'manual'
-    | 'agent'
-    | 'shopping_item'
-    | 'asset'
-    | 'media_subscription'
-    | 'finance_transaction';
-  sourceId: string;
-  reversalOfId: string | null;
-  postings: FinancePosting[];
-  reversed: boolean;
-  reversalId: string | null;
-  createdAt: string;
-}
-
-export interface FinanceBudget {
-  id: string;
-  householdId: string;
-  categoryId: string;
-  category: FinanceCategory;
-  month: string;
-  amount: number;
-  spent: number;
-  remaining: number;
-  ratio: number;
-  version: number;
-  updatedById: string;
-  updatedBy: Member;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface FinanceSummary {
-  month: string;
-  currency: 'CNY';
-  income: number;
-  expense: number;
-  net: number;
-  totalBalance: number;
-  accounts: FinanceAccount[];
-  categories: FinanceCategory[];
-  budgets: FinanceBudget[];
-  categorySpending: {
-    category: FinanceCategory | null;
-    amount: number;
-  }[];
-}
 
 // 投票域类型已迁到 packages/contracts（Zod schema 推导），这里只做 re-export
 export type {

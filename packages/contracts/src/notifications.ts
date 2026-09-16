@@ -58,8 +58,7 @@ export const appNotificationSchema = z
     targetPath: z.string(),
     readAt: nullableDateTime,
     createdAt: isoDateTime,
-  })
-  .loose();
+  });
 export type AppNotification = z.infer<typeof appNotificationSchema>;
 
 export const notificationListQuery = z.object({
@@ -97,8 +96,7 @@ export const notificationChannelSchema = z
     preference: notificationChannelPreferenceSchema,
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
 
 export const createNotificationChannelBody = z.object({
@@ -155,8 +153,7 @@ export const notificationDeliveryAttemptSchema = z
     startedAt: isoDateTime,
     finishedAt: isoDateTime,
     createdAt: isoDateTime,
-  })
-  .loose();
+  });
 export type NotificationDeliveryAttempt = z.infer<
   typeof notificationDeliveryAttemptSchema
 >;
@@ -183,8 +180,7 @@ export const notificationDeliveryRecordSchema = z
     lastError: z.string().nullable(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type NotificationDeliveryRecord = z.infer<
   typeof notificationDeliveryRecordSchema
 >;

@@ -71,8 +71,7 @@ export const calendarEntryMetadataSchema = z
     destination: z.string().nullable().optional(),
     completedItems: z.number().int().optional(),
     totalItems: z.number().int().optional(),
-  })
-  .loose();
+  });
 export type CalendarEntryMetadata = z.infer<typeof calendarEntryMetadataSchema>;
 
 export const calendarEntrySchema = z
@@ -88,8 +87,7 @@ export const calendarEntrySchema = z
     status: calendarEntryStatus,
     targetPath: z.string(),
     metadata: calendarEntryMetadataSchema,
-  })
-  .loose();
+  });
 export type CalendarEntry = z.infer<typeof calendarEntrySchema>;
 
 /** 家庭事件实体。create/update 直接回传 save 结果，createdBy 可能未加载。 */
@@ -106,8 +104,7 @@ export const calendarEventSchema = z
     createdBy: memberSchema.optional(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
-  })
-  .loose();
+  });
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 
 export const calendarRangeQuery = z.object({

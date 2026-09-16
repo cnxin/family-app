@@ -4,17 +4,17 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 85 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 119 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
 | activities | 1 | 1 |
 | agent | 40 | 0 |
 | assets | 18 | 0 |
-| auth | 16 | 0 |
+| auth | 16 | 16 |
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
-| finance | 13 | 0 |
+| finance | 13 | 13 |
 | guests | 21 | 0 |
 | inventory | 13 | 13 |
 | knowledge | 8 | 0 |
@@ -27,11 +27,11 @@
 | recipes | 7 | 7 |
 | reminders | 5 | 5 |
 | shopping | 5 | 5 |
-| smart-menu | 4 | 0 |
+| smart-menu | 4 | 4 |
 | system | 8 | 0 |
 | tasks | 5 | 5 |
 | travel | 21 | 0 |
-| upload | 1 | 0 |
+| upload | 1 | 1 |
 
 ## activities（1）
 
@@ -111,22 +111,22 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| PATCH | `/accounts/me/password` | `AuthController.updatePassword` | 登录 |  | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/invitations/preview` | `AuthController.previewInvitation` | 公开 |  | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/invitations/redeem` | `AuthController.redeemInvitation` | 公开 |  | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/login` | `AuthController.login` | 公开 |  | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/logout` | `AuthController.logout` | 登录 |  | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/refresh` | `AuthController.refresh` | 公开 |  | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/setup/bootstrap` | `AuthController.bootstrap` | 公开 |  | `apps/api/src/auth/auth.module.ts` |
-| GET | `/auth/setup/status` | `AuthController.setupStatus` | 公开 |  | `apps/api/src/auth/auth.module.ts` |
-| GET | `/household/invitations` | `AuthController.listInvitations` | `manage_members` |  | `apps/api/src/auth/auth.module.ts` |
-| POST | `/household/invitations` | `AuthController.createInvitation` | `manage_members` |  | `apps/api/src/auth/auth.module.ts` |
-| DELETE | `/household/invitations/:id` | `AuthController.revokeInvitation` | `manage_members` |  | `apps/api/src/auth/auth.module.ts` |
-| GET | `/household/members` | `AuthController.managedMembers` | `manage_members` |  | `apps/api/src/auth/auth.module.ts` |
-| PATCH | `/household/members/:id` | `AuthController.updateManagedMember` | `manage_members` |  | `apps/api/src/auth/auth.module.ts` |
-| PATCH | `/household/members/:id/status` | `AuthController.updateManagedMemberStatus` | `manage_members` |  | `apps/api/src/auth/auth.module.ts` |
-| GET | `/members` | `AuthController.list` | 登录 |  | `apps/api/src/auth/auth.module.ts` |
-| PATCH | `/members/me/preferences` | `AuthController.updatePreferences` | 登录 |  | `apps/api/src/auth/auth.module.ts` |
+| PATCH | `/accounts/me/password` | `AuthController.updatePassword` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| POST | `/auth/invitations/preview` | `AuthController.previewInvitation` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| POST | `/auth/invitations/redeem` | `AuthController.redeemInvitation` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| POST | `/auth/login` | `AuthController.login` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| POST | `/auth/logout` | `AuthController.logout` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| POST | `/auth/refresh` | `AuthController.refresh` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| POST | `/auth/setup/bootstrap` | `AuthController.bootstrap` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| GET | `/auth/setup/status` | `AuthController.setupStatus` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| GET | `/household/invitations` | `AuthController.listInvitations` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
+| POST | `/household/invitations` | `AuthController.createInvitation` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
+| DELETE | `/household/invitations/:id` | `AuthController.revokeInvitation` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
+| GET | `/household/members` | `AuthController.managedMembers` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
+| PATCH | `/household/members/:id` | `AuthController.updateManagedMember` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
+| PATCH | `/household/members/:id/status` | `AuthController.updateManagedMemberStatus` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
+| GET | `/members` | `AuthController.list` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| PATCH | `/members/me/preferences` | `AuthController.updatePreferences` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
 
 ## calendar（4）
 
@@ -151,19 +151,19 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/finance/accounts` | `FinanceController.accounts` | `view_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| POST | `/finance/accounts` | `FinanceController.createAccount` | `view_finance` `manage_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| PATCH | `/finance/accounts/:id` | `FinanceController.updateAccount` | `view_finance` `manage_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| GET | `/finance/budgets` | `FinanceController.budgets` | `view_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| PUT | `/finance/budgets` | `FinanceController.upsertBudget` | `view_finance` `manage_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| DELETE | `/finance/budgets/:id` | `FinanceController.deleteBudget` | `view_finance` `manage_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| GET | `/finance/categories` | `FinanceController.categories` | `view_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| POST | `/finance/categories` | `FinanceController.createCategory` | `view_finance` `manage_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| PATCH | `/finance/categories/:id` | `FinanceController.updateCategory` | `view_finance` `manage_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| GET | `/finance/summary` | `FinanceController.summary` | `view_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| GET | `/finance/transactions` | `FinanceController.transactions` | `view_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| POST | `/finance/transactions` | `FinanceController.createTransaction` | `view_finance` `record_finance` |  | `apps/api/src/finance/finance.module.ts` |
-| POST | `/finance/transactions/:id/reverse` | `FinanceController.reverseTransaction` | `view_finance` `manage_finance` |  | `apps/api/src/finance/finance.module.ts` |
+| GET | `/finance/accounts` | `FinanceController.accounts` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| POST | `/finance/accounts` | `FinanceController.createAccount` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| PATCH | `/finance/accounts/:id` | `FinanceController.updateAccount` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| GET | `/finance/budgets` | `FinanceController.budgets` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| PUT | `/finance/budgets` | `FinanceController.upsertBudget` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| DELETE | `/finance/budgets/:id` | `FinanceController.deleteBudget` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| GET | `/finance/categories` | `FinanceController.categories` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| POST | `/finance/categories` | `FinanceController.createCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| PATCH | `/finance/categories/:id` | `FinanceController.updateCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| GET | `/finance/summary` | `FinanceController.summary` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| GET | `/finance/transactions` | `FinanceController.transactions` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| POST | `/finance/transactions` | `FinanceController.createTransaction` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| POST | `/finance/transactions/:id/reverse` | `FinanceController.reverseTransaction` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
 
 ## guests（21）
 
@@ -368,10 +368,10 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/smart-menu-plans` | `SmartMenuController.list` | 登录 |  | `apps/api/src/smart-menu/smart-menu.module.ts` |
-| POST | `/smart-menu-plans` | `SmartMenuController.create` | `place_meal_order` |  | `apps/api/src/smart-menu/smart-menu.module.ts` |
-| POST | `/smart-menu-plans/:id/adopt` | `SmartMenuController.adopt` | `place_meal_order` |  | `apps/api/src/smart-menu/smart-menu.module.ts` |
-| POST | `/smart-menu-plans/:id/poll` | `SmartMenuController.createPoll` | `place_meal_order` |  | `apps/api/src/smart-menu/smart-menu.module.ts` |
+| GET | `/smart-menu-plans` | `SmartMenuController.list` | 登录 | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
+| POST | `/smart-menu-plans` | `SmartMenuController.create` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
+| POST | `/smart-menu-plans/:id/adopt` | `SmartMenuController.adopt` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
+| POST | `/smart-menu-plans/:id/poll` | `SmartMenuController.createPoll` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
 
 ## system（8）
 
@@ -426,5 +426,5 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| POST | `/upload` | `UploadController.FileInterceptor` | 登录 |  | `apps/api/src/upload/upload.module.ts` |
+| POST | `/upload` | `UploadController.FileInterceptor` | 登录 | ✓ | `apps/api/src/upload/upload.module.ts` |
 
