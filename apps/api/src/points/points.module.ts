@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  Body,
   ConflictException,
   Controller,
   Get,
@@ -10,25 +9,32 @@ import {
   Param,
   Patch,
   Post,
-  Query,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import {
-  IsIn,
-  IsBoolean,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import {
+  adjustmentBody,
+  createRewardBody,
+  decideRedemptionBody,
+  ledgerOperationBody,
+  ledgerQuery,
+  redemptionQuery,
+  rewardsQuery,
+  updateRewardBody,
+  type AdjustmentBody,
+  type CreateRewardBody,
+  type DecideRedemptionBody,
+  type LedgerOperationBody,
+  type LedgerQuery,
+  type RedemptionQuery,
+  type RewardsQuery,
+  type UpdateRewardBody,
+} from '@family/contracts';
+import { ZodBody, ZodQuery } from '../common/zod';
 import {
   HouseholdTask,
   HouseholdTaskInstance,
@@ -43,132 +49,6 @@ import {
   RewardRedemptionStatus,
 } from '../entities';
 import { isHouseholdManager, normalizedText } from '@family/shared';
-
-class LedgerQueryDto {
-  @IsOptional()
-  @IsUUID()
-  memberId?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(200)
-  limit?: number;
-}
-
-class AdjustmentDto {
-  @IsUUID()
-  memberId: string;
-
-  @IsInt()
-  @Min(-1_000_000)
-  @Max(1_000_000)
-  delta: number;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  note?: string | null;
-
-  @IsString()
-  @MaxLength(180)
-  idempotencyKey: string;
-}
-
-class ReverseLedgerDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  note?: string | null;
-
-  @IsString()
-  @MaxLength(180)
-  idempotencyKey: string;
-}
-
-class CreateRewardDto {
-  @IsString()
-  @MaxLength(120)
-  name: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  description?: string | null;
-
-  @IsInt()
-  @Min(1)
-  @Max(1_000_000)
-  cost: number;
-}
-
-class UpdateRewardDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  name?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  description?: string | null;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(1_000_000)
-  cost?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-}
-
-class RedeemRewardDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  note?: string | null;
-
-  @IsString()
-  @MaxLength(180)
-  idempotencyKey: string;
-}
-
-class RedemptionQueryDto {
-  @IsOptional()
-  @IsIn(['pending', 'approved', 'rejected', 'cancelled', 'reversed'])
-  status?: RewardRedemptionStatus;
-
-  @IsOptional()
-  @IsUUID()
-  memberId?: string;
-}
-
-class DecideRedemptionDto {
-  @IsIn(['approve', 'reject'])
-  decision: 'approve' | 'reject';
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  note?: string | null;
-
-  @IsString()
-  @MaxLength(180)
-  idempotencyKey: string;
-}
-
-class RedemptionOperationDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  note?: string | null;
-
-  @IsString()
-  @MaxLength(180)
-  idempotencyKey: string;
-}
 
 interface DeltaInput {
   householdId: string;
@@ -223,7 +103,7 @@ export class PointsService {
     });
   }
 
-  listLedger(query: LedgerQueryDto, user: JwtUser) {
+  listLedger(query: LedgerQuery, user: JwtUser) {
     return this.ledger.find({
       where: {
         householdId: user.householdId,
@@ -234,7 +114,7 @@ export class PointsService {
     });
   }
 
-  async adjust(dto: AdjustmentDto, user: JwtUser) {
+  async adjust(dto: AdjustmentBody, user: JwtUser) {
     if (dto.delta === 0) throw new BadRequestException('积分变化不能为 0');
     await this.requireMember(dto.memberId, user.householdId);
     const entry = await this.dataSource.transaction(async (manager) => {
@@ -265,7 +145,7 @@ export class PointsService {
     return this.findLedger(entry.id, user.householdId);
   }
 
-  async reverseLedger(id: string, dto: ReverseLedgerDto, user: JwtUser) {
+  async reverseLedger(id: string, dto: LedgerOperationBody, user: JwtUser) {
     const entry = await this.dataSource.transaction(async (manager) => {
       const original = await manager.getRepository(PointsLedger).findOneBy({
         id,
@@ -311,7 +191,7 @@ export class PointsService {
     });
   }
 
-  async createReward(dto: CreateRewardDto, user: JwtUser) {
+  async createReward(dto: CreateRewardBody, user: JwtUser) {
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('奖励名称不能为空');
     const reward = await this.dataSource.transaction(async (manager) => {
@@ -344,7 +224,7 @@ export class PointsService {
     return this.findReward(reward.id, user.householdId);
   }
 
-  async updateReward(id: string, dto: UpdateRewardDto, user: JwtUser) {
+  async updateReward(id: string, dto: UpdateRewardBody, user: JwtUser) {
     if (!Object.keys(dto).length) {
       throw new BadRequestException('至少需要修改一个字段');
     }
@@ -395,7 +275,7 @@ export class PointsService {
     return this.findReward(id, user.householdId);
   }
 
-  async redeem(rewardId: string, dto: RedeemRewardDto, user: JwtUser) {
+  async redeem(rewardId: string, dto: LedgerOperationBody, user: JwtUser) {
     const redemptionId = await this.dataSource.transaction(async (manager) => {
       await this.lockIdempotency(
         manager,
@@ -468,7 +348,7 @@ export class PointsService {
     return this.findRedemption(redemptionId, user.householdId);
   }
 
-  listRedemptions(query: RedemptionQueryDto, user: JwtUser) {
+  listRedemptions(query: RedemptionQuery, user: JwtUser) {
     const memberId = isHouseholdManager(user) ? query.memberId : user.memberId;
     return this.redemptions.find({
       where: {
@@ -481,7 +361,7 @@ export class PointsService {
     });
   }
 
-  async decide(id: string, dto: DecideRedemptionDto, user: JwtUser) {
+  async decide(id: string, dto: DecideRedemptionBody, user: JwtUser) {
     const resultId = await this.dataSource.transaction(async (manager) => {
       await this.lockIdempotency(
         manager,
@@ -540,7 +420,7 @@ export class PointsService {
     return this.findRedemption(resultId, user.householdId);
   }
 
-  async cancel(id: string, dto: RedemptionOperationDto, user: JwtUser) {
+  async cancel(id: string, dto: LedgerOperationBody, user: JwtUser) {
     const resultId = await this.dataSource.transaction(async (manager) => {
       await this.lockIdempotency(
         manager,
@@ -595,7 +475,7 @@ export class PointsService {
 
   async reverseRedemption(
     id: string,
-    dto: RedemptionOperationDto,
+    dto: LedgerOperationBody,
     user: JwtUser,
   ) {
     const resultId = await this.dataSource.transaction(async (manager) => {
@@ -914,13 +794,13 @@ export class PointsController {
   }
 
   @Get('points/ledger')
-  ledger(@Query() query: LedgerQueryDto, @CurrentUser() user: JwtUser) {
+  ledger(@ZodQuery(ledgerQuery) query: LedgerQuery, @CurrentUser() user: JwtUser) {
     return this.service.listLedger(query, user);
   }
 
   @Post('points/adjustments')
   @RequireCapabilities('manage_points')
-  adjust(@Body() dto: AdjustmentDto, @CurrentUser() user: JwtUser) {
+  adjust(@ZodBody(adjustmentBody) dto: AdjustmentBody, @CurrentUser() user: JwtUser) {
     return this.service.adjust(dto, user);
   }
 
@@ -928,7 +808,7 @@ export class PointsController {
   @RequireCapabilities('manage_points')
   reverseLedger(
     @Param('id') id: string,
-    @Body() dto: ReverseLedgerDto,
+    @ZodBody(ledgerOperationBody) dto: LedgerOperationBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.reverseLedger(id, dto, user);
@@ -936,15 +816,15 @@ export class PointsController {
 
   @Get('rewards')
   rewards(
-    @Query('includeInactive') includeInactive: string | undefined,
+    @ZodQuery(rewardsQuery) query: RewardsQuery,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.listRewards(includeInactive === 'true', user);
+    return this.service.listRewards(query.includeInactive === 'true', user);
   }
 
   @Post('rewards')
   @RequireCapabilities('manage_points')
-  createReward(@Body() dto: CreateRewardDto, @CurrentUser() user: JwtUser) {
+  createReward(@ZodBody(createRewardBody) dto: CreateRewardBody, @CurrentUser() user: JwtUser) {
     return this.service.createReward(dto, user);
   }
 
@@ -952,7 +832,7 @@ export class PointsController {
   @RequireCapabilities('manage_points')
   updateReward(
     @Param('id') id: string,
-    @Body() dto: UpdateRewardDto,
+    @ZodBody(updateRewardBody) dto: UpdateRewardBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.updateReward(id, dto, user);
@@ -961,7 +841,7 @@ export class PointsController {
   @Post('rewards/:id/redemptions')
   redeem(
     @Param('id') id: string,
-    @Body() dto: RedeemRewardDto,
+    @ZodBody(ledgerOperationBody) dto: LedgerOperationBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.redeem(id, dto, user);
@@ -969,7 +849,7 @@ export class PointsController {
 
   @Get('reward-redemptions')
   redemptions(
-    @Query() query: RedemptionQueryDto,
+    @ZodQuery(redemptionQuery) query: RedemptionQuery,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.listRedemptions(query, user);
@@ -979,7 +859,7 @@ export class PointsController {
   @RequireCapabilities('manage_points')
   decide(
     @Param('id') id: string,
-    @Body() dto: DecideRedemptionDto,
+    @ZodBody(decideRedemptionBody) dto: DecideRedemptionBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.decide(id, dto, user);
@@ -988,7 +868,7 @@ export class PointsController {
   @Post('reward-redemptions/:id/cancel')
   cancel(
     @Param('id') id: string,
-    @Body() dto: RedemptionOperationDto,
+    @ZodBody(ledgerOperationBody) dto: LedgerOperationBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.cancel(id, dto, user);
@@ -998,7 +878,7 @@ export class PointsController {
   @RequireCapabilities('manage_points')
   reverseRedemption(
     @Param('id') id: string,
-    @Body() dto: RedemptionOperationDto,
+    @ZodBody(ledgerOperationBody) dto: LedgerOperationBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.reverseRedemption(id, dto, user);

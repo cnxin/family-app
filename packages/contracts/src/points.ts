@@ -122,6 +122,7 @@ export const ledgerQuery = z.object({
   memberId: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
 });
+export type LedgerQuery = z.infer<typeof ledgerQuery>;
 
 export const adjustmentBody = z.object({
   memberId: uuid,
@@ -150,14 +151,18 @@ export const updateRewardBody = createRewardBody
   .extend({ isActive: z.boolean().optional() });
 export type UpdateRewardBody = z.infer<typeof updateRewardBody>;
 
+// Controller 里是 `includeInactive === 'true'`，别的值一律当成"不含停用项"而不是报错。
+// `.catch(undefined)` 把这个容忍写进契约，换 Zod 管道后 `?includeInactive=yes` 的行为不变。
 export const rewardsQuery = z.object({
-  includeInactive: z.enum(['true', 'false']).optional(),
+  includeInactive: z.enum(['true', 'false']).optional().catch(undefined),
 });
+export type RewardsQuery = z.infer<typeof rewardsQuery>;
 
 export const redemptionQuery = z.object({
   status: rewardRedemptionStatus.optional(),
   memberId: uuid.optional(),
 });
+export type RedemptionQuery = z.infer<typeof redemptionQuery>;
 
 export const decideRedemptionBody = ledgerOperationBody.extend({
   decision: z.enum(['approve', 'reject']),

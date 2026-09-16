@@ -153,6 +153,34 @@ try {
     '管理员可以创建家庭奖励并设置兑换积分',
   );
 
+  // 以下三条守的是请求校验管道（points 已从 class-validator DTO 换成契约 schema）。
+  const emptyKey = await request(
+    `/rewards/${reward.data.id}/redemptions`,
+    member.accessToken,
+    'POST',
+    { idempotencyKey: '' },
+  );
+  assert(
+    emptyKey.status === 400,
+    '空幂等键被请求校验拒绝（契约 min(1)，原 DTO 只限了最大长度）',
+  );
+
+  const badDecision = await request(
+    `/reward-redemptions/${randomUUID()}/decision`,
+    owner.accessToken,
+    'POST',
+    { decision: '再想想', idempotencyKey: randomUUID() },
+  );
+  assert(badDecision.status === 400, '未知审批动作被请求校验拒绝');
+
+  // rewardsQuery 用 .catch(undefined) 保住了原来的容忍：非 true/false 不报错，按"不含停用项"处理
+  const looseFlag = await request('/rewards?includeInactive=yes', owner.accessToken);
+  assert(
+    looseFlag.status === 200 &&
+      looseFlag.data.every((item) => item.isActive),
+    '奖励目录对无法识别的 includeInactive 仍按不含停用项处理',
+  );
+
   const redeemKey = randomUUID();
   const redemption = await request(
     `/rewards/${reward.data.id}/redemptions`,
