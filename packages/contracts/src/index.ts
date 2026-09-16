@@ -13,11 +13,17 @@ export * from './dishes';
 export * from './recipes';
 export * from './shopping';
 export * from './inventory';
+export * from './menus';
+export * from './notifications';
+export * from './activities';
 
 import { buildContractIndex } from './registry';
+import { activities } from './activities';
 import { calendar } from './calendar';
 import { dishes } from './dishes';
 import { inventory } from './inventory';
+import { menus } from './menus';
+import { notifications } from './notifications';
 import { points } from './points';
 import { polls } from './polls';
 import { recipes } from './recipes';
@@ -36,6 +42,9 @@ export const contracts = {
   recipes,
   shopping,
   inventory,
+  menus,
+  notifications,
+  activities,
 };
 
 /** `METHOD /path` → 契约。API 测试模式下的响应校验用它查表。 */

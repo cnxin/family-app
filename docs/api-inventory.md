@@ -4,11 +4,11 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 64 个。
+共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 85 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
-| activities | 1 | 0 |
+| activities | 1 | 1 |
 | agent | 40 | 0 |
 | assets | 18 | 0 |
 | auth | 16 | 0 |
@@ -20,8 +20,8 @@
 | knowledge | 8 | 0 |
 | media | 32 | 0 |
 | memories | 8 | 0 |
-| menus | 9 | 0 |
-| notifications | 11 | 0 |
+| menus | 9 | 9 |
+| notifications | 11 | 11 |
 | points | 12 | 12 |
 | polls | 8 | 8 |
 | recipes | 7 | 7 |
@@ -37,7 +37,7 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/activities` | `ActivitiesController.list` | 登录 |  | `apps/api/src/activities/activities.module.ts` |
+| GET | `/activities` | `ActivitiesController.list` | 登录 | ✓ | `apps/api/src/activities/activities.module.ts` |
 
 ## agent（40）
 
@@ -276,31 +276,31 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/menu-dates` | `MenusController.dateCounts` | 登录 |  | `apps/api/src/menus/menus.module.ts` |
-| PATCH | `/menu-items/:id` | `MenusController.updateItem` | 登录 |  | `apps/api/src/menus/menus.module.ts` |
-| GET | `/menu-notifications` | `MenusController.notifications` | 登录 |  | `apps/api/src/menus/menus.module.ts` |
-| PATCH | `/menu-notifications/:id/read` | `MenusController.markNotificationRead` | 登录 |  | `apps/api/src/menus/menus.module.ts` |
-| GET | `/menus` | `MenusController.get` | 登录 |  | `apps/api/src/menus/menus.module.ts` |
-| PATCH | `/menus/:id/chef` | `MenusController.assignChef` | `update_meal_status` |  | `apps/api/src/menus/menus.module.ts` |
-| POST | `/menus/:id/complete` | `MenusController.complete` | `update_meal_status` |  | `apps/api/src/menus/menus.module.ts` |
-| GET | `/menus/:id/events` | `MenusController.events` | 登录 |  | `apps/api/src/menus/menus.module.ts` |
-| POST | `/menus/:id/items` | `MenusController.addItems` | `place_meal_order` |  | `apps/api/src/menus/menus.module.ts` |
+| GET | `/menu-dates` | `MenusController.dateCounts` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
+| PATCH | `/menu-items/:id` | `MenusController.updateItem` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
+| GET | `/menu-notifications` | `MenusController.notifications` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
+| PATCH | `/menu-notifications/:id/read` | `MenusController.markNotificationRead` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
+| GET | `/menus` | `MenusController.get` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
+| PATCH | `/menus/:id/chef` | `MenusController.assignChef` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.module.ts` |
+| POST | `/menus/:id/complete` | `MenusController.complete` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.module.ts` |
+| GET | `/menus/:id/events` | `MenusController.events` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
+| POST | `/menus/:id/items` | `MenusController.addItems` | `place_meal_order` | ✓ | `apps/api/src/menus/menus.module.ts` |
 
 ## notifications（11）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/notification-channels` | `ExternalNotificationsController.listChannels` | 登录 |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| POST | `/notification-channels` | `ExternalNotificationsController.createChannel` | `manage_integrations` |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| PATCH | `/notification-channels/:id` | `ExternalNotificationsController.updateChannel` | `manage_integrations` |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| DELETE | `/notification-channels/:id` | `ExternalNotificationsController.deleteChannel` | `manage_integrations` |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| PUT | `/notification-channels/:id/preference` | `ExternalNotificationsController.updatePreference` | 登录 |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| POST | `/notification-channels/:id/test` | `ExternalNotificationsController.testChannel` | `manage_integrations` |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| GET | `/notification-deliveries` | `ExternalNotificationsController.listDeliveries` | 登录 |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| POST | `/notification-deliveries/:id/retry` | `ExternalNotificationsController.retryDelivery` | 登录 |  | `apps/api/src/notifications/external-notifications.controller.ts` |
-| GET | `/notifications` | `NotificationsController.list` | 登录 |  | `apps/api/src/notifications/notifications.module.ts` |
-| PATCH | `/notifications/:id/read` | `NotificationsController.markRead` | 登录 |  | `apps/api/src/notifications/notifications.module.ts` |
-| PATCH | `/notifications/read-all` | `NotificationsController.markAllRead` | 登录 |  | `apps/api/src/notifications/notifications.module.ts` |
+| GET | `/notification-channels` | `ExternalNotificationsController.listChannels` | 登录 | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| POST | `/notification-channels` | `ExternalNotificationsController.createChannel` | `manage_integrations` | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| PATCH | `/notification-channels/:id` | `ExternalNotificationsController.updateChannel` | `manage_integrations` | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| DELETE | `/notification-channels/:id` | `ExternalNotificationsController.deleteChannel` | `manage_integrations` | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| PUT | `/notification-channels/:id/preference` | `ExternalNotificationsController.updatePreference` | 登录 | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| POST | `/notification-channels/:id/test` | `ExternalNotificationsController.testChannel` | `manage_integrations` | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| GET | `/notification-deliveries` | `ExternalNotificationsController.listDeliveries` | 登录 | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| POST | `/notification-deliveries/:id/retry` | `ExternalNotificationsController.retryDelivery` | 登录 | ✓ | `apps/api/src/notifications/external-notifications.controller.ts` |
+| GET | `/notifications` | `NotificationsController.list` | 登录 | ✓ | `apps/api/src/notifications/notifications.module.ts` |
+| PATCH | `/notifications/:id/read` | `NotificationsController.markRead` | 登录 | ✓ | `apps/api/src/notifications/notifications.module.ts` |
+| PATCH | `/notifications/read-all` | `NotificationsController.markAllRead` | 登录 | ✓ | `apps/api/src/notifications/notifications.module.ts` |
 
 ## points（12）
 

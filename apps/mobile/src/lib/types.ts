@@ -1,5 +1,7 @@
 // 已迁移到 packages/contracts 的域：类型从契约包导入再 re-export，本文件不再手工维护它们
 import type {
+  ActivityModule,
+  AppNotification,
   CalendarEntry,
   CalendarEvent,
   Dish,
@@ -45,6 +47,22 @@ import type {
   TaskInstanceStatus,
   TaskOccurrence,
   TaskRecurrence,
+  DishRecipeSnapshot,
+  HouseholdActivity,
+  MealType,
+  Menu,
+  MenuDateCount,
+  MenuEvent,
+  MenuEventType,
+  MenuItem,
+  MenuItemStatus,
+  NotificationChannel,
+  NotificationChannelKind,
+  NotificationChannelPreference,
+  NotificationDelivery,
+  NotificationDeliveryAttempt,
+  NotificationDeliveryStatus,
+  NotificationModule,
 } from '@family/contracts';
 
 // 菜品 / 菜谱 / 购物 / 库存域类型已迁到 packages/contracts
@@ -74,16 +92,29 @@ export type {
   ShoppingItem,
 };
 
+// 菜单 / 通知 / 活动域类型已迁到 packages/contracts
+export type {
+  ActivityModule,
+  AppNotification,
+  DishRecipeSnapshot,
+  HouseholdActivity,
+  MealType,
+  Menu,
+  MenuDateCount,
+  MenuEvent,
+  MenuEventType,
+  MenuItem,
+  MenuItemStatus,
+  NotificationChannel,
+  NotificationChannelKind,
+  NotificationChannelPreference,
+  NotificationDelivery,
+  NotificationDeliveryAttempt,
+  NotificationDeliveryStatus,
+  NotificationModule,
+};
+
 export type MemberRole = 'owner' | 'admin' | 'member';
-export type MealType = 'breakfast' | 'lunch' | 'dinner';
-export type MenuItemStatus = 'pending' | 'accepted' | 'cooking' | 'done' | 'rejected';
-export type MenuEventType =
-  | 'item_ordered'
-  | 'item_status_changed'
-  | 'item_assigned'
-  | 'item_note_changed'
-  | 'meal_chef_assigned'
-  | 'menu_completed';
 export type BackupScheduleFrequency = 'daily' | 'weekly';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
 export type BackupRunKind = 'backup' | 'restore_drill' | 'capacity_check';
@@ -344,44 +375,6 @@ export interface ManagedMember extends Member {
   } | null;
 }
 
-export type ActivityModule =
-  | 'member'
-  | 'invitation'
-  | 'menu'
-  | 'calendar'
-  | 'task'
-  | 'poll'
-  | 'reminder'
-  | 'shopping'
-  | 'inventory'
-  | 'recipe'
-  | 'media'
-  | 'guest'
-  | 'asset'
-  | 'points'
-  | 'knowledge'
-  | 'memory'
-  | 'travel'
-  | 'finance'
-  | 'system';
-
-export interface HouseholdActivity {
-  id: string;
-  module: ActivityModule;
-  action: string;
-  summary: string;
-  detail: string | null;
-  actor: {
-    id: string | null;
-    name: string;
-    avatarEmoji: string;
-  };
-  subjectMemberId: string | null;
-  targetPath: string | null;
-  metadata: Record<string, unknown>;
-  occurredAt: string;
-}
-
 export interface AccountProfile {
   id: string;
   loginName: string;
@@ -413,68 +406,6 @@ export interface InvitationPreview {
   avatarEmoji: string;
   role: Exclude<MemberRole, 'owner'>;
   expiresAt: string;
-}
-
-export interface DishRecipeSnapshot {
-  variantId: string;
-  name: string;
-  authorMemberId: string | null;
-  authorName: string | null;
-  note: string | null;
-  estMinutes: number | null;
-  ingredients: {
-    ingredientId: string;
-    name: string;
-    category: string;
-    isPantryStaple: boolean;
-    quantity: number;
-    unit: string;
-  }[];
-  steps: DishRecipeStep[];
-  referenceLinks: DishReferenceLink[];
-}
-
-export interface MenuItem {
-  id: string;
-  dishId: string;
-  dish: Dish;
-  requestedBy: Member;
-  assignedTo: Member | null;
-  assignedToId: string | null;
-  note: string | null;
-  status: MenuItemStatus;
-  statusReason: string | null;
-  recipeVariantId: string | null;
-  recipeSnapshot: DishRecipeSnapshot | null;
-  createdAt: string;
-}
-
-export interface Menu {
-  id: string;
-  date: string;
-  mealType: MealType;
-  status: 'open' | 'done';
-  chef: Member | null;
-  chefId: string | null;
-  completedAt: string | null;
-  completedBy: Member | null;
-  items: MenuItem[];
-}
-
-export interface MenuEvent {
-  id: string;
-  menuId: string;
-  menu: Menu;
-  menuItemId: string | null;
-  menuItem: MenuItem | null;
-  actor: Member;
-  recipientId: string | null;
-  type: MenuEventType;
-  fromValue: string | null;
-  toValue: string | null;
-  reason: string | null;
-  readAt: string | null;
-  createdAt: string;
 }
 
 export interface SmartMenuCandidate {
@@ -668,11 +599,6 @@ export interface MaintenanceShoppingResult {
   existingCount: number;
   satisfiedCount: number;
   items: ShoppingItem[];
-}
-
-export interface MenuDateCount {
-  date: string;
-  count: number;
 }
 
 export type MediaType = 'movie' | 'series';
@@ -1107,18 +1033,6 @@ export type {
   TaskRecurrence,
 };
 
-export type NotificationModule =
-  | 'menu'
-  | 'task'
-  | 'poll'
-  | 'calendar'
-  | 'reminder'
-  | 'media'
-  | 'guest'
-  | 'points'
-  | 'agent'
-  | 'system';
-
 // 积分与奖励域类型已迁到 packages/contracts
 export type {
   PointsAccount,
@@ -1244,91 +1158,6 @@ export interface FinanceSummary {
     category: FinanceCategory | null;
     amount: number;
   }[];
-}
-
-export interface AppNotification {
-  id: string;
-  householdId: string;
-  recipientId: string;
-  recipient: Member;
-  module: NotificationModule;
-  type: string;
-  sourceId: string | null;
-  title: string;
-  body: string | null;
-  targetPath: string;
-  readAt: string | null;
-  createdAt: string;
-}
-
-export type NotificationChannelKind = 'webhook' | 'ntfy';
-export type NotificationDeliveryStatus =
-  | 'pending'
-  | 'processing'
-  | 'retry_scheduled'
-  | 'sent'
-  | 'failed';
-
-export interface NotificationChannelPreference {
-  id: string | null;
-  isEnabled: boolean;
-  modules: NotificationModule[];
-  updatedAt: string | null;
-}
-
-export interface NotificationChannel {
-  id: string;
-  householdId: string;
-  name: string;
-  kind: NotificationChannelKind;
-  endpointHint: string;
-  credentialConfigured: boolean;
-  credentialHint: string | null;
-  isEnabled: boolean;
-  createdBy: Member | null;
-  lastTestedAt: string | null;
-  lastTestStatus: 'success' | 'failed' | null;
-  lastTestError: string | null;
-  preference: NotificationChannelPreference;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface NotificationDeliveryAttempt {
-  id: string;
-  deliveryId: string;
-  attemptNumber: number;
-  status: 'sent' | 'failed';
-  httpStatus: number | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  startedAt: string;
-  finishedAt: string;
-  createdAt: string;
-}
-
-export interface NotificationDelivery {
-  id: string;
-  householdId: string;
-  notificationId: string;
-  notification: AppNotification;
-  recipientId: string;
-  recipient: Member;
-  channelId: string | null;
-  channelName: string;
-  channelKind: NotificationChannelKind;
-  endpointHint: string;
-  status: NotificationDeliveryStatus;
-  attemptCount: number;
-  maxAttempts: number;
-  nextAttemptAt: string | null;
-  lastAttemptAt: string | null;
-  deliveredAt: string | null;
-  lastError: string | null;
-  attempts: NotificationDeliveryAttempt[];
-  canRetry: boolean;
-  createdAt: string;
-  updatedAt: string;
 }
 
 // 投票域类型已迁到 packages/contracts（Zod schema 推导），这里只做 re-export
