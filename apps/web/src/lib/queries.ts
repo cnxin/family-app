@@ -6,10 +6,13 @@ import type {
   HouseholdTask,
   MealType,
   Menu,
+  MenuDateCount,
   MenuItem,
+  MemberProfile,
   TaskOccurrence,
   UpdateMenuItemBody,
   UpdateTaskInstanceBody,
+  UpsertDishBody,
 } from '@family/contracts';
 import { api } from './api';
 
@@ -98,5 +101,48 @@ export function useUpdateMenuItem(date: string, mealType: MealType) {
     mutationFn: (input: { id: string; body: UpdateMenuItemBody }) =>
       api<MenuItem>(`/menu-items/${input.id}`, { method: 'PATCH', body: input.body }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['menu', date, mealType] }),
+  });
+}
+
+export function useMenuDateCounts(start: string, end: string) {
+  return useQuery({
+    queryKey: ['menu-dates', start, end],
+    queryFn: () => api<MenuDateCount[]>(`/menu-dates?start=${start}&end=${end}`),
+  });
+}
+
+export function useMembers() {
+  return useQuery({
+    queryKey: ['members'],
+    queryFn: () => api<MemberProfile[]>('/members'),
+    staleTime: 10 * 60_000,
+  });
+}
+
+export function useAssignChef(date: string, mealType: MealType) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { menuId: string; chefId: string | null }) =>
+      api<Menu>(`/menus/${input.menuId}/chef`, {
+        method: 'PATCH',
+        body: { chefId: input.chefId },
+      }),
+    onSuccess: (menu) => client.setQueryData(['menu', date, mealType], menu),
+  });
+}
+
+export function useCompleteMenu(date: string, mealType: MealType) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (menuId: string) => api<Menu>(`/menus/${menuId}/complete`, { method: 'POST' }),
+    onSuccess: (menu) => client.setQueryData(['menu', date, mealType], menu),
+  });
+}
+
+export function useCreateDish() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpsertDishBody) => api<Dish>('/dishes', { method: 'POST', body }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['dishes'] }),
   });
 }
