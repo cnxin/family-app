@@ -97,6 +97,8 @@ export const loginBody = z.object({
   password: z.string().max(72).optional(),
   householdSlug: z.string().max(64).optional(),
 });
+export type LoginBody = z.infer<typeof loginBody>;
+
 export const refreshBody = z.object({
   refreshToken: z.string().min(32).max(256),
 });
