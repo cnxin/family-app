@@ -1091,10 +1091,13 @@ export default function AssistantScreen() {
 
   const newConversation = async () => {
     setLocalError(null);
+    // 清空必须在 await 之前：创建请求一落地，输入框就重新可编辑，而 setDraft('') 还要等
+    // 这个 then 继续执行——中间这一帧里用户（或自动化）敲进去的字会被随后清掉，
+    // 表现是输入框有字但发送按钮永远是禁用的。
+    setDraft('');
     try {
       const created = await createConversation.mutateAsync(undefined);
       setConversationId(created.id);
-      setDraft('');
     } catch (error) {
       setLocalError(errorMessage(error));
     }

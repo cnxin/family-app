@@ -82,12 +82,17 @@ test('管理员可用鼠标或触控使用小管家并查看运行时设置', as
   const newConversation = page.getByTestId('agent-new-conversation');
   await expectTouchTarget(send, '发送按钮');
   await expectTouchTarget(newConversation, '新对话按钮');
+  // 输入框可编辑 == 助理状态查询已落地。不等这一步就读下面的标题文案，读到的会是
+  // status 还没回来时的「离线模式可用」，整段核心断言会被静默跳过——CI 慢一点就走进来、
+  // 本地快就跳过，两边结论不一样。
+  await expect(input).toBeEditable();
   const localRuntime = await page
     .getByText('本地家庭摘要可用', { exact: true })
     .isVisible();
   if (localRuntime) {
     await activate(newConversation, testInfo.project.name === 'mobile-chrome');
     await input.fill('这周还有哪些家庭任务？');
+    await expect(send).toBeEnabled();
     await send.click();
     const taskResult = page.getByTestId('agent-result-tasks').last();
     await expect(taskResult).toBeVisible({ timeout: 60_000 });
