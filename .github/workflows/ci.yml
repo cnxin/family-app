@@ -116,6 +116,11 @@ jobs:
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-store-${{ runner.os }}-
       - run: corepack pnpm install --frozen-lockfile
+      # channel: 'chrome' 用 runner 自带的 Google Chrome，浏览器本体不用下；
+      # 但 playwright.config.ts 开了 video: 'retain-on-failure'，录像要 Playwright 自带的 ffmpeg，
+      # 干净 runner 上没有这个二进制，不装的话 browserContext.newPage() 直接抛错。
+      - name: 安装 Playwright ffmpeg（录像用）
+        run: corepack pnpm --filter mobile exec playwright install ffmpeg
       - name: 运行 Playwright 回归
         env:
           CI: '1'
