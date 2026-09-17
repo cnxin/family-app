@@ -20,6 +20,7 @@
     "seed": "corepack pnpm --filter api seed",
     "test:api": "corepack pnpm --filter api test:api",
     "test:web": "corepack pnpm --filter api test:web",
+    "test:web:next": "corepack pnpm --filter api test:web -- --client web",
     "typecheck": "node scripts/build-packages.mjs --check && corepack pnpm --filter api exec tsc --noEmit && corepack pnpm --filter mobile typecheck && corepack pnpm --filter web typecheck"
   }
 }

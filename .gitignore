@@ -20,3 +20,8 @@ apps/web/dist/
 
 # 截图临时目录（验证用，不进仓库）
 .tmp-shots/
+
+# 新客户端 Playwright 的登录态与产物
+apps/web/e2e/.auth/
+apps/web/test-results/
+apps/web/playwright-report/

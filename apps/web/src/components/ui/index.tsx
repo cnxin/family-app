@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
 /* 控件的四个状态（悬停/按下/聚焦/禁用）在这一层一次写清楚，页面不再各写各的。
@@ -163,7 +164,10 @@ export function Dialog({
     };
   }, [onClose]);
 
-  return (
+  // 一定要挂到 body 上：<main> 有 view-transition-name，自带一个层叠上下文，
+  // 对话框留在里面的话 z-50 只在 main 内部算数，手机底部标签栏（z-30）会盖住对话框的底部按钮。
+  // Playwright 抓到的第一个真 bug 就是这个：手机上「保存」被标签栏挡着点不到。
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
       onMouseDown={(event) => {
@@ -189,9 +193,14 @@ export function Dialog({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
-        {footer ? <div className="border-t border-border px-4 py-3">{footer}</div> : null}
+        {footer ? (
+          <div className="border-t border-border px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:pb-3">
+            {footer}
+          </div>
+        ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

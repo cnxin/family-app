@@ -267,6 +267,16 @@
     肉眼分辨不出来，必须用脚本数一下它到底被调用了没有**——本次三项（预取、过渡、落地路径）
     都是这么验的，第一次就抓到了这个假绿。
 
+15. **新客户端接上 Playwright 的第一轮就抓到一个手机上点不到「保存」的 bug。** `<main>` 带
+    `view-transition-name`，这会创建层叠上下文；`Dialog` 渲染在 `main` 里，它的 `z-50` 只在 main
+    内部算数，而手机底部标签栏（`z-30`，在根上下文）就盖住了对话框底部的按钮——`elementFromPoint`
+    命中的是标签栏的图标。桌面上标签栏不显示，肉眼验收一直没发现。修法是 `createPortal` 挂到
+    `document.body`，以后任何浮层都别放在 `main` 里。另外两条工程上的规矩也是这轮定下的：
+    登录接口本机 5 次/分钟限流，整套只在 `auth.setup.ts` 登录（爸爸两次 UI、妈妈一次 API），
+    令牌写到 `e2e/.auth/sessions.json` 给用例复用，用例里再登录就会 429 连环失败；
+    `run-web-tests.mjs --client web` 复用旧客户端那套随机库隔离，Vite 用
+    `FAMILY_API_STRIP_PREFIX=1` 自己剥 `/api` 前缀直连隔离 API，48 个用例 48 秒。
+
 
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）

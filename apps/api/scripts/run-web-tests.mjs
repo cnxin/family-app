@@ -8,8 +8,18 @@ import { join, resolve } from 'node:path';
 import pg from 'pg';
 
 const { Client } = pg;
+// --client web 跑新客户端（apps/web，Vite）；默认仍是旧客户端（apps/mobile，Expo）。
+// 旧客户端下线后这个开关就没意义了，届时把 mobile 分支删掉。
+const rawArgs = process.argv.slice(2);
+const clientFlag = rawArgs.indexOf('--client');
+const CLIENT = clientFlag === -1 ? 'mobile' : rawArgs[clientFlag + 1];
+if (CLIENT !== 'mobile' && CLIENT !== 'web') {
+  throw new Error(`--client 只能是 mobile 或 web，收到：${CLIENT}`);
+}
 const API_PORT = Number(process.env.E2E_API_PORT || 3198);
-const WEB_PORT = Number(process.env.E2E_WEB_PORT || 8083);
+const WEB_PORT = Number(
+  process.env.E2E_WEB_PORT || (CLIENT === 'web' ? 5181 : 8083),
+);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const WEB_URL = `http://localhost:${WEB_PORT}`;
 const TEST_DATABASE = `family_app_web_test_${randomUUID().replaceAll('-', '')}`;
@@ -20,7 +30,8 @@ const TEST_UPLOAD_DIR = join(
 const TEST_PASSWORD = `web-${randomUUID()}`;
 const apiRoot = process.cwd();
 const repoRoot = resolve(apiRoot, '../..');
-const rawPlaywrightArgs = process.argv.slice(2);
+const rawPlaywrightArgs =
+  clientFlag === -1 ? rawArgs : [...rawArgs.slice(0, clientFlag), ...rawArgs.slice(clientFlag + 2)];
 const playwrightArgs = rawPlaywrightArgs[0] === '--'
   ? rawPlaywrightArgs.slice(1)
   : rawPlaywrightArgs;
@@ -71,6 +82,9 @@ const testEnvironment = {
 const browserEnvironment = {
   ...testEnvironment,
   NODE_ENV: 'development',
+  // 新客户端的 Vite dev server 直连隔离 API，要自己剥 /api 前缀
+  FAMILY_API_ORIGIN: API_URL,
+  FAMILY_API_STRIP_PREFIX: '1',
 };
 
 function configuredDatabasePassword() {
@@ -167,7 +181,7 @@ try {
   api = startApi();
   await waitForApi();
 
-  const browserCommand = ['pnpm', '--filter', 'mobile', 'test:web'];
+  const browserCommand = ['pnpm', '--filter', CLIENT, 'test:web'];
   if (playwrightArgs.length) browserCommand.push(...playwrightArgs);
   await runProcess('corepack', browserCommand, repoRoot, browserEnvironment);
 } finally {
