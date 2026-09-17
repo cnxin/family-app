@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSoftNavigate } from './soft-link';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Dish } from '@family/contracts';
@@ -22,6 +22,8 @@ interface Entry {
  * ⌘K：功能一多，导航再怎么分也不如直接说出名字快。
  * 除了页面，还能搜菜品（搜到就直接跳菜谱），以后加成员、任务也是往这里塞。
  */
+const NO_DISHES: Dish[] = [];
+
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -31,34 +33,44 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // 打开的同时把上次的输入清掉——放在打开动作里而不是 effect 里，少一次级联渲染
+  const show = useCallback(() => {
+    setQuery('');
+    setCursor(0);
+    setOpen(true);
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setOpen((value) => !value);
+        setOpen((value) => {
+          if (value) return false;
+          setQuery('');
+          setCursor(0);
+          return true;
+        });
       }
       if (event.key === 'Escape') setOpen(false);
     };
-    const onOpen = () => setOpen(true);
+    const onOpen = () => show();
     document.addEventListener('keydown', onKey);
     document.addEventListener('palette:open', onOpen);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('palette:open', onOpen);
     };
-  }, []);
+  }, [show]);
 
   useEffect(() => {
     if (!open) return;
-    setQuery('');
-    setCursor(0);
     prefetchSearchSources(client);
     // 等对话框挂上去再聚焦，否则 iOS 上键盘不弹
     const timer = window.setTimeout(() => inputRef.current?.focus(), 30);
     return () => window.clearTimeout(timer);
   }, [open, client]);
 
-  const dishes = (client.getQueryData(['dishes']) as Dish[] | undefined) ?? [];
+  const dishes = (client.getQueryData(['dishes']) as Dish[] | undefined) ?? NO_DISHES;
 
   const entries = useMemo<Entry[]>(() => {
     const pages: Entry[] = [];
@@ -104,10 +116,6 @@ export function CommandPalette() {
       .slice(0, 20);
   }, [entries, query]);
 
-  useEffect(() => {
-    setCursor(0);
-  }, [query]);
-
   if (!open) return null;
 
   const pick = (entry: Entry | undefined) => {
@@ -134,7 +142,10 @@ export function CommandPalette() {
           value={query}
           placeholder="去哪儿？输入页面或菜名"
           aria-label="搜索页面或菜品"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setCursor(0);
+          }}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') {
               event.preventDefault();

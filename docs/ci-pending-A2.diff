@@ -1,0 +1,34 @@
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -36,6 +36,8 @@
+       - name: 类型检查（API + 客户端 + Playwright）
+         run: corepack pnpm typecheck
+       - name: Lint（客户端 + API）
+         run: corepack pnpm lint
++      - name: 新客户端构建（Vite）
++        run: corepack pnpm --filter web build
+       - name: 端点清单与代码一致
+         run: node scripts/api-inventory.mjs --check
+@@ -130,12 +132,23 @@
+           DB_PASSWORD: family123
+         run: corepack pnpm test:web
++      - name: 运行新客户端 Playwright 回归
++        if: always()
++        env:
++          CI: '1'
++          DB_HOST: 127.0.0.1
++          DB_PORT: '5433'
++          DB_USER: family
++          DB_PASSWORD: family123
++        run: corepack pnpm test:web:next
+       - name: 上传失败截图与 trace
+         if: failure()
+         uses: actions/upload-artifact@v4
+         with:
+           name: playwright-artifacts
+           path: |
+             apps/mobile/test-results
+             apps/mobile/playwright-report
++            apps/web/test-results
++            apps/web/playwright-report
+           retention-days: 7

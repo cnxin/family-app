@@ -196,6 +196,8 @@ function ManualAdd({ date }: { date: string }) {
   );
 }
 
+const NO_ITEMS: ShoppingItem[] = [];
+
 export function ShoppingView() {
   const today = todayISO();
   const [date, setDate] = useState(today);
@@ -206,7 +208,7 @@ export function ShoppingView() {
   const remove = useDeleteShoppingItem();
   const generate = useGenerateShoppingList();
 
-  const items = list.data ?? [];
+  const items = list.data ?? NO_ITEMS;
   const done = items.filter((item) => item.checked).length;
 
   // 分组照旧客户端：维护耗材单独一组，其余按食材分类，手动项兜底

@@ -32,6 +32,8 @@ function batchStatusLabel(batch: InventoryBatch) {
   return batch.expiresOn ? `到期 ${batch.expiresOn}` : '未设到期日';
 }
 
+const NO_ITEMS: InventoryItem[] = [];
+
 export function InventoryView() {
   const { data: items, isPending } = useInventory();
   const { data: batches } = useInventoryBatches('all', 7);
@@ -46,7 +48,7 @@ export function InventoryView() {
   const [deleting, setDeleting] = useState<InventoryItem | null>(null);
   const [restocking, setRestocking] = useState(false);
 
-  const list = items ?? [];
+  const list = items ?? NO_ITEMS;
   const low = list.filter((item) => Number(item.quantity) <= Number(item.lowStockThreshold));
   const activeBatches = (batches ?? []).filter((batch) => Number(batch.quantity) > 0);
   const expiring = activeBatches.filter((batch) => batch.status === 'expiring');

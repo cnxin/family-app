@@ -32,13 +32,11 @@ function write(session: AuthSession | null) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<AuthSession | null>(() => read());
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setAccessToken(session?.accessToken ?? null);
-    setReady(true);
-  }, [session]);
+  const [session, setSession] = useState<AuthSession | null>(() => {
+    const stored = read();
+    setAccessToken(stored?.accessToken ?? null);
+    return stored;
+  });
 
   const signOut = useCallback(() => {
     setSession(null);
@@ -78,14 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthValue>(
     () => ({
       session,
-      ready,
+      // 会话是同步从 localStorage 读出来的，首帧就是最终状态；ready 留着只为了接口不变
+      ready: true,
       signOut,
       signIn: async (body) => {
         const next = await api<AuthSession>('/auth/login', { method: 'POST', auth: false, body });
         apply(next);
       },
     }),
-    [session, ready, signOut, apply],
+    [session, signOut, apply],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

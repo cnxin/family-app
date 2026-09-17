@@ -252,7 +252,7 @@ export default function XxxPage() {
 | 任务 | 状态 | 提交 | 备注 |
 |---|---|---|---|
 | A1 Playwright 新套件 | ☑ | | 48 用例（setup 2 + 冒烟 13 + 导航 5 + 写路径 5，两视口），隔离库 48 秒；顺手修了手机端对话框被标签栏盖住的 bug（教训 15） |
-| A2 CI 覆盖 web | ☐ | | |
+| A2 CI 覆盖 web | ◐ | | 仓库侧完成：web 有 eslint（max-lines 400 是 error，已把 queries.ts / shell.tsx / kitchen.tsx 拆到 400 行内，react-hooks 全清）、根 lint 含 web；**等用户贴 `docs/ci-pending-A2.diff`**（`git apply docs/ci-pending-A2.diff`），CI 绿了再打勾 |
 | A3 seed --demo | ☐ | | |
 | B0 检查 dish/recipe-edit/canteen 覆盖情况 | ☐ | | |
 | B1 投票 | ☐ | | |

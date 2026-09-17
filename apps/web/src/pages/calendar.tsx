@@ -179,6 +179,8 @@ function startOfWeek(date: Date) {
   return day;
 }
 
+const NO_ENTRIES: CalendarEntry[] = [];
+
 export function CalendarPage() {
   const today = toDateStr(new Date());
   const [params, setParams] = useSearchParams();
@@ -207,7 +209,7 @@ export function CalendarPage() {
 
   const entries = useCalendarEntries(range.start, range.end);
   const remove = useDeleteCalendarEvent();
-  const rows = entries.data ?? [];
+  const rows = entries.data ?? NO_ENTRIES;
 
   const dayRows = useMemo(
     () => (dayOpen ? rows.filter((entry) => entry.date === dayOpen) : []),

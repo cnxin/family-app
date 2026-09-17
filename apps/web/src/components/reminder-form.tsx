@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type {
   HouseholdReminder,
   MemberProfile,
@@ -116,8 +116,12 @@ export function ReminderForm({
   const [time, setTime] = useState('09:00');
   const [recipients, setRecipients] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // 表单初值依赖异步到手的 sources：等到有东西了播种一次就够了，
+  // 以前放在 effect 里跟着 sources 变，列表一刷新用户填了一半的东西就被冲掉
+  const [seeded, setSeeded] = useState(false);
 
-  useEffect(() => {
+  if (!seeded && (editing || sources.length)) {
+    setSeeded(true);
     const key = editing?.source
       ? sourceKey(editing.source)
       : editing
@@ -133,7 +137,7 @@ export function ReminderForm({
     setRecipients(
       editing?.recipients.map((one) => one.member.id) ?? (meId ? [meId] : []),
     );
-  }, [editing, initialKey, sources, meId]);
+  }
 
   const selected =
     sources.find((one) => sourceKey(one) === selectedKey) ?? editing?.source ?? null;

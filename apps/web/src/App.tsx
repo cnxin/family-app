@@ -11,7 +11,8 @@ import { InventoryPage } from './pages/inventory';
 import { CalendarPage } from './pages/calendar';
 import { RemindersPage } from './pages/reminders';
 import { NotificationsPage } from './pages/notifications';
-import { LegacyBridge, Shell } from './components/shell';
+import { Shell } from './components/shell';
+import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
 import { SCENES, landingPath } from './lib/nav';
 
