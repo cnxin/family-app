@@ -49,6 +49,18 @@ async function activate(locator: Locator, touch: boolean) {
   else await locator.click();
 }
 
+// 助理输入框挂在 RN Web 的受控组件上：点「新对话」后会话切换是异步的，晚到的一次
+// 重渲染可能把刚填进去的草稿又冲掉，于是发送按钮停留在 disabled——本地快就看不见，
+// CI 慢一点就必红。所以这里不是「填一次然后断言」，而是填到发送按钮真的可用为止。
+async function fillDraft(input: Locator, send: Locator, text: string) {
+  await expect(input).toBeEditable();
+  await expect(async () => {
+    await input.fill(text);
+    await expect(input).toHaveValue(text, { timeout: 1_000 });
+    await expect(send).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
 test('管理员可用鼠标或触控使用小管家并查看运行时设置', async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   await openAuthenticated(page, '/assistant', testInfo.project.name);
@@ -91,8 +103,7 @@ test('管理员可用鼠标或触控使用小管家并查看运行时设置', as
     .isVisible();
   if (localRuntime) {
     await activate(newConversation, testInfo.project.name === 'mobile-chrome');
-    await input.fill('这周还有哪些家庭任务？');
-    await expect(send).toBeEnabled();
+    await fillDraft(input, send, '这周还有哪些家庭任务？');
     await send.click();
     const taskResult = page.getByTestId('agent-result-tasks').last();
     await expect(taskResult).toBeVisible({ timeout: 60_000 });
@@ -103,7 +114,7 @@ test('管理员可用鼠标或触控使用小管家并查看运行时设置', as
 
     const proposalTitle = `触控回归任务-${Date.now()}`;
     const proposalDate = new Date().toISOString().slice(0, 10);
-    await input.fill(`创建任务：${proposalTitle} ${proposalDate}`);
+    await fillDraft(input, send, `创建任务：${proposalTitle} ${proposalDate}`);
     await activate(send, testInfo.project.name === 'mobile-chrome');
     const confirm = page.getByRole('button', { name: '确认执行', exact: true }).last();
     const reject = page.getByRole('button', { name: '放弃', exact: true }).last();
