@@ -15,7 +15,7 @@ import {
   useMenuDateCounts,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Input } from '../components/ui';
+import { Button, Card, Input, Page, Panel } from '../components/ui';
 
 function DishCard({
   dish,
@@ -201,22 +201,19 @@ export function OrderPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-28 pt-6 lg:pb-10">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">点菜</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {session?.member.name}，这顿想吃点什么？共 {dishes.data?.length ?? 0} 道家常菜
-          </p>
-        </div>
+    <Page
+      title="点菜"
+      subtitle={`${session?.member.name ?? ''}，这顿想吃点什么？共 ${dishes.data?.length ?? 0} 道家常菜`}
+      actions={
         <Link
           to="/eat/kitchen"
           className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-accent transition-colors duration-150 hover:bg-muted"
         >
           去厨房看这一餐 →
         </Link>
-      </header>
-
+      }
+      toolbar={
+        <>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input
           type="date"
@@ -266,8 +263,10 @@ export function OrderPage() {
           这一餐已经结束，历史菜单锁定了，不能再加菜
         </p>
       ) : null}
-
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
+        </>
+      }
+    >
+      <Panel className="p-3">
         <div className="min-w-0">
           <Input value={keyword} placeholder="搜菜名" onChange={(e) => setKeyword(e.target.value)} />
           <div className="mt-3 flex flex-wrap gap-2">
@@ -319,11 +318,12 @@ export function OrderPage() {
           </div>
         </div>
 
-        <aside className="hidden lg:block">{cartPanel}</aside>
-      </div>
+      </Panel>
 
-      {/* 窄屏：购物车收在底部，点一下展开 */}
-      <div className="fixed inset-x-0 bottom-0 z-20 lg:hidden">
+      <aside className="hidden lg:block lg:w-[320px] lg:flex-none">{cartPanel}</aside>
+
+      {/* 窄屏：购物车收在底部标签栏上方，点一下展开 */}
+      <div className="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-20 lg:hidden">
         {cartOpen ? <div className="px-4 pb-2">{cartPanel}</div> : null}
         <div className="border-t border-border bg-bg/90 px-4 py-3 backdrop-blur-xl">
           <Button
@@ -335,6 +335,6 @@ export function OrderPage() {
           </Button>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

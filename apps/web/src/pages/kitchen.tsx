@@ -15,7 +15,7 @@ import {
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
-import { Button, Card, Input } from '../components/ui';
+import { Button, Card, EmptyState, Input, Page, Panel } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
 // 文案照旧客户端 kitchen.tsx 的 STATUS_META，不另起一套说法
@@ -494,60 +494,58 @@ export function KitchenPage() {
     rejecting?.item.status === 'accepted' || rejecting?.item.status === 'cooking';
 
   return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-32 pt-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">菜单安排</h1>
-          <p className="mt-1 text-sm text-ink-soft">分配主厨、认领菜品并查看进度</p>
-        </div>
-        <Link
-          to="/eat/order"
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-accent transition-colors duration-150 hover:bg-muted"
-        >
-          ← 回去点菜
-        </Link>
-      </header>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <input
-          type="date"
-          aria-label="选择日期"
-          value={date}
-          onChange={(event) => event.target.value && setDate(event.target.value)}
-          className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] text-ink hover:border-ink-soft/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
-        />
-        {date === today ? null : (
-          <Button variant="ghost" className="h-9 px-2 text-[13px]" onClick={() => setDate(today)}>
-            回今天
+    <Page
+      title="菜单安排"
+      subtitle="分配主厨、认领菜品并查看进度"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-9 px-3 text-[13px]"
+            disabled={generate.isPending || !anyItems}
+            onClick={() =>
+              generate.mutate(date, {
+                onSuccess: (list) =>
+                  pushToast(
+                    list.length
+                      ? `清单已生成：共 ${list.length} 项食材，去「购物清单」看`
+                      : '接单的菜都不缺食材（常备调料不进清单）',
+                  ),
+              })
+            }
+          >
+            {generate.isPending ? '生成中…' : '生成购物清单'}
           </Button>
-        )}
-        <Button
-          variant="outline"
-          className="ml-auto h-9 px-3 text-[13px]"
-          disabled={generate.isPending || !anyItems}
-          onClick={() =>
-            generate.mutate(date, {
-              onSuccess: (list) =>
-                pushToast(
-                  list.length
-                    ? `清单已生成：共 ${list.length} 项食材，去「购物清单」看`
-                    : '接单的菜都不缺食材（常备调料不进清单）',
-                ),
-            })
-          }
-        >
-          {generate.isPending ? '生成中…' : '生成购物清单'}
-        </Button>
-      </div>
-
+          <Link
+            to="/eat/order"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-accent transition-colors duration-150 hover:bg-muted"
+          >
+            ← 回去点菜
+          </Link>
+        </div>
+      }
+      toolbar={
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            aria-label="选择日期"
+            value={date}
+            onChange={(event) => event.target.value && setDate(event.target.value)}
+            className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] text-ink hover:border-ink-soft/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+          />
+          {date === today ? null : (
+            <Button variant="ghost" className="h-9 px-2 text-[13px]" onClick={() => setDate(today)}>
+              回今天
+            </Button>
+          )}
+        </div>
+      }
+    >
+      <Panel className="p-3">
       {menus.isPending ? (
         <ListSkeleton rows={4} />
       ) : !anyItems ? (
-        <div className="mt-10 flex flex-col items-center gap-2 text-center">
-          <span className="text-4xl">🍳</span>
-          <p className="text-sm font-medium">这天还没有安排</p>
-          <p className="text-[13px] text-ink-soft">等家人去「点菜」页下单吧</p>
-        </div>
+        <EmptyState emoji="🍳" title="这天还没有安排" hint="等家人去「点菜」页下单吧" />
       ) : (
         // 宽屏一餐一行会把右边空出来，排两列
         <div className="grid gap-x-5 xl:grid-cols-2 xl:items-start">
@@ -563,9 +561,10 @@ export function KitchenPage() {
         ))}
         </div>
       )}
+      </Panel>
 
       {rejecting ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 backdrop-blur-xl">
+        <div className="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 border-t border-border bg-bg/95 backdrop-blur-xl lg:bottom-0">
           <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 py-3">
             <p className="text-[13px] text-ink-soft">
               {reasonRequired
@@ -604,6 +603,6 @@ export function KitchenPage() {
           </div>
         </div>
       ) : null}
-    </div>
+    </Page>
   );
 }

@@ -5,7 +5,7 @@ import { CATEGORY_EMOJI, useCart } from '../lib/cart';
 import { MEAL_LABELS, useRecipes, useRemoveSkill, useUpsertSkill } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Input } from '../components/ui';
+import { Button, Card, Input, Page, Panel } from '../components/ui';
 import { RecipeEditor } from '../components/recipe-editor';
 
 const LEVEL_LABEL: Record<string, string> = {
@@ -160,41 +160,39 @@ export function RecipesPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-20 pt-6">
-      <header className="px-1">
-        <h1 className="text-2xl font-semibold tracking-tight">菜谱</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          家里 {recipes.data?.length ?? 0} 道菜的做法、食材和谁拿手。搜菜名，也能搜食材
-        </p>
-      </header>
-
-      <div className="mt-5">
-        <Input
-          value={keyword}
-          placeholder="搜菜名或食材，比如「西兰花」"
-          onChange={(event) => setKeyword(event.target.value)}
-        />
-        <div className="mt-3 flex flex-wrap gap-2">
-          {[null, ...DISH_CATEGORIES].map((value) => (
-            <button
-              key={value ?? 'all'}
-              type="button"
-              aria-pressed={category === value}
-              onClick={() => setCategory(value)}
-              className={
-                'rounded-full border px-3 py-1.5 text-[13px] transition-colors duration-150 ' +
-                (category === value
-                  ? 'border-accent bg-accent-soft font-medium text-accent'
-                  : 'border-border text-ink-soft hover:bg-muted')
-              }
-            >
-              {value ? `${CATEGORY_EMOJI[value] ?? ''} ${value}` : '全部'}
-            </button>
-          ))}
+    <Page
+      title="菜谱"
+      subtitle={`家里 ${recipes.data?.length ?? 0} 道菜的做法、食材和谁拿手。搜菜名，也能搜食材`}
+      toolbar={
+        <div className="flex flex-col gap-3">
+          <Input
+            value={keyword}
+            placeholder="搜菜名或食材，比如「西兰花」"
+            onChange={(event) => setKeyword(event.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            {[null, ...DISH_CATEGORIES].map((value) => (
+              <button
+                key={value ?? 'all'}
+                type="button"
+                aria-pressed={category === value}
+                onClick={() => setCategory(value)}
+                className={
+                  'rounded-full border px-3 py-1.5 text-[13px] transition-colors duration-150 ' +
+                  (category === value
+                    ? 'border-accent bg-accent-soft font-medium text-accent'
+                    : 'border-border text-ink-soft hover:bg-muted')
+                }
+              >
+                {value ? `${CATEGORY_EMOJI[value] ?? ''} ${value}` : '全部'}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 lg:grid-cols-2 lg:items-start">
+      }
+    >
+      <Panel className="p-3">
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
         {recipes.isPending ? (
           <p className="px-1 py-6 text-sm text-ink-soft">读取菜谱…</p>
         ) : visible.length === 0 ? (
@@ -325,6 +323,7 @@ export function RecipesPage() {
           })
         )}
       </div>
-    </div>
+      </Panel>
+    </Page>
   );
 }
