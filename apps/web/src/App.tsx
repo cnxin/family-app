@@ -8,6 +8,7 @@ import { KitchenPage } from './pages/kitchen';
 import { RecipesPage } from './pages/recipes';
 import { ShoppingPage } from './pages/shopping';
 import { InventoryPage } from './pages/inventory';
+import { CalendarPage } from './pages/calendar';
 import { LegacyBridge, Shell } from './components/shell';
 import { CommandPalette } from './components/command-palette';
 import { SCENES, landingPath } from './lib/nav';
@@ -42,6 +43,7 @@ export function App() {
           <Route path="/eat/inventory" element={<InventoryPage />} />
 
           <Route path="/schedule" element={<Navigate to={landingPath(SCENES[2])} replace />} />
+          <Route path="/schedule/calendar" element={<CalendarPage />} />
           <Route path="/schedule/tasks" element={<TasksPage />} />
 
           <Route path="/house" element={<Navigate to={landingPath(SCENES[3])} replace />} />

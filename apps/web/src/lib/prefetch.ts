@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type {
+  CalendarEntry,
   Dish,
   InventoryItem,
   Menu,
@@ -9,6 +10,7 @@ import type {
 } from '@family/contracts';
 import { api } from './api';
 import { shiftDays, todayISO } from './queries';
+import { calendarRange, startOfMonth } from '../components/calendar-month';
 
 /**
  * 预取：鼠标悬停或手指按下标签的那一刻就开始拉数据，
@@ -56,6 +58,13 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
     void client.prefetchQuery({
       queryKey: ['inventory'],
       queryFn: () => api<InventoryItem[]>('/inventory'),
+    });
+  },
+  '/schedule/calendar': (client) => {
+    const { start, end } = calendarRange(startOfMonth(new Date()));
+    void client.prefetchQuery({
+      queryKey: ['calendar', start, end],
+      queryFn: () => api<CalendarEntry[]>(`/calendar?start=${start}&end=${end}`),
     });
   },
   '/schedule/tasks': (client) => {

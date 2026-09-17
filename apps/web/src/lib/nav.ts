@@ -57,7 +57,7 @@ export const SCENES: NavScene[] = [
     icon: '📅',
     path: '/schedule',
     segments: [
-      { key: 'calendar', label: '日历', legacy: '/calendar' },
+      { key: 'calendar', label: '日历', path: '/schedule/calendar', ready: true },
       { key: 'tasks', label: '任务', path: '/schedule/tasks', ready: true },
       { key: 'reminders', label: '提醒', legacy: '/reminders' },
       { key: 'polls', label: '投票', legacy: '/polls' },
