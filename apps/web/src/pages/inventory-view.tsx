@@ -14,6 +14,7 @@ import { pushToast } from '../lib/toast';
 import { Button, Card, Dialog, SectionTitle } from '../components/ui';
 import { BatchDialog, CATEGORY_EMOJI, InventoryEditor } from '../components/inventory-editor';
 import { InventoryLog } from '../components/inventory-log';
+import { ListSkeleton } from '../components/skeleton';
 
 function Stat({ value, label, tone }: { value: number; label: string; tone?: 'warm' | 'danger' }) {
   const color = !value ? 'text-ink' : tone === 'danger' ? 'text-danger' : tone === 'warm' ? 'text-warm' : 'text-ink';
@@ -188,7 +189,7 @@ export function InventoryView() {
         </div>
       ) : null}
 
-      {isPending ? <p className="mt-8 px-1 text-sm text-ink-soft">读取中…</p> : null}
+      {isPending ? <ListSkeleton rows={5} /> : null}
 
       {!isPending && !list.length ? (
         <div className="mt-10 flex flex-col items-center gap-2 text-center">

@@ -16,6 +16,7 @@ import {
 import { pushToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
 import { Button, Card, Input } from '../components/ui';
+import { ListSkeleton } from '../components/skeleton';
 
 // 文案照旧客户端 kitchen.tsx 的 STATUS_META，不另起一套说法
 const STATUS_LABEL: Record<MenuItemStatus, string> = {
@@ -500,7 +501,7 @@ export function KitchenPage() {
           <p className="mt-1 text-sm text-ink-soft">分配主厨、认领菜品并查看进度</p>
         </div>
         <Link
-          to="/order"
+          to="/eat/order"
           className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-accent transition-colors duration-150 hover:bg-muted"
         >
           ← 回去点菜
@@ -540,7 +541,7 @@ export function KitchenPage() {
       </div>
 
       {menus.isPending ? (
-        <p className="mt-8 px-1 text-sm text-ink-soft">读取中…</p>
+        <ListSkeleton rows={4} />
       ) : !anyItems ? (
         <div className="mt-10 flex flex-col items-center gap-2 text-center">
           <span className="text-4xl">🍳</span>

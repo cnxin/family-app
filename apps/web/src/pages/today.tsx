@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { shiftDays, todayISO, useTaskRange, useUpdateOccurrence } from '../lib/queries';
 import { Card, Checkbox, SectionTitle } from '../components/ui';
+import { Skeleton } from '../components/skeleton';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -23,7 +24,7 @@ export function TodayPage() {
   const unclaimed = open.filter((item) => !item.assigneeId);
 
   return (
-    <div className="mx-auto w-full max-w-[680px] px-4 pb-16 pt-6">
+    <div className="mx-auto w-full max-w-[760px] px-4 pb-16 pt-6">
       <header className="px-1">
         <h1 className="text-2xl font-semibold tracking-tight">
           {greeting()}，{session?.member.name}
@@ -40,7 +41,7 @@ export function TodayPage() {
       <section className="mt-6">
         <SectionTitle
           right={
-            <Link to="/tasks" className="text-[13px] text-accent hover:underline">
+            <Link to="/schedule/tasks" className="text-[13px] text-accent hover:underline">
               全部任务
             </Link>
           }
@@ -49,7 +50,11 @@ export function TodayPage() {
         </SectionTitle>
         <Card>
           {range.isPending ? (
-            <p className="px-4 py-6 text-sm text-ink-soft">读取中…</p>
+            <div className="px-4 py-4">
+              <Skeleton className="h-4 w-2/5" />
+              <Skeleton className="mt-3 h-4 w-3/5" />
+              <Skeleton className="mt-3 h-4 w-1/3" />
+            </div>
           ) : range.isError ? (
             <p className="px-4 py-6 text-sm text-danger">读不到任务，检查一下后端是否在跑</p>
           ) : todays.length === 0 ? (

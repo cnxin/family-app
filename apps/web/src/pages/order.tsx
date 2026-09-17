@@ -210,7 +210,7 @@ export function OrderPage() {
           </p>
         </div>
         <Link
-          to="/kitchen"
+          to="/eat/kitchen"
           className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-accent transition-colors duration-150 hover:bg-muted"
         >
           去厨房看这一餐 →

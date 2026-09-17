@@ -12,6 +12,7 @@ import {
 import { pushToast } from '../lib/toast';
 import { Button, Card, Checkbox, Dialog, Input, SectionTitle } from '../components/ui';
 import { StockDialog } from '../components/stock-dialog';
+import { ListSkeleton } from '../components/skeleton';
 
 function num(value: string | null | undefined) {
   return value == null ? 0 : Number(value);
@@ -260,14 +261,14 @@ export function ShoppingView() {
         </Button>
       </div>
 
-      {list.isPending ? <p className="mt-8 px-1 text-sm text-ink-soft">读取中…</p> : null}
+      {list.isPending ? <ListSkeleton rows={4} /> : null}
 
       {!list.isPending && !items.length ? (
         <div className="mt-10 flex flex-col items-center gap-2 text-center">
           <span className="text-4xl">🧾</span>
           <p className="text-sm font-medium">清单是空的</p>
           <p className="text-[13px] text-ink-soft">
-            去<Link to="/kitchen" className="mx-1 text-accent">厨房</Link>
+            去<Link to="/eat/kitchen" className="mx-1 text-accent">厨房</Link>
             接单后生成，或在下面手动添加
           </p>
         </div>

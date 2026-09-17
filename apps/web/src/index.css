@@ -46,3 +46,27 @@ body {
     "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* 切页用交叉淡入 + 一点点上浮，只作用在主体（view-transition-name: page），
+   顶栏底栏留在原地——整屏淡入会让人觉得"闪了一下"，局部淡入才像同一个页面在换内容。 */
+::view-transition-old(page) {
+  animation: 120ms cubic-bezier(0.4, 0, 1, 1) both page-out;
+}
+::view-transition-new(page) {
+  animation: 180ms cubic-bezier(0, 0, 0.2, 1) both page-in;
+}
+@keyframes page-out {
+  to { opacity: 0; }
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* 系统里关了动效就别动 */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(page),
+  ::view-transition-new(page) {
+    animation: none;
+  }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

@@ -8,6 +8,7 @@ import {
   useUpdateOccurrence,
 } from '../lib/queries';
 import { Button, Card, Checkbox, Input, SectionTitle } from '../components/ui';
+import { ListSkeleton } from '../components/skeleton';
 
 export function TasksPage() {
   const today = todayISO();
@@ -32,7 +33,7 @@ export function TasksPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[680px] px-4 pb-16 pt-6">
+    <div className="mx-auto w-full max-w-[760px] px-4 pb-16 pt-6">
       <h1 className="px-1 text-2xl font-semibold tracking-tight">家庭任务</h1>
       <p className="mt-1 px-1 text-sm text-ink-soft">未来两周的安排</p>
 
@@ -53,7 +54,7 @@ export function TasksPage() {
       ) : null}
 
       {range.isPending ? (
-        <p className="mt-8 px-1 text-sm text-ink-soft">读取中…</p>
+        <ListSkeleton rows={5} />
       ) : byDate.size === 0 ? (
         <p className="mt-8 px-1 text-sm text-ink-soft">这两周还没有任务</p>
       ) : (

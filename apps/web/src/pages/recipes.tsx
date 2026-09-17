@@ -160,7 +160,7 @@ export function RecipesPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[840px] px-4 pb-20 pt-6">
+    <div className="mx-auto w-full max-w-[760px] px-4 pb-20 pt-6">
       <header className="px-1">
         <h1 className="text-2xl font-semibold tracking-tight">菜谱</h1>
         <p className="mt-1 text-sm text-ink-soft">
