@@ -108,7 +108,34 @@ export function useCreateDish() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: UpsertDishBody) => api<Dish>('/dishes', { method: 'POST', body }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['dishes'] }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['dishes'] });
+      void client.invalidateQueries({ queryKey: ['recipes'] });
+    },
+  });
+}
+
+export function useUpdateDish() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; body: UpsertDishBody }) =>
+      api<Dish>(`/dishes/${input.id}`, { method: 'PATCH', body: input.body }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['dishes'] });
+      void client.invalidateQueries({ queryKey: ['recipes'] });
+    },
+  });
+}
+
+/** 下架（isActive=false），不是物理删除；菜单里已点过的记录不受影响。 */
+export function useRemoveDish() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<Dish>(`/dishes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['dishes'] });
+      void client.invalidateQueries({ queryKey: ['recipes'] });
+    },
   });
 }
 

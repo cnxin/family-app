@@ -254,7 +254,7 @@ export default function XxxPage() {
 | A1 Playwright 新套件 | ☑ | | 48 用例（setup 2 + 冒烟 13 + 导航 5 + 写路径 5，两视口），隔离库 48 秒；顺手修了手机端对话框被标签栏盖住的 bug（教训 15） |
 | A2 CI 覆盖 web | ◐ | | 仓库侧完成：web 有 eslint（max-lines 400 是 error，已把 queries.ts / shell.tsx / kitchen.tsx 拆到 400 行内，react-hooks 全清）、根 lint 含 web；**等用户贴 `docs/ci-pending-A2.diff`**（`git apply docs/ci-pending-A2.diff`），CI 绿了再打勾 |
 | A3 seed --demo | ☑ | | 改成走 HTTP 的 `apps/api/scripts/demo-data.mjs`（`corepack pnpm demo`，本机加 `API_URL=http://localhost:8088/api`）：13 个域、幂等、日期相对今天；`test:web:next` 起隔离 API 后自动跑一遍，冒烟不再是空态 |
-| B0 检查 dish/recipe-edit/canteen 覆盖情况 | ☐ | | |
+| B0 检查 dish/recipe-edit/canteen 覆盖情况 | ☑ | | `canteen` 是旧客户端给普通成员的入口页（新 IA 用今天页 + managerOnly 覆盖）；`dish/[id]` 的做法版本/谁会做/加菜篮、`recipe-edit` 的食材/步骤/链接都在新菜谱页；**缺的是 `dish-edit` 的菜品基本信息**（菜名/分类/难度/耗时/口味/照片/下架）——已补 `components/dish-editor.tsx` + 菜谱页「+ 新建菜品」「编辑」，写路径用例 +1 |
 | B1 投票 | ☐ | | |
 | B2 积分 | ☐ | | |
 | B3 成员 | ☐ | | |

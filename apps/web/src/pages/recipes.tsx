@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
 import { Button, Card, Input, Page, Panel } from '../components/ui';
 import { RecipeEditor } from '../components/recipe-editor';
+import { DishEditor } from '../components/dish-editor';
 
 const LEVEL_LABEL: Record<string, string> = {
   learning: '在学',
@@ -142,6 +143,8 @@ export function RecipesPage() {
   const upsertSkill = useUpsertSkill();
   const removeSkill = useRemoveSkill();
   const [editor, setEditor] = useState<{ dishId: string; variantId: string | null } | null>(null);
+  // 菜品本身的编辑（菜名 / 分类 / 照片…）；'new' 表示新建
+  const [dishEdit, setDishEdit] = useState<RecipeDish | 'new' | null>(null);
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<DishCategory | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -163,6 +166,11 @@ export function RecipesPage() {
     <Page
       title="菜谱"
       subtitle={`家里 ${recipes.data?.length ?? 0} 道菜的做法、食材和谁拿手。搜菜名，也能搜食材`}
+      actions={
+        <Button className="h-9 px-3 text-[13px]" onClick={() => setDishEdit('new')}>
+          + 新建菜品
+        </Button>
+      }
       toolbar={
         <div className="flex flex-col gap-3">
           <Input
@@ -269,6 +277,14 @@ export function RecipesPage() {
                       </Button>
                       <Button
                         variant="ghost"
+                        className="h-8 px-2 text-[13px]"
+                        aria-label={`编辑菜品${dish.name}`}
+                        onClick={() => setDishEdit(dish)}
+                      >
+                        编辑
+                      </Button>
+                      <Button
+                        variant="ghost"
                         className={
                           'h-8 px-2 text-[13px] ' + (mySkill ? 'text-accent' : '')
                         }
@@ -324,6 +340,15 @@ export function RecipesPage() {
         )}
       </div>
       </Panel>
+
+      {dishEdit ? (
+        <DishEditor
+          key={dishEdit === 'new' ? 'new' : dishEdit.id}
+          editing={dishEdit === 'new' ? null : dishEdit}
+          onClose={() => setDishEdit(null)}
+          onCreated={(dish) => setOpen(dish.id)}
+        />
+      ) : null}
     </Page>
   );
 }

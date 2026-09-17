@@ -176,3 +176,47 @@ test('消息：有人划掉我点的菜会收到通知，一键全部已读', as
     await dad.delete(`/dishes/${dish.id}`);
   }
 });
+
+test('菜谱：新建菜品、改口味、下架', async ({ page, request }) => {
+  const api = apiClient(request);
+  const name = stamp('新菜');
+  let dishId: string | null = null;
+
+  try {
+    await page.goto('/eat/recipes');
+    await page.getByRole('button', { name: '+ 新建菜品' }).click();
+    const dialog = page.getByRole('dialog', { name: '新建菜品' });
+    await dialog.getByPlaceholder('比如：番茄炒蛋').fill(name);
+    await dialog.getByRole('button', { name: '素菜', exact: true }).click();
+    await dialog.getByRole('radio', { name: '难度 2' }).click();
+    const created = waitFor(page, 'POST', /\/dishes$/);
+    await dialog.getByRole('button', { name: '保存', exact: true }).click();
+    const createResponse = await created;
+    expect(createResponse.status(), await createResponse.text()).toBe(201);
+    dishId = ((await createResponse.json()) as { data: { id: string } }).data.id;
+    await expect(dialog).toBeHidden();
+
+    // 列表里能看到，且分类和难度都对
+    await page.getByPlaceholder('搜菜名或食材，比如「西兰花」').fill(name);
+    const card = page.locator('main').getByText(name, { exact: true }).first();
+    await expect(card).toBeVisible();
+
+    await page.getByRole('button', { name: `编辑菜品${name}` }).click();
+    const editDialog = page.getByRole('dialog', { name: `编辑「${name}」` });
+    await editDialog.getByPlaceholder('比如：酸甜、微辣').fill('微辣');
+    const updated = waitFor(page, 'PATCH', /\/dishes\/[^/]+$/);
+    await editDialog.getByRole('button', { name: '保存', exact: true }).click();
+    expect((await updated).ok()).toBeTruthy();
+    await expect(editDialog).toBeHidden();
+
+    await page.getByRole('button', { name: `编辑菜品${name}` }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '下架', exact: true }).click();
+    const removed = waitFor(page, 'DELETE', /\/dishes\/[^/]+$/);
+    await page.getByRole('dialog').getByRole('button', { name: '确认下架' }).click();
+    expect((await removed).ok()).toBeTruthy();
+    dishId = null;
+    await expect(page.locator('main').getByText(name, { exact: true })).toBeHidden();
+  } finally {
+    if (dishId) await api.delete(`/dishes/${dishId}`);
+  }
+});
