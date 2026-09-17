@@ -10,11 +10,17 @@ import type {
   MenuEvent,
   MenuItem,
   DishRecipeVariant,
+  BatchDatesInput,
+  CreateInventoryItemBody,
   InventoryActionResult,
+  InventoryBatch,
+  InventoryItem,
+  InventoryTransaction,
   MemberDishSkillRecord,
   MemberProfile,
   MenuInventoryPreview,
   RecipeDish,
+  ShoppingInventoryPreview,
   ShoppingItem,
   TaskOccurrence,
   UpdateMenuItemBody,
@@ -294,5 +300,183 @@ export function useRemoveSkill() {
         method: 'DELETE',
       }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['recipes'] }),
+  });
+}
+
+// ---- 购物清单 ---------------------------------------------------------------
+
+export function useShoppingList(date: string) {
+  return useQuery({
+    queryKey: ['shopping', date],
+    queryFn: () => api<ShoppingItem[]>(`/shopping-list?date=${date}`),
+  });
+}
+
+export function useCheckShoppingItem() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; checked: boolean }) =>
+      api<ShoppingItem>(`/shopping-items/${input.id}`, {
+        method: 'PATCH',
+        body: { checked: input.checked },
+      }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['shopping'] }),
+  });
+}
+
+export function useAddManualShoppingItem() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { date: string; customName: string; totalQty: number; unit: string }) =>
+      api<ShoppingItem>('/shopping-items', { method: 'POST', body: input }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['shopping'] }),
+  });
+}
+
+export function useDeleteShoppingItem() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; removed: true }>(`/shopping-items/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['shopping'] }),
+  });
+}
+
+/** 入库预览：候选库存项 + 预计前后量。不选具体库存项时后端自己挑同单位的。 */
+export function useShoppingInventoryPreview(
+  shoppingItemId: string | null,
+  inventoryItemId: string | null,
+  enabled: boolean,
+) {
+  const suffix = inventoryItemId
+    ? `?inventoryItemId=${encodeURIComponent(inventoryItemId)}`
+    : '';
+  return useQuery({
+    queryKey: ['shopping-inventory-preview', shoppingItemId, inventoryItemId],
+    queryFn: () =>
+      api<ShoppingInventoryPreview>(
+        `/shopping-items/${shoppingItemId}/inventory-preview${suffix}`,
+      ),
+    enabled: enabled && Boolean(shoppingItemId),
+  });
+}
+
+export function useConfirmShoppingReceipt() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      shoppingItemId: string;
+      inventoryItemId?: string;
+      batch?: BatchDatesInput;
+    }) =>
+      api<InventoryActionResult>(`/shopping-items/${input.shoppingItemId}/confirm-stock`, {
+        method: 'POST',
+        body: { inventoryItemId: input.inventoryItemId, batch: input.batch },
+      }),
+    onSuccess: () => invalidateInventory(client),
+  });
+}
+
+// ---- 库存 -------------------------------------------------------------------
+
+/** 一次库存变动会同时改动清单、流水、批次和菜单扣库预览，所以统一失效。 */
+function invalidateInventory(client: ReturnType<typeof useQueryClient>) {
+  for (const key of [
+    ['inventory'],
+    ['inventory-transactions'],
+    ['inventory-batches'],
+    ['shopping'],
+    ['shopping-inventory-preview'],
+    ['menu-inventory-preview'],
+  ]) {
+    void client.invalidateQueries({ queryKey: key });
+  }
+}
+
+export function useInventory() {
+  return useQuery({
+    queryKey: ['inventory'],
+    queryFn: () => api<InventoryItem[]>('/inventory'),
+  });
+}
+
+export type InventoryUpsertInput = Partial<CreateInventoryItemBody> & { id?: string };
+
+export function useUpsertInventoryItem() {
+  const client = useQueryClient();
+  return useMutation({
+    // 改 quantity 会记一条 adjustment 流水，后端要求 idempotencyKey 防重复
+    mutationFn: ({ id, ...body }: InventoryUpsertInput) =>
+      id
+        ? api<InventoryItem>(`/inventory-items/${id}`, {
+            method: 'PATCH',
+            body: {
+              ...body,
+              idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            },
+          })
+        : api<InventoryItem>('/inventory-items', { method: 'POST', body }),
+    onSuccess: () => invalidateInventory(client),
+  });
+}
+
+export function useDeleteInventoryItem() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ id: string; removed: true }>(`/inventory-items/${id}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateInventory(client),
+  });
+}
+
+export function useInventoryTransactions(limit = 40) {
+  return useQuery({
+    queryKey: ['inventory-transactions', limit],
+    queryFn: () => api<InventoryTransaction[]>(`/inventory-transactions?limit=${limit}`),
+  });
+}
+
+export function useReverseInventoryTransaction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<InventoryActionResult>(`/inventory-transactions/${id}/reverse`, { method: 'POST' }),
+    onSuccess: () => invalidateInventory(client),
+  });
+}
+
+export function useInventoryBatches(
+  status: 'all' | 'active' | 'expiring' | 'expired' = 'all',
+  days = 7,
+) {
+  return useQuery({
+    queryKey: ['inventory-batches', status, days],
+    queryFn: () => api<InventoryBatch[]>(`/inventory-batches?status=${status}&days=${days}`),
+  });
+}
+
+export function useCreateInventoryBatch() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BatchDatesInput & { inventoryItemId: string; quantity: number }) =>
+      api<InventoryBatch>('/inventory-batches', {
+        method: 'POST',
+        body: {
+          ...input,
+          idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
+      }),
+    onSuccess: () => invalidateInventory(client),
+  });
+}
+
+export function useUpdateInventoryBatch() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BatchDatesInput & { id: string; expectedVersion: number }) => {
+      const { id, ...body } = input;
+      return api<InventoryBatch>(`/inventory-batches/${id}`, { method: 'PATCH', body });
+    },
+    onSuccess: () => invalidateInventory(client),
   });
 }

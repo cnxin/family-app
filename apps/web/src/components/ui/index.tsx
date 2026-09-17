@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
 /* 控件的四个状态（悬停/按下/聚焦/禁用）在这一层一次写清楚，页面不再各写各的。
@@ -89,5 +90,107 @@ export function Checkbox({
         />
       </svg>
     </button>
+  );
+}
+
+export const selectClass =
+  'h-9 rounded-lg border border-border bg-surface px-2 text-[13px] text-ink ' +
+  'transition-colors duration-150 hover:border-ink-soft/40 focus:border-accent focus:outline-none ' +
+  'focus:ring-2 focus:ring-accent/25 disabled:opacity-50';
+
+/** 分段控件：同一页里切视图用，不占一个导航位。 */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div role="tablist" className="inline-flex rounded-lg border border-border bg-muted p-0.5">
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            role="tab"
+            type="button"
+            aria-selected={active}
+            onClick={() => onChange(option.value)}
+            className={
+              'rounded-[7px] px-3 py-1.5 text-[13px] transition-colors duration-150 ' +
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ' +
+              (active ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink-soft hover:text-ink')
+            }
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * 模态框：手机上从底部铺满，桌面上居中。Esc 关闭，点遮罩关闭，
+ * 打开时锁住 body 滚动——不锁的话背后的长列表会跟着手指一起动。
+ */
+export function Dialog({
+  title,
+  onClose,
+  children,
+  footer,
+  maxWidth = 480,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+  maxWidth?: number;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={{ maxWidth }}
+        className="flex max-h-[88vh] w-full flex-col rounded-t-card border border-border bg-surface shadow-xl sm:rounded-card"
+      >
+        <div className="flex items-start gap-3 border-b border-border px-4 py-3">
+          <h2 className="flex-1 text-[15px] font-semibold">{title}</h2>
+          <button
+            type="button"
+            aria-label="关闭"
+            onClick={onClose}
+            className="-mr-1 grid size-8 place-items-center rounded-lg text-ink-soft transition-colors duration-150 hover:bg-muted hover:text-ink"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
+        {footer ? <div className="border-t border-border px-4 py-3">{footer}</div> : null}
+      </div>
+    </div>
   );
 }
