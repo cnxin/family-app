@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { CalendarEntry } from '@family/contracts';
 import {
   calendarRange,
@@ -140,18 +140,16 @@ function EntryRow({
 
       <div className="flex shrink-0 items-center gap-0.5">
         {canRemind ? (
-          <a
-            href={legacyUrl(
-              `/reminders?sourceModule=${entry.module}&sourceId=${entry.sourceId}` +
-                (entry.module === 'task' ? `&occurrenceDate=${entry.date}` : ''),
-            )}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to={
+              `/schedule/reminders?sourceModule=${entry.module}&sourceId=${entry.sourceId}` +
+              (entry.module === 'task' ? `&occurrenceDate=${entry.date}` : '')
+            }
             aria-label={`提醒${entry.title}`}
             className="grid size-8 place-items-center rounded-lg text-[13px] text-ink-soft transition-colors duration-150 hover:bg-muted hover:text-accent"
           >
             🔔
-          </a>
+          </Link>
         ) : null}
         {canManage ? (
           <>

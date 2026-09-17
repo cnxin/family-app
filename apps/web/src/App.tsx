@@ -9,6 +9,7 @@ import { RecipesPage } from './pages/recipes';
 import { ShoppingPage } from './pages/shopping';
 import { InventoryPage } from './pages/inventory';
 import { CalendarPage } from './pages/calendar';
+import { RemindersPage } from './pages/reminders';
 import { LegacyBridge, Shell } from './components/shell';
 import { CommandPalette } from './components/command-palette';
 import { SCENES, landingPath } from './lib/nav';
@@ -45,6 +46,7 @@ export function App() {
           <Route path="/schedule" element={<Navigate to={landingPath(SCENES[2])} replace />} />
           <Route path="/schedule/calendar" element={<CalendarPage />} />
           <Route path="/schedule/tasks" element={<TasksPage />} />
+          <Route path="/schedule/reminders" element={<RemindersPage />} />
 
           <Route path="/house" element={<Navigate to={landingPath(SCENES[3])} replace />} />
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />

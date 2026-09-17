@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type {
   CalendarEntry,
   Dish,
+  HouseholdReminder,
   InventoryItem,
   Menu,
   RecipeDish,
@@ -65,6 +66,12 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
     void client.prefetchQuery({
       queryKey: ['calendar', start, end],
       queryFn: () => api<CalendarEntry[]>(`/calendar?start=${start}&end=${end}`),
+    });
+  },
+  '/schedule/reminders': (client) => {
+    void client.prefetchQuery({
+      queryKey: ['reminders', 'all'],
+      queryFn: () => api<HouseholdReminder[]>('/reminders?status=all'),
     });
   },
   '/schedule/tasks': (client) => {
