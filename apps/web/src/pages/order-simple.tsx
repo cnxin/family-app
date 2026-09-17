@@ -60,6 +60,8 @@ export function OrderSimplePage() {
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<DishCategory | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  // 已接单/制作中的菜，后端要求填划掉原因；这里存「正在填原因的那一条」
+  const [rejecting, setRejecting] = useState<{ id: string; reason: string } | null>(null);
 
   const menu = useMenu(date, meal);
   const dishes = useDishes();
@@ -73,6 +75,7 @@ export function OrderSimplePage() {
   const items = menu.data?.items ?? [];
   const live = items.filter((item) => item.status !== 'rejected');
   const orderedByDish = new Map<string, MenuItem>(live.map((item) => [item.dishId, item]));
+  const undone = live.filter((item) => item.status !== 'done').length;
   const locked = menu.data?.status === 'done';
   const iAmChef = menu.data?.chefId === session?.member.id;
 
@@ -125,16 +128,24 @@ export function OrderSimplePage() {
         </div>
         <div className="flex items-center gap-1">
           <Button variant="outline" className="h-9 w-9 px-0" aria-label="前一天"
-            onClick={() => setDate(shiftDays(date, -1))}>
-            ‹
-          </Button>
-          <Button variant="outline" className="h-9 px-3 text-[13px]" onClick={() => setDate(today)}>
-            今天
-          </Button>
+            onClick={() => setDate(shiftDays(date, -1))}>‹</Button>
+          {/* 直接选任意一天：前后翻页只适合挨着的几天，跨周就该用日期选择器 */}
+          <input
+            type="date"
+            aria-label="选择日期"
+            value={date}
+            onChange={(event) => event.target.value && setDate(event.target.value)}
+            className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] text-ink
+              transition-colors duration-150 hover:border-ink-soft/40 focus:border-accent
+              focus:outline-none focus:ring-2 focus:ring-accent/25"
+          />
           <Button variant="outline" className="h-9 w-9 px-0" aria-label="后一天"
-            onClick={() => setDate(shiftDays(date, 1))}>
-            ›
-          </Button>
+            onClick={() => setDate(shiftDays(date, 1))}>›</Button>
+          {date === today ? null : (
+            <Button variant="ghost" className="h-9 px-2 text-[13px]" onClick={() => setDate(today)}>
+              回今天
+            </Button>
+          )}
         </div>
       </header>
 
@@ -231,12 +242,16 @@ export function OrderSimplePage() {
                       variant="ghost"
                       className="h-8 shrink-0 px-2 text-[13px]"
                       disabled={updateItem.isPending}
-                      onClick={() =>
-                        updateItem.mutate({
-                          id: item.id,
-                          body: { status: item.status === 'rejected' ? 'pending' : 'rejected' },
-                        })
-                      }
+                        onClick={() => {
+                        if (item.status === 'rejected') {
+                          updateItem.mutate({ id: item.id, body: { status: 'pending' } });
+                        } else if (item.status === 'accepted' || item.status === 'cooking') {
+                          // 后端要求：已接单或制作中的菜，划掉必须带原因
+                          setRejecting({ id: item.id, reason: '' });
+                        } else {
+                          updateItem.mutate({ id: item.id, body: { status: 'rejected' } });
+                        }
+                      }}
                     >
                       {item.status === 'rejected' ? '恢复' : '划掉'}
                     </Button>
@@ -247,14 +262,20 @@ export function OrderSimplePage() {
           )}
           {menu.data && live.length > 0 && !locked ? (
             <div className="border-t border-border px-4 py-3">
+              {/* 后端规则：还有菜没上桌就不让结束（409）。与其让人点了没反应，不如先说清楚。 */}
               <Button
                 variant="outline"
                 className="h-9 w-full text-[13px]"
-                disabled={completeMenu.isPending}
+                disabled={completeMenu.isPending || undone > 0}
                 onClick={() => completeMenu.mutate(menu.data!.id)}
               >
                 {completeMenu.isPending ? '结束中…' : '这一餐吃完了'}
               </Button>
+              {undone > 0 ? (
+                <p className="mt-2 text-center text-[12px] text-ink-soft">
+                  还有 {undone} 道没做好，做好或划掉之后才能结束
+                </p>
+              ) : null}
             </div>
           ) : null}
         </Card>
@@ -334,6 +355,40 @@ export function OrderSimplePage() {
           )}
         </div>
       </section>
+
+      {rejecting ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 backdrop-blur-xl">
+          <div className="mx-auto w-full max-w-[680px] px-4 py-3">
+            <p className="text-[13px] text-ink-soft">这道菜已经有人接了，划掉要说一句原因</p>
+            <div className="mt-2 flex gap-2">
+              <Input
+                autoFocus
+                value={rejecting.reason}
+                placeholder="比如：食材不够了"
+                onChange={(event) => setRejecting({ ...rejecting, reason: event.target.value })}
+              />
+              <Button
+                className="shrink-0"
+                disabled={!rejecting.reason.trim() || updateItem.isPending}
+                onClick={() =>
+                  updateItem.mutate(
+                    {
+                      id: rejecting.id,
+                      body: { status: 'rejected', reason: rejecting.reason.trim() },
+                    },
+                    { onSuccess: () => setRejecting(null) },
+                  )
+                }
+              >
+                划掉
+              </Button>
+              <Button variant="ghost" className="shrink-0" onClick={() => setRejecting(null)}>
+                取消
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {picked.length > 0 ? (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-bg/85 backdrop-blur-xl">
