@@ -26,6 +26,10 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
       queryKey: ['menus-of-date', today],
       queryFn: () => api<Menu[]>(`/menus?date=${today}`),
     });
+    void client.prefetchQuery({
+      queryKey: ['tasks', today, shiftDays(today, 2)],
+      queryFn: () => api<TaskOccurrence[]>(`/tasks?start=${today}&end=${shiftDays(today, 2)}`),
+    });
   },
   '/eat/order': (client) => {
     void client.prefetchQuery({
