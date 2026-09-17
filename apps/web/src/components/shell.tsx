@@ -99,7 +99,7 @@ function Sidebar({ manager }: { manager: boolean }) {
                           : 'text-ink-soft hover:bg-muted hover:text-ink')
                       }
                     >
-                      <span className="flex-1 truncate">{segment.label}</span>
+                      <span className="truncate">{segment.label}</span>
                       {/* 还没搬到新客户端的，标一个点 */}
                       {ready ? null : <span className="text-warm">·</span>}
                     </SoftLink>
@@ -124,7 +124,11 @@ interface MenuAnchor {
   bottom: number;
 }
 
-const MENU_WIDTH = 148;
+// 菜单宽度不写死：中文标签大多两三个字，固定宽度会让文字孤零零贴在左边，
+// 右边空一大条——那条多余的空白就是「不够优雅」的来源。让盒子贴着文字长，
+// 只给下限（太窄点不准）和上限（别横穿屏幕）。
+const MENU_MIN = 112;
+const MENU_MAX_VW = 0.62;
 const EXIT_MS = 170;
 
 /**
@@ -163,23 +167,29 @@ function SceneMenu({
     return () => document.removeEventListener('keydown', onKey);
   }, [requestClose]);
 
-  const left = Math.min(
-    Math.max(8, anchor.center - MENU_WIDTH / 2),
-    window.innerWidth - MENU_WIDTH - 8,
-  );
-  const caret = Math.min(Math.max(13, anchor.center - left), MENU_WIDTH - 13);
-
   // 整组都还在旧版时，九个点谁也没区分谁，纯噪音；只有混着的时候才标
   const mixed =
     segments.some((one) => one.ready && one.path) && segments.some((one) => !one.ready);
 
-  // 边缘渐隐只在真的滚得动时才加——列表没超出还淡掉首尾，等于骗人说下面还有
   const listRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
   const [scrollable, setScrollable] = useState(false);
+
+  // 量完再定位：useLayoutEffect 在绘制前跑，所以不会看到先歪一下再跳过去。
+  // 顺带量一下列表到底滚不滚得动——没超出还淡掉首尾，等于骗人说下面还有。
   useLayoutEffect(() => {
     const list = listRef.current;
-    if (list) setScrollable(list.scrollHeight > list.clientHeight + 1);
-  }, [segments.length]);
+    if (!list) return;
+    setWidth(list.offsetWidth);
+    setScrollable(list.scrollHeight > list.clientHeight + 1);
+  }, [segments]);
+
+  const measured = width || MENU_MIN;
+  const left = Math.min(
+    Math.max(8, anchor.center - measured / 2),
+    window.innerWidth - measured - 8,
+  );
+  const caret = Math.min(Math.max(13, anchor.center - left), measured - 13);
 
   return (
     <div className="fixed inset-0 z-40 lg:hidden" onPointerDown={requestClose}>
@@ -196,7 +206,6 @@ function SceneMenu({
         style={{
           left,
           bottom: anchor.bottom + 10,
-          width: MENU_WIDTH,
           // 原点钉在小三角上 = 钉在被点的那个标签上
           transformOrigin: `${caret}px bottom`,
         }}
@@ -210,8 +219,9 @@ function SceneMenu({
       >
         <div
           ref={listRef}
+          style={{ minWidth: MENU_MIN, maxWidth: `${MENU_MAX_VW * 100}vw` }}
           className={
-            'pop-material max-h-[56vh] overflow-y-auto rounded-xl ' +
+            'pop-material w-max max-h-[56vh] overflow-y-auto rounded-xl ' +
             (scrollable ? 'pop-scroll ' : '') +
             (closing
               ? 'animate-[material-out_170ms_ease-out_both]'
@@ -229,7 +239,7 @@ function SceneMenu({
                 active={current}
                 onNavigate={requestClose}
                 className={
-                  'relative flex items-center gap-1.5 px-3 py-[9px] text-[13.5px] ' +
+                  'relative flex items-center justify-between gap-2.5 px-3.5 py-[9px] text-[13.5px] ' +
                   'tracking-[0.01em] transition-colors duration-100 ' +
                   // 分隔线内缩一点，不顶到两边——顶满会把每一行框成一个格子
                   'after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 ' +
@@ -239,7 +249,7 @@ function SceneMenu({
                     : 'font-medium text-ink active:bg-ink/[0.05]')
                 }
               >
-                <span className="flex-1 truncate">{segment.label}</span>
+                <span className="truncate">{segment.label}</span>
                 {/* 「旧版」重复九遍太吵，跟侧栏一样用一个小点 */}
                 {ready || !mixed ? null : (
                   <span className="size-1 shrink-0 rounded-full bg-warm/70" title="还在旧版" />
