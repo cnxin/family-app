@@ -230,3 +230,12 @@ export function useGenerateShoppingList() {
     onSuccess: () => void client.invalidateQueries({ queryKey: ['shopping'] }),
   });
 }
+
+/** 菜谱库：菜品 + 所有未归档做法 + 会做的人。 */
+export function useRecipes() {
+  return useQuery({
+    queryKey: ['recipes'],
+    queryFn: () => api<RecipeDish[]>('/recipes'),
+    staleTime: 5 * 60_000,
+  });
+}
