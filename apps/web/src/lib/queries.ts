@@ -9,7 +9,9 @@ import type {
   MenuDateCount,
   MenuEvent,
   MenuItem,
+  DishRecipeVariant,
   InventoryActionResult,
+  MemberDishSkillRecord,
   MemberProfile,
   MenuInventoryPreview,
   RecipeDish,
@@ -18,6 +20,8 @@ import type {
   UpdateMenuItemBody,
   UpdateTaskInstanceBody,
   UpsertDishBody,
+  UpsertDishSkillBody,
+  UpsertRecipeVariantBody,
 } from '@family/contracts';
 import { api } from './api';
 
@@ -237,5 +241,58 @@ export function useRecipes() {
     queryKey: ['recipes'],
     queryFn: () => api<RecipeDish[]>('/recipes'),
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpsertVariant() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { dishId: string; variantId?: string; body: UpsertRecipeVariantBody }) =>
+      input.variantId
+        ? api<DishRecipeVariant>(`/recipe-variants/${input.variantId}`, {
+            method: 'PATCH',
+            body: input.body,
+          })
+        : api<DishRecipeVariant>(`/dishes/${input.dishId}/recipe-variants`, {
+            method: 'POST',
+            body: input.body,
+          }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['recipes'] });
+      void client.invalidateQueries({ queryKey: ['recipe'] });
+      void client.invalidateQueries({ queryKey: ['dishes'] });
+    },
+  });
+}
+
+export function useArchiveVariant() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (variantId: string) =>
+      api<{ id: string }>(`/recipe-variants/${variantId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['recipes'] });
+      void client.invalidateQueries({ queryKey: ['recipe'] });
+    },
+  });
+}
+
+export function useUpsertSkill() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpsertDishSkillBody) =>
+      api<MemberDishSkillRecord>('/member-dish-skills', { method: 'POST', body }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['recipes'] }),
+  });
+}
+
+export function useRemoveSkill() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { memberId: string; dishId: string }) =>
+      api<{ removed: true }>(`/members/${input.memberId}/dish-skills/${input.dishId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['recipes'] }),
   });
 }

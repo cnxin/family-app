@@ -83,3 +83,35 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
     return once<T>(path, options, renewed);
   }
 }
+
+/** multipart 上传一张图片，返回 /uploads/<filename>。走同一个 /api 代理和同一套 401 续期。 */
+export async function uploadPhoto(file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  const send = async (token: string | null) => {
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    const text = await response.text();
+    const payload = text ? JSON.parse(text) : null;
+    if (!response.ok) {
+      throw new ApiError(
+        payload?.error?.code ?? 'UPLOAD_FAILED',
+        payload?.error?.message ?? '照片上传失败',
+        response.status,
+        payload?.requestId,
+      );
+    }
+    return payload?.data?.url as string;
+  };
+  try {
+    return await send(accessToken);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error;
+    const renewed = await refreshOnce();
+    if (!renewed) throw error;
+    return send(renewed);
+  }
+}

@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import type { DishCategory, RecipeDish } from '@family/contracts';
 import { DISH_CATEGORIES } from '@family/contracts';
 import { CATEGORY_EMOJI, useCart } from '../lib/cart';
-import { MEAL_LABELS, useRecipes } from '../lib/queries';
+import { MEAL_LABELS, useRecipes, useRemoveSkill, useUpsertSkill } from '../lib/queries';
+import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
 import { Button, Card, Input } from '../components/ui';
+import { RecipeEditor } from '../components/recipe-editor';
 
 const LEVEL_LABEL: Record<string, string> = {
   learning: '在学',
@@ -12,7 +14,13 @@ const LEVEL_LABEL: Record<string, string> = {
   signature: '拿手菜',
 };
 
-function VariantView({ dish }: { dish: RecipeDish }) {
+function VariantView({
+  dish,
+  onEdit,
+}: {
+  dish: RecipeDish;
+  onEdit: (variantId: string) => void;
+}) {
   const variants = dish.recipeVariants.filter((one) => !one.isArchived);
   const [current, setCurrent] = useState(
     () => variants.find((one) => one.isDefault)?.id ?? variants[0]?.id ?? '',
@@ -47,10 +55,19 @@ function VariantView({ dish }: { dish: RecipeDish }) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-ink-soft">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[12.5px] text-ink-soft">
         {variant.estMinutes ? <span>约 {variant.estMinutes} 分钟</span> : null}
         {variant.author ? <span>{variant.author.name} 的写法</span> : null}
         {variant.note ? <span className="text-warm">{variant.note}</span> : null}
+        {variant.canManage ? (
+          <Button
+            variant="ghost"
+            className="ml-auto h-8 px-2 text-[13px]"
+            onClick={() => onEdit(variant.id)}
+          >
+            编辑这个做法
+          </Button>
+        ) : null}
       </div>
 
       {variant.ingredients.length > 0 ? (
@@ -121,6 +138,10 @@ function VariantView({ dish }: { dish: RecipeDish }) {
 export function RecipesPage() {
   const recipes = useRecipes();
   const cart = useCart();
+  const { session } = useAuth();
+  const upsertSkill = useUpsertSkill();
+  const removeSkill = useRemoveSkill();
+  const [editor, setEditor] = useState<{ dishId: string; variantId: string | null } | null>(null);
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<DishCategory | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -182,6 +203,8 @@ export function RecipesPage() {
           visible.map((dish) => {
             const expanded = open === dish.id;
             const variants = dish.recipeVariants.filter((one) => !one.isArchived);
+            const mySkill = dish.skills.some((skill) => skill.member.id === session?.member.id);
+            const editingHere = editor?.dishId === dish.id;
             return (
               <Card key={dish.id} className="overflow-hidden">
                 <div className="flex gap-3 p-3">
@@ -237,6 +260,30 @@ export function RecipesPage() {
                         {expanded ? '收起做法' : '看做法'}
                       </Button>
                       <Button
+                        variant="ghost"
+                        className="h-8 px-2 text-[13px]"
+                        onClick={() => setEditor({ dishId: dish.id, variantId: null })}
+                      >
+                        加我的做法
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className={
+                          'h-8 px-2 text-[13px] ' + (mySkill ? 'text-accent' : '')
+                        }
+                        disabled={upsertSkill.isPending || removeSkill.isPending}
+                        onClick={() =>
+                          mySkill
+                            ? removeSkill.mutate({
+                                memberId: session!.member.id,
+                                dishId: dish.id,
+                              })
+                            : upsertSkill.mutate({ dishId: dish.id, level: 'can_cook' })
+                        }
+                      >
+                        {mySkill ? '✓ 我会做' : '标记我会做'}
+                      </Button>
+                      <Button
                         variant="outline"
                         className="h-8 px-2.5 text-[13px]"
                         disabled={cart.has(dish.id)}
@@ -251,9 +298,23 @@ export function RecipesPage() {
                   </div>
                 </div>
 
-                {expanded ? (
+                {editingHere ? (
+                  <RecipeEditor
+                    dishId={dish.id}
+                    dishName={dish.name}
+                    editing={
+                      editor?.variantId
+                        ? (variants.find((one) => one.id === editor.variantId) ?? null)
+                        : null
+                    }
+                    onClose={() => setEditor(null)}
+                  />
+                ) : expanded ? (
                   <div className="border-t border-border bg-muted/40">
-                    <VariantView dish={dish} />
+                    <VariantView
+                      dish={dish}
+                      onEdit={(variantId) => setEditor({ dishId: dish.id, variantId })}
+                    />
                   </div>
                 ) : null}
               </Card>
