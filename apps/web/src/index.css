@@ -71,7 +71,7 @@ body {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-/* 底部面板从下往上推出来 */
-@keyframes sheet-up {
-  from { transform: translateY(100%); }
+/* 气泡从被点的标签上方弹出来 */
+@keyframes menu-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
 }

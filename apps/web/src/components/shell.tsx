@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth';
@@ -116,12 +116,27 @@ function Sidebar({ manager }: { manager: boolean }) {
 
 // ---- 手机：底部标签 + 上弹面板 -------------------------------------------------
 
-function SceneSheet({
-  scene,
+interface MenuAnchor {
+  scene: NavScene;
+  /** 被点的那个标签的水平中点，用来把气泡对准它 */
+  center: number;
+  /** 标签栏顶边距离视口底部的距离，气泡就浮在它上面 */
+  bottom: number;
+}
+
+const MENU_WIDTH = 176;
+
+/**
+ * 从被点的那个标签正上方弹出来的气泡菜单（微信公众号底部菜单那种）。
+ * 比整屏上推的面板轻，而且指向明确——你点的是哪个标签，就从哪儿冒出来。
+ * 靠边的标签会把气泡顶到屏幕边缘，所以位置要夹一下，小三角单独对准标签中点。
+ */
+function SceneMenu({
+  anchor,
   segments,
   onClose,
 }: {
-  scene: NavScene;
+  anchor: MenuAnchor;
   segments: NavSegment[];
   onClose: () => void;
 }) {
@@ -130,75 +145,74 @@ function SceneSheet({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
     document.addEventListener('keydown', onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = previous;
-    };
+    return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const left = Math.min(
+    Math.max(8, anchor.center - MENU_WIDTH / 2),
+    window.innerWidth - MENU_WIDTH - 8,
+  );
+  const caret = anchor.center - left;
+
   return (
-    <div
-      className="fixed inset-0 z-40 lg:hidden"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" onMouseDown={onClose} />
+    <div className="fixed inset-0 z-40 lg:hidden" onMouseDown={onClose}>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${scene.label}的功能`}
-        className="absolute inset-x-0 bottom-0 animate-[sheet-up_220ms_cubic-bezier(0,0,0.2,1)] rounded-t-2xl border-t border-border bg-surface pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-2xl"
+        role="menu"
+        aria-label={`${anchor.scene.label}的功能`}
+        style={{ left, bottom: anchor.bottom + 10, width: MENU_WIDTH }}
+        onMouseDown={(event) => event.stopPropagation()}
+        className="fixed origin-bottom animate-[menu-pop_160ms_cubic-bezier(0,0,0.2,1)]"
       >
-        <button
-          type="button"
-          aria-label="收起"
-          onClick={onClose}
-          className="flex w-full justify-center py-2.5"
-        >
-          <span className="h-1 w-9 rounded-full bg-border" />
-        </button>
-        <p className="px-5 pb-1 pt-3 text-[13px] font-medium text-ink-soft">
-          {scene.icon} {scene.label}
-        </p>
-        <div className="max-h-[56vh] overflow-y-auto px-2 pb-2">
-          {segments.map((segment) => {
-            const href = segmentHref(scene, segment);
-            const current = href === pathname;
-            const ready = Boolean(segment.ready && segment.path);
-            return (
-              <SoftLink
-                key={segment.key}
-                to={href}
-                active={current}
-                onNavigate={onClose}
-                className={
-                  'flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] transition-colors duration-150 ' +
-                  (current ? 'bg-accent-soft font-medium text-accent' : 'text-ink active:bg-muted')
-                }
-              >
-                <span className="flex-1">{segment.label}</span>
-                {ready ? null : <span className="text-[12px] text-warm">旧版</span>}
-                {current ? <span className="text-accent">✓</span> : null}
-              </SoftLink>
-            );
-          })}
+        {/* 小三角要探出容器，所以圆角和裁剪放在里层，外层只负责定位 */}
+        <div className="max-h-[62vh] overflow-y-auto rounded-xl border border-border bg-surface shadow-2xl">
+        {segments.map((segment) => {
+          const href = segmentHref(anchor.scene, segment);
+          const current = href === pathname;
+          const ready = Boolean(segment.ready && segment.path);
+          return (
+            <SoftLink
+              key={segment.key}
+              to={href}
+              active={current}
+              onNavigate={onClose}
+              className={
+                'flex items-center gap-2 border-b border-border px-3.5 py-3 text-[14px] last:border-b-0 ' +
+                (current ? 'bg-accent-soft font-medium text-accent' : 'text-ink active:bg-muted')
+              }
+            >
+              <span className="flex-1 truncate">{segment.label}</span>
+              {ready ? null : <span className="text-[11px] text-warm">旧版</span>}
+              {current ? <span className="text-accent">✓</span> : null}
+            </SoftLink>
+          );
+        })}
         </div>
+        {/* 指向被点标签的小三角 */}
+        <span
+          style={{ left: Math.min(Math.max(14, caret), MENU_WIDTH - 14) }}
+          className="absolute bottom-0 -ml-[6px] h-3 w-3 translate-y-1/2 rotate-45 border-b border-r border-border bg-surface"
+        />
       </div>
     </div>
   );
 }
 
-function BottomTabs({ manager, onOpenSheet }: { manager: boolean; onOpenSheet: (scene: NavScene) => void }) {
+function BottomTabs({
+  manager,
+  onOpenMenu,
+}: {
+  manager: boolean;
+  onOpenMenu: (anchor: MenuAnchor) => void;
+}) {
   const { pathname } = useLocation();
   const prefetch = usePrefetch();
   const soft = useSoftNavigate();
   const active = sceneOf(pathname);
+  const navRef = useRef<HTMLElement>(null);
 
   return (
     <nav
+      ref={navRef}
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
       aria-label="主导航"
     >
@@ -211,7 +225,19 @@ function BottomTabs({ manager, onOpenSheet }: { manager: boolean; onOpenSheet: (
               key={scene.key}
               type="button"
               {...prefetch.bind(landingPath(scene))}
-              onClick={() => (segments.length ? onOpenSheet(scene) : soft(scene.path))}
+              onClick={(event) => {
+                if (!segments.length) {
+                  soft(scene.path);
+                  return;
+                }
+                const tab = event.currentTarget.getBoundingClientRect();
+                const bar = navRef.current?.getBoundingClientRect();
+                onOpenMenu({
+                  scene,
+                  center: tab.left + tab.width / 2,
+                  bottom: window.innerHeight - (bar?.top ?? tab.top),
+                });
+              }}
               aria-haspopup={segments.length ? 'menu' : undefined}
               className={
                 'flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] transition-colors duration-150 ' +
@@ -240,7 +266,7 @@ export function Shell() {
   const prefetch = usePrefetch();
   const soft = useSoftNavigate();
   const [theme, setTheme] = useState(readTheme);
-  const [sheet, setSheet] = useState<NavScene | null>(null);
+  const [menu, setMenu] = useState<MenuAnchor | null>(null);
   useEffect(() => applyTheme(theme), [theme]);
 
   const manager = session?.member.role !== 'member';
@@ -328,17 +354,17 @@ export function Shell() {
 
       <BottomTabs
         manager={manager}
-        onOpenSheet={(next) => {
-          prefetch.all(visibleSegments(next, manager));
-          setSheet(next);
+        onOpenMenu={(anchor) => {
+          prefetch.all(visibleSegments(anchor.scene, manager));
+          setMenu(anchor);
         }}
       />
 
-      {sheet ? (
-        <SceneSheet
-          scene={sheet}
-          segments={visibleSegments(sheet, manager)}
-          onClose={() => setSheet(null)}
+      {menu ? (
+        <SceneMenu
+          anchor={menu}
+          segments={visibleSegments(menu.scene, manager)}
+          onClose={() => setMenu(null)}
         />
       ) : null}
     </div>
@@ -353,7 +379,7 @@ export function LegacyBridge() {
   if (!segment) return null;
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-4 lg:mx-0 lg:px-8 pb-24 pt-10">
+    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-24 pt-10">
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="text-4xl">{scene.icon}</span>
         <h1 className="text-xl font-semibold">{segment.label}还在旧版</h1>

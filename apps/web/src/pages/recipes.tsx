@@ -160,7 +160,7 @@ export function RecipesPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-4 lg:mx-0 lg:px-8 pb-20 pt-6">
+    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-20 pt-6">
       <header className="px-1">
         <h1 className="text-2xl font-semibold tracking-tight">菜谱</h1>
         <p className="mt-1 text-sm text-ink-soft">
@@ -194,7 +194,7 @@ export function RecipesPage() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3">
+      <div className="mt-4 grid gap-3 lg:grid-cols-2 lg:items-start">
         {recipes.isPending ? (
           <p className="px-1 py-6 text-sm text-ink-soft">读取菜谱…</p>
         ) : visible.length === 0 ? (
@@ -206,7 +206,10 @@ export function RecipesPage() {
             const mySkill = dish.skills.some((skill) => skill.member.id === session?.member.id);
             const editingHere = editor?.dishId === dish.id;
             return (
-              <Card key={dish.id} className="overflow-hidden">
+              <Card
+                key={dish.id}
+                className={`overflow-hidden ${expanded ? 'lg:col-span-2' : ''}`}
+              >
                 <div className="flex gap-3 p-3">
                   <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted">
                     {dish.photoUrl ? (

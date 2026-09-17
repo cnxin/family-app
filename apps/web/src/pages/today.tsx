@@ -24,7 +24,7 @@ export function TodayPage() {
   const unclaimed = open.filter((item) => !item.assigneeId);
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-4 lg:mx-0 lg:px-8 pb-16 pt-6">
+    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-16 pt-6">
       <header className="px-1">
         <h1 className="text-2xl font-semibold tracking-tight">
           {greeting()}，{session?.member.name}
@@ -38,6 +38,7 @@ export function TodayPage() {
         </p>
       </header>
 
+      <div className="grid gap-x-5 lg:grid-cols-2 lg:items-start">
       <section className="mt-6">
         <SectionTitle
           right={
@@ -113,6 +114,7 @@ export function TodayPage() {
           </Card>
         </section>
       ) : null}
+      </div>
     </div>
   );
 }

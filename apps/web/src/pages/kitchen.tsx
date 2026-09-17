@@ -494,7 +494,7 @@ export function KitchenPage() {
     rejecting?.item.status === 'accepted' || rejecting?.item.status === 'cooking';
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-4 lg:mx-0 lg:px-8 pb-32 pt-6">
+    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-32 pt-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">菜单安排</h1>
@@ -549,7 +549,9 @@ export function KitchenPage() {
           <p className="text-[13px] text-ink-soft">等家人去「点菜」页下单吧</p>
         </div>
       ) : (
-        (menus.data ?? []).map((menu) => (
+        // 宽屏一餐一行会把右边空出来，排两列
+        <div className="grid gap-x-5 xl:grid-cols-2 xl:items-start">
+        {(menus.data ?? []).map((menu) => (
           <MealSection
             key={menu.id}
             menu={menu}
@@ -558,12 +560,13 @@ export function KitchenPage() {
             date={date}
             onReject={(item) => setRejecting({ item, reason: '' })}
           />
-        ))
+        ))}
+        </div>
       )}
 
       {rejecting ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-[760px] px-4 lg:mx-0 lg:px-8 py-3">
+          <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 py-3">
             <p className="text-[13px] text-ink-soft">
               {reasonRequired
                 ? '这道菜已经有人准备，请填写原因。'

@@ -33,7 +33,7 @@ export function TasksPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-4 lg:mx-0 lg:px-8 pb-16 pt-6">
+    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-16 pt-6">
       <h1 className="px-1 text-2xl font-semibold tracking-tight">家庭任务</h1>
       <p className="mt-1 px-1 text-sm text-ink-soft">未来两周的安排</p>
 
@@ -58,8 +58,10 @@ export function TasksPage() {
       ) : byDate.size === 0 ? (
         <p className="mt-8 px-1 text-sm text-ink-soft">这两周还没有任务</p>
       ) : (
-        [...byDate.entries()].map(([date, items]) => (
-          <section key={date} className="mt-6">
+        // 宽屏一列会把右边空出来，日期分组排两列
+        <div className="mt-1 grid gap-x-5 lg:grid-cols-2 lg:items-start">
+        {[...byDate.entries()].map(([date, items]) => (
+          <section key={date} className="mt-5">
             <SectionTitle>
               {date === today ? '今天' : date === shiftDays(today, 1) ? '明天' : date}
             </SectionTitle>
@@ -97,7 +99,8 @@ export function TasksPage() {
               ))}
             </Card>
           </section>
-        ))
+        ))}
+        </div>
       )}
     </div>
   );

@@ -261,37 +261,42 @@ export function ShoppingView() {
         </Button>
       </div>
 
-      {list.isPending ? <ListSkeleton rows={4} /> : null}
+      {/* 宽屏分两栏：左边是要买的东西，右边把「添加物品」钉住，边走边加不用滚到底 */}
+      <div className="mt-1 grid gap-x-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="min-w-0">
+          {list.isPending ? <ListSkeleton rows={4} /> : null}
 
-      {!list.isPending && !items.length ? (
-        <div className="mt-10 flex flex-col items-center gap-2 text-center">
-          <span className="text-4xl">🧾</span>
-          <p className="text-sm font-medium">清单是空的</p>
-          <p className="text-[13px] text-ink-soft">
-            去<Link to="/eat/kitchen" className="mx-1 text-accent">厨房</Link>
-            接单后生成，或在下面手动添加
-          </p>
+          {!list.isPending && !items.length ? (
+            <div className="mt-10 flex flex-col items-center gap-2 text-center">
+              <span className="text-4xl">🧾</span>
+              <p className="text-sm font-medium">清单是空的</p>
+              <p className="text-[13px] text-ink-soft">
+                去<Link to="/eat/kitchen" className="mx-1 text-accent">厨房</Link>
+                接单后生成，或在下面手动添加
+              </p>
+            </div>
+          ) : null}
+
+          {groups.map(([category, rows]) => (
+            <div key={category} className="mt-5">
+              <SectionTitle>{category}</SectionTitle>
+              <Card>
+                {rows.map((item) => (
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    onStock={() => setStocking(item)}
+                    onDelete={() => setDeleting(item)}
+                  />
+                ))}
+              </Card>
+            </div>
+          ))}
         </div>
-      ) : null}
 
-      {groups.map(([category, rows]) => (
-        <div key={category} className="mt-5">
-          <SectionTitle>{category}</SectionTitle>
-          <Card>
-            {rows.map((item) => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                onStock={() => setStocking(item)}
-                onDelete={() => setDeleting(item)}
-              />
-            ))}
-          </Card>
-        </div>
-      ))}
-
-      <div className="mt-6">
-        <ManualAdd date={date} />
+        <aside className="mt-6 min-w-0 lg:sticky lg:top-20 lg:mt-5">
+          <ManualAdd date={date} />
+        </aside>
       </div>
 
       {stocking ? <StockDialog item={stocking} onClose={() => setStocking(null)} /> : null}

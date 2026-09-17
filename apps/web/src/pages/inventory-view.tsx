@@ -149,46 +149,8 @@ export function InventoryView() {
         ))}
       </div>
 
-      {activeBatches.length ? (
-        <div className="mt-5">
-          <SectionTitle>批次与保质期</SectionTitle>
-          <Card>
-            {activeBatches
-              .slice()
-              .sort((a, b) =>
-                (a.expiresOn ?? '9999-12-31').localeCompare(b.expiresOn ?? '9999-12-31'),
-              )
-              .map((batch) => (
-                <button
-                  key={batch.id}
-                  type="button"
-                  onClick={() => setBatchEditor(batch)}
-                  className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-left transition-colors duration-150 last:border-b-0 hover:bg-muted"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{batch.inventoryItem.name}</p>
-                    <p className="mt-0.5 text-[12px] text-ink-soft">
-                      {Number(batch.quantity)} {batch.inventoryItem.unit} · 到货 {batch.receivedOn}
-                    </p>
-                  </div>
-                  <span
-                    className={
-                      'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ' +
-                      (batch.status === 'expired'
-                        ? 'bg-danger/10 text-danger'
-                        : batch.status === 'expiring'
-                          ? 'bg-warm-soft text-warm'
-                          : 'bg-muted text-ink-soft')
-                    }
-                  >
-                    {batchStatusLabel(batch)}
-                  </span>
-                </button>
-              ))}
-          </Card>
-        </div>
-      ) : null}
-
+      <div className="mt-1 grid gap-x-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <div className="min-w-0">
       {isPending ? <ListSkeleton rows={5} /> : null}
 
       {!isPending && !list.length ? (
@@ -302,8 +264,54 @@ export function InventoryView() {
           </Card>
         </div>
       ))}
+        </div>
 
-      <InventoryLog />
+        {/* 宽屏时把「会过期」和「动过什么」放右边一列，窄屏自动落回下面 */}
+        <aside className="min-w-0">
+      {activeBatches.length ? (
+        <div className="mt-5">
+          <SectionTitle>批次与保质期</SectionTitle>
+          <Card>
+            {activeBatches
+              .slice()
+              .sort((a, b) =>
+                (a.expiresOn ?? '9999-12-31').localeCompare(b.expiresOn ?? '9999-12-31'),
+              )
+              .map((batch) => (
+                <button
+                  key={batch.id}
+                  type="button"
+                  onClick={() => setBatchEditor(batch)}
+                  className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-left transition-colors duration-150 last:border-b-0 hover:bg-muted"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{batch.inventoryItem.name}</p>
+                    <p className="mt-0.5 text-[12px] text-ink-soft">
+                      {Number(batch.quantity)} {batch.inventoryItem.unit} · 到货 {batch.receivedOn}
+                    </p>
+                  </div>
+                  <span
+                    className={
+                      'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ' +
+                      (batch.status === 'expired'
+                        ? 'bg-danger/10 text-danger'
+                        : batch.status === 'expiring'
+                          ? 'bg-warm-soft text-warm'
+                          : 'bg-muted text-ink-soft')
+                    }
+                  >
+                    {batchStatusLabel(batch)}
+                  </span>
+                </button>
+              ))}
+          </Card>
+        </div>
+      ) : null}
+
+          <InventoryLog />
+        </aside>
+      </div>
+
 
       {editor ? (
         <InventoryEditor
