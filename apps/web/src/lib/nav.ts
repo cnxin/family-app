@@ -60,7 +60,7 @@ export const SCENES: NavScene[] = [
       { key: 'calendar', label: '日历', path: '/schedule/calendar', ready: true },
       { key: 'tasks', label: '任务', path: '/schedule/tasks', ready: true },
       { key: 'reminders', label: '提醒', path: '/schedule/reminders', ready: true },
-      { key: 'polls', label: '投票', legacy: '/polls' },
+      { key: 'polls', label: '投票', path: '/schedule/polls', ready: true },
       { key: 'notifications', label: '消息', path: '/schedule/notifications', ready: true },
     ],
   },

@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import { LoginPage } from './pages/login';
 import { TodayPage } from './pages/today';
@@ -11,12 +11,13 @@ import { InventoryPage } from './pages/inventory';
 import { CalendarPage } from './pages/calendar';
 import { RemindersPage } from './pages/reminders';
 import { NotificationsPage } from './pages/notifications';
+import { PollsPage } from './pages/polls';
 import { Shell } from './components/shell';
 import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
 import { SCENES, landingPath } from './lib/nav';
 
-/** 旧路径（一层）保留跳转，免得家里人存的书签全废掉。 */
+/** 旧路径（一层）保留跳转，免得家里人存的书签全废掉；查询串原样带过去（通知里的 ?pollId= 靠它）。 */
 const REDIRECTS: [string, string][] = [
   ['/tasks', '/schedule/tasks'],
   ['/order', '/eat/order'],
@@ -24,7 +25,16 @@ const REDIRECTS: [string, string][] = [
   ['/recipes', '/eat/recipes'],
   ['/supplies', '/eat/shopping'],
   ['/eat/supplies', '/eat/shopping'],
+  ['/polls', '/schedule/polls'],
+  ['/calendar', '/schedule/calendar'],
+  ['/reminders', '/schedule/reminders'],
+  ['/notifications', '/schedule/notifications'],
 ];
+
+function RedirectKeepingSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
 
 export function App() {
   const { session, ready } = useAuth();
@@ -50,6 +60,7 @@ export function App() {
           <Route path="/schedule/tasks" element={<TasksPage />} />
           <Route path="/schedule/reminders" element={<RemindersPage />} />
           <Route path="/schedule/notifications" element={<NotificationsPage />} />
+          <Route path="/schedule/polls" element={<PollsPage />} />
 
           <Route path="/house" element={<Navigate to={landingPath(SCENES[3])} replace />} />
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
@@ -61,7 +72,7 @@ export function App() {
           <Route path="/me/:segment" element={<LegacyBridge />} />
 
           {REDIRECTS.map(([from, to]) => (
-            <Route key={from} path={from} element={<Navigate to={to} replace />} />
+            <Route key={from} path={from} element={<RedirectKeepingSearch to={to} />} />
           ))}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

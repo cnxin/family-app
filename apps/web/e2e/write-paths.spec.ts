@@ -220,3 +220,48 @@ test('菜谱：新建菜品、改口味、下架', async ({ page, request }) => 
     if (dishId) await api.delete(`/dishes/${dishId}`);
   }
 });
+
+test('投票：发起、投一票、结束、删除', async ({ page, request }) => {
+  const api = apiClient(request);
+  const title = stamp('投票');
+  let pollId: string | null = null;
+  try {
+  await page.goto('/schedule/polls');
+  await page.getByRole('button', { name: '+ 发起投票' }).click();
+  const dialog = page.getByRole('dialog', { name: '发起投票' });
+  await dialog.getByPlaceholder('比如：周末去哪儿').fill(title);
+  await dialog.getByRole('button', { name: /活动/ }).click();
+  await dialog.getByLabel('候选项 1').fill('公园');
+  await dialog.getByLabel('候选项 2').fill('博物馆');
+  const created = waitFor(page, 'POST', /\/polls$/);
+  await dialog.getByRole('button', { name: '发起投票', exact: true }).click();
+  const createResponse = await created;
+  expect(createResponse.status(), await createResponse.text()).toBe(201);
+  pollId = ((await createResponse.json()) as { data: { id: string } }).data.id;
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/pollId=/);
+
+  const card = page.getByRole('article', { name: title });
+  await card.getByRole('radio', { name: '选择公园' }).click();
+  const voted = waitFor(page, 'POST', /\/polls\/[^/]+\/votes$/);
+  await card.getByRole('button', { name: '提交选择' }).click();
+  expect((await voted).ok()).toBeTruthy();
+  await expect(card.getByText(/1 票 · 100%/)).toBeVisible();
+
+  await page.getByRole('button', { name: `结束投票${title}` }).click();
+  const closed = waitFor(page, 'POST', /\/polls\/[^/]+\/close$/);
+  await page.getByRole('dialog', { name: '结束这个投票？' }).getByRole('button', { name: '结束投票' }).click();
+  expect((await closed).ok()).toBeTruthy();
+  await page.getByRole('tab', { name: '已结束' }).click();
+  await expect(page.getByRole('heading', { name: title })).toBeVisible();
+
+  await page.getByRole('button', { name: `删除投票${title}` }).click();
+  const archived = waitFor(page, 'DELETE', /\/polls\/[^/]+$/);
+  await page.getByRole('dialog', { name: '删除这个投票？' }).getByRole('button', { name: '删除投票' }).click();
+  expect((await archived).ok()).toBeTruthy();
+  pollId = null;
+  await expect(page.getByRole('heading', { name: title })).toBeHidden();
+  } finally {
+    if (pollId) await api.delete(`/polls/${pollId}`);
+  }
+});

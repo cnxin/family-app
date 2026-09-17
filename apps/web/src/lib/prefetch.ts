@@ -3,6 +3,7 @@ import type {
   AppNotification,
   CalendarEntry,
   Dish,
+  HouseholdPoll,
   HouseholdReminder,
   InventoryItem,
   Menu,
@@ -21,6 +22,12 @@ import { calendarRange, startOfMonth } from '../components/calendar-month';
  * 剩下的交给页面自己。
  */
 const PREFETCH: Record<string, (client: QueryClient) => void> = {
+  '/schedule/polls': (client) => {
+    void client.prefetchQuery({
+      queryKey: ['polls'],
+      queryFn: () => api<HouseholdPoll[]>('/polls?status=all'),
+    });
+  },
   '/': (client) => {
     const today = todayISO();
     void client.prefetchQuery({

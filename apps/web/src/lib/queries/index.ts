@@ -6,3 +6,4 @@ export * from './inventory';
 export * from './calendar';
 export * from './reminders';
 export * from './notifications';
+export * from './polls';

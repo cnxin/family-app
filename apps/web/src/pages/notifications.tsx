@@ -7,6 +7,7 @@ import {
   useNotifications,
 } from '../lib/queries';
 import { legacyUrl } from '../lib/nav';
+import { toNewRoute } from '../lib/routes';
 import { pushToast } from '../lib/toast';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
@@ -38,13 +39,6 @@ const MODULE_ICON: Record<NotificationModule, string> = {
 };
 
 /** 已搬的域在新客户端里的落点；其余回旧版，用后端给的 targetPath。 */
-const NEW_ROUTE: Partial<Record<NotificationModule, string>> = {
-  menu: '/eat/kitchen',
-  task: '/schedule/tasks',
-  calendar: '/schedule/calendar',
-  reminder: '/schedule/reminders',
-};
-
 function when(value: string) {
   const date = new Date(value);
   const today = new Date();
@@ -73,7 +67,7 @@ function NotificationRow({
   // 点开就顺手标已读——看过了还留着未读，下次还得再扫一遍
   const open = () => {
     if (unread) onRead();
-    const route = NEW_ROUTE[item.module];
+    const route = toNewRoute(item.targetPath);
     if (route) navigate(route);
     else window.open(legacyUrl(item.targetPath), '_blank', 'noopener');
   };
