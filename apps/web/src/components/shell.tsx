@@ -127,7 +127,9 @@ interface MenuAnchor {
 // 菜单宽度不写死：中文标签大多两三个字，固定宽度会让文字孤零零贴在左边，
 // 右边空一大条——那条多余的空白就是「不够优雅」的来源。让盒子贴着文字长，
 // 只给下限（太窄点不准）和上限（别横穿屏幕）。
-const MENU_MIN = 112;
+// 右边不放任何标记：勾和圆点各占一条空档，而它们要说的事情用颜色说就够了——
+// 当前项是强调色，按下去背景变一下。少一列标记，宽度直接少一半。
+const MENU_MIN = 72;
 const MENU_MAX_VW = 0.62;
 const EXIT_MS = 170;
 
@@ -166,10 +168,6 @@ function SceneMenu({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [requestClose]);
-
-  // 整组都还在旧版时，九个点谁也没区分谁，纯噪音；只有混着的时候才标
-  const mixed =
-    segments.some((one) => one.ready && one.path) && segments.some((one) => !one.ready);
 
   const listRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -231,7 +229,6 @@ function SceneMenu({
           {segments.map((segment) => {
             const href = segmentHref(anchor.scene, segment);
             const current = href === pathname;
-            const ready = Boolean(segment.ready && segment.path);
             return (
               <SoftLink
                 key={segment.key}
@@ -239,22 +236,17 @@ function SceneMenu({
                 active={current}
                 onNavigate={requestClose}
                 className={
-                  'relative flex items-center justify-between gap-2.5 px-3.5 py-[9px] text-[13.5px] ' +
+                  'relative flex items-center justify-center px-3 py-[9px] text-[13.5px] ' +
                   'tracking-[0.01em] transition-colors duration-100 ' +
                   // 分隔线内缩一点，不顶到两边——顶满会把每一行框成一个格子
-                  'after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 ' +
+                  'after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 ' +
                   'after:h-px after:bg-border/60 last:after:hidden ' +
                   (current
                     ? 'font-semibold text-accent'
-                    : 'font-medium text-ink active:bg-ink/[0.05]')
+                    : 'font-medium text-ink active:bg-ink/[0.06]')
                 }
               >
                 <span className="truncate">{segment.label}</span>
-                {/* 「旧版」重复九遍太吵，跟侧栏一样用一个小点 */}
-                {ready || !mixed ? null : (
-                  <span className="size-1 shrink-0 rounded-full bg-warm/70" title="还在旧版" />
-                )}
-                {current ? <span className="text-[11px] leading-none">●</span> : null}
               </SoftLink>
             );
           })}
