@@ -9,8 +9,11 @@ import type {
   MenuDateCount,
   MenuEvent,
   MenuItem,
+  InventoryActionResult,
   MemberProfile,
+  MenuInventoryPreview,
   RecipeDish,
+  ShoppingItem,
   TaskOccurrence,
   UpdateMenuItemBody,
   UpdateTaskInstanceBody,
@@ -164,5 +167,66 @@ export function useRecipe(dishId: string | null) {
     queryFn: () => api<RecipeDish>(`/recipes/${dishId}`),
     enabled: Boolean(dishId),
     staleTime: 5 * 60_000,
+  });
+}
+
+/** 厨房那侧看的是「这一天三餐」，不带 mealType 时 /menus 返回三餐数组。 */
+export function useMenusOfDate(date: string) {
+  return useQuery({
+    queryKey: ['menus-of-date', date],
+    queryFn: () => api<Menu[]>(`/menus?date=${date}`),
+  });
+}
+
+export function useMenuMutations(date: string) {
+  const client = useQueryClient();
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: ['menus-of-date', date] });
+    void client.invalidateQueries({ queryKey: ['menu-events'] });
+  };
+  return {
+    updateItem: useMutation({
+      mutationFn: (input: { id: string; body: UpdateMenuItemBody }) =>
+        api<MenuItem>(`/menu-items/${input.id}`, { method: 'PATCH', body: input.body }),
+      onSuccess: refresh,
+    }),
+    assignChef: useMutation({
+      mutationFn: (input: { menuId: string; chefId: string | null }) =>
+        api<Menu>(`/menus/${input.menuId}/chef`, { method: 'PATCH', body: { chefId: input.chefId } }),
+      onSuccess: refresh,
+    }),
+    complete: useMutation({
+      mutationFn: (menuId: string) => api<Menu>(`/menus/${menuId}/complete`, { method: 'POST' }),
+      onSuccess: refresh,
+    }),
+  };
+}
+
+export function useMenuInventoryPreview(menuId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['menu-inventory-preview', menuId],
+    queryFn: () => api<MenuInventoryPreview>(`/menus/${menuId}/inventory-preview`),
+    enabled,
+  });
+}
+
+export function useConfirmConsumption() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (menuId: string) =>
+      api<InventoryActionResult>(`/menus/${menuId}/confirm-consumption`, { method: 'POST' }),
+    onSuccess: (_, menuId) => {
+      void client.invalidateQueries({ queryKey: ['menu-inventory-preview', menuId] });
+      void client.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
+export function useGenerateShoppingList() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (date: string) =>
+      api<ShoppingItem[]>('/shopping-list/generate', { method: 'POST', body: { date } }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['shopping'] }),
   });
 }

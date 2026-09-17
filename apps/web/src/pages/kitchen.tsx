@@ -1,37 +1,68 @@
 import { useState } from 'react';
-import type { MealType, MenuEvent, MenuItem, MenuItemStatus } from '@family/contracts';
-import { MEAL_TYPES } from '@family/contracts';
+import type { MemberProfile, Menu, MenuEvent, MenuItem, MenuItemStatus } from '@family/contracts';
 import { Link } from 'react-router-dom';
 import {
   MEAL_LABELS,
-  defaultMealType,
-  shiftDays,
   todayISO,
-  useAssignChef,
-  useCompleteMenu,
+  useConfirmConsumption,
+  useGenerateShoppingList,
   useMembers,
-  useMenu,
-  useMenuDateCounts,
   useMenuEvents,
+  useMenuInventoryPreview,
+  useMenuMutations,
+  useMenusOfDate,
   useRecipe,
-  useUpdateMenuItem,
 } from '../lib/queries';
+import { pushToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
-import { Button, Card, Input, SectionTitle } from '../components/ui';
+import { Button, Card, Input } from '../components/ui';
 
+// 文案照旧客户端 kitchen.tsx 的 STATUS_META，不另起一套说法
 const STATUS_LABEL: Record<MenuItemStatus, string> = {
-  pending: '待接',
-  accepted: '已接',
-  cooking: '在做',
-  done: '做好了',
+  pending: '待认领',
+  accepted: '已认领',
+  cooking: '做菜中',
+  done: '已上桌',
   rejected: '已划掉',
 };
 
-const NEXT_STEP: Partial<Record<MenuItemStatus, { to: MenuItemStatus; label: string }>> = {
-  pending: { to: 'accepted', label: '接单' },
-  accepted: { to: 'cooking', label: '开始做' },
-  cooking: { to: 'done', label: '做好了' },
-};
+/**
+ * 动作表照搬旧客户端的 actionsFor：动作既改状态也改认领人，
+ * 而且随「这道菜是不是我接的」变化——「我来做」和「换我来做」是两回事。
+ */
+interface ItemAction {
+  key: string;
+  label: string;
+  status?: MenuItemStatus;
+  claim?: boolean;
+  danger?: boolean;
+}
+
+function actionsFor(item: MenuItem, memberId: string, locked: boolean): ItemAction[] {
+  if (locked) return [];
+  if (item.status === 'pending') {
+    return [
+      { key: 'claim', label: '我来做', status: 'accepted', claim: true },
+      { key: 'reject', label: '划掉', danger: true },
+    ];
+  }
+  if (item.status === 'accepted') {
+    return [
+      item.assignedToId === memberId
+        ? { key: 'cook', label: '开做', status: 'cooking' }
+        : { key: 'reclaim', label: '换我来做', claim: true },
+      { key: 'reject', label: '划掉', danger: true },
+    ];
+  }
+  if (item.status === 'cooking') {
+    return [
+      { key: 'done', label: '上桌', status: 'done' },
+      { key: 'reject', label: '划掉', danger: true },
+    ];
+  }
+  if (item.status === 'rejected') return [{ key: 'restore', label: '恢复', status: 'pending' }];
+  return [];
+}
 
 const EVENT_LABEL: Record<MenuEvent['type'], string> = {
   item_ordered: '点了',
@@ -65,17 +96,15 @@ const selectClass =
 function ItemDetail({
   item,
   locked,
-  date,
-  meal,
+  members,
+  update,
 }: {
   item: MenuItem;
   locked: boolean;
-  date: string;
-  meal: MealType;
+  members: MemberProfile[];
+  update: ReturnType<typeof useMenuMutations>['updateItem'];
 }) {
-  const members = useMembers();
   const recipe = useRecipe(item.dishId);
-  const update = useUpdateMenuItem(date, meal);
   const [note, setNote] = useState(item.note ?? '');
   const dirty = note.trim() !== (item.note ?? '');
 
@@ -121,7 +150,7 @@ function ItemDetail({
             }
           >
             <option value="">还没认领</option>
-            {(members.data ?? []).map((member) => (
+            {members.map((member) => (
               <option key={member.id} value={member.id}>
                 {member.name}
               </option>
@@ -215,40 +244,260 @@ function EventLine({ event }: { event: MenuEvent }) {
   );
 }
 
+
+/** 一餐一块：主厨、菜品、结束与扣库、操作历史。三餐并列，不用切换。 */
+function MealSection({
+  menu,
+  members,
+  memberId,
+  date,
+  onReject,
+}: {
+  menu: Menu;
+  members: MemberProfile[];
+  memberId: string;
+  date: string;
+  onReject: (item: MenuItem) => void;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showLog, setShowLog] = useState(false);
+  const { updateItem, assignChef, complete } = useMenuMutations(date);
+  const events = useMenuEvents(menu.id, showLog);
+  const locked = menu.status === 'done';
+  const preview = useMenuInventoryPreview(menu.id, locked);
+  const confirm = useConfirmConsumption();
+
+  const active = menu.items.filter((item) => item.status !== 'rejected');
+  const remaining = active.filter((item) => item.status !== 'done').length;
+  const canComplete = active.length > 0 && remaining === 0;
+
+  function runAction(item: MenuItem, action: ItemAction) {
+    if (action.key === 'reject') {
+      onReject(item);
+      return;
+    }
+    updateItem.mutate({
+      id: item.id,
+      body: {
+        ...(action.status ? { status: action.status } : {}),
+        ...(action.claim ? { assignedToId: memberId } : {}),
+      },
+    });
+  }
+
+  return (
+    <section className="mt-6">
+      <div className="mb-2 flex items-baseline justify-between px-1">
+        <h2 className="text-[15px] font-semibold">{MEAL_LABELS[menu.mealType]}</h2>
+        <span className="text-xs text-ink-soft">
+          {locked
+            ? menu.completedBy
+              ? `${menu.completedBy.name} 已锁定`
+              : '已锁定'
+            : active.length === 0
+              ? '还没人点菜'
+              : remaining === 0
+                ? '都上桌了'
+                : `${active.length - remaining} / ${active.length} 已上桌`}
+        </span>
+      </div>
+
+      <Card>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3">
+          <span className="text-[12px] font-medium text-ink-soft">本餐主厨</span>
+          <span className="text-sm font-medium">
+            {menu.chef ? `${menu.chef.avatarEmoji} ${menu.chef.name}` : '未指定'}
+          </span>
+          {!locked ? (
+            <div className="ml-auto flex flex-wrap gap-1.5">
+              {members.map((member) => {
+                const active2 = menu.chefId === member.id;
+                return (
+                  <button
+                    key={member.id}
+                    type="button"
+                    aria-pressed={active2}
+                    disabled={assignChef.isPending}
+                    onClick={() =>
+                      assignChef.mutate({ menuId: menu.id, chefId: active2 ? null : member.id })
+                    }
+                    className={
+                      'flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12.5px] ' +
+                      'transition-[background-color,border-color,transform] duration-150 active:scale-95 ' +
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50 ' +
+                      (active2
+                        ? 'border-accent bg-accent-soft font-medium text-accent'
+                        : 'border-border text-ink-soft hover:bg-muted')
+                    }
+                  >
+                    <span>{member.avatarEmoji}</span>
+                    {member.name}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+
+        {menu.items.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-ink-soft">这一餐还没人点菜</p>
+        ) : (
+          menu.items.map((item, index) => {
+            const open = expanded === item.id;
+            const actions = actionsFor(item, memberId, locked);
+            return (
+              <div key={item.id} className={index ? 'border-t border-border' : ''}>
+                <div className="flex min-h-[54px] flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(open ? null : item.id)}
+                    aria-expanded={open}
+                    className="min-w-0 flex-1 text-left text-[15px] hover:text-accent"
+                  >
+                    <span className={item.status === 'rejected' ? 'text-ink-soft line-through' : ''}>
+                      {item.dish.name}
+                    </span>
+                    {item.note ? <span className="ml-2 text-[12px] text-warm">“{item.note}”</span> : null}
+                    <span className="ml-2 text-[11px] text-ink-soft">{open ? '收起' : '详情'}</span>
+                    <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                      {item.requestedBy.name}点的
+                      {item.assignedTo ? ` · ${item.assignedTo.name}做` : ''}
+                      {item.statusReason ? ` · ${item.statusReason}` : ''}
+                    </span>
+                  </button>
+                  <StatusChip status={item.status} />
+                  {actions.map((action) => (
+                    <Button
+                      key={action.key}
+                      variant={action.danger ? 'ghost' : 'outline'}
+                      className={'h-8 shrink-0 px-2.5 text-[13px] ' + (action.danger ? 'text-ink-soft' : '')}
+                      disabled={updateItem.isPending}
+                      onClick={() => runAction(item, action)}
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+                {open ? (
+                  <ItemDetail item={item} locked={locked} members={members} update={updateItem} />
+                ) : null}
+              </div>
+            );
+          })
+        )}
+
+        {!locked && active.length > 0 ? (
+          <div className="border-t border-border px-4 py-3">
+            <Button
+              variant="outline"
+              className="h-9 w-full text-[13px]"
+              disabled={!canComplete || complete.isPending}
+              onClick={() => complete.mutate(menu.id)}
+            >
+              {complete.isPending ? '结束中…' : '结束并锁定'}
+            </Button>
+            <p className="mt-2 text-center text-[12px] text-ink-soft">
+              {canComplete
+                ? '结束后这餐的主厨、菜品和状态将变为只读'
+                : `还有 ${remaining} 道没上桌，上桌或划掉之后才能结束`}
+            </p>
+          </div>
+        ) : null}
+
+        {locked && preview.data ? (
+          <div className="border-t border-border px-4 py-3">
+            {preview.data.confirmed ? (
+              <p className="text-[13px] text-ink-soft">
+                已确认扣库{preview.data.reversed ? '（后来撤销过）' : ''}
+              </p>
+            ) : preview.data.rows.length === 0 ? (
+              <p className="text-[13px] text-ink-soft">本餐没有可匹配扣减的库存项</p>
+            ) : (
+              <>
+                <p className="mb-2 text-[12px] font-medium text-ink-soft">这一餐会扣掉</p>
+                <div className="flex flex-col gap-1 text-[13px]">
+                  {preview.data.rows.map((row) => (
+                    <div key={row.ingredientId} className="flex items-baseline gap-2">
+                      <span className="min-w-0 flex-1 truncate">
+                        {row.inventoryItemName ?? row.ingredientName}
+                      </span>
+                      <span className="shrink-0 font-mono text-[12px] text-ink-soft">
+                        {row.status === 'ready'
+                          ? `${row.quantityBefore} → ${row.quantityAfter} ${row.unit}`
+                          : row.status === 'missing_inventory'
+                            ? '未建库存，跳过'
+                            : row.status === 'unit_mismatch'
+                              ? `单位对不上（要 ${row.unit}）`
+                              : `库存不够（要 ${row.quantity} ${row.unit}）`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  className="mt-3 h-9 w-full text-[13px]"
+                  disabled={!preview.data.canConfirm || confirm.isPending}
+                  onClick={() =>
+                    confirm.mutate(menu.id, {
+                      onSuccess: () => pushToast('已确认扣库，库存流水里能看到'),
+                    })
+                  }
+                >
+                  {confirm.isPending ? '扣库中…' : '确认扣库'}
+                </Button>
+              </>
+            )}
+          </div>
+        ) : null}
+      </Card>
+
+      <div className="mt-1.5">
+        <Button
+          variant="ghost"
+          className="h-8 px-2 text-[13px]"
+          aria-expanded={showLog}
+          onClick={() => setShowLog((value) => !value)}
+        >
+          {showLog ? '收起操作历史' : '看操作历史'}
+        </Button>
+        {showLog ? (
+          <Card className="mt-1 divide-y divide-border">
+            {events.isPending ? (
+              <p className="px-4 py-3 text-[13px] text-ink-soft">读取中…</p>
+            ) : (events.data ?? []).length === 0 ? (
+              <p className="px-4 py-3 text-[13px] text-ink-soft">暂无记录</p>
+            ) : (
+              (events.data ?? []).map((event) => <EventLine key={event.id} event={event} />)
+            )}
+          </Card>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 export function KitchenPage() {
   const { session } = useAuth();
   const today = todayISO();
   const [date, setDate] = useState(today);
-  const [meal, setMeal] = useState<MealType>(defaultMealType);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [showLog, setShowLog] = useState(false);
-  const [rejecting, setRejecting] = useState<{ id: string; reason: string } | null>(null);
+  const [rejecting, setRejecting] = useState<{ item: MenuItem; reason: string } | null>(null);
 
-  const menu = useMenu(date, meal);
-  const counts = useMenuDateCounts(shiftDays(date, -1), shiftDays(date, 1));
-  const updateItem = useUpdateMenuItem(date, meal);
-  const assignChef = useAssignChef(date, meal);
-  const completeMenu = useCompleteMenu(date, meal);
-  const events = useMenuEvents(menu.data?.id, showLog);
+  const menus = useMenusOfDate(date);
+  const members = useMembers();
+  const generate = useGenerateShoppingList();
+  const { updateItem } = useMenuMutations(date);
 
-  const items = menu.data?.items ?? [];
-  const live = items.filter((item) => item.status !== 'rejected');
-  const undone = live.filter((item) => item.status !== 'done').length;
-  const locked = menu.data?.status === 'done';
-  const iAmChef = menu.data?.chefId === session?.member.id;
-  const mine = live.filter((item) => item.assignedToId === session?.member.id).length;
-  const dayCount = (value: string) => counts.data?.find((row) => row.date === value)?.count ?? 0;
+  const memberId = session?.member.id ?? '';
+  const anyItems = (menus.data ?? []).some((menu) => menu.items.length > 0);
+  // 已有人准备的菜，后端要求填原因；待认领的菜原因选填
+  const reasonRequired =
+    rejecting?.item.status === 'accepted' || rejecting?.item.status === 'cooking';
 
   return (
-    <div className="mx-auto w-full max-w-[680px] px-4 pb-32 pt-6">
+    <div className="mx-auto w-full max-w-[760px] px-4 pb-32 pt-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">厨房</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {date === today ? '今天' : date.slice(5)} · {MEAL_LABELS[meal]}
-            {locked ? ' · 已结束' : undone > 0 ? ` · 还有 ${undone} 道没做好` : ' · 都做好了'}
-            {mine > 0 ? ` · 我要做 ${mine} 道` : ''}
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">菜单安排</h1>
+          <p className="mt-1 text-sm text-ink-soft">分配主厨、认领菜品并查看进度</p>
         </div>
         <Link
           to="/order"
@@ -259,8 +508,6 @@ export function KitchenPage() {
       </header>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button variant="outline" className="h-9 w-9 px-0" aria-label="前一天"
-          onClick={() => setDate(shiftDays(date, -1))}>‹</Button>
         <input
           type="date"
           aria-label="选择日期"
@@ -268,187 +515,78 @@ export function KitchenPage() {
           onChange={(event) => event.target.value && setDate(event.target.value)}
           className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] text-ink hover:border-ink-soft/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
         />
-        <Button variant="outline" className="h-9 w-9 px-0" aria-label="后一天"
-          onClick={() => setDate(shiftDays(date, 1))}>›</Button>
         {date === today ? null : (
           <Button variant="ghost" className="h-9 px-2 text-[13px]" onClick={() => setDate(today)}>
             回今天
           </Button>
         )}
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
-          {MEAL_TYPES.map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={meal === value}
-              onClick={() => setMeal(value)}
-              className={
-                'rounded-md px-3 py-1.5 text-[13px] transition-colors duration-150 ' +
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ' +
-                (meal === value ? 'bg-surface font-semibold text-ink shadow-sm' : 'text-ink-soft hover:text-ink')
-              }
-            >
-              {MEAL_LABELS[value]}
-            </button>
-          ))}
-        </div>
-        <span className="text-xs text-ink-soft">
-          昨天 {dayCount(shiftDays(date, -1))} · 明天 {dayCount(shiftDays(date, 1))}
-        </span>
-      </div>
-
-      <section className="mt-5">
-        <SectionTitle
-          right={
-            menu.data && !locked ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-ink-soft">
-                  {menu.data.chef ? `${menu.data.chef.name}掌勺` : '还没定主厨'}
-                </span>
-                <Button
-                  variant="ghost"
-                  className="h-7 px-2 text-[12px]"
-                  disabled={assignChef.isPending}
-                  onClick={() =>
-                    assignChef.mutate({
-                      menuId: menu.data!.id,
-                      chefId: iAmChef ? null : (session?.member.id ?? null),
-                    })
-                  }
-                >
-                  {iAmChef ? '不做了' : '我来做'}
-                </Button>
-              </div>
-            ) : null
+        <Button
+          variant="outline"
+          className="ml-auto h-9 px-3 text-[13px]"
+          disabled={generate.isPending || !anyItems}
+          onClick={() =>
+            generate.mutate(date, {
+              onSuccess: (list) =>
+                pushToast(
+                  list.length
+                    ? `清单已生成：共 ${list.length} 项食材，去「购物清单」看`
+                    : '接单的菜都不缺食材（常备调料不进清单）',
+                ),
+            })
           }
         >
-          这一餐
-        </SectionTitle>
+          {generate.isPending ? '生成中…' : '生成购物清单'}
+        </Button>
+      </div>
 
-        <Card>
-          {menu.isPending ? (
-            <p className="px-4 py-6 text-sm text-ink-soft">读取中…</p>
-          ) : items.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-ink-soft">这一餐还没人点菜</p>
-          ) : (
-            items.map((item, index) => {
-              const step = NEXT_STEP[item.status];
-              const open = expanded === item.id;
-              return (
-                <div key={item.id} className={index ? 'border-t border-border' : ''}>
-                  <div className="flex min-h-[54px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => setExpanded(open ? null : item.id)}
-                      aria-expanded={open}
-                      className="min-w-0 flex-1 truncate text-left text-[15px] hover:text-accent"
-                    >
-                      <span className={item.status === 'rejected' ? 'text-ink-soft line-through' : ''}>
-                        {item.dish.name}
-                      </span>
-                      {item.note ? <span className="ml-2 text-[12px] text-warm">“{item.note}”</span> : null}
-                      <span className="ml-2 text-[11px] text-ink-soft">{open ? '收起' : '详情'}</span>
-                    </button>
-                    <span className="shrink-0 text-xs text-ink-soft">
-                      {item.assignedTo ? `${item.assignedTo.name}做` : `${item.requestedBy.name}点的`}
-                    </span>
-                    <StatusChip status={item.status} />
-                    {!locked && step && item.status !== 'rejected' ? (
-                      <Button
-                        variant="outline"
-                        className="h-8 shrink-0 px-2.5 text-[13px]"
-                        disabled={updateItem.isPending}
-                        onClick={() => updateItem.mutate({ id: item.id, body: { status: step.to } })}
-                      >
-                        {step.label}
-                      </Button>
-                    ) : null}
-                    {!locked ? (
-                      <Button
-                        variant="ghost"
-                        className="h-8 shrink-0 px-2 text-[13px]"
-                        disabled={updateItem.isPending}
-                        onClick={() => {
-                          if (item.status === 'rejected') {
-                            updateItem.mutate({ id: item.id, body: { status: 'pending' } });
-                          } else if (item.status === 'accepted' || item.status === 'cooking') {
-                            setRejecting({ id: item.id, reason: '' });
-                          } else {
-                            updateItem.mutate({ id: item.id, body: { status: 'rejected' } });
-                          }
-                        }}
-                      >
-                        {item.status === 'rejected' ? '恢复' : '划掉'}
-                      </Button>
-                    ) : null}
-                  </div>
-                  {open ? <ItemDetail item={item} locked={locked} date={date} meal={meal} /> : null}
-                </div>
-              );
-            })
-          )}
-
-          {menu.data && live.length > 0 && !locked ? (
-            <div className="border-t border-border px-4 py-3">
-              <Button
-                variant="outline"
-                className="h-9 w-full text-[13px]"
-                disabled={completeMenu.isPending || undone > 0}
-                onClick={() => completeMenu.mutate(menu.data!.id)}
-              >
-                {completeMenu.isPending ? '结束中…' : '这一餐吃完了'}
-              </Button>
-              {undone > 0 ? (
-                <p className="mt-2 text-center text-[12px] text-ink-soft">
-                  还有 {undone} 道没做好，做好或划掉之后才能结束
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </Card>
-
-        {menu.data ? (
-          <div className="mt-2">
-            <Button
-              variant="ghost"
-              className="h-8 px-2 text-[13px]"
-              aria-expanded={showLog}
-              onClick={() => setShowLog((value) => !value)}
-            >
-              {showLog ? '收起操作历史' : '看操作历史'}
-            </Button>
-            {showLog ? (
-              <Card className="mt-1 divide-y divide-border">
-                {events.isPending ? (
-                  <p className="px-4 py-3 text-[13px] text-ink-soft">读取中…</p>
-                ) : (events.data ?? []).length === 0 ? (
-                  <p className="px-4 py-3 text-[13px] text-ink-soft">这一餐还没有操作</p>
-                ) : (
-                  (events.data ?? []).map((event) => <EventLine key={event.id} event={event} />)
-                )}
-              </Card>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
+      {menus.isPending ? (
+        <p className="mt-8 px-1 text-sm text-ink-soft">读取中…</p>
+      ) : !anyItems ? (
+        <div className="mt-10 flex flex-col items-center gap-2 text-center">
+          <span className="text-4xl">🍳</span>
+          <p className="text-sm font-medium">这天还没有安排</p>
+          <p className="text-[13px] text-ink-soft">等家人去「点菜」页下单吧</p>
+        </div>
+      ) : (
+        (menus.data ?? []).map((menu) => (
+          <MealSection
+            key={menu.id}
+            menu={menu}
+            members={members.data ?? []}
+            memberId={memberId}
+            date={date}
+            onReject={(item) => setRejecting({ item, reason: '' })}
+          />
+        ))
+      )}
 
       {rejecting ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-[680px] px-4 py-3">
-            <p className="text-[13px] text-ink-soft">这道菜已经有人接了，划掉要说一句原因</p>
+          <div className="mx-auto w-full max-w-[760px] px-4 py-3">
+            <p className="text-[13px] text-ink-soft">
+              {reasonRequired
+                ? '这道菜已经有人准备，请填写原因。'
+                : '划掉后会移出有效菜单，之后仍可恢复。'}
+            </p>
             <div className="mt-2 flex gap-2">
               <Input
                 autoFocus
                 value={rejecting.reason}
-                placeholder="比如：食材不够了"
+                placeholder={reasonRequired ? '划掉原因' : '原因（选填）'}
                 onChange={(event) => setRejecting({ ...rejecting, reason: event.target.value })}
               />
               <Button
                 className="shrink-0"
-                disabled={!rejecting.reason.trim() || updateItem.isPending}
+                disabled={(reasonRequired && !rejecting.reason.trim()) || updateItem.isPending}
                 onClick={() =>
                   updateItem.mutate(
-                    { id: rejecting.id, body: { status: 'rejected', reason: rejecting.reason.trim() } },
+                    {
+                      id: rejecting.item.id,
+                      body: {
+                        status: 'rejected',
+                        ...(rejecting.reason.trim() ? { reason: rejecting.reason.trim() } : {}),
+                      },
+                    },
                     { onSuccess: () => setRejecting(null) },
                   )
                 }
