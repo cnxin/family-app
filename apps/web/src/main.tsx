@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './lib/auth';
+import { CartProvider } from './lib/cart';
 import { ApiError } from './lib/api';
 import { pushToast } from './lib/toast';
 import { ToastHost } from './components/toast';
@@ -29,8 +30,10 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
-          <ToastHost />
+          <CartProvider>
+            <App />
+            <ToastHost />
+          </CartProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
