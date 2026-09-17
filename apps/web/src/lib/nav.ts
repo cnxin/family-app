@@ -61,7 +61,7 @@ export const SCENES: NavScene[] = [
       { key: 'tasks', label: '任务', path: '/schedule/tasks', ready: true },
       { key: 'reminders', label: '提醒', path: '/schedule/reminders', ready: true },
       { key: 'polls', label: '投票', legacy: '/polls' },
-      { key: 'notifications', label: '消息', legacy: '/notifications' },
+      { key: 'notifications', label: '消息', path: '/schedule/notifications', ready: true },
     ],
   },
   {

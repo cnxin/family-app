@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type {
+  AppNotification,
   CalendarEntry,
   Dish,
   HouseholdReminder,
@@ -70,6 +71,12 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
     void client.prefetchQuery({
       queryKey: ['calendar', start, end],
       queryFn: () => api<CalendarEntry[]>(`/calendar?start=${start}&end=${end}`),
+    });
+  },
+  '/schedule/notifications': (client) => {
+    void client.prefetchQuery({
+      queryKey: ['notifications', false],
+      queryFn: () => api<AppNotification[]>('/notifications'),
     });
   },
   '/schedule/reminders': (client) => {
