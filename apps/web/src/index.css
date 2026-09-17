@@ -71,7 +71,69 @@ body {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-/* 气泡从被点的标签上方弹出来 */
-@keyframes menu-pop {
-  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+/* 气泡菜单：从被点的标签里长出来，缩回去也走同一条路。
+   临界阻尼曲线（iOS 那条 0.32/0.72/0/1），不回弹——点一下没有甩出去的动量，回弹是假的。
+   模糊半径跟着缩放一起动，让它像一层玻璃落下来而不是一张图淡入。 */
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+}
+@keyframes pop-out {
+  to { opacity: 0; transform: translateY(6px) scale(0.955); }
+}
+/* 模糊单独动在带材质的那层上：外层容器没有 backdrop-filter，动它是空转 */
+@keyframes material-in {
+  from {
+    backdrop-filter: blur(0px) saturate(100%);
+    -webkit-backdrop-filter: blur(0px) saturate(100%);
+    background: color-mix(in oklch, var(--color-surface) 40%, transparent);
+  }
+}
+@keyframes material-out {
+  to {
+    backdrop-filter: blur(3px) saturate(120%);
+    -webkit-backdrop-filter: blur(3px) saturate(120%);
+  }
+}
+@keyframes scrim-in { from { opacity: 0; } }
+@keyframes scrim-out { to { opacity: 0; } }
+
+/* 半透明材质：内容能透出来一点，层级关系才看得出来。
+   上边缘提亮一线，是玻璃接到光的样子。 */
+.pop-material,
+.pop-caret {
+  background: color-mix(in oklch, var(--color-surface) 76%, transparent);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid var(--color-border);
+}
+.pop-material {
+  border-top-color: color-mix(in oklch, white 50%, var(--color-border));
+  box-shadow:
+    0 14px 36px -10px oklch(0.25 0.02 60 / 0.3),
+    0 3px 10px -3px oklch(0.25 0.02 60 / 0.18);
+}
+.pop-caret {
+  border-top: 0;
+  border-left: 0;
+}
+
+/* 列表能滚的时候，上下边缘用渐隐代替硬切口，顺便提示「下面还有」 */
+.pop-scroll {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 14px,
+    black calc(100% - 14px),
+    transparent 100%
+  );
+}
+
+/* 关掉透明度偏好时，玻璃变实心，不然文字压在花背景上读不清 */
+@media (prefers-reduced-transparency: reduce) {
+  .pop-material,
+  .pop-caret {
+    background: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
