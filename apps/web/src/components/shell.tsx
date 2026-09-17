@@ -124,7 +124,7 @@ interface MenuAnchor {
   bottom: number;
 }
 
-const MENU_WIDTH = 176;
+const MENU_WIDTH = 148;
 const EXIT_MS = 170;
 
 /**
@@ -167,7 +167,11 @@ function SceneMenu({
     Math.max(8, anchor.center - MENU_WIDTH / 2),
     window.innerWidth - MENU_WIDTH - 8,
   );
-  const caret = Math.min(Math.max(14, anchor.center - left), MENU_WIDTH - 14);
+  const caret = Math.min(Math.max(13, anchor.center - left), MENU_WIDTH - 13);
+
+  // 整组都还在旧版时，九个点谁也没区分谁，纯噪音；只有混着的时候才标
+  const mixed =
+    segments.some((one) => one.ready && one.path) && segments.some((one) => !one.ready);
 
   // 边缘渐隐只在真的滚得动时才加——列表没超出还淡掉首尾，等于骗人说下面还有
   const listRef = useRef<HTMLDivElement>(null);
@@ -207,7 +211,7 @@ function SceneMenu({
         <div
           ref={listRef}
           className={
-            'pop-material max-h-[62vh] overflow-y-auto rounded-2xl ' +
+            'pop-material max-h-[56vh] overflow-y-auto rounded-xl ' +
             (scrollable ? 'pop-scroll ' : '') +
             (closing
               ? 'animate-[material-out_170ms_ease-out_both]'
@@ -225,16 +229,22 @@ function SceneMenu({
                 active={current}
                 onNavigate={requestClose}
                 className={
-                  'flex items-center gap-2 border-b border-border/70 px-3.5 py-3 text-[14px] ' +
-                  'tracking-[0.01em] transition-colors duration-100 last:border-b-0 ' +
+                  'relative flex items-center gap-1.5 px-3 py-[9px] text-[13.5px] ' +
+                  'tracking-[0.01em] transition-colors duration-100 ' +
+                  // 分隔线内缩一点，不顶到两边——顶满会把每一行框成一个格子
+                  'after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 ' +
+                  'after:h-px after:bg-border/60 last:after:hidden ' +
                   (current
-                    ? 'bg-accent-soft/80 font-semibold text-accent'
-                    : 'font-medium text-ink active:bg-ink/[0.06]')
+                    ? 'font-semibold text-accent'
+                    : 'font-medium text-ink active:bg-ink/[0.05]')
                 }
               >
                 <span className="flex-1 truncate">{segment.label}</span>
-                {ready ? null : <span className="text-[11px] text-warm">旧版</span>}
-                {current ? <span className="text-accent">✓</span> : null}
+                {/* 「旧版」重复九遍太吵，跟侧栏一样用一个小点 */}
+                {ready || !mixed ? null : (
+                  <span className="size-1 shrink-0 rounded-full bg-warm/70" title="还在旧版" />
+                )}
+                {current ? <span className="text-[11px] leading-none">●</span> : null}
               </SoftLink>
             );
           })}
@@ -242,7 +252,7 @@ function SceneMenu({
         {/* 指向被点标签的小三角，用同一种材质，不然会像贴上去的 */}
         <span
           style={{ left: caret }}
-          className="pop-caret absolute bottom-0 -ml-[6px] h-3 w-3 translate-y-1/2 rotate-45"
+          className="pop-caret absolute bottom-0 -ml-[5px] h-2.5 w-2.5 translate-y-1/2 rotate-45"
         />
       </div>
     </div>
