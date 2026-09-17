@@ -201,7 +201,7 @@ export function OrderPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-28 pt-6 lg:pb-10">
+    <div className="mx-auto w-full max-w-[1120px] px-4 lg:mx-0 lg:px-8 pb-28 pt-6 lg:pb-10">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">点菜</h1>

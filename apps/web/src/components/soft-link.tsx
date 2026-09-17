@@ -34,12 +34,15 @@ export function SoftLink({
   active,
   className,
   children,
+  onNavigate,
   ...rest
 }: {
   to: string;
   active?: boolean;
   className?: string;
   children: ReactNode;
+  /** 导航之后再执行，比如关掉弹出面板 */
+  onNavigate?: () => void;
   onPointerEnter?: () => void;
   onPointerDown?: () => void;
 }) {
@@ -53,6 +56,7 @@ export function SoftLink({
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
         event.preventDefault();
         soft(to);
+        onNavigate?.();
       }}
       {...rest}
     >
