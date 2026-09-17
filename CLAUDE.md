@@ -40,6 +40,7 @@
 npx pnpm install                        # 安装工作区依赖
 npx pnpm api                            # API dev (localhost:3100，依赖本机 PostgreSQL 5433)
 npx pnpm seed                           # 灌种子数据
+API_URL=http://localhost:8088/api npx pnpm demo   # 再造一套演示数据（走 HTTP，幂等）
 npx pnpm mobile                         # Expo dev server
 npx pnpm typecheck                      # API + 客户端类型检查
 npx pnpm lint                           # API + 客户端 lint

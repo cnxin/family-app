@@ -124,8 +124,8 @@ test('提醒：给一个事件建提醒，再取消', async ({ page, request }) 
     // 表单默认按第一条来源的模块过滤，先切到「日程」再找刚建的事件
     await dialog.getByRole('button', { name: '日程', exact: true }).click();
     await dialog.getByRole('button', { name: title }).click();
-    // 收件人默认可能为空，保证至少选了自己
-    const me = dialog.getByRole('button', { name: /爸爸/ }).first();
+    // 收件人默认可能为空，保证至少选了自己（只在「提醒谁」那一组里找，来源列表里也可能有带「爸爸」的标题）
+    const me = dialog.locator('p:has-text("提醒谁") + div').getByRole('button', { name: /爸爸/ });
     if ((await me.getAttribute('aria-pressed')) !== 'true') await me.click();
     const created = waitFor(page, 'POST', /\/reminders$/);
     await dialog.getByRole('button', { name: '保存', exact: true }).click();

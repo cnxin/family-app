@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.{ts,mjs}\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.{ts,mjs}\""
+    "format:check": "prettier --check \"src/**/*.ts\" \"scripts/**/*.{ts,mjs}\"",
+    "demo": "node scripts/demo-data.mjs"
   },
   "dependencies": {
     "@family/contracts": "workspace:*",

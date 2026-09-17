@@ -180,6 +180,14 @@ try {
   );
   api = startApi();
   await waitForApi();
+  if (CLIENT === 'web') {
+    // 新客户端的冒烟要有东西可渲染：走 HTTP 造一套演示数据（幂等，见 demo-data.mjs）
+    await runProcess(process.execPath, ['scripts/demo-data.mjs'], apiRoot, {
+      ...testEnvironment,
+      API_URL,
+      DEMO_PASSWORD: TEST_PASSWORD,
+    });
+  }
 
   const browserCommand = ['pnpm', '--filter', CLIENT, 'test:web'];
   if (playwrightArgs.length) browserCommand.push(...playwrightArgs);

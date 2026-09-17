@@ -147,7 +147,7 @@ export default function XxxPage() {
 - **验收**：push 后 CI 四个 job 全绿，`check` 日志里能看到 vite build 输出。
 - **提交**：`ci: 静态检查与回归覆盖新客户端`
 
-#### A3 · 演示数据脚本化 ［M］
+#### A3 · 演示数据脚本化 ［M］（已完成——实际做法：不改 seed.ts，而是 `scripts/demo-data.mjs` 走 HTTP 造数，业务规则和通知由 API 自己保证）
 - **目标**：`corepack pnpm seed -- --demo` 一条命令造出一套像样的家庭数据，本地演示和 Playwright 冒烟都用它，不再手工 curl。
 - **先读**：`apps/api/src/seed.ts`（现有：家庭 + 爸爸/妈妈 + 食材 + 菜品，幂等）、`apps/api/src/entities/index.ts`、各域黑盒脚本里的造数方式（`calendar.mjs` `shopping-inventory.mjs` `tasks.mjs` `reminders.mjs` `polls.mjs` `points.mjs` `assets.mjs` `knowledge.mjs` `memories.mjs` `travel.mjs` `finance.mjs` `guests.mjs`）。
 - **改**：`seed.ts` 加 `--demo` 参数（`process.argv.includes('--demo')`），拆到 `apps/api/src/seed-demo.ts`（≤ 400 行，再超按域拆）。**必须幂等**（每类数据先查有没有再插）。至少：未来两周 8～10 条日历事件、今明两天三餐点菜（含一道被拒）、5 条库存 + 2 个批次（一个快过期）、3 条购物清单、4 条任务（1 条已完成）、2 条待发提醒、1 个进行中投票、每人一些积分流水、2 件资产（一件有维护记录）、3 条知识库、2 条回忆、1 次出行、本月 5 笔财务、1 个访客邀请。已搬页面用到什么就造什么；B 阶段每搬一域回来补该域。
@@ -253,7 +253,7 @@ export default function XxxPage() {
 |---|---|---|---|
 | A1 Playwright 新套件 | ☑ | | 48 用例（setup 2 + 冒烟 13 + 导航 5 + 写路径 5，两视口），隔离库 48 秒；顺手修了手机端对话框被标签栏盖住的 bug（教训 15） |
 | A2 CI 覆盖 web | ◐ | | 仓库侧完成：web 有 eslint（max-lines 400 是 error，已把 queries.ts / shell.tsx / kitchen.tsx 拆到 400 行内，react-hooks 全清）、根 lint 含 web；**等用户贴 `docs/ci-pending-A2.diff`**（`git apply docs/ci-pending-A2.diff`），CI 绿了再打勾 |
-| A3 seed --demo | ☐ | | |
+| A3 seed --demo | ☑ | | 改成走 HTTP 的 `apps/api/scripts/demo-data.mjs`（`corepack pnpm demo`，本机加 `API_URL=http://localhost:8088/api`）：13 个域、幂等、日期相对今天；`test:web:next` 起隔离 API 后自动跑一遍，冒烟不再是空态 |
 | B0 检查 dish/recipe-edit/canteen 覆盖情况 | ☐ | | |
 | B1 投票 | ☐ | | |
 | B2 积分 | ☐ | | |
