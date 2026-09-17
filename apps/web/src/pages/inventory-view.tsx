@@ -11,7 +11,7 @@ import {
   useUpsertInventoryItem,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Dialog, SectionTitle } from '../components/ui';
+import { Button, Card, Dialog, EmptyState, Page, Panel, SectionTitle } from '../components/ui';
 import { BatchDialog, CATEGORY_EMOJI, InventoryEditor } from '../components/inventory-editor';
 import { InventoryLog } from '../components/inventory-log';
 import { ListSkeleton } from '../components/skeleton';
@@ -98,75 +98,80 @@ export function InventoryView() {
   };
 
   return (
-    <>
-      <div className="mt-4 flex gap-2">
-        <Stat value={list.length} label="库存种类" />
-        <Stat value={low.length} label="待补货" tone="warm" />
-        <Stat value={expiring.length} label="7 天内到期" tone="warm" />
-        <Stat value={expired.length} label="已过期" tone="danger" />
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button className="h-9 px-3 text-[13px]" onClick={() => setEditor('new')}>
-          + 新增库存
-        </Button>
-        <Button
-          variant="outline"
-          className="h-9 px-3 text-[13px]"
-          disabled={!list.length}
-          onClick={() => setBatchEditor('new')}
-        >
-          登记批次
-        </Button>
-        {needsShopping.length ? (
+    <Page
+      title="家庭库存"
+      subtitle="家里还有什么，不够了会提醒补货"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="h-9 px-3 text-[13px]" onClick={() => setEditor('new')}>
+            + 新增库存
+          </Button>
           <Button
             variant="outline"
-            className="h-9 px-3 text-[13px] text-warm"
-            disabled={restocking}
-            onClick={() => void addRestock(needsShopping)}
+            className="h-9 px-3 text-[13px]"
+            disabled={!list.length}
+            onClick={() => setBatchEditor('new')}
           >
-            {restocking ? '加入中…' : `补货 ${needsShopping.length} 项`}
+            登记批次
           </Button>
-        ) : null}
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {(['全部', ...INVENTORY_CATEGORIES] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={value === filter}
-            onClick={() => setFilter(value)}
-            className={
-              'rounded-full border px-2.5 py-1 text-[12px] transition-colors duration-150 ' +
-              (value === filter
-                ? 'border-accent bg-accent-soft text-accent'
-                : 'border-border bg-surface text-ink-soft hover:bg-muted')
-            }
-          >
-            {value === '全部' ? '全部' : `${CATEGORY_EMOJI[value]} ${value}`}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-1 grid gap-x-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-        <div className="min-w-0">
-      {isPending ? <ListSkeleton rows={5} /> : null}
-
-      {!isPending && !list.length ? (
-        <div className="mt-10 flex flex-col items-center gap-2 text-center">
-          <span className="text-4xl">📦</span>
-          <p className="text-sm font-medium">还没有库存记录</p>
-          <p className="text-[13px] text-ink-soft">先记下大米、调料和饮料，不够时会提醒补货</p>
+          {needsShopping.length ? (
+            <Button
+              variant="outline"
+              className="h-9 px-3 text-[13px] text-warm"
+              disabled={restocking}
+              onClick={() => void addRestock(needsShopping)}
+            >
+              {restocking ? '加入中…' : `补货 ${needsShopping.length} 项`}
+            </Button>
+          ) : null}
+        </div>
+      }
+      toolbar={
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-2">
+            <Stat value={list.length} label="库存种类" />
+            <Stat value={low.length} label="待补货" tone="warm" />
+            <Stat value={expiring.length} label="7 天内到期" tone="warm" />
+            <Stat value={expired.length} label="已过期" tone="danger" />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(['全部', ...INVENTORY_CATEGORIES] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={value === filter}
+                onClick={() => setFilter(value)}
+                className={
+                  'rounded-full border px-2.5 py-1 text-[12px] transition-colors duration-150 ' +
+                  (value === filter
+                    ? 'border-accent bg-accent-soft text-accent'
+                    : 'border-border bg-surface text-ink-soft hover:bg-muted')
+                }
+              >
+                {value === '全部' ? '全部' : `${CATEGORY_EMOJI[value]} ${value}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      }
+    >
+      <Panel title={`${list.length} 种`}>
+      {isPending ? (
+        <div className="p-3">
+          <ListSkeleton rows={5} />
         </div>
       ) : null}
 
+      {!isPending && !list.length ? (
+        <EmptyState emoji="📦" title="还没有库存记录" hint="先记下大米、调料和饮料，不够时会提醒补货" />
+      ) : null}
+
       {groups.map(([category, rows]) => (
-        <div key={category} className="mt-5">
-          <SectionTitle>
+        <div key={category}>
+          <p className="sticky top-0 z-10 border-b border-border bg-surface/90 px-3.5 py-1.5 text-[12px] font-medium text-ink-soft backdrop-blur">
             {CATEGORY_EMOJI[category]} {category}
-          </SectionTitle>
-          <Card>
+          </p>
+          <div>
             {rows.map((item) => {
               const isLow = Number(item.quantity) <= Number(item.lowStockThreshold);
               const queued = inShopping.has(item.name);
@@ -261,13 +266,13 @@ export function InventoryView() {
                 </div>
               );
             })}
-          </Card>
+          </div>
         </div>
       ))}
-        </div>
+      </Panel>
 
-        {/* 宽屏时把「会过期」和「动过什么」放右边一列，窄屏自动落回下面 */}
-        <aside className="min-w-0">
+      {/* 宽屏时把「会过期」和「动过什么」放右边一列，窄屏自动落回下面 */}
+      <aside className="flex min-h-0 min-w-0 flex-col gap-4 lg:w-[340px] lg:flex-none">
       {activeBatches.length ? (
         <div className="mt-5">
           <SectionTitle>批次与保质期</SectionTitle>
@@ -308,9 +313,8 @@ export function InventoryView() {
         </div>
       ) : null}
 
-          <InventoryLog />
-        </aside>
-      </div>
+        <InventoryLog />
+      </aside>
 
 
       {editor ? (
@@ -366,6 +370,6 @@ export function InventoryView() {
           </p>
         </Dialog>
       ) : null}
-    </>
+    </Page>
   );
 }

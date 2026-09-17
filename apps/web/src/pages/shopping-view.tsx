@@ -10,7 +10,7 @@ import {
   useShoppingList,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Checkbox, Dialog, Input, SectionTitle } from '../components/ui';
+import { Button, Card, Checkbox, Dialog, EmptyState, Input, Page, Panel, SectionTitle } from '../components/ui';
 import { StockDialog } from '../components/stock-dialog';
 import { ListSkeleton } from '../components/skeleton';
 
@@ -223,28 +223,13 @@ export function ShoppingView() {
   }, [items]);
 
   return (
-    <>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <input
-          type="date"
-          aria-label="选择日期"
-          value={date}
-          onChange={(event) => event.target.value && setDate(event.target.value)}
-          className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] text-ink hover:border-ink-soft/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
-        />
-        {date === today ? null : (
-          <Button variant="ghost" className="h-9 px-2 text-[13px]" onClick={() => setDate(today)}>
-            回今天
-          </Button>
-        )}
-        {items.length ? (
-          <span className="text-[13px] text-ink-soft">
-            已买 {done}/{items.length}
-          </span>
-        ) : null}
+    <Page
+      title="购物清单"
+      subtitle="这天要买什么，买回来记得入库"
+      actions={
         <Button
           variant="outline"
-          className="ml-auto h-9 px-3 text-[13px]"
+          className="h-9 px-3 text-[13px]"
           disabled={generate.isPending}
           onClick={() =>
             generate.mutate(date, {
@@ -259,45 +244,70 @@ export function ShoppingView() {
         >
           {generate.isPending ? '生成中…' : '按菜单重算'}
         </Button>
-      </div>
-
-      {/* 宽屏分两栏：左边是要买的东西，右边把「添加物品」钉住，边走边加不用滚到底 */}
-      <div className="mt-1 grid gap-x-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <div className="min-w-0">
-          {list.isPending ? <ListSkeleton rows={4} /> : null}
-
-          {!list.isPending && !items.length ? (
-            <div className="mt-10 flex flex-col items-center gap-2 text-center">
-              <span className="text-4xl">🧾</span>
-              <p className="text-sm font-medium">清单是空的</p>
-              <p className="text-[13px] text-ink-soft">
-                去<Link to="/eat/kitchen" className="mx-1 text-accent">厨房</Link>
-                接单后生成，或在下面手动添加
-              </p>
-            </div>
+      }
+      toolbar={
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            aria-label="选择日期"
+            value={date}
+            onChange={(event) => event.target.value && setDate(event.target.value)}
+            className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] text-ink hover:border-ink-soft/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+          />
+          {date === today ? null : (
+            <Button variant="ghost" className="h-9 px-2 text-[13px]" onClick={() => setDate(today)}>
+              回今天
+            </Button>
+          )}
+          {items.length ? (
+            <span className="text-[13px] text-ink-soft">
+              已买 {done}/{items.length}
+            </span>
           ) : null}
-
-          {groups.map(([category, rows]) => (
-            <div key={category} className="mt-5">
-              <SectionTitle>{category}</SectionTitle>
-              <Card>
-                {rows.map((item) => (
-                  <ItemRow
-                    key={item.id}
-                    item={item}
-                    onStock={() => setStocking(item)}
-                    onDelete={() => setDeleting(item)}
-                  />
-                ))}
-              </Card>
-            </div>
-          ))}
         </div>
+      }
+    >
+      <Panel title={`${items.length} 件要买`}>
+        {list.isPending ? (
+          <div className="p-3">
+            <ListSkeleton rows={4} />
+          </div>
+        ) : !items.length ? (
+          <EmptyState
+            emoji="🧾"
+            title="清单是空的"
+            hint={
+              <>
+                去
+                <Link to="/eat/kitchen" className="mx-1 text-accent">
+                  厨房
+                </Link>
+                接单后生成，或在右边手动添加
+              </>
+            }
+          />
+        ) : (
+          groups.map(([category, rows]) => (
+            <div key={category}>
+              <p className="sticky top-0 z-10 border-b border-border bg-surface/90 px-3.5 py-1.5 text-[12px] font-medium text-ink-soft backdrop-blur">
+                {category}
+              </p>
+              {rows.map((item) => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  onStock={() => setStocking(item)}
+                  onDelete={() => setDeleting(item)}
+                />
+              ))}
+            </div>
+          ))
+        )}
+      </Panel>
 
-        <aside className="mt-6 min-w-0 lg:sticky lg:top-20 lg:mt-5">
-          <ManualAdd date={date} />
-        </aside>
-      </div>
+      <aside className="min-w-0 lg:w-[320px] lg:flex-none">
+        <ManualAdd date={date} />
+      </aside>
 
       {stocking ? <StockDialog item={stocking} onClose={() => setStocking(null)} /> : null}
 
@@ -335,6 +345,6 @@ export function ShoppingView() {
           </p>
         </Dialog>
       ) : null}
-    </>
+    </Page>
   );
 }

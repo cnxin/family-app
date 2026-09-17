@@ -1,13 +1,6 @@
 import { ShoppingView } from './shopping-view';
 
+/** 页面骨架在 ShoppingView 里（日期选择要进工具栏，得和列表同一层状态）。 */
 export function ShoppingPage() {
-  return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-24 pt-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">购物清单</h1>
-        <p className="mt-1 text-sm text-ink-soft">这天要买什么，买回来记得入库</p>
-      </header>
-      <ShoppingView />
-    </div>
-  );
+  return <ShoppingView />;
 }

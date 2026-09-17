@@ -18,6 +18,25 @@ import { ListSkeleton } from '../components/skeleton';
 
 type View = 'month' | 'week' | 'agenda';
 
+const VIEW_KEY = 'family-app.calendar-view';
+
+/**
+ * 没指定视图时：桌面默认「月」——宽屏要的是空间感，一眼看完整月分布；
+ * 手机默认「流」——一屏放不下七列也画不清月格，按天往下滚最顺。
+ * 选过之后记住选择（只存在这台设备上，读写都包 try/catch，隐私模式下会抛）。
+ */
+function defaultView(): View {
+  try {
+    const saved = localStorage.getItem(VIEW_KEY);
+    if (saved === 'month' || saved === 'week' || saved === 'agenda') return saved;
+  } catch {
+    /* 隐私模式读不到就按屏幕来 */
+  }
+  return typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+    ? 'month'
+    : 'agenda';
+}
+
 function fullDate(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
     month: 'long',
@@ -163,7 +182,8 @@ function startOfWeek(date: Date) {
 export function CalendarPage() {
   const today = toDateStr(new Date());
   const [params, setParams] = useSearchParams();
-  const view = (params.get('view') as View) ?? 'month';
+  const [fallbackView] = useState(defaultView);
+  const view = (params.get('view') as View | null) ?? fallbackView;
   const [anchor, setAnchor] = useState(() => new Date());
   const [dayOpen, setDayOpen] = useState<string | null>(null);
   const [form, setForm] = useState<{ editing: CalendarEntry | null } | null>(null);
@@ -227,7 +247,14 @@ export function CalendarPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
             value={view}
-            onChange={(next) => setParams(next === 'month' ? {} : { view: next }, { replace: true })}
+            onChange={(next) => {
+              try {
+                localStorage.setItem(VIEW_KEY, next);
+              } catch {
+                /* 存不下不影响这次切换 */
+              }
+              setParams({ view: next }, { replace: true });
+            }}
             options={[
               { value: 'month' as const, label: '月' },
               { value: 'week' as const, label: '周' },
