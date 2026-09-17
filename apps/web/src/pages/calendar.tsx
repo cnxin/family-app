@@ -12,7 +12,7 @@ import { EventForm } from '../components/event-form';
 import { useCalendarEntries, useDeleteCalendarEvent } from '../lib/queries';
 import { legacyUrl } from '../lib/nav';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Dialog, SectionTitle } from '../components/ui';
+import { Button, Dialog, EmptyState, Page, Panel } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
 /** 七类来源各给一个字形和一种色，扫一眼就知道这条是哪来的。 */
@@ -24,6 +24,16 @@ const MODULE_META: Record<CalendarEntry['module'], { icon: string; tone: string 
   guest: { icon: '👋', tone: 'bg-muted text-ink-soft' },
   maintenance: { icon: '🔧', tone: 'bg-muted text-ink-soft' },
   travel: { icon: '✈️', tone: 'bg-muted text-ink-soft' },
+};
+
+const MODULE_LABEL: Record<CalendarEntry['module'], string> = {
+  menu: '吃饭',
+  calendar: '家庭事件',
+  task: '任务',
+  media: '观影',
+  guest: '来访',
+  maintenance: '维护',
+  travel: '出行',
 };
 
 function fullDate(value: string) {
@@ -187,25 +197,33 @@ export function CalendarPage() {
   const entries = useCalendarEntries(range.start, range.end);
   const remove = useDeleteCalendarEvent();
 
+  // 左栏下面那块：这个月每类各有多少，顺手把空着的一列填上
+  const monthStats = useMemo(() => {
+    const counts = new Map<CalendarEntry['module'], number>();
+    for (const entry of entries.data ?? []) {
+      counts.set(entry.module, (counts.get(entry.module) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [entries.data]);
+
   const dayEntries = useMemo(
     () => (entries.data ?? []).filter((entry) => entry.date === selected),
     [entries.data, selected],
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-24 pt-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">家庭日历</h1>
-          <p className="mt-1 text-sm text-ink-soft">吃饭、任务、来访、维护、出行都汇到这儿</p>
-        </div>
+    <Page
+      title="家庭日历"
+      subtitle="吃饭、任务、来访、维护、出行都汇到这儿"
+      actions={
         <Button className="h-9 px-3 text-[13px]" onClick={() => setForm({ editing: null })}>
           + 添加事件
         </Button>
-      </header>
-
-      <div className="mt-5 grid gap-x-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-        <Card className="p-2">
+      }
+    >
+      {/* 左栏：月历按内容高度摆着，下面接一块本月概览，把这一列填满 */}
+      <div className="flex min-h-0 flex-col gap-4 lg:w-[360px] lg:flex-none">
+        <Panel grow={false} className="p-2">
           <CalendarMonth
             entries={entries.data}
             selectedDate={selected}
@@ -217,50 +235,62 @@ export function CalendarPage() {
             }}
             onMonthChange={setMonth}
           />
-        </Card>
+        </Panel>
 
-        <div className="mt-6 min-w-0 lg:mt-0">
-          <SectionTitle
-            right={
-              selected === today ? null : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelected(today);
-                    setMonth(startOfMonth(new Date()));
-                  }}
-                  className="text-[13px] text-accent hover:underline"
-                >
-                  回今天
-                </button>
-              )
-            }
-          >
-            {fullDate(selected)} · {dayEntries.length ? `${dayEntries.length} 项安排` : '暂无安排'}
-          </SectionTitle>
-
-          {entries.isPending ? (
-            <ListSkeleton rows={4} />
-          ) : dayEntries.length === 0 ? (
-            <div className="mt-8 flex flex-col items-center gap-2 text-center">
-              <span className="text-4xl">🗓</span>
-              <p className="text-sm font-medium">这天还没有安排</p>
-              <p className="text-[13px] text-ink-soft">点右上角添加一个家庭事件</p>
-            </div>
+        <Panel title={`本月 · 共 ${entries.data?.length ?? 0} 项`} className="hidden lg:flex">
+          {monthStats.length ? (
+            monthStats.map(([module, count]) => (
+              <div
+                key={module}
+                className="flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 last:border-b-0"
+              >
+                <span className={`grid size-7 shrink-0 place-items-center rounded-full text-[13px] ${MODULE_META[module].tone}`}>
+                  {MODULE_META[module].icon}
+                </span>
+                <span className="flex-1 text-sm">{MODULE_LABEL[module]}</span>
+                <span className="text-sm font-medium tabular-nums">{count}</span>
+              </div>
+            ))
           ) : (
-            <Card>
-              {dayEntries.map((entry) => (
-                <EntryRow
-                  key={entry.id}
-                  entry={entry}
-                  onEdit={() => setForm({ editing: entry })}
-                  onDelete={() => setDeleting(entry)}
-                />
-              ))}
-            </Card>
+            <EmptyState emoji="📭" title="这个月还没有安排" />
           )}
-        </div>
+        </Panel>
       </div>
+
+      <Panel
+        title={`${fullDate(selected)} · ${dayEntries.length ? `${dayEntries.length} 项安排` : '暂无安排'}`}
+        right={
+          selected === today ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                setSelected(today);
+                setMonth(startOfMonth(new Date()));
+              }}
+              className="shrink-0 text-[13px] text-accent hover:underline"
+            >
+              回今天
+            </button>
+          )
+        }
+      >
+        {entries.isPending ? (
+          <div className="p-3">
+            <ListSkeleton rows={4} />
+          </div>
+        ) : dayEntries.length === 0 ? (
+          <EmptyState emoji="🗓" title="这天还没有安排" hint="点右上角添加一个家庭事件" />
+        ) : (
+          dayEntries.map((entry) => (
+            <EntryRow
+              key={entry.id}
+              entry={entry}
+              onEdit={() => setForm({ editing: entry })}
+              onDelete={() => setDeleting(entry)}
+            />
+          ))
+        )}
+      </Panel>
 
       {form ? (
         <EventForm
@@ -301,6 +331,6 @@ export function CalendarPage() {
           <p className="text-sm text-ink-soft">删掉后不可恢复。</p>
         </Dialog>
       ) : null}
-    </div>
+    </Page>
   );
 }

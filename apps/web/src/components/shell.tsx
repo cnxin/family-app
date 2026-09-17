@@ -384,7 +384,7 @@ export function Shell() {
         </div>
       </aside>
 
-      <div className="flex min-h-full flex-col lg:pl-[224px]">
+      <div className="flex min-h-full flex-col lg:h-dvh lg:pl-[224px]">
         {/* 手机：顶栏只留当前位置和两个开关，功能切换全部交给底部标签 */}
         <header className="sticky top-0 z-20 border-b border-border bg-bg/85 backdrop-blur-xl lg:hidden">
           <div className="flex h-14 w-full items-center gap-1 px-4">
@@ -418,7 +418,7 @@ export function Shell() {
         </header>
 
         {/* view-transition-name 只给主体，导航留在原地不参与淡入 */}
-        <main className="flex-1 [view-transition-name:page]" key={segment?.key ?? scene.key}>
+        <main className="flex-1 [view-transition-name:page] lg:h-dvh lg:overflow-y-auto" key={segment?.key ?? scene.key}>
           <Outlet />
         </main>
       </div>

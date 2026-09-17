@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { shiftDays, todayISO, useTaskRange, useUpdateOccurrence } from '../lib/queries';
-import { Card, Checkbox, SectionTitle } from '../components/ui';
+import { Checkbox, Page, Panel } from '../components/ui';
 import { Skeleton } from '../components/skeleton';
 
 function greeting() {
@@ -24,32 +24,25 @@ export function TodayPage() {
   const unclaimed = open.filter((item) => !item.assigneeId);
 
   return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-16 pt-6">
-      <header className="px-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {greeting()}，{session?.member.name}
-        </h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          {range.isPending
-            ? '正在读取今天的安排…'
-            : open.length === 0
-              ? '今天没有待办了'
-              : `今天还有 ${open.length} 件${unclaimed.length ? ` · ${unclaimed.length} 件没人认领` : ''}`}
-        </p>
-      </header>
-
-      <div className="grid gap-x-5 lg:grid-cols-2 lg:items-start">
-      <section className="mt-6">
-        <SectionTitle
-          right={
-            <Link to="/schedule/tasks" className="text-[13px] text-accent hover:underline">
-              全部任务
-            </Link>
-          }
-        >
-          今日待办
-        </SectionTitle>
-        <Card>
+    <Page
+      title={`${greeting()}，${session?.member.name ?? ''}`}
+      subtitle={
+        range.isPending
+          ? '正在读取今天的安排…'
+          : open.length === 0
+            ? '今天没有待办了'
+            : `今天还有 ${open.length} 件${unclaimed.length ? ` · ${unclaimed.length} 件没人认领` : ''}`
+      }
+    >
+      <Panel
+        title="今日待办"
+        right={
+          <Link to="/schedule/tasks" className="shrink-0 text-[13px] text-accent hover:underline">
+            全部任务
+          </Link>
+        }
+      >
+        <div>
           {range.isPending ? (
             <div className="px-4 py-4">
               <Skeleton className="h-4 w-2/5" />
@@ -93,13 +86,12 @@ export function TodayPage() {
               </div>
             ))
           )}
-        </Card>
-      </section>
+        </div>
+      </Panel>
 
       {later.length > 0 ? (
-        <section className="mt-6">
-          <SectionTitle>接下来两天</SectionTitle>
-          <Card>
+        <Panel title="接下来两天">
+          <div>
             {later.map((item, index) => (
               <div
                 key={item.id}
@@ -111,10 +103,9 @@ export function TodayPage() {
                 <span className="shrink-0 font-mono text-xs text-ink-soft">{item.dueDate.slice(5)}</span>
               </div>
             ))}
-          </Card>
-        </section>
+          </div>
+        </Panel>
       ) : null}
-      </div>
-    </div>
+    </Page>
   );
 }

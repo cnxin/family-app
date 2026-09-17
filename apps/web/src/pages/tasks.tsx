@@ -7,7 +7,7 @@ import {
   useTaskRange,
   useUpdateOccurrence,
 } from '../lib/queries';
-import { Button, Card, Checkbox, Input, SectionTitle } from '../components/ui';
+import { Button, Card, Checkbox, EmptyState, Input, Page, Panel, SectionTitle } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
 export function TasksPage() {
@@ -33,35 +33,41 @@ export function TasksPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-16 pt-6">
-      <h1 className="px-1 text-2xl font-semibold tracking-tight">家庭任务</h1>
-      <p className="mt-1 px-1 text-sm text-ink-soft">未来两周的安排</p>
-
-      <form onSubmit={add} className="mt-5 flex gap-2">
-        <Input
-          value={title}
-          placeholder="加一件今天要做的事"
-          onChange={(event) => setTitle(event.target.value)}
-        />
-        <Button type="submit" disabled={!title.trim() || create.isPending} className="shrink-0">
-          {create.isPending ? '添加中…' : '添加'}
-        </Button>
-      </form>
-      {create.isError ? (
-        <p role="alert" className="mt-2 px-1 text-[13px] text-danger">
-          没加上：{(create.error as Error).message}
-        </p>
-      ) : null}
-
+    <Page
+      title="家庭任务"
+      subtitle="未来两周的安排"
+      toolbar={
+        <>
+          <form onSubmit={add} className="flex gap-2">
+            <Input
+              value={title}
+              placeholder="加一件今天要做的事"
+              onChange={(event) => setTitle(event.target.value)}
+            />
+            <Button type="submit" disabled={!title.trim() || create.isPending} className="shrink-0">
+              {create.isPending ? '添加中…' : '添加'}
+            </Button>
+          </form>
+          {create.isError ? (
+            <p role="alert" className="mt-2 text-[13px] text-danger">
+              没加上：{(create.error as Error).message}
+            </p>
+          ) : null}
+        </>
+      }
+    >
+      <Panel title={`${range.data?.length ?? 0} 项`}>
       {range.isPending ? (
-        <ListSkeleton rows={5} />
+        <div className="p-3">
+          <ListSkeleton rows={5} />
+        </div>
       ) : byDate.size === 0 ? (
-        <p className="mt-8 px-1 text-sm text-ink-soft">这两周还没有任务</p>
+        <EmptyState emoji="📋" title="这两周还没有任务" hint="在上面的输入框加一件" />
       ) : (
         // 宽屏一列会把右边空出来，日期分组排两列
-        <div className="mt-1 grid gap-x-5 lg:grid-cols-2 lg:items-start">
+        <div className="grid gap-x-5 p-3 lg:grid-cols-2 lg:items-start">
         {[...byDate.entries()].map(([date, items]) => (
-          <section key={date} className="mt-5">
+          <section key={date} className="mb-4 last:mb-0">
             <SectionTitle>
               {date === today ? '今天' : date === shiftDays(today, 1) ? '明天' : date}
             </SectionTitle>
@@ -102,6 +108,7 @@ export function TasksPage() {
         ))}
         </div>
       )}
-    </div>
+      </Panel>
+    </Page>
   );
 }

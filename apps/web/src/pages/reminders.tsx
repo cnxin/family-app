@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../lib/auth';
 import { legacyUrl } from '../lib/nav';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Dialog, Segmented } from '../components/ui';
+import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
 function shiftDays(days: number) {
@@ -42,7 +42,7 @@ const STATUS_LABEL: Record<ReminderStatus, string> = {
   cancelled: '已取消',
 };
 
-function ReminderCard({
+function ReminderRow({
   reminder,
   onEdit,
   onCancel,
@@ -65,45 +65,31 @@ function ReminderCard({
   };
 
   return (
-    <Card className="p-3">
-      <div className="flex items-start gap-2.5">
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-[15px]">
-          {SOURCE_ICON[reminder.sourceModule]}
-        </span>
-        <button
-          type="button"
-          disabled={!source}
-          onClick={open}
-          className="min-w-0 flex-1 text-left"
-        >
-          <span className="line-clamp-2 block text-sm font-medium">
-            {source?.title ?? '原事项已不可用'}
-          </span>
-          <span className="mt-0.5 block text-[12px] text-ink-soft">
-            {SOURCE_LABEL[reminder.sourceModule]} ·{' '}
-            {source ? formatSourceSchedule(source) : '来源已删除'}
-          </span>
-        </button>
-        <span
-          className={
-            'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ' +
-            (reminder.status === 'scheduled'
-              ? 'bg-accent-soft text-accent'
-              : reminder.status === 'sent'
-                ? 'bg-warm-soft text-warm'
-                : 'bg-muted text-ink-soft')
-          }
-        >
-          {STATUS_LABEL[reminder.status]}
-        </span>
-      </div>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3.5 py-3 last:border-b-0">
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-[15px]">
+        {SOURCE_ICON[reminder.sourceModule]}
+      </span>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-2.5">
-        <span className="text-[13px]">
-          <span className="text-ink-soft">提醒时间 </span>
-          <span className="font-medium">{formatRemindAt(reminder.remindAt)}</span>
+      <button
+        type="button"
+        disabled={!source}
+        onClick={open}
+        className="min-w-[9rem] flex-1 text-left"
+      >
+        <span className="block truncate text-sm font-medium">
+          {source?.title ?? '原事项已不可用'}
         </span>
-        <span className="flex items-center gap-1.5 text-[12px] text-ink-soft">
+        <span className="mt-0.5 block truncate text-[12px] text-ink-soft">
+          {SOURCE_LABEL[reminder.sourceModule]} ·{' '}
+          {source ? formatSourceSchedule(source) : '来源已删除'}
+        </span>
+      </button>
+
+      <span className="shrink-0 text-right">
+        <span className="block text-[13px] font-medium tabular-nums">
+          {formatRemindAt(reminder.remindAt)}
+        </span>
+        <span className="mt-0.5 flex items-center justify-end gap-1 text-[12px] text-ink-soft">
           <span className="flex">
             {reminder.recipients.slice(0, 4).map((one, index) => (
               <span
@@ -115,11 +101,28 @@ function ReminderCard({
               </span>
             ))}
           </span>
-          {reminder.recipients.map((one) => one.member.name).join('、')}
+          <span className="max-w-[9rem] truncate">
+            {reminder.recipients.map((one) => one.member.name).join('、')}
+          </span>
         </span>
+      </span>
 
+      <span
+        className={
+          'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ' +
+          (reminder.status === 'scheduled'
+            ? 'bg-accent-soft text-accent'
+            : reminder.status === 'sent'
+              ? 'bg-warm-soft text-warm'
+              : 'bg-muted text-ink-soft')
+        }
+      >
+        {STATUS_LABEL[reminder.status]}
+      </span>
+
+      <span className="flex w-[68px] shrink-0 justify-end gap-0.5">
         {manageable ? (
-          <span className="ml-auto flex gap-0.5">
+          <>
             <button
               type="button"
               aria-label={`编辑提醒${source?.title ?? ''}`}
@@ -136,10 +139,10 @@ function ReminderCard({
             >
               🗑
             </button>
-          </span>
+          </>
         ) : null}
-      </div>
-    </Card>
+      </span>
+    </div>
   );
 }
 
@@ -191,14 +194,10 @@ export function RemindersPage() {
   const pending = (list.data ?? []).filter((one) => one.status === 'scheduled').length;
 
   return (
-    <div className="mx-auto w-full max-w-[1160px] px-4 lg:mx-0 lg:px-8 pb-24 pt-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">提醒中心</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {pending ? `还有 ${pending} 条待提醒` : '到点会推给指定的家人'}
-          </p>
-        </div>
+    <Page
+      title="提醒中心"
+      subtitle={pending ? `还有 ${pending} 条待提醒` : '到点会推给指定的家人'}
+      actions={
         <Button
           className="h-9 px-3 text-[13px]"
           onClick={() => {
@@ -208,9 +207,8 @@ export function RemindersPage() {
         >
           + 新建提醒
         </Button>
-      </header>
-
-      <div className="mt-4">
+      }
+      toolbar={
         <Segmented
           value={filter}
           onChange={setFilter}
@@ -221,24 +219,22 @@ export function RemindersPage() {
             { value: 'all' as const, label: '全部' },
           ]}
         />
-      </div>
-
-      {list.isPending ? (
-        <ListSkeleton rows={3} />
-      ) : rows.length === 0 ? (
-        <div className="mt-10 flex flex-col items-center gap-2 text-center">
-          <span className="text-4xl">🔔</span>
-          <p className="text-sm font-medium">
-            {filter === 'scheduled' ? '没有待提醒的事' : '这一类没有记录'}
-          </p>
-          <p className="text-[13px] text-ink-soft">
-            日历里每条安排右边的铃铛也能直接建提醒
-          </p>
-        </div>
-      ) : (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2 lg:items-start">
-          {rows.map((reminder) => (
-            <ReminderCard
+      }
+    >
+      <Panel title={`${rows.length} 条`}>
+        {list.isPending ? (
+          <div className="p-3">
+            <ListSkeleton rows={3} />
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            emoji="🔔"
+            title={filter === 'scheduled' ? '没有待提醒的事' : '这一类没有记录'}
+            hint="日历里每条安排右边的铃铛也能直接建提醒"
+          />
+        ) : (
+          rows.map((reminder) => (
+            <ReminderRow
               key={reminder.id}
               reminder={reminder}
               onEdit={() => {
@@ -247,9 +243,9 @@ export function RemindersPage() {
               }}
               onCancel={() => setCancelling(reminder)}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </Panel>
 
       {formOpen ? (
         <ReminderForm
@@ -295,6 +291,6 @@ export function RemindersPage() {
           </p>
         </Dialog>
       ) : null}
-    </div>
+    </Page>
   );
 }
