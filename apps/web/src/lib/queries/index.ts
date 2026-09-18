@@ -22,3 +22,4 @@ export * from './finance';
 export * from './knowledge';
 export * from './memories';
 export * from './travel';
+export * from './backups';

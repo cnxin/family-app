@@ -78,7 +78,7 @@ export const SCENES: NavScene[] = [
       { key: 'travel', label: '出行', path: '/house/travel', ready: true },
       { key: 'guests', label: '访客', path: '/house/guests', ready: true },
       { key: 'members', label: '成员', path: '/house/members', ready: true, managerOnly: true },
-      { key: 'backups', label: '备份', legacy: '/system-backups', managerOnly: true },
+      { key: 'backups', label: '备份', path: '/house/backups', ready: true, managerOnly: true },
     ],
   },
   {

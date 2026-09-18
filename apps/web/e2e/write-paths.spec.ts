@@ -1100,3 +1100,58 @@ test('出行模板：建一个模板、套进行程、再归档模板', async ({
     }
   }
 });
+
+interface BackupPolicyShape {
+  scheduleEnabled: boolean;
+  frequency: 'daily' | 'weekly';
+  weeklyDay: number | null;
+  scheduledHour: number;
+  scheduledMinute: number;
+  retentionDays: number;
+  retentionCount: number;
+  capacityWarningPercent: number;
+  capacityCriticalPercent: number;
+  restoreDrillEnabled: boolean;
+  restoreDrillDay: number;
+  restoreDrillHour: number;
+}
+
+test('备份：改一下保留策略（排队和演练是 worker 的活，这里不碰）', async ({ page, request }) => {
+  const api = apiClient(request);
+  const before = await api.get<{ policy: BackupPolicyShape }>('/system/backups');
+  const original = before.policy;
+  const restore: BackupPolicyShape = {
+    scheduleEnabled: original.scheduleEnabled,
+    frequency: original.frequency,
+    weeklyDay: original.frequency === 'weekly' ? original.weeklyDay : null,
+    scheduledHour: original.scheduledHour,
+    scheduledMinute: original.scheduledMinute,
+    retentionDays: original.retentionDays,
+    retentionCount: original.retentionCount,
+    capacityWarningPercent: original.capacityWarningPercent,
+    capacityCriticalPercent: original.capacityCriticalPercent,
+    restoreDrillEnabled: original.restoreDrillEnabled,
+    restoreDrillDay: original.restoreDrillDay,
+    restoreDrillHour: original.restoreDrillHour,
+  };
+
+  try {
+    await page.goto('/house/backups');
+    await expect(page.getByRole('heading', { name: '系统备份', level: 1 })).toBeVisible();
+
+    await page.getByLabel('保留天数').fill('21');
+    const saved = waitFor(page, 'PUT', /\/system\/backups\/policy$/);
+    await page.getByRole('button', { name: '保存策略' }).click();
+    const savedResponse = await saved;
+    expect(savedResponse.status(), await savedResponse.text()).toBe(200);
+    await expect(page.getByLabel('保留天数')).toHaveValue('21');
+
+    // 阈值填反了要被前端拦住，不该发请求
+    await page.getByLabel('容量警告').fill('95');
+    await page.getByLabel('容量严重').fill('90');
+    await page.getByRole('button', { name: '保存策略' }).click();
+    await expect(page.getByText('警告阈值要低于严重阈值')).toBeVisible();
+  } finally {
+    await api.put('/system/backups/policy', restore);
+  }
+});

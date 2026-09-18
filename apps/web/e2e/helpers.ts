@@ -42,6 +42,11 @@ export function apiClient(request: APIRequestContext, as: string = loginName) {
       expect(response.ok(), `POST ${path} → ${response.status()} ${await response.text()}`).toBeTruthy();
       return ((await response.json()) as { data: T }).data;
     },
+    async put<T>(path: string, body: unknown) {
+      const response = await request.put(`${apiURL}${path}`, { headers, data: body });
+      expect(response.ok(), `PUT ${path} → ${response.status()} ${await response.text()}`).toBeTruthy();
+      return ((await response.json()) as { data: T }).data;
+    },
     async patch<T>(path: string, body: unknown) {
       const response = await request.patch(`${apiURL}${path}`, { headers, data: body });
       expect(response.ok(), `PATCH ${path} → ${response.status()} ${await response.text()}`).toBeTruthy();

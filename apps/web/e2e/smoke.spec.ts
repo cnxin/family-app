@@ -25,6 +25,7 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/house/knowledge', title: '家庭知识库' },
   { path: '/house/memories', title: '家庭回忆' },
   { path: '/house/travel', title: '家庭出行' },
+  { path: '/house/backups', title: '系统备份' },
   { path: '/me/profile', title: '我的' },
   { path: '/me/assistant', title: '问问小管家' },
   { path: '/me/assistant/memories', title: '小管家的记忆' },
@@ -44,10 +45,10 @@ for (const target of READY_PAGES) {
 
 // 拿一个还没搬的分段当样本；搬到它的时候记得换一个还没搬的
 test('没搬的分段落到桥接页，并给出旧版入口', async ({ page }) => {
-  await page.goto('/house/backups');
+  await page.goto('/me/activity');
   const legacy = page.locator('main').getByRole('link', { name: /旧版/ });
   await expect(legacy).toBeVisible();
-  await expect(legacy).toHaveAttribute('href', /\/system-backups$/);
+  await expect(legacy).toHaveAttribute('href', /\/activity$/);
 });
 
 test('旧的一层路径会跳到新位置', async ({ page }) => {

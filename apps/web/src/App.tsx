@@ -20,6 +20,7 @@ import { FinancePage } from './pages/finance';
 import { KnowledgePage } from './pages/knowledge';
 import { MemoriesPage } from './pages/memories';
 import { TravelPage } from './pages/travel';
+import { BackupsPage } from './pages/backups';
 import { TravelPlanPage } from './pages/travel-plan';
 import { AssetDetailPage } from './pages/asset-detail';
 import { GuestInvitationPage } from './pages/guest-invitation';
@@ -101,6 +102,7 @@ export function App() {
           <Route path="/house/knowledge" element={<KnowledgePage />} />
           <Route path="/house/memories" element={<MemoriesPage />} />
           <Route path="/house/travel" element={<TravelPage />} />
+          <Route path="/house/backups" element={<BackupsPage />} />
           <Route path="/house/travel/:id" element={<TravelPlanPage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
