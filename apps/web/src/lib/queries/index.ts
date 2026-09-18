@@ -19,3 +19,4 @@ export * from './guest-invitation';
 export * from './assets';
 export * from './assets-maintenance';
 export * from './finance';
+export * from './knowledge';

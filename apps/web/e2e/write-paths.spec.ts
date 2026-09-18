@@ -838,3 +838,63 @@ test('财务预算：新增分类、设预算、看进度、再删掉', async ({
     }
   }
 });
+
+test('知识库：写一篇、改一版、还原回上一版、归档', async ({ page, request }) => {
+  const api = apiClient(request);
+  const title = stamp('说明');
+  let articleId: string | null = null;
+
+  try {
+    await page.goto('/house/knowledge');
+    await page.getByRole('button', { name: '+ 写一篇' }).click();
+    const editor = page.getByRole('dialog', { name: '写一篇' });
+    await editor.getByLabel('标题').fill(title);
+    await editor.getByLabel('正文').fill('第一版：先按开关，再按启动。');
+    const created = waitFor(page, 'POST', /\/knowledge-articles$/);
+    await editor.getByRole('button', { name: '创建文章' }).click();
+    const createdResponse = await created;
+    expect(createdResponse.status(), await createdResponse.text()).toBe(201);
+    articleId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
+
+    // 保存完直接停在这篇的详情上
+    const detail = page.getByRole('dialog', { name: title });
+    await expect(detail).toContainText('第一版');
+
+    // 改一版
+    await detail.getByRole('button', { name: '编辑' }).click();
+    const again = page.getByRole('dialog', { name: `编辑「${title}」` });
+    await again.getByLabel('正文').fill('第二版：先插电。');
+    const patched = waitFor(page, 'PATCH', /\/knowledge-articles\/[^/]+$/);
+    await again.getByRole('button', { name: '保存修改' }).click();
+    expect((await patched).status()).toBe(200);
+    await expect(detail).toContainText('第二版');
+
+    // 还原回 v1：现在的内容照样留在历史里
+    await detail.getByRole('button', { name: /版本历史/ }).click();
+    const restored = waitFor(page, 'POST', /\/knowledge-articles\/[^/]+\/revisions\/1\/restore$/);
+    await page.getByRole('button', { name: '还原到 v1' }).click();
+    await page.getByRole('dialog', { name: '还原到 v1？' }).getByRole('button', { name: '确认还原' }).click();
+    expect((await restored).status()).toBe(201);
+    await expect(detail).toContainText('第一版');
+
+    // 归档：从「使用中」里收起来
+    await detail.getByRole('button', { name: '归档' }).click();
+    const archived = waitFor(page, 'POST', /\/knowledge-articles\/[^/]+\/archive$/);
+    await page.getByRole('dialog', { name: '归档这篇？' }).getByRole('button', { name: '确认归档' }).click();
+    expect((await archived).status()).toBe(201);
+    await expect(detail).toContainText('已归档');
+  } finally {
+    // 知识库没有删除，归档就是终点
+    if (articleId) {
+      const one = await api.get<{ archivedAt: string | null; version: number }>(
+        `/knowledge-articles/${articleId}`,
+      );
+      if (!one.archivedAt) {
+        await api.post(`/knowledge-articles/${articleId}/archive`, {
+          expectedVersion: one.version,
+          idempotencyKey: `e2e-cleanup-${articleId}`,
+        });
+      }
+    }
+  }
+});
