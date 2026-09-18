@@ -246,6 +246,8 @@ export default function XxxPage() {
 - Playwright 的 `webServer.reuseExistingServer` 是个陷阱：vite 没有 `--strictPort` 时端口被占会**静默换端口**，
   于是隔离跑复用到一台代理去 8088（演示库）的 dev server，症状是登录 401「账号或密码不正确」，
   跟密码、seed、限流全都没关系。现在隔离跑传 `E2E_ISOLATED=1` 禁用复用，`web dev` 也加了 `--strictPort`。
+- `test:api -- --only <域>` 单跑可能假红：`agent-memory` 单跑必失败（memoryEnabled=false 那条断言依赖前面脚本落下的数据），
+  全量跑是绿的。CLAUDE.md 早写了「--only 只用于迭代，验收必须全量跑」，别被单跑的红吓到。
 - 老页面字段名别猜：点菜项是 `requestedById`（不是 `orderedById`），`/menus?date=` 一次返回三餐，提醒来源 `/reminder-sources?start&end`。
 
 ---
@@ -264,7 +266,8 @@ export default function XxxPage() {
 | B4 个人 | ☑ | | `/me/profile`：档案（名字/头像去成员页改）、经常掌勺开关、小管家「启用记忆」（乐观锁，冲突会提示刷新）、管理员的「主动提醒」夜间汇总开关（同时校验两个版本号）、改/设密码、退出登录。旧页的「家庭内容」链接堆不搬——侧栏和底部 tab 已经是导航；**外部通知渠道留给 B4b**（它在旧客户端属于消息页） |
 | B4b 外部通知渠道（补在消息页） | ☑ | | 消息页改成三段：消息 / 外部渠道 / 投递记录。渠道增删改停用、发测试消息、每个人自己的「收哪些模块」偏好、投递记录与重投；旧版链接删掉。顺手把 setup 改成「令牌还有效就不重新登录」——本机登录限流 5 次/分钟，反复跑必撞 429（隔离跑每次新库，照样会真的走一遍登录页） |
 | B5a 小管家：对话 | ☑ | | `/me/assistant`：会话列表（新建/切换/归档）、消息流、发送、运行中的工具进度、停止、失败重试、Hermes 不可用时的本地摘要提示、工具结果卡片（点进对应页面）、单条操作提案确认/放弃（乐观锁 + 幂等）。轮询按旧客户端的 700ms（后端是排队 + worker，没有 SSE）。**注意**：演示栈和隔离库里 agent 都没启用（`status.enabled=false`），所以只有冒烟覆盖，发消息这条路要等接了 Hermes 才能端到端验 |
-| B5b 小管家：多步骤提案组 + 记忆页 + 助理设置 | ☐ | | 旧客户端 `assistant.tsx` 的 ProposalGroupCard（429-626）、`agent-memory.tsx` + `agent-memory/[id].tsx`、RuntimeSettings / ChannelBindings |
+| B5b 小管家：多步骤提案组 + 记忆页 | ☑ | | 提案组卡片（按步骤列出、整组确认/放弃）接在对话流里；`/me/assistant/memories` 把旧的两页（列表 + 详情路由）合成一页 + 详情弹窗：我的/共享、已生效/待确认、主动记一条、确认、改内容、共享到家庭、忘掉、清空。**顺手补了一个契约缺口**：`DELETE /agent/memories/:id` 的控制器读 `dto.expectedVersion`，契约里却没声明 body，客户端照契约写就会版本冲突 |
+| B5c 小管家：助理设置（运行时 + 渠道绑定） | ☐ | | 旧 `assistant.tsx` 的 RuntimeSettings（626-684）与 ChannelBindings（684-850）|
 | B6 访客 + 公开页 | ☐ | | |
 | B7 资产 + 详情 | ☐ | | |
 | B8 财务 | ☐ | | |

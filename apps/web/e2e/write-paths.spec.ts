@@ -466,3 +466,53 @@ test('外部渠道：新增、改接收范围、发测试、删除', async ({ pa
   expect((await removed).ok()).toBeTruthy();
   await expect(card).toBeHidden();
 });
+
+test('小管家记忆：记一条、确认、改内容、忘掉', async ({ page, isMobile }) => {
+  // 只在一个视口跑：同一个人同一类记忆只能有一条生效，两个 project 并排跑会互相 409
+  test.skip(isMobile, '记忆是按 (成员, 类别) 唯一的，跑一个视口就够');
+  const content = stamp('记忆');
+  await page.goto('/me/assistant/memories');
+
+  await page.getByRole('button', { name: '+ 记一条' }).click();
+  const form = page.getByRole('dialog', { name: '记一条给小管家' });
+  await form.getByLabel('想让小管家记住什么').fill(content);
+  await form.getByRole('button', { name: '其他信息', exact: true }).click();
+  const created = waitFor(page, 'POST', /\/agent\/memories\/candidates$/);
+  await form.getByRole('button', { name: '记下来' }).click();
+  expect((await created).status(), await (await created).text()).toBe(201);
+  await expect(form).toBeHidden();
+
+  // 新记的在「待确认」里
+  await page.getByRole('tab', { name: /待确认/ }).click();
+  const card = page.getByRole('button', { name: new RegExp(`待确认，其他信息：${content}`) });
+  await expect(card).toBeVisible();
+  await card.click();
+
+  const detail = page.getByRole('dialog', { name: '其他信息' });
+  const confirmed = waitFor(page, 'POST', /\/agent\/memories\/[^/]+\/confirm$/);
+  await detail.getByRole('button', { name: '确认', exact: true }).click();
+  expect((await confirmed).status()).toBe(201);
+  await expect(detail).toBeHidden();
+
+  // 确认之后进「已生效」，改一下内容
+  await page.getByRole('tab', { name: '已生效' }).click();
+  const active = page.getByRole('button', { name: new RegExp(`其他信息：${content}`) });
+  await expect(active).toBeVisible();
+  await active.click();
+  const detail2 = page.getByRole('dialog', { name: '其他信息' });
+  await detail2.getByRole('button', { name: '改内容' }).click();
+  await detail2.getByLabel('记忆内容').fill(`${content}（改过）`);
+  const corrected = waitFor(page, 'PATCH', /\/agent\/memories\/[^/]+$/);
+  await detail2.getByRole('button', { name: '保存修改' }).click();
+  expect((await corrected).ok()).toBeTruthy();
+
+  // 再打开，忘掉
+  const edited = page.getByRole('button', { name: new RegExp(`其他信息：${content}（改过）`) });
+  await expect(edited).toBeVisible();
+  await edited.click();
+  const detail3 = page.getByRole('dialog', { name: '其他信息' });
+  const forgotten = waitFor(page, 'DELETE', /\/agent\/memories\/[^/]+$/);
+  await detail3.getByRole('button', { name: '忘掉' }).click();
+  expect((await forgotten).ok()).toBeTruthy();
+  await expect(edited).toBeHidden();
+});

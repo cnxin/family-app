@@ -764,6 +764,7 @@ export const agent = {
     path: '/agent/memories/:id',
     summary: '遗忘一条记忆（幂等；已是终态直接回传）',
     params: idParams,
+    body: agentMemoryVersionBody,
     response: agentMemoryForgetResultSchema,
   }),
   conversations: defineEndpoint({

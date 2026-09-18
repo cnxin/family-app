@@ -21,6 +21,7 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/house/members', title: '家庭成员' },
   { path: '/me/profile', title: '我的' },
   { path: '/me/assistant', title: '问问小管家' },
+  { path: '/me/assistant/memories', title: '小管家的记忆' },
 ];
 
 for (const target of READY_PAGES) {

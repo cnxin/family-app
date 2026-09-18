@@ -3,6 +3,7 @@ import type { AgentConversation } from '@family/contracts';
 import {
   useAgentConversation,
   useAgentConversations,
+  useAgentProposalGroups,
   useAgentStatus,
   useArchiveAgentConversation,
   useCancelAgentRun,
@@ -17,6 +18,8 @@ import {
   ToolProgress,
   ToolResultGroup,
 } from '../components/agent-chat';
+import { ProposalGroupCard } from '../components/agent-memory-ui';
+import { SoftLink } from '../components/soft-link';
 import { Button, EmptyState, Input, Page, Panel } from '../components/ui';
 
 const SUGGESTIONS = [
@@ -47,6 +50,7 @@ export function AssistantPage() {
   const cancel = useCancelAgentRun();
   const retry = useRetryAgentRun();
   const archive = useArchiveAgentConversation();
+  const proposalGroups = useAgentProposalGroups(Boolean(conversationId));
 
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +104,13 @@ export function AssistantPage() {
       title="问问小管家"
       subtitle={runtimeHint}
       actions={
+        <div className="flex flex-wrap items-center gap-2">
+        <SoftLink
+          to="/me/assistant/memories"
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-ink-soft transition-colors duration-150 hover:bg-muted"
+        >
+          它记住了什么
+        </SoftLink>
         <Button
           className="h-9 px-3 text-[13px]"
           disabled={create.isPending}
@@ -112,6 +123,7 @@ export function AssistantPage() {
         >
           + 新对话
         </Button>
+        </div>
       }
     >
       {/* 聊天这块不用 Panel：Panel 会把 children 塞进自己的滚动容器，
@@ -154,6 +166,12 @@ export function AssistantPage() {
                   ) : null}
                 </Fragment>
               ))}
+
+              {conversationId
+                ? (proposalGroups.data ?? [])
+                    .filter((group) => group.conversationId === conversationId)
+                    .map((group) => <ProposalGroupCard key={group.id} group={group} />)
+                : null}
 
               {conversationId
                 ? detail?.proposals.map((proposal) => (

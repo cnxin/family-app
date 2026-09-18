@@ -17,6 +17,7 @@ const MOVED: [string, string][] = [
   ['/members', '/house/members'],
   ['/profile', '/me/profile'],
   ['/assistant', '/me/assistant'],
+  ['/agent-memory', '/me/assistant/memories'],
   ['/notifications', '/schedule/notifications'],
 ];
 

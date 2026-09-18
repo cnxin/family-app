@@ -16,6 +16,7 @@ import { PointsPage } from './pages/points';
 import { MembersPage } from './pages/members';
 import { ProfilePage } from './pages/profile';
 import { AssistantPage } from './pages/assistant';
+import { AgentMemoriesPage } from './pages/agent-memories';
 import { Shell } from './components/shell';
 import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
@@ -76,6 +77,7 @@ export function App() {
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
           <Route path="/me/profile" element={<ProfilePage />} />
           <Route path="/me/assistant" element={<AssistantPage />} />
+          <Route path="/me/assistant/memories" element={<AgentMemoriesPage />} />
 
           {/* 没搬过来的分段统一落到旧版入口页 */}
           <Route path="/eat/:segment" element={<LegacyBridge />} />
