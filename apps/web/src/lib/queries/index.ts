@@ -11,3 +11,4 @@ export * from './points';
 export * from './members';
 export * from './profile';
 export * from './channels';
+export * from './agent';
