@@ -15,6 +15,7 @@ import { PollsPage } from './pages/polls';
 import { PointsPage } from './pages/points';
 import { MembersPage } from './pages/members';
 import { GuestsPage } from './pages/guests';
+import { GuestInvitationPage } from './pages/guest-invitation';
 import { ProfilePage } from './pages/profile';
 import { AssistantPage } from './pages/assistant';
 import { AgentMemoriesPage } from './pages/agent-memories';
@@ -49,6 +50,16 @@ function RedirectKeepingSearch({ to }: { to: string }) {
 
 export function App() {
   const { session, ready } = useAuth();
+  const { pathname } = useLocation();
+
+  // 公开邀请页在登录闸门之前：访客没有家庭账号，既不该被弹到登录页，也不用等鉴权就绪。
+  if (pathname.startsWith('/guest/')) {
+    return (
+      <Routes>
+        <Route path="/guest/:token" element={<GuestInvitationPage />} />
+      </Routes>
+    );
+  }
 
   if (!ready) return null;
   if (!session) return <LoginPage />;

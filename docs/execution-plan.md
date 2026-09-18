@@ -248,6 +248,10 @@ export default function XxxPage() {
   跟密码、seed、限流全都没关系。现在隔离跑传 `E2E_ISOLATED=1` 禁用复用，`web dev` 也加了 `--strictPort`。
 - `test:api -- --only <域>` 单跑可能假红：`agent-memory` 单跑必失败（memoryEnabled=false 那条断言依赖前面脚本落下的数据），
   全量跑是绿的。CLAUDE.md 早写了「--only 只用于迭代，验收必须全量跑」，别被单跑的红吓到。
+- 访客点菜的后端语义是「一个邀请 + 一天 + 一餐 = 一条请求」：菜单里点的那道和自由填的那条是**同一条**，
+  再提交就是覆盖（`menuItemId` 会留着）。前端按 `menuItemId` 分成两拨来找「这一餐我提过没有」就会把人自己的请求顶掉。
+- 深色模式下主按钮是 `bg-accent text-white`，而深色的 accent 是浅绿，白字压上去对比度不够。
+  这是 A 阶段就有的全局问题（每个页面都有），等有一块专门收拾设计令牌的时间再一起改，别在搬页面的提交里顺手动。
 - 老页面字段名别猜：点菜项是 `requestedById`（不是 `orderedById`），`/menus?date=` 一次返回三餐，提醒来源 `/reminder-sources?start&end`。
 
 ---
@@ -269,7 +273,7 @@ export default function XxxPage() {
 | B5b 小管家：多步骤提案组 + 记忆页 | ☑ | | 提案组卡片（按步骤列出、整组确认/放弃）接在对话流里；`/me/assistant/memories` 把旧的两页（列表 + 详情路由）合成一页 + 详情弹窗：我的/共享、已生效/待确认、主动记一条、确认、改内容、共享到家庭、忘掉、清空。**顺手补了一个契约缺口**：`DELETE /agent/memories/:id` 的控制器读 `dto.expectedVersion`，契约里却没声明 body，客户端照契约写就会版本冲突 |
 | B5c 小管家：助理设置（运行时 + 渠道绑定） | ☑ | | 对话页右上「设置」弹窗：启用开关、本地摘要 / Hermes 切换（乐观锁）、消息渠道绑定（签发一次性配对码，明文只回一次；解绑已绑定的渠道；作废没用掉的配对码）。**至此 B5「问问小管家」整段完成** |
 | B6a 访客（管理端） | ☑ | | `/house/guests` 三视图：来访（新建/编辑/取消、关联访客与访客 Wi-Fi、生成一次性邀请链接 + 作废）、访客名册（新建/编辑/匿名化）、访客 Wi-Fi（新建/编辑/停用）；右栏是访客点菜请求的接受/婉拒。邀请明文令牌只在签发响应里出现一次，前端立刻拼成 `${origin}/guest/<token>` 给人复制 |
-| B6b 访客：公开邀请页 `/guest/:token` | ☐ | | 在 `<Shell/>` 之外、不需要登录：RSVP、Wi-Fi 二维码（要挑一个 web 端二维码库，旧客户端用的是 react-native-qrcode-svg）、点菜（菜单 + 自由填写）、观影投票 |
+| B6b 访客：公开邀请页 `/guest/:token` | ☑ | | `App.tsx` 在登录闸门**之前**拦 `/guest/`，所以访客不会被弹到登录页；这一组请求全部 `auth: false`。RSVP（只能回一次）、访客 Wi-Fi 二维码（`qrcode.react`，白底写死，深色模式下也能扫）、菜单点菜 + 菜单外自由点菜、观影投票（覆盖式）。用例故意清空登录态跑（`e2e/guest-invitation.spec.ts`），谁把它挪回 `<Shell/>` 里就会红。**至此 B6「访客」整段完成** |
 | B7 资产 + 详情 | ☐ | | |
 | B8 财务 | ☐ | | |
 | B9 知识库 | ☐ | | |
