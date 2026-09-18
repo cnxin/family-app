@@ -1,21 +1,39 @@
-FROM node:22-alpine AS build
+# 新客户端（apps/web，Vite）是 `/`，旧客户端（apps/mobile，Expo）挂在 `/legacy`，
+# 两份静态产物由同一个 Caddy 提供。旧客户端下线（C3）时把 legacy 那一段整个删掉就行。
 
+FROM node:22-alpine AS base
 RUN npm install --global pnpm@10.34.5
-
 WORKDIR /app
-
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/mobile/package.json ./apps/mobile/package.json
 # 工作区包和构建脚本先于 install 复制：根 postinstall 会执行 scripts/build-packages.mjs 构建 packages/*
 COPY packages ./packages
 COPY scripts/build-packages.mjs ./scripts/build-packages.mjs
 
-# 过滤器要额外带上 ./packages/*：mobile 只依赖 @family/contracts，`--filter mobile...` 不会把
-# @family/shared 拉进来，而根 postinstall 的 build-packages.mjs 会构建 packages 下的每一个包，
-# 少装一个的 typescript 就会「找不到 typescript」直接失败。
+FROM base AS build-web
+
+COPY apps/web/package.json ./apps/web/package.json
+# 过滤器要额外带上 ./packages/*：根 postinstall 的 build-packages.mjs 会构建 packages 下的
+# 每一个包，少装一个的 typescript 就会「找不到 typescript」直接失败。
+RUN pnpm install --frozen-lockfile --filter web... --filter "./packages/*"
+
+COPY apps/web ./apps/web
+
+# legacyUrl 是字符串拼接，给一个路径前缀就退化成同源的 /legacy/...，代码不用改。
+ARG VITE_LEGACY_ORIGIN=/legacy
+ENV VITE_LEGACY_ORIGIN=$VITE_LEGACY_ORIGIN
+
+RUN pnpm --filter web build
+
+FROM base AS build-legacy
+
+COPY apps/mobile/package.json ./apps/mobile/package.json
 RUN pnpm install --frozen-lockfile --filter mobile... --filter "./packages/*"
 
 COPY apps/mobile ./apps/mobile
+
+# 挂在子路径上要让 Expo 知道，不然产物里的资源路径是 `/_expo/...`，进了 /legacy/ 就 404。
+# 只在镜像里改，仓库里的 app.json 不动——开发和旧客户端回归还是跑在根路径上。
+RUN node -e "const fs=require('fs');const f='apps/mobile/app.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.expo.experiments={...j.expo.experiments,baseUrl:'/legacy'};fs.writeFileSync(f,JSON.stringify(j,null,2));"
 
 ARG EXPO_PUBLIC_API_URL=/api
 ENV EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL
@@ -25,6 +43,7 @@ RUN pnpm --filter mobile exec expo export --platform web --output-dir dist
 FROM caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d AS runtime
 
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
-COPY --from=build /app/apps/mobile/dist /srv
+COPY --from=build-web /app/apps/web/dist /srv
+COPY --from=build-legacy /app/apps/mobile/dist /srv-legacy
 
 EXPOSE 80 443 443/udp

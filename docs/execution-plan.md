@@ -294,7 +294,7 @@ export default function XxxPage() {
 | B14c 观影：观看记录 | ☑ | | `/eat/media/history`：全部 / 在放 / 放完了三档，每条显示片名、状态、在哪台设备、谁在看、进度条和「去 X 接着看」。数据靠播放 webhook 喂，隔离库里没有，所以回归也走 mock |
 | B14d 观影：连接器设置 | ☑ | | `/eat/media/settings`（只有管理员能改，普通成员看到一句人话）：三档 `Segmented` 记在 `?section=` 里——媒体服务（Plex/Emby/MoviePilot：启用、主媒体库、名称、地址、凭据、保存 / 保存并测试 / 恢复默认，外加回调地址轮换）、搜索数据源（TMDB/豆瓣/Bangumi：启用、地址、凭据类型、TMDB 图片地址、Bangumi User-Agent）、用户映射（把媒体服务器账号对到家庭成员，离线/失效/停用的只剩「取消关联」）。**凭据只写不读**：输入框永远从空开始，留空＝不改，要删得显式勾「清除现有凭据」；回调地址里的密钥只在轮换那一次回传，所以那一行不做任何自动刷新，用 `${window.location.origin}/api` 拼成能直接贴进 Plex/Emby/MoviePilot 的地址。**没用 effect 重置表单**：恢复默认时直接拿响应里那条 setState（remount 会把只显示一次的回调地址冲掉）。回归只改地址不填凭据（测试库里不该出现真凭据）。顺手把 `/eat/media` 上还指着旧版的两个入口（观影设置、排片卡片）换成了站内跳转，`routes.ts` 补了 `/media/settings` 和 `/media` |
 | Zod 顺路迁移（记录做了哪些域） | ☐ | | 已完成：common、polls、points、tasks、agent（部分）；未完成 19 个域见 `grep -rl class-validator apps/api/src` |
-| C1 镜像与 Caddy 切换 | ☐ | | |
+| C1 镜像与 Caddy 切换 | ☑ | | `Dockerfile.web` 拆成 `base` + `build-web`（Vite，产物进 `/srv`）+ `build-legacy`（Expo，产物进 `/srv-legacy`）三段；旧客户端挂子路径要让 Expo 知道，所以在镜像里把 `app.json` 的 `experiments.baseUrl` 改成 `/legacy`——**仓库里的 app.json 不动**，开发和旧客户端回归还是跑在根路径。`Caddyfile` 的 `handle_path /legacy/*` 必须排在默认 `handle` 前面。`VITE_LEGACY_ORIGIN=/legacy` 让 `legacyUrl` 退化成同源。**本机验收过**：`docker build -f Dockerfile.web .` 成功（镜像 ~90MB）；`caddy validate` 通过；起一个容器 curl 了一遍——`/` 200 给新客户端、`/legacy/` 200 给旧客户端且资源路径是 `/legacy/_expo/...`、两边深链都回退到各自的 index.html、CSP 头还在、`:2015/healthz` 通。**用户要做的**：贴 `docs/ci-pending-C1.diff`（CI 现在完全没构建过这个镜像），以及在 NAS 上 `docker compose -f docker-compose.prod.yml up --build` |
 | C2 家庭试用两周 | ☐ | | 起止日期： |
 | C3 删除旧客户端 | ☐ | | |
 | C4 文档改写 | ☐ | | |

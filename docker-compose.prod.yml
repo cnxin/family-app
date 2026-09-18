@@ -133,6 +133,7 @@ services:
       dockerfile: Dockerfile.web
       args:
         EXPO_PUBLIC_API_URL: /api
+        VITE_LEGACY_ORIGIN: /legacy
     image: family-app-web:${APP_VERSION:-latest}
     restart: unless-stopped
     read_only: true

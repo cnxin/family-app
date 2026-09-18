@@ -9,6 +9,14 @@
 		reverse_proxy api:3100
 	}
 
+	# 旧客户端（C3 下线时连同 Dockerfile.web 的 build-legacy 一起删掉）。
+	# 要放在默认 handle 之前，不然会被它先吃掉。
+	handle_path /legacy/* {
+		root * /srv-legacy
+		try_files {path} /index.html
+		file_server
+	}
+
 	handle {
 		root * /srv
 		try_files {path} /index.html
