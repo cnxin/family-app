@@ -113,7 +113,7 @@ export const updateMemoryBody = createMemoryBody
   .extend({ expectedVersion, idempotencyKey });
 export const memoryVersionOperationBody = z.object({ expectedVersion, idempotencyKey });
 
-/** multipart/form-data：文件字段 `photo`（≤ 10MB，gif/jpeg/png/webp），其余字段如下。 */
+/** multipart/form-data：文件字段 `file`（控制器是 FileInterceptor('file')；≤ 10MB，gif/jpeg/png/webp），其余字段如下。 */
 export const uploadMemoryPhotoBody = z.object({
   caption: z.string().max(240).nullish(),
   idempotencyKey,

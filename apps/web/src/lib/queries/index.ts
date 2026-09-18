@@ -20,3 +20,4 @@ export * from './assets';
 export * from './assets-maintenance';
 export * from './finance';
 export * from './knowledge';
+export * from './memories';

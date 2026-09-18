@@ -74,7 +74,7 @@ export const SCENES: NavScene[] = [
       { key: 'finance', label: '财务', path: '/house/finance', ready: true, managerOnly: true },
       { key: 'points', label: '积分', path: '/house/points', ready: true },
       { key: 'knowledge', label: '知识库', path: '/house/knowledge', ready: true },
-      { key: 'memories', label: '回忆', legacy: '/memories' },
+      { key: 'memories', label: '回忆', path: '/house/memories', ready: true },
       { key: 'travel', label: '出行', legacy: '/travel' },
       { key: 'guests', label: '访客', path: '/house/guests', ready: true },
       { key: 'members', label: '成员', path: '/house/members', ready: true, managerOnly: true },

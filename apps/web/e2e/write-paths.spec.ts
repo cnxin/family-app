@@ -898,3 +898,61 @@ test('知识库：写一篇、改一版、还原回上一版、归档', async ({
     }
   }
 });
+
+// 1×1 的透明 PNG，够后端认出是图片就行
+const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+test('回忆：记一条、放一张照片、归档', async ({ page, request }) => {
+  const api = apiClient(request);
+  const title = stamp('回忆');
+  let memoryId: string | null = null;
+
+  try {
+    await page.goto('/house/memories');
+    await page.getByRole('button', { name: '+ 记一条' }).click();
+    const editor = page.getByRole('dialog', { name: '记一条回忆' });
+    await editor.getByLabel('标题').fill(title);
+    await editor.getByLabel('故事').fill('今天一起包了饺子。');
+    const created = waitFor(page, 'POST', /\/memories$/);
+    await editor.getByRole('button', { name: '保存回忆' }).click();
+    const createdResponse = await created;
+    expect(createdResponse.status(), await createdResponse.text()).toBe(201);
+    memoryId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
+
+    // 保存完直接停在详情上，往里放一张照片
+    const detail = page.getByRole('dialog', { name: title });
+    await detail.getByLabel('选择回忆照片').setInputFiles({
+      name: 'e2e.png',
+      mimeType: 'image/png',
+      buffer: TINY_PNG,
+    });
+    await detail.getByLabel('照片说明').fill('饺子');
+    const uploaded = waitFor(page, 'POST', /\/memories\/[^/]+\/photos$/);
+    await detail.getByRole('button', { name: '加进去' }).click();
+    const uploadedResponse = await uploaded;
+    expect(uploadedResponse.status(), await uploadedResponse.text()).toBe(201);
+    // 照片正文走的是签名地址，公开端点，img 直接能取到
+    await expect(detail.getByRole('img', { name: '饺子' })).toBeVisible();
+
+    // 归档
+    await detail.getByRole('button', { name: '归档' }).click();
+    const archived = waitFor(page, 'POST', /\/memories\/[^/]+\/archive$/);
+    await page.getByRole('dialog', { name: '归档这条回忆？' }).getByRole('button', { name: '确认归档' }).click();
+    expect((await archived).status()).toBe(201);
+    await expect(page.getByRole('button', { name: title })).toBeHidden();
+  } finally {
+    // 回忆没有删除，归档就是终点
+    if (memoryId) {
+      const one = await api.get<{ archivedAt: string | null; version: number }>(`/memories/${memoryId}`);
+      if (!one.archivedAt) {
+        await api.post(`/memories/${memoryId}/archive`, {
+          expectedVersion: one.version,
+          idempotencyKey: `e2e-cleanup-${memoryId}`,
+        });
+      }
+    }
+  }
+});
