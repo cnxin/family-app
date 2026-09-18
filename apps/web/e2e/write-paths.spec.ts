@@ -1178,3 +1178,56 @@ test('家庭动态：写点什么就能在时间线上看到，点一下跳到�
   await page.getByRole('tab', { name: '菜单' }).click();
   await expect(page.getByRole('tab', { name: '菜单' })).toHaveAttribute('aria-selected', 'true');
 });
+
+test('片单：手动加一部、发起观影投票、再改成已排期', async ({ page, request }) => {
+  const api = apiClient(request);
+  const title = stamp('片');
+  let mediaId: string | null = null;
+  let pollId: string | null = null;
+
+  try {
+    await page.goto('/eat/media/watchlist');
+    await page.getByRole('button', { name: '+ 加进片单' }).click();
+    const form = page.getByRole('dialog', { name: '加进家庭片单' });
+    // 隔离库里三个元数据源都没配，所以走手动这条路
+    await form.getByRole('button', { name: '都没有？手动填' }).click();
+    await form.getByLabel('影视名称').fill(title);
+    await form.getByLabel('年份').fill('2026');
+    const created = waitFor(page, 'POST', /\/media$/);
+    await form.getByRole('button', { name: '加进片单' }).click();
+    const createdResponse = await created;
+    expect(createdResponse.status(), await createdResponse.text()).toBe(201);
+    mediaId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
+
+    const card = page.getByRole('article', { name: title });
+    await expect(card).toContainText('想看');
+
+    // 发起单片投票：后端会把它置成「投票中」（所以要先投票再排期，
+    // 排期之后投票入口就没了，投票期间也不让改状态）
+    await card.getByRole('button', { name: `发起${title}的投票` }).click();
+    const pollDialog = page.getByRole('dialog', { name: '发起观影投票' });
+    const polled = waitFor(page, 'POST', /\/polls$/);
+    await pollDialog.getByRole('button', { name: '发起投票' }).click();
+    const polledResponse = await polled;
+    expect(polledResponse.status(), await polledResponse.text()).toBe(201);
+    pollId = ((await polledResponse.json()) as { data: { id: string } }).data.id;
+    await expect(page.getByRole('article', { name: title })).toContainText('投票中');
+
+    // 投票结束之后才能改状态
+    await api.post(`/polls/${pollId}/close`, {});
+    await page.reload();
+    await page.getByRole('button', { name: '全部' }).click();
+    const again = page.getByRole('article', { name: title });
+    await again.getByRole('button', { name: `编辑${title}` }).click();
+    const editor = page.getByRole('dialog', { name: `编辑「${title}」的安排` });
+    await editor.getByRole('checkbox', { name: '安排观影日期' }).click();
+    await editor.getByLabel('观影日期', { exact: true }).fill(tomorrow);
+    const patched = waitFor(page, 'PATCH', /\/media\/[^/]+$/);
+    await editor.getByRole('button', { name: '保存安排' }).click();
+    expect((await patched).status(), await (await patched).text()).toBe(200);
+    await expect(again).toContainText('已排期');
+  } finally {
+    if (pollId) await api.post(`/polls/${pollId}/close`, {}).catch(() => undefined);
+    if (mediaId) await api.delete(`/media/${mediaId}`).catch(() => undefined);
+  }
+});

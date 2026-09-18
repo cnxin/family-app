@@ -12,7 +12,8 @@ export function usePolls() {
 
 function invalidatePollSideEffects(client: ReturnType<typeof useQueryClient>) {
   // 投票会出现在日历、提醒来源和站内通知里，旧客户端也是这几个一起刷
-  for (const key of ['polls', 'notifications', 'reminder-sources', 'reminders', 'calendar']) {
+  // 观影投票会把候选片单条目置成「投票中」，结束时再落回「想看」，所以 media 也要刷
+  for (const key of ['polls', 'notifications', 'reminder-sources', 'reminders', 'calendar', 'media']) {
     void client.invalidateQueries({ queryKey: [key] });
   }
 }

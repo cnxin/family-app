@@ -103,6 +103,13 @@ export function MediaPage() {
 
       <aside className="flex shrink-0 flex-col gap-4 lg:w-[300px]">
         <Panel title="去哪儿看" grow={false}>
+          <SoftLink to="/eat/media/watchlist" className="flex items-center gap-2 px-3.5 py-2.5 hover:bg-muted">
+            <span className="text-[15px]">🎬</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px]">家庭片单</p>
+              <p className="text-[12px] text-ink-soft">{rows.length} 部影视</p>
+            </div>
+          </SoftLink>
           <SoftLink to="/eat/media/library" className="flex items-center gap-2 px-3.5 py-2.5 hover:bg-muted">
             <span className="text-[15px]">📚</span>
             <div className="min-w-0 flex-1">
@@ -130,9 +137,8 @@ export function MediaPage() {
               <p className="text-[12px] text-ink-soft">{sessions.data?.length ?? 0} 次播放</p>
             </div>
           </SoftLink>
-          {/* 片单和观影设置还没搬，先给旧版入口，别让人点空 */}
+          {/* 观影设置还没搬，先给旧版入口，别让人点空 */}
           {[
-            ['🎬', '家庭片单', `${rows.length} 部影视`, '/media/watchlist'],
             ...(canManage ? [['⚙️', '观影设置', '连接 Plex / Emby / MoviePilot', '/media/settings']] : []),
           ].map(([emoji, title, hint, path]) => (
             <a

@@ -8,7 +8,6 @@ import {
   useSyncMediaLibrary,
 } from '../lib/queries';
 import { useAuth } from '../lib/auth';
-import { legacyUrl } from '../lib/nav';
 import { pushToast } from '../lib/toast';
 import { SoftLink } from '../components/soft-link';
 import { ListSkeleton } from '../components/skeleton';
@@ -213,14 +212,12 @@ export function MediaLibraryPage() {
                         </a>
                       ) : null}
                       {item.householdMediaId ? (
-                        <a
-                          href={legacyUrl(`/media/watchlist?mediaId=${item.householdMediaId}`)}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <SoftLink
+                          to={`/eat/media/watchlist?mediaId=${item.householdMediaId}`}
                           className="inline-flex h-8 items-center rounded-lg px-2 text-[12px] text-accent hover:bg-muted"
                         >
                           已在片单
-                        </a>
+                        </SoftLink>
                       ) : (
                         <Button
                           variant="ghost"
@@ -285,14 +282,12 @@ export function MediaLibraryPage() {
                 </a>
               ) : null}
               {detail.householdMediaId ? (
-                <a
-                  href={legacyUrl(`/media/watchlist?mediaId=${detail.householdMediaId}`)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <SoftLink
+                  to={`/eat/media/watchlist?mediaId=${detail.householdMediaId}`}
                   className="inline-flex h-10 items-center rounded-lg px-4 text-sm text-accent hover:bg-muted"
                 >
                   去片单看看
-                </a>
+                </SoftLink>
               ) : (
                 <Button disabled={add.isPending} onClick={() => addToWatchlist(detail)}>
                   加进家庭片单
