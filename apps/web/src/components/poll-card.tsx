@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { HouseholdPoll } from '@family/contracts';
 import { useVotePoll } from '../lib/queries';
-import { legacyUrl } from '../lib/nav';
 import { pushToast } from '../lib/toast';
 import { SoftLink } from './soft-link';
 import { Button } from './ui';
@@ -195,14 +194,12 @@ export function PollCard({
           🔔 提醒
         </SoftLink>
         {poll.sourceModule === 'media' && poll.sourceId ? (
-          <a
-            href={legacyUrl('/media/watchlist')}
-            target="_blank"
-            rel="noopener noreferrer"
+          <SoftLink
+            to={`/eat/media/watchlist?mediaId=${poll.sourceId}`}
             className="h-9 rounded-lg px-2 text-[13px] leading-9 text-ink-soft transition-colors duration-150 hover:bg-muted"
           >
-            🎬 看片单 ↗
-          </a>
+            🎬 看片单
+          </SoftLink>
         ) : null}
         {poll.canManage ? (
           <span className="ml-auto flex items-center gap-1">
