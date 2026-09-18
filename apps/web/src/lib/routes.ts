@@ -20,6 +20,7 @@ const MOVED: [string, string][] = [
   ['/finance', '/house/finance'],
   ['/knowledge', '/house/knowledge'],
   ['/memories', '/house/memories'],
+  ['/travel', '/house/travel'],
   ['/home-assets', '/house/assets'],
   ['/asset', '/house/assets'],
   ['/profile', '/me/profile'],

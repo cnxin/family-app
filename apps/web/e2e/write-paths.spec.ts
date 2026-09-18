@@ -956,3 +956,65 @@ test('回忆：记一条、放一张照片、归档', async ({ page, request }) 
     }
   }
 });
+
+test('出行：建行程、加一项清单、打勾、完成这趟', async ({ page, request }) => {
+  const api = apiClient(request);
+  const title = stamp('出行');
+  let planId: string | null = null;
+
+  try {
+    await page.goto('/house/travel');
+    await page.getByRole('button', { name: '+ 新建行程' }).click();
+    const form = page.getByRole('dialog', { name: '安排一趟出行' });
+    await form.getByLabel('行程名称').fill(title);
+    await form.getByLabel('目的地').fill('杭州');
+    const created = waitFor(page, 'POST', /\/travel-plans$/);
+    await form.getByRole('button', { name: '创建行程' }).click();
+    const createdResponse = await created;
+    expect(createdResponse.status(), await createdResponse.text()).toBe(201);
+    planId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
+
+    // 建完直接落到详情页
+    await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible();
+
+    // 清单空的时候不能完成
+    await expect(page.getByRole('button', { name: '完成行程' })).toBeEnabled();
+
+    // 加一项，行程就有待处理了，完成按钮会被拦住
+    await page.getByRole('button', { name: '+ 加一项' }).click();
+    const itemForm = page.getByRole('dialog', { name: '加一项' });
+    await itemForm.getByLabel('清单项名称').fill('充电器');
+    await itemForm.getByRole('button', { name: '增加数量' }).click();
+    const itemCreated = waitFor(page, 'POST', /\/travel-plans\/[^/]+\/items$/);
+    await itemForm.getByRole('button', { name: '加进清单' }).click();
+    expect((await itemCreated).status()).toBe(201);
+    await expect(page.getByLabel('充电器', { exact: true })).toContainText('× 2');
+    await expect(page.getByRole('button', { name: '完成行程' })).toBeDisabled();
+
+    // 打勾之后才允许完成
+    const checked = waitFor(page, 'POST', /\/items\/[^/]+\/complete$/);
+    await page.getByRole('checkbox', { name: '完成充电器' }).click();
+    expect((await checked).status()).toBe(201);
+    const completeButton = page.getByRole('button', { name: '完成行程' });
+    await expect(completeButton).toBeEnabled();
+
+    const completed = waitFor(page, 'POST', /\/travel-plans\/[^/]+\/complete$/);
+    await completeButton.click();
+    await page.getByRole('dialog', { name: '这趟就算完成了？' }).getByRole('button', { name: '确认完成' }).click();
+    expect((await completed).status()).toBe(201);
+    await expect(page.getByRole('button', { name: '重新打开' })).toBeVisible();
+  } finally {
+    // 出行没有删除，归档就行
+    if (planId) {
+      const plan = await api.get<{ archivedAt: string | null; version: number }>(
+        `/travel-plans/${planId}`,
+      );
+      if (!plan.archivedAt) {
+        await api.post(`/travel-plans/${planId}/archive`, {
+          expectedVersion: plan.version,
+          idempotencyKey: `e2e-cleanup-${planId}`,
+        });
+      }
+    }
+  }
+});

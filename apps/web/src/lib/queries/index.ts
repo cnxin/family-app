@@ -21,3 +21,4 @@ export * from './assets-maintenance';
 export * from './finance';
 export * from './knowledge';
 export * from './memories';
+export * from './travel';
