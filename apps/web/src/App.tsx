@@ -16,6 +16,7 @@ import { PointsPage } from './pages/points';
 import { MembersPage } from './pages/members';
 import { GuestsPage } from './pages/guests';
 import { AssetsPage } from './pages/assets';
+import { FinancePage } from './pages/finance';
 import { AssetDetailPage } from './pages/asset-detail';
 import { GuestInvitationPage } from './pages/guest-invitation';
 import { ProfilePage } from './pages/profile';
@@ -92,6 +93,7 @@ export function App() {
           <Route path="/house/members" element={<MembersPage />} />
           <Route path="/house/guests" element={<GuestsPage />} />
           <Route path="/house/assets" element={<AssetsPage />} />
+          <Route path="/house/finance" element={<FinancePage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
           <Route path="/me/profile" element={<ProfilePage />} />

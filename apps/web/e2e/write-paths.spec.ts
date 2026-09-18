@@ -728,3 +728,57 @@ test('资产维护：排计划、关联耗材、完成一次、加条资料再�
     if (assetId) await api.patch(`/assets/${assetId}`, { status: 'retired' });
   }
 });
+
+test('财务：新建账户、记一笔支出、再撤销', async ({ page, request }) => {
+  const api = apiClient(request);
+  const accountName = stamp('账户');
+  const title = stamp('聚餐');
+
+  try {
+    await page.goto('/house/finance');
+
+    // 账户：新建一个，余额立刻算出来
+    await page.getByRole('tab', { name: '账户' }).click();
+    await page.getByRole('button', { name: '+ 新增账户' }).click();
+    const accountForm = page.getByRole('dialog', { name: '新增账户' });
+    await accountForm.getByLabel('账户名称').fill(accountName);
+    await accountForm.getByLabel('初始余额').fill('1000');
+    const created = waitFor(page, 'POST', /\/finance\/accounts$/);
+    await accountForm.getByRole('button', { name: '保存账户' }).click();
+    expect((await created).status(), await (await created).text()).toBe(201);
+    await expect(accountForm).toBeHidden();
+    const accountRow = page.getByLabel(accountName, { exact: true });
+    await expect(accountRow).toContainText('¥1,000.00');
+
+    // 记一笔支出，记在这个账户上
+    await page.getByRole('button', { name: '+ 记一笔' }).click();
+    const form = page.getByRole('dialog', { name: '记一笔' });
+    await form.getByLabel('金额').fill('88.80');
+    await form.getByRole('button', { name: new RegExp(accountName) }).click();
+    await form.getByLabel('账目名称').fill(title);
+    const recorded = waitFor(page, 'POST', /\/finance\/transactions$/);
+    await form.getByRole('button', { name: '确认记账' }).click();
+    expect((await recorded).status(), await (await recorded).text()).toBe(201);
+    await expect(form).toBeHidden();
+
+    // 流水里能看到，金额带负号
+    await page.getByRole('tab', { name: '流水' }).click();
+    // 撤销之后会多出一条「撤销：<标题>」，名字是包含关系，所以这里必须 exact
+    const entry = page.getByRole('article', { name: title, exact: true });
+    await expect(entry).toContainText('-¥88.80');
+
+    // 撤销：原流水留着，标成已撤销
+    await entry.getByRole('button', { name: `撤销${title}` }).click();
+    const reversed = waitFor(page, 'POST', /\/finance\/transactions\/[^/]+\/reverse$/);
+    await page.getByRole('dialog', { name: '撤销这笔流水？' }).getByRole('button', { name: '确认撤销' }).click();
+    expect((await reversed).status()).toBe(201);
+    await expect(entry).toContainText('已经被一笔反向流水撤销');
+  } finally {
+    // 账本不可删，停用就行；余额和流水都留在历史里
+    const accounts = await api.get<{ id: string; name: string; version: number }[]>(
+      '/finance/accounts?includeInactive=true',
+    );
+    const mine = accounts.find((one) => one.name === accountName);
+    if (mine) await api.patch(`/finance/accounts/${mine.id}`, { isActive: false, expectedVersion: mine.version });
+  }
+});
