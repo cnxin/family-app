@@ -23,3 +23,4 @@ export * from './knowledge';
 export * from './memories';
 export * from './travel';
 export * from './backups';
+export * from './activities';

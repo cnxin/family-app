@@ -89,7 +89,7 @@ export const SCENES: NavScene[] = [
     segments: [
       { key: 'profile', label: '个人', path: '/me/profile', ready: true },
       { key: 'assistant', label: '问问小管家', path: '/me/assistant', ready: true },
-      { key: 'activity', label: '家庭动态', legacy: '/activity' },
+      { key: 'activity', label: '家庭动态', path: '/me/activity', ready: true },
     ],
   },
 ];

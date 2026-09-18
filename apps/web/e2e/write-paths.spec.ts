@@ -1155,3 +1155,26 @@ test('备份：改一下保留策略（排队和演练是 worker 的活，这里
     await api.put('/system/backups/policy', restore);
   }
 });
+
+test('家庭动态：写点什么就能在时间线上看到，点一下跳到那一页', async ({ page, request }) => {
+  const api = apiClient(request);
+  const name = stamp('说明');
+
+  // 造一条一定会写活动流的动作：写一篇知识库文章
+  await api.post('/knowledge-articles', {
+    title: name,
+    category: 'other',
+    content: '活动流用例造的。',
+    idempotencyKey: `e2e-activity-${Date.now()}`,
+  });
+
+  await page.goto('/me/activity');
+  await expect(page.getByRole('heading', { name: '家庭动态', level: 1 })).toBeVisible();
+  // 今天这一组里应该有刚才那条，而且能点进搬好的知识库页
+  await expect(page.getByText(new RegExp(name))).toBeVisible();
+  await expect(page.getByRole('heading', { name: '今天', level: 2 })).toBeVisible();
+
+  // 「菜单」这一档只看菜单事件
+  await page.getByRole('tab', { name: '菜单' }).click();
+  await expect(page.getByRole('tab', { name: '菜单' })).toHaveAttribute('aria-selected', 'true');
+});
