@@ -10,12 +10,14 @@ import {
 } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { AccountsPanel } from '../components/finance-accounts';
+import { BudgetBar, BudgetsPanel } from '../components/finance-budgets';
+import { CategoriesPanel } from '../components/finance-categories';
 import { LedgerPanel } from '../components/finance-ledger';
 import { TransactionForm } from '../components/finance-transaction-form';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
-type View = 'overview' | 'ledger' | 'accounts';
+type View = 'overview' | 'ledger' | 'budgets' | 'accounts';
 
 function Tile({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -85,6 +87,7 @@ export function FinancePage() {
             options={[
               { value: 'overview' as const, label: '概览' },
               { value: 'ledger' as const, label: '流水' },
+              { value: 'budgets' as const, label: '预算' },
               { value: 'accounts' as const, label: '账户' },
             ]}
           />
@@ -93,8 +96,20 @@ export function FinancePage() {
     >
       {view === 'ledger' ? (
         <LedgerPanel month={month} canManage={canManage} />
+      ) : view === 'budgets' ? (
+        <BudgetsPanel
+          month={month}
+          categories={categories.data ?? []}
+          budgets={summary.data?.budgets ?? []}
+          canManage={canManage}
+        />
       ) : view === 'accounts' ? (
-        <AccountsPanel accounts={rows} canManage={canManage} />
+        <>
+          <AccountsPanel accounts={rows} canManage={canManage} />
+          <aside className="flex shrink-0 flex-col lg:w-[320px]">
+            <CategoriesPanel categories={categories.data ?? []} canManage={canManage} />
+          </aside>
+        </>
       ) : (
         <Panel className="p-3">
           {summary.isPending || accounts.isPending ? (
@@ -165,6 +180,39 @@ export function FinancePage() {
                   ))}
                 </div>
               </div>
+
+              {summary.data?.budgets.length ? (
+                <div>
+                  <h2 className="mb-2 px-1 text-[13px] font-semibold text-ink-soft">本月预算</h2>
+                  <div className="overflow-hidden rounded-card border border-border">
+                    {summary.data.budgets.map((budget, index) => (
+                      <div
+                        key={budget.id}
+                        className={'px-3.5 py-2.5 ' + (index ? 'border-t border-border' : '')}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: budget.category.color }}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-[13px]">
+                            {budget.category.name}
+                          </span>
+                          <span
+                            className={
+                              'shrink-0 text-[12px] tabular-nums ' +
+                              (budget.ratio > 100 ? 'text-danger' : 'text-ink-soft')
+                            }
+                          >
+                            {yuan(budget.spent)} / {yuan(budget.amount)}
+                          </span>
+                        </div>
+                        <BudgetBar ratio={budget.ratio} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </Panel>

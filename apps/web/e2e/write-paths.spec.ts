@@ -782,3 +782,59 @@ test('财务：新建账户、记一笔支出、再撤销', async ({ page, reque
     if (mine) await api.patch(`/finance/accounts/${mine.id}`, { isActive: false, expectedVersion: mine.version });
   }
 });
+
+test('财务预算：新增分类、设预算、看进度、再删掉', async ({ page, request }) => {
+  const api = apiClient(request);
+  const categoryName = stamp('分类');
+  let categoryId: string | null = null;
+
+  try {
+    await page.goto('/house/finance');
+
+    // 新增一个支出分类
+    await page.getByRole('tab', { name: '账户' }).click();
+    await page.getByRole('button', { name: '+ 新增分类' }).click();
+    const categoryForm = page.getByRole('dialog', { name: '新增收支分类' });
+    await categoryForm.getByLabel('分类名称').fill(categoryName);
+    const categoryCreated = waitFor(page, 'POST', /\/finance\/categories$/);
+    await categoryForm.getByRole('button', { name: '保存分类' }).click();
+    const categoryResponse = await categoryCreated;
+    expect(categoryResponse.status(), await categoryResponse.text()).toBe(201);
+    categoryId = ((await categoryResponse.json()) as { data: { id: string } }).data.id;
+
+    // 给它设一个预算
+    await page.getByRole('tab', { name: '预算' }).click();
+    await page.getByRole('button', { name: `设置${categoryName}预算` }).click();
+    const budgetForm = page.getByRole('dialog', { name: `${categoryName}的月度预算` });
+    await budgetForm.getByLabel('预算金额').fill('100');
+    const saved = waitFor(page, 'PUT', /\/finance\/budgets$/);
+    await budgetForm.getByRole('button', { name: '保存预算' }).click();
+    expect((await saved).status(), await (await saved).text()).toBe(200);
+    const budgetRow = page.getByLabel(categoryName, { exact: true });
+    await expect(budgetRow).toContainText('¥100.00');
+    await expect(budgetRow).toContainText('已用 ¥0.00');
+
+    // 删掉
+    await page.getByRole('button', { name: `删除${categoryName}预算` }).click();
+    const removed = waitFor(page, 'DELETE', /\/finance\/budgets\/[^/?]+/);
+    await page
+      .getByRole('dialog', { name: `删掉${categoryName}的预算？` })
+      .getByRole('button', { name: '删除预算' })
+      .click();
+    expect((await removed).status()).toBe(200);
+    await expect(budgetRow).toContainText('未设');
+  } finally {
+    if (categoryId) {
+      const categories = await api.get<{ id: string; version: number }[]>(
+        '/finance/categories?includeInactive=true',
+      );
+      const mine = categories.find((one) => one.id === categoryId);
+      if (mine) {
+        await api.patch(`/finance/categories/${categoryId}`, {
+          isActive: false,
+          expectedVersion: mine.version,
+        });
+      }
+    }
+  }
+});
