@@ -9,3 +9,4 @@ export * from './notifications';
 export * from './polls';
 export * from './points';
 export * from './members';
+export * from './profile';

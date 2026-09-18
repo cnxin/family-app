@@ -376,3 +376,48 @@ test('成员：生成邀请码再撤销、改掌勺偏好', async ({ page }) => 
   await again.getByRole('button', { name: '保存成员资料' }).click();
   expect((await restored).ok()).toBeTruthy();
 });
+
+test('个人：改掌勺偏好、小管家记忆开关、密码校验', async ({ page, request }) => {
+  const api = apiClient(request);
+  await page.goto('/me/profile');
+
+  // 掌勺偏好：点一下写库，再点回来
+  const cooking = page.getByRole('checkbox', { name: '经常掌勺' });
+  const before = await cooking.getAttribute('aria-checked');
+  const saved = waitFor(page, 'PATCH', /\/members\/me\/preferences$/);
+  await cooking.click();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(cooking).toHaveAttribute('aria-checked', before === 'true' ? 'false' : 'true');
+  const restored = waitFor(page, 'PATCH', /\/members\/me\/preferences$/);
+  await cooking.click();
+  expect((await restored).ok()).toBeTruthy();
+
+  // 小管家记忆：乐观锁要带 version，改完再改回来
+  const memory = page.getByRole('checkbox', { name: '启用记忆' });
+  const memoryBefore = await memory.getAttribute('aria-checked');
+  const toggled = waitFor(page, 'PATCH', /\/agent\/profile$/);
+  await memory.click();
+  expect((await toggled).ok()).toBeTruthy();
+  await expect(memory).toHaveAttribute('aria-checked', memoryBefore === 'true' ? 'false' : 'true');
+  const back = waitFor(page, 'PATCH', /\/agent\/profile$/);
+  await memory.click();
+  expect((await back).ok()).toBeTruthy();
+
+  // 密码表单只验前端校验，不真改密码（会把后面的用例锁出去）
+  await page.getByRole('button', { name: /修改密码|设置密码/ }).click();
+  const dialog = page.getByRole('dialog', { name: /修改密码|设置密码/ });
+  await dialog.getByLabel('新密码').fill('short');
+  await dialog.getByLabel('再输一次').fill('short');
+  await dialog.getByRole('button', { name: '更新密码' }).click();
+  await expect(dialog.getByText('新密码至少 8 位')).toBeVisible();
+  await dialog.getByLabel('新密码').fill('longenough123');
+  await dialog.getByLabel('再输一次').fill('different123');
+  await dialog.getByRole('button', { name: '更新密码' }).click();
+  await expect(dialog.getByText('两次输入的新密码不一样')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  // 会话里的偏好确实回到了原样
+  const me = await api.get<{ prefersCooking: boolean }[]>('/members');
+  expect(me.length).toBeGreaterThan(0);
+});

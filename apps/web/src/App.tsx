@@ -14,6 +14,7 @@ import { NotificationsPage } from './pages/notifications';
 import { PollsPage } from './pages/polls';
 import { PointsPage } from './pages/points';
 import { MembersPage } from './pages/members';
+import { ProfilePage } from './pages/profile';
 import { Shell } from './components/shell';
 import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
@@ -30,6 +31,7 @@ const REDIRECTS: [string, string][] = [
   ['/polls', '/schedule/polls'],
   ['/points', '/house/points'],
   ['/members', '/house/members'],
+  ['/profile', '/me/profile'],
   ['/calendar', '/schedule/calendar'],
   ['/reminders', '/schedule/reminders'],
   ['/notifications', '/schedule/notifications'],
@@ -70,6 +72,7 @@ export function App() {
           <Route path="/house/points" element={<PointsPage />} />
           <Route path="/house/members" element={<MembersPage />} />
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
+          <Route path="/me/profile" element={<ProfilePage />} />
 
           {/* 没搬过来的分段统一落到旧版入口页 */}
           <Route path="/eat/:segment" element={<LegacyBridge />} />
