@@ -1,44 +1,25 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AppNotification, NotificationModule } from '@family/contracts';
+import type { AppNotification, NotificationChannel, NotificationModule } from '@family/contracts';
 import {
+  useDeleteNotificationChannel,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
+  useNotificationChannels,
+  useNotificationDeliveries,
   useNotifications,
 } from '../lib/queries';
 import { legacyUrl } from '../lib/nav';
 import { toNewRoute } from '../lib/routes';
+import { MODULE_ICON, MODULE_LABEL } from '../lib/notification-meta';
 import { pushToast } from '../lib/toast';
-import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
+import { useAuth } from '../lib/auth';
+import { ChannelCard, ChannelEditor, DeliveryList } from '../components/channel-settings';
 import { ListSkeleton } from '../components/skeleton';
+import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
-const MODULE_LABEL: Record<NotificationModule, string> = {
-  menu: '菜单',
-  task: '任务',
-  poll: '投票',
-  calendar: '日历',
-  reminder: '提醒',
-  media: '观影',
-  guest: '访客',
-  points: '积分',
-  agent: '小管家',
-  system: '系统',
-};
+type View = 'inbox' | 'channels' | 'deliveries';
 
-const MODULE_ICON: Record<NotificationModule, string> = {
-  menu: '🍲',
-  task: '✅',
-  poll: '🗳',
-  calendar: '📅',
-  reminder: '🔔',
-  media: '🎬',
-  guest: '👋',
-  points: '🎁',
-  agent: '🤖',
-  system: '⚙️',
-};
-
-/** 已搬的域在新客户端里的落点；其余回旧版，用后端给的 targetPath。 */
 function when(value: string) {
   const date = new Date(value);
   const today = new Date();
@@ -54,13 +35,7 @@ function when(value: string) {
   }).format(date);
 }
 
-function NotificationRow({
-  item,
-  onRead,
-}: {
-  item: AppNotification;
-  onRead: () => void;
-}) {
+function NotificationRow({ item, onRead }: { item: AppNotification; onRead: () => void }) {
   const navigate = useNavigate();
   const unread = !item.readAt;
 
@@ -117,12 +92,20 @@ function NotificationRow({
 }
 
 export function NotificationsPage() {
+  const { session } = useAuth();
+  const manager = session?.member.role !== 'member';
+  const [view, setView] = useState<View>('inbox');
   const [scope, setScope] = useState<'unread' | 'all'>('unread');
   const [module, setModule] = useState<NotificationModule | 'all'>('all');
+  const [channelForm, setChannelForm] = useState<NotificationChannel | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<NotificationChannel | null>(null);
 
   const list = useNotifications(scope === 'all');
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
+  const channels = useNotificationChannels();
+  const deliveries = useNotificationDeliveries(view === 'deliveries');
+  const deleteChannel = useDeleteNotificationChannel();
 
   const rows = useMemo(() => {
     const all = list.data ?? [];
@@ -138,13 +121,23 @@ export function NotificationsPage() {
     return [...seen];
   }, [list.data]);
 
+  const channelRows = channels.data ?? [];
+
   return (
     <Page
       title="消息"
-      subtitle={unread ? `${unread} 条未读` : '都看过了'}
+      subtitle={
+        view === 'channels'
+          ? '外部渠道和我的接收范围'
+          : view === 'deliveries'
+            ? '外部投递状态与重试'
+            : unread
+              ? `${unread} 条未读`
+              : '都看过了'
+      }
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {unread ? (
+          {view === 'inbox' && unread ? (
             <Button
               variant="outline"
               className="h-9 px-3 text-[13px]"
@@ -158,27 +151,35 @@ export function NotificationsPage() {
               {markAll.isPending ? '处理中…' : '全部已读'}
             </Button>
           ) : null}
-          <a
-            href={legacyUrl('/notifications')}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-ink-soft transition-colors duration-150 hover:bg-muted"
-          >
-            外部渠道设置 ↗
-          </a>
+          {view === 'channels' && manager ? (
+            <Button className="h-9 px-3 text-[13px]" onClick={() => setChannelForm('new')}>
+              + 新增渠道
+            </Button>
+          ) : null}
         </div>
       }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
-            value={scope}
-            onChange={setScope}
+            value={view}
+            onChange={setView}
             options={[
-              { value: 'unread' as const, label: '未读' },
-              { value: 'all' as const, label: '全部' },
+              { value: 'inbox' as const, label: unread ? `消息 ${unread}` : '消息' },
+              { value: 'channels' as const, label: '外部渠道' },
+              { value: 'deliveries' as const, label: '投递记录' },
             ]}
           />
-          {presentModules.length > 1 ? (
+          {view === 'inbox' ? (
+            <Segmented
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: 'unread' as const, label: '未读' },
+                { value: 'all' as const, label: '全部' },
+              ]}
+            />
+          ) : null}
+          {view === 'inbox' && presentModules.length > 1 ? (
             <div className="flex flex-wrap gap-1.5">
               {(['all', ...presentModules] as const).map((value) => (
                 <button
@@ -201,27 +202,102 @@ export function NotificationsPage() {
         </div>
       }
     >
-      <Panel title={`${rows.length} 条`}>
-        {list.isPending ? (
-          <div className="p-3">
-            <ListSkeleton rows={5} />
-          </div>
-        ) : rows.length === 0 ? (
-          <EmptyState
-            emoji="📭"
-            title={scope === 'unread' ? '没有未读消息' : '还没有消息'}
-            hint="菜单、任务、提醒有动静时会推到这儿"
-          />
-        ) : (
-          rows.map((item) => (
-            <NotificationRow
-              key={item.id}
-              item={item}
-              onRead={() => markRead.mutate(item.id)}
+      {view === 'inbox' ? (
+        <Panel title={`${rows.length} 条`}>
+          {list.isPending ? (
+            <div className="p-3">
+              <ListSkeleton rows={5} />
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              emoji="📭"
+              title={scope === 'unread' ? '没有未读消息' : '还没有消息'}
+              hint="菜单、任务、提醒有动静时会推到这儿"
             />
-          ))
-        )}
-      </Panel>
+          ) : (
+            rows.map((item) => (
+              <NotificationRow key={item.id} item={item} onRead={() => markRead.mutate(item.id)} />
+            ))
+          )}
+        </Panel>
+      ) : view === 'channels' ? (
+        <Panel className="p-3">
+          {channels.isPending ? (
+            <ListSkeleton rows={2} />
+          ) : channelRows.length === 0 ? (
+            <EmptyState
+              emoji="📡"
+              title="还没有外部渠道"
+              hint={
+                manager
+                  ? '加一个 ntfy 或 Webhook，家里人就能各自选要收哪些通知'
+                  : '等家庭管理员先配好渠道'
+              }
+            />
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+              {channelRows.map((one) => (
+                <ChannelCard
+                  key={one.id}
+                  channel={one}
+                  manager={manager}
+                  onEdit={() => setChannelForm(one)}
+                  onDelete={() => setDeleting(one)}
+                />
+              ))}
+            </div>
+          )}
+        </Panel>
+      ) : (
+        <Panel className="p-3">
+          {deliveries.isPending ? (
+            <ListSkeleton rows={4} />
+          ) : (
+            <DeliveryList deliveries={deliveries.data ?? []} />
+          )}
+        </Panel>
+      )}
+
+      {channelForm ? (
+        <ChannelEditor
+          key={channelForm === 'new' ? 'new' : channelForm.id}
+          editing={channelForm === 'new' ? null : channelForm}
+          onClose={() => setChannelForm(null)}
+        />
+      ) : null}
+
+      {deleting ? (
+        <Dialog
+          title={`删除渠道「${deleting.name}」？`}
+          onClose={() => setDeleting(null)}
+          maxWidth={400}
+          footer={
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleting(null)}>
+                再想想
+              </Button>
+              <Button
+                className="flex-1 bg-danger hover:brightness-110"
+                disabled={deleteChannel.isPending}
+                onClick={() =>
+                  deleteChannel.mutate(deleting.id, {
+                    onSuccess: () => {
+                      pushToast(`渠道「${deleting.name}」已删除`);
+                      setDeleting(null);
+                    },
+                  })
+                }
+              >
+                删除渠道
+              </Button>
+            </div>
+          }
+        >
+          <p className="text-sm leading-relaxed text-ink-soft">
+            删除后家里人都不会再收到这个渠道的推送，已有的投递记录保留。站内消息不受影响。
+          </p>
+        </Dialog>
+      ) : null}
     </Page>
   );
 }

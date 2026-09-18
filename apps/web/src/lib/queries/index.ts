@@ -10,3 +10,4 @@ export * from './polls';
 export * from './points';
 export * from './members';
 export * from './profile';
+export * from './channels';

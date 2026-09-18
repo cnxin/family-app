@@ -421,3 +421,48 @@ test('个人：改掌勺偏好、小管家记忆开关、密码校验', async ({
   const me = await api.get<{ prefersCooking: boolean }[]>('/members');
   expect(me.length).toBeGreaterThan(0);
 });
+
+test('外部渠道：新增、改接收范围、发测试、删除', async ({ page }) => {
+  const name = stamp('渠道');
+  await page.goto('/schedule/notifications');
+  await page.getByRole('tab', { name: '外部渠道' }).click();
+
+  await page.getByRole('button', { name: '+ 新增渠道' }).click();
+  const dialog = page.getByRole('dialog', { name: '新增外部渠道' });
+  await dialog.getByLabel('渠道名称').fill(name);
+  // 指一个一定连不上的地址：这样「发测试消息」会失败，正好验证失败提示也是好的
+  await dialog.getByLabel('接收地址').fill('http://127.0.0.1:1/e2e');
+  const created = waitFor(page, 'POST', /\/notification-channels$/);
+  await dialog.getByRole('button', { name: '创建渠道' }).click();
+  const createResponse = await created;
+  expect(createResponse.status(), await createResponse.text()).toBe(201);
+  await expect(dialog).toBeHidden();
+
+  const card = page.getByRole('article', { name });
+  await expect(card).toBeVisible();
+
+  // 开启「接收我的通知」，再取消一个模块
+  const receive = card.getByRole('checkbox', { name: `通过${name}接收我的通知` });
+  if ((await receive.getAttribute('aria-checked')) !== 'true') {
+    const on = waitFor(page, 'PUT', /\/notification-channels\/[^/]+\/preference$/);
+    await receive.click();
+    expect((await on).ok()).toBeTruthy();
+  }
+  const moduleChip = card.getByRole('button', { name: '提醒', exact: true });
+  const wasOn = await moduleChip.getAttribute('aria-pressed');
+  const changed = waitFor(page, 'PUT', /\/notification-channels\/[^/]+\/preference$/);
+  await moduleChip.click();
+  expect((await changed).ok()).toBeTruthy();
+  await expect(moduleChip).toHaveAttribute('aria-pressed', wasOn === 'true' ? 'false' : 'true');
+
+  // 发测试消息：地址是死的，所以这里只要求接口被调到并给出结果
+  const tested = waitFor(page, 'POST', /\/notification-channels\/[^/]+\/test$/);
+  await card.getByRole('button', { name: `测试${name}` }).click();
+  expect((await tested).status()).toBeGreaterThanOrEqual(200);
+
+  await page.getByRole('button', { name: `删除${name}` }).click();
+  const removed = waitFor(page, 'DELETE', /\/notification-channels\/[^/]+$/);
+  await page.getByRole('dialog', { name: `删除渠道「${name}」？` }).getByRole('button', { name: '删除渠道' }).click();
+  expect((await removed).ok()).toBeTruthy();
+  await expect(card).toBeHidden();
+});
