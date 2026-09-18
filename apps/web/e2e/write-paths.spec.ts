@@ -1018,3 +1018,85 @@ test('出行：建行程、加一项清单、打勾、完成这趟', async ({ pa
     }
   }
 });
+
+test('出行模板：建一个模板、套进行程、再归档模板', async ({ page, request }) => {
+  const api = apiClient(request);
+  const templateTitle = stamp('模板');
+  const planTitle = stamp('出行');
+  let planId: string | null = null;
+  let templateId: string | null = null;
+
+  try {
+    const plan = await api.post<{ id: string }>('/travel-plans', {
+      title: planTitle,
+      startDate: isoDate(3),
+      endDate: isoDate(4),
+      idempotencyKey: `e2e-plan-${Date.now()}`,
+    });
+    planId = plan.id;
+
+    // 建模板
+    await page.goto('/house/travel');
+    await page.getByRole('tab', { name: '打包模板' }).click();
+    await page.getByRole('button', { name: '+ 新建模板' }).click();
+    const form = page.getByRole('dialog', { name: '新建打包模板' });
+    await form.getByLabel('模板名称').fill(templateTitle);
+    await form.getByLabel('模板清单第 1 项').fill('洗漱包');
+    await form.getByRole('button', { name: '+ 再加一行' }).click();
+    await form.getByLabel('模板清单第 2 项').fill('雨伞');
+    const created = waitFor(page, 'POST', /\/travel-templates$/);
+    await form.getByRole('button', { name: '创建模板' }).click();
+    const createdResponse = await created;
+    expect(createdResponse.status(), await createdResponse.text()).toBe(201);
+    templateId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
+    await expect(page.getByRole('article', { name: templateTitle })).toContainText('2 项');
+
+    // 套进刚才那个行程
+    await page.goto(`/house/travel/${plan.id}`);
+    await page.getByRole('button', { name: '套用模板' }).click();
+    const picker = page.getByRole('dialog', { name: '选一个打包模板' });
+    await picker.getByRole('button', { name: templateTitle }).click();
+    const applied = waitFor(page, 'POST', /\/templates\/[^/]+\/apply$/);
+    await page.getByRole('dialog', { name: `用「${templateTitle}」？` }).getByRole('button', { name: '加到清单' }).click();
+    expect((await applied).status(), await (await applied).text()).toBe(201);
+    await expect(page.getByLabel('洗漱包', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('雨伞', { exact: true })).toBeVisible();
+
+    // 同一个模板不能再套第二次：选择列表里已经置灰
+    await page.getByRole('button', { name: '套用模板' }).click();
+    await expect(picker.getByRole('button', { name: templateTitle })).toBeDisabled();
+    await picker.getByRole('button', { name: '关闭' }).click();
+
+    // 归档模板
+    await page.goto('/house/travel');
+    await page.getByRole('tab', { name: '打包模板' }).click();
+    const archived = waitFor(page, 'POST', /\/travel-templates\/[^/]+\/archive$/);
+    await page.getByRole('button', { name: `归档${templateTitle}` }).click();
+    expect((await archived).status()).toBe(201);
+    await expect(page.getByRole('article', { name: templateTitle })).toContainText('已归档');
+  } finally {
+    if (planId) {
+      const plan = await api.get<{ archivedAt: string | null; version: number }>(
+        `/travel-plans/${planId}`,
+      );
+      if (!plan.archivedAt) {
+        await api.post(`/travel-plans/${planId}/archive`, {
+          expectedVersion: plan.version,
+          idempotencyKey: `e2e-cleanup-plan-${planId}`,
+        });
+      }
+    }
+    if (templateId) {
+      const templates = await api.get<{ id: string; archivedAt: string | null; version: number }[]>(
+        '/travel-templates?status=all',
+      );
+      const mine = templates.find((one) => one.id === templateId);
+      if (mine && !mine.archivedAt) {
+        await api.post(`/travel-templates/${templateId}/archive`, {
+          expectedVersion: mine.version,
+          idempotencyKey: `e2e-cleanup-template-${templateId}`,
+        });
+      }
+    }
+  }
+});

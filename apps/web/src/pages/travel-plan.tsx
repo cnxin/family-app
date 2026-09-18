@@ -10,6 +10,7 @@ import {
   useTravelPlan,
   useTravelPlanAction,
 } from '../lib/queries';
+import { ApplyTemplateDialog } from '../components/travel-apply-template';
 import { ItemForm, PlanForm } from '../components/travel-forms';
 import { SoftLink } from '../components/soft-link';
 import { ListSkeleton } from '../components/skeleton';
@@ -56,6 +57,7 @@ export function TravelPlanPage() {
   const [editing, setEditing] = useState(false);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItem, setEditingItem] = useState<TravelChecklistItem | null>(null);
+  const [applying, setApplying] = useState(false);
   const [ask, setAsk] = useState<Ask | null>(null);
 
   if (query.isPending) {
@@ -173,13 +175,25 @@ export function TravelPlanPage() {
         title={`出行清单 ${plan.counts.completed}/${plan.counts.total}`}
         right={
           plan.canEditChecklist ? (
-            <Button
-              variant="ghost"
-              className="h-7 px-2 text-[12px]"
-              onClick={() => setAddingItem(true)}
-            >
-              + 加一项
-            </Button>
+            <div className="flex items-center gap-1">
+              {/* 应用模板后端还要求是创建者或管理员，所以按 canManage 显示，别让人点了才吃 403 */}
+              {plan.canManage ? (
+                <Button
+                  variant="ghost"
+                  className="h-7 px-2 text-[12px]"
+                  onClick={() => setApplying(true)}
+                >
+                  套用模板
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                className="h-7 px-2 text-[12px]"
+                onClick={() => setAddingItem(true)}
+              >
+                + 加一项
+              </Button>
+            </div>
           ) : null
         }
       >
@@ -338,6 +352,8 @@ export function TravelPlanPage() {
           </Panel>
         ) : null}
       </aside>
+
+      {applying ? <ApplyTemplateDialog plan={plan} onClose={() => setApplying(false)} /> : null}
 
       {editing ? (
         <PlanForm editing={plan} onSaved={() => setEditing(false)} onClose={() => setEditing(false)} />

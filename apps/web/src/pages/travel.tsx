@@ -3,19 +3,23 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { TravelPlan } from '@family/contracts';
 import { travelDateRange, travelStatusLabel, useTravelPlans } from '../lib/queries';
 import { PlanForm } from '../components/travel-forms';
+import { TemplatesPanel } from '../components/travel-templates';
 import { SoftLink } from '../components/soft-link';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
 type Status = 'active' | 'completed' | 'cancelled' | 'archived';
+type View = 'plans' | 'templates';
 
 const NO_PLANS: TravelPlan[] = [];
 
 export function TravelPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const [view, setView] = useState<View>('plans');
   const [status, setStatus] = useState<Status>('active');
   const [composing, setComposing] = useState(false);
+  const [composingTemplate, setComposingTemplate] = useState(false);
 
   const list = useTravelPlans(status);
   const rows = list.data ?? NO_PLANS;
@@ -31,23 +35,47 @@ export function TravelPage() {
       title="家庭出行"
       subtitle="行程、打包清单和家里的分工"
       actions={
-        <Button className="h-9 px-3 text-[13px]" onClick={() => setComposing(true)}>
-          + 新建行程
-        </Button>
+        view === 'plans' ? (
+          <Button className="h-9 px-3 text-[13px]" onClick={() => setComposing(true)}>
+            + 新建行程
+          </Button>
+        ) : (
+          <Button className="h-9 px-3 text-[13px]" onClick={() => setComposingTemplate(true)}>
+            + 新建模板
+          </Button>
+        )
       }
       toolbar={
-        <Segmented
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: 'active' as const, label: '计划中' },
-            { value: 'completed' as const, label: '已完成' },
-            { value: 'cancelled' as const, label: '已取消' },
-            { value: 'archived' as const, label: '已归档' },
-          ]}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'plans' as const, label: '行程' },
+              { value: 'templates' as const, label: '打包模板' },
+            ]}
+          />
+          {view === 'plans' ? (
+            <Segmented
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: 'active' as const, label: '计划中' },
+                { value: 'completed' as const, label: '已完成' },
+                { value: 'cancelled' as const, label: '已取消' },
+                { value: 'archived' as const, label: '已归档' },
+              ]}
+            />
+          ) : null}
+        </div>
       }
     >
+      {view === 'templates' ? (
+        <TemplatesPanel
+          creating={composingTemplate}
+          onCloseCreate={() => setComposingTemplate(false)}
+        />
+      ) : (
       <Panel className="p-3">
         {list.isPending ? (
           <ListSkeleton rows={3} />
@@ -106,6 +134,7 @@ export function TravelPage() {
           </div>
         )}
       </Panel>
+      )}
 
       {composing ? (
         <PlanForm
