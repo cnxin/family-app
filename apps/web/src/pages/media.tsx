@@ -120,10 +120,19 @@ export function MediaPage() {
               <p className="text-[12px] text-ink-soft">今晚看哪部，让家里人投</p>
             </div>
           </SoftLink>
-          {/* 片单、观看记录、观影设置还没搬，先给旧版入口，别让人点空 */}
+          <SoftLink
+            to="/eat/media/history"
+            className="flex items-center gap-2 border-t border-border px-3.5 py-2.5 hover:bg-muted"
+          >
+            <span className="text-[15px]">⏱️</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px]">观看记录</p>
+              <p className="text-[12px] text-ink-soft">{sessions.data?.length ?? 0} 次播放</p>
+            </div>
+          </SoftLink>
+          {/* 片单和观影设置还没搬，先给旧版入口，别让人点空 */}
           {[
             ['🎬', '家庭片单', `${rows.length} 部影视`, '/media/watchlist'],
-            ['⏱️', '观看记录', `${sessions.data?.length ?? 0} 次播放`, '/media/history'],
             ...(canManage ? [['⚙️', '观影设置', '连接 Plex / Emby / MoviePilot', '/media/settings']] : []),
           ].map(([emoji, title, hint, path]) => (
             <a
