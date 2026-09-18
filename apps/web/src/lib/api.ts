@@ -84,13 +84,12 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   }
 }
 
-/** multipart 上传一张图片，返回 /uploads/<filename>。走同一个 /api 代理和同一套 401 续期。 */
-export async function uploadPhoto(file: File): Promise<string> {
-  const form = new FormData();
-  form.append('file', file);
+/** multipart 提交，走同一个 /api 代理和同一套 401 续期。 */
+export async function postForm<T>(path: string, form: FormData): Promise<T> {
   const send = async (token: string | null) => {
-    const response = await fetch('/api/upload', {
+    const response = await fetch(`/api${path}`, {
       method: 'POST',
+      // 不要自己设 Content-Type：boundary 只有浏览器知道，手写会让后端解析不出文件
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,
     });
@@ -99,12 +98,12 @@ export async function uploadPhoto(file: File): Promise<string> {
     if (!response.ok) {
       throw new ApiError(
         payload?.error?.code ?? 'UPLOAD_FAILED',
-        payload?.error?.message ?? '照片上传失败',
+        payload?.error?.message ?? '上传失败',
         response.status,
         payload?.requestId,
       );
     }
-    return payload?.data?.url as string;
+    return payload?.data as T;
   };
   try {
     return await send(accessToken);
@@ -114,4 +113,12 @@ export async function uploadPhoto(file: File): Promise<string> {
     if (!renewed) throw error;
     return send(renewed);
   }
+}
+
+/** 上传一张图片，返回 /uploads/<filename>。 */
+export async function uploadPhoto(file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  const data = await postForm<{ url: string }>('/upload', form);
+  return data.url;
 }

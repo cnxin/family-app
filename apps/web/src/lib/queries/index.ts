@@ -17,3 +17,4 @@ export * from './agent-settings';
 export * from './guests';
 export * from './guest-invitation';
 export * from './assets';
+export * from './assets-maintenance';

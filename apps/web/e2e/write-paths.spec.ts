@@ -653,3 +653,78 @@ test('资产：登记一件家电、补档案、停用', async ({ page, request 
     if (assetId) await api.patch(`/assets/${assetId}`, { status: 'retired' });
   }
 });
+
+test('资产维护：排计划、关联耗材、完成一次、加条资料再删掉', async ({ page, request }) => {
+  const api = apiClient(request);
+  const assetName = stamp('设备');
+  const planTitle = stamp('保养');
+  const supplyName = stamp('滤芯');
+  let assetId: string | null = null;
+
+  try {
+    const asset = await api.post<{ id: string }>('/assets', { name: assetName, category: 'appliance' });
+    assetId = asset.id;
+    await api.post('/inventory-items', {
+      name: supplyName,
+      category: '日用品',
+      quantity: 10,
+      unit: '个',
+      lowStockThreshold: 1,
+      restockQuantity: 2,
+    });
+
+    await page.goto(`/house/assets/${asset.id}`);
+
+    // 排一条维护计划
+    await page.getByRole('button', { name: '+ 新增计划' }).click();
+    const planForm = page.getByRole('dialog', { name: '新增维护计划' });
+    await planForm.getByLabel('维护事项').fill(planTitle);
+    await planForm.getByLabel('周期天数').fill('90');
+    await planForm.getByLabel('首次到期日').fill(tomorrow);
+    const planCreated = waitFor(page, 'POST', /\/assets\/[^/]+\/maintenance-plans$/);
+    await planForm.getByRole('button', { name: '保存维护计划' }).click();
+    expect((await planCreated).status()).toBe(201);
+    await expect(planForm).toBeHidden();
+    const planCard = page.getByRole('article', { name: planTitle });
+
+    // 关联一个库存项当耗材
+    await page.getByRole('button', { name: `给${planTitle}关联耗材` }).click();
+    const consumableForm = page.getByRole('dialog', { name: '关联维护耗材' });
+    await consumableForm.getByRole('button', { name: new RegExp(supplyName) }).click();
+    await consumableForm.getByLabel('每次用量').fill('2');
+    const linked = waitFor(page, 'POST', /\/maintenance-plans\/[^/]+\/consumables$/);
+    await consumableForm.getByRole('button', { name: '确认关联' }).click();
+    expect((await linked).status()).toBe(201);
+    await expect(planCard.getByLabel(`编辑耗材${supplyName}`)).toBeVisible();
+
+    // 完成一次维护：库存够，所以「顺便扣库存」是可以选的
+    await planCard.getByRole('button', { name: '完成维护' }).click();
+    const completion = page.getByRole('dialog', { name: '确认完成维护' });
+    await expect(completion.getByRole('article', { name: supplyName })).toContainText('够扣');
+    await completion.getByRole('tab', { name: '顺便扣库存' }).click();
+    const completed = waitFor(page, 'POST', /\/maintenance-plans\/[^/]+\/complete$/);
+    await completion.getByRole('button', { name: /确认完成、扣库并推进日期/ }).click();
+    expect((await completed).status()).toBe(201);
+    await expect(completion).toBeHidden();
+    await expect(page.getByText('已扣减 1 项耗材')).toBeVisible();
+
+    // 加一条外链资料，再删掉
+    await page.getByRole('button', { name: '+ 添加' }).click();
+    const documentForm = page.getByRole('dialog', { name: '添加资产资料' });
+    await documentForm.getByLabel('资料名称').fill('说明书');
+    await documentForm.getByLabel('资料链接').fill('https://example.com/manual.pdf');
+    const documentAdded = waitFor(page, 'POST', /\/assets\/[^/]+\/documents$/);
+    await documentForm.getByRole('button', { name: '保存资料' }).click();
+    expect((await documentAdded).status()).toBe(201);
+    await expect(page.getByRole('button', { name: '打开资料说明书' })).toBeVisible();
+
+    await page.getByRole('button', { name: '删除资料说明书' }).click();
+    const removed = waitFor(page, 'DELETE', /\/asset-documents\/[^/]+$/);
+    await page.getByRole('dialog', { name: '删除「说明书」？' }).getByRole('button', { name: '删除', exact: true }).click();
+    expect((await removed).status()).toBe(200);
+    await expect(page.getByRole('button', { name: '打开资料说明书' })).toBeHidden();
+  } finally {
+    // 库存项删不掉：维护耗材还引用着它（后端会拒），停用资产就够了
+    if (assetId) await api.patch(`/assets/${assetId}`, { status: 'retired' });
+  }
+});
