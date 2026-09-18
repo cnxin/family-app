@@ -14,3 +14,4 @@ export * from './channels';
 export * from './agent';
 export * from './agent-memory';
 export * from './agent-settings';
+export * from './guests';

@@ -551,3 +551,62 @@ test('小管家设置：开关运行方式、签发并作废配对码', async ({
   await dialog.getByRole('button', { name: /作废telegram的配对码/ }).click();
   expect((await revoked).status()).toBe(201);
 });
+
+test('访客：新增访客、安排来访、生成并撤销邀请链接', async ({ page, request }) => {
+  const api = apiClient(request);
+  const guestName = stamp('访客');
+  const visitTitle = stamp('来访');
+  let guestId: string | null = null;
+
+  try {
+    await page.goto('/house/guests');
+
+    // 访客名册里新增一位
+    await page.getByRole('tab', { name: '访客名册' }).click();
+    await page.getByRole('button', { name: '+ 新增访客' }).click();
+    const guestForm = page.getByRole('dialog', { name: '新增访客' });
+    await guestForm.getByLabel('访客姓名').fill(guestName);
+    const guestCreated = waitFor(page, 'POST', /\/guests$/);
+    await guestForm.getByRole('button', { name: '保存访客' }).click();
+    const guestResponse = await guestCreated;
+    expect(guestResponse.status(), await guestResponse.text()).toBe(201);
+    guestId = ((await guestResponse.json()) as { data: { id: string } }).data.id;
+    await expect(guestForm).toBeHidden();
+
+    // 安排一次来访，把他选上
+    await page.getByRole('tab', { name: /来访/ }).click();
+    await page.getByRole('button', { name: '+ 安排来访' }).click();
+    const visitForm = page.getByRole('dialog', { name: '安排来访' });
+    await visitForm.getByLabel('来访主题').fill(visitTitle);
+    await visitForm.getByLabel('来访日期').fill(isoDate(2));
+    await visitForm.getByRole('button', { name: new RegExp(guestName) }).click();
+    const visitCreated = waitFor(page, 'POST', /\/visits$/);
+    await visitForm.getByRole('button', { name: '保存来访计划' }).click();
+    expect((await visitCreated).status()).toBe(201);
+    await expect(visitForm).toBeHidden();
+
+    // 生成邀请链接：明文只回一次，页面上要看得到
+    await page.getByRole('button', { name: `给${visitTitle}生成邀请链接` }).click();
+    const inviteForm = page.getByRole('dialog', { name: '生成访客邀请链接' });
+    const issued = waitFor(page, 'POST', /\/visits\/[^/]+\/invitations$/);
+    await inviteForm.getByRole('button', { name: '生成链接' }).click();
+    const issuedResponse = await issued;
+    expect(issuedResponse.status(), await issuedResponse.text()).toBe(201);
+    const token = ((await issuedResponse.json()) as { data: { invitationToken: string } }).data
+      .invitationToken;
+    expect(token.length).toBeGreaterThan(20);
+    const issuedDialog = page.getByRole('dialog', { name: '邀请链接生成好了' });
+    await expect(issuedDialog.getByText(token)).toBeVisible();
+    await issuedDialog.getByRole('button', { name: '知道了' }).click();
+
+    // 撤销邀请
+    await page.getByRole('button', { name: `撤销给${guestName}的邀请` }).click();
+    await expect(page.getByRole('button', { name: `撤销给${guestName}的邀请` })).toBeHidden();
+
+    // 取消来访，别留在演示数据里
+    await page.getByRole('button', { name: `取消${visitTitle}` }).click();
+    await expect(page.getByRole('article', { name: visitTitle }).getByText('已取消')).toBeVisible();
+  } finally {
+    if (guestId) await api.patch(`/guests/${guestId}`, { isActive: false });
+  }
+});

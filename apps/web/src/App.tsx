@@ -14,6 +14,7 @@ import { NotificationsPage } from './pages/notifications';
 import { PollsPage } from './pages/polls';
 import { PointsPage } from './pages/points';
 import { MembersPage } from './pages/members';
+import { GuestsPage } from './pages/guests';
 import { ProfilePage } from './pages/profile';
 import { AssistantPage } from './pages/assistant';
 import { AgentMemoriesPage } from './pages/agent-memories';
@@ -33,6 +34,7 @@ const REDIRECTS: [string, string][] = [
   ['/polls', '/schedule/polls'],
   ['/points', '/house/points'],
   ['/members', '/house/members'],
+  ['/guests', '/house/guests'],
   ['/profile', '/me/profile'],
   ['/assistant', '/me/assistant'],
   ['/calendar', '/schedule/calendar'],
@@ -74,6 +76,7 @@ export function App() {
           <Route path="/house" element={<Navigate to={landingPath(SCENES[3])} replace />} />
           <Route path="/house/points" element={<PointsPage />} />
           <Route path="/house/members" element={<MembersPage />} />
+          <Route path="/house/guests" element={<GuestsPage />} />
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
           <Route path="/me/profile" element={<ProfilePage />} />
           <Route path="/me/assistant" element={<AssistantPage />} />
