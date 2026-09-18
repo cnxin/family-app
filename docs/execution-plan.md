@@ -251,6 +251,7 @@ export default function XxxPage() {
   改的全是 `apps/web`，碰不到旧客户端，所以判定为旧套件自己的 flaky。按 CLAUDE.md 的规矩：
   **不改旧客户端、不放宽断言，`gh run rerun <id> --failed` 重跑一次**。旧客户端 C 阶段就下线了，
   真要治本也是那之前的事。
+- 旧客户端第二条 flaky：`agent-ui.spec.ts:64`（「管理员可用鼠标或触控使用小管家并查看运行时设置」）在 C1 那次 push 上红了一次，报的是 `element(s) not found`，`gh run rerun --failed` 重跑即绿。同样是只改了 `apps/web` / 部署文件的提交，判定为旧套件的 flaky，处理方式和上一条一样：**重跑，不动旧客户端**。
 - `test:api -- --only <域>` 单跑可能假红：`agent-memory` 单跑必失败（memoryEnabled=false 那条断言依赖前面脚本落下的数据），
   全量跑是绿的。CLAUDE.md 早写了「--only 只用于迭代，验收必须全量跑」，别被单跑的红吓到。
 - 访客点菜的后端语义是「一个邀请 + 一天 + 一餐 = 一条请求」：菜单里点的那道和自由填的那条是**同一条**，
