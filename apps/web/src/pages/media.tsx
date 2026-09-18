@@ -7,7 +7,6 @@ import {
   useViewingSessions,
 } from '../lib/queries';
 import { useAuth } from '../lib/auth';
-import { legacyUrl } from '../lib/nav';
 import { SoftLink } from '../components/soft-link';
 import { ListSkeleton } from '../components/skeleton';
 import { EmptyState, Page, Panel } from '../components/ui';
@@ -69,11 +68,9 @@ export function MediaPage() {
                 scheduled.slice(0, 6).map((entry, index) => {
                   const poster = mediaAsset(entry.mediaTitle.posterUrl);
                   return (
-                    <a
+                    <SoftLink
                       key={entry.id}
-                      href={legacyUrl(`/media/watchlist?mediaId=${entry.id}`)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      to={`/eat/media/watchlist?mediaId=${entry.id}`}
                       className={
                         'flex items-center gap-3 px-3.5 py-2.5 hover:bg-muted ' +
                         (index ? 'border-t border-border' : '')
@@ -92,7 +89,7 @@ export function MediaPage() {
                           {entry.scheduledFor ? scheduleLabel(entry.scheduledFor) : ''}
                         </p>
                       </div>
-                    </a>
+                    </SoftLink>
                   );
                 })
               )}
@@ -137,24 +134,18 @@ export function MediaPage() {
               <p className="text-[12px] text-ink-soft">{sessions.data?.length ?? 0} 次播放</p>
             </div>
           </SoftLink>
-          {/* 观影设置还没搬，先给旧版入口，别让人点空 */}
-          {[
-            ...(canManage ? [['⚙️', '观影设置', '连接 Plex / Emby / MoviePilot', '/media/settings']] : []),
-          ].map(([emoji, title, hint, path]) => (
-            <a
-              key={path}
-              href={legacyUrl(path)}
-              target="_blank"
-              rel="noopener noreferrer"
+          {canManage ? (
+            <SoftLink
+              to="/eat/media/settings"
               className="flex items-center gap-2 border-t border-border px-3.5 py-2.5 hover:bg-muted"
             >
-              <span className="text-[15px]">{emoji}</span>
+              <span className="text-[15px]">⚙️</span>
               <div className="min-w-0 flex-1">
-                <p className="text-[14px]">{title}</p>
-                <p className="text-[12px] text-ink-soft">{hint} · 还在旧版</p>
+                <p className="text-[14px]">观影设置</p>
+                <p className="text-[12px] text-ink-soft">连接 Plex / Emby / MoviePilot</p>
               </div>
-            </a>
-          ))}
+            </SoftLink>
+          ) : null}
         </Panel>
 
         <Panel title="媒体服务" grow={false}>

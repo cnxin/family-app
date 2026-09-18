@@ -31,6 +31,7 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/eat/media/library', title: '我的媒体库' },
   { path: '/eat/media/history', title: '观看记录' },
   { path: '/eat/media/watchlist', title: '家庭片单' },
+  { path: '/eat/media/settings', title: '观影设置' },
   { path: '/me/profile', title: '我的' },
   { path: '/me/assistant', title: '问问小管家' },
   { path: '/me/assistant/memories', title: '小管家的记忆' },

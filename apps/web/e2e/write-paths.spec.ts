@@ -1231,3 +1231,46 @@ test('片单：手动加一部、发起观影投票、再改成已排期', async
     if (mediaId) await api.delete(`/media/${mediaId}`).catch(() => undefined);
   }
 });
+
+test('观影设置：改媒体服务地址和搜索数据源，再恢复服务器默认', async ({ page, request }) => {
+  const api = apiClient(request);
+  const plexUrl = 'http://192.168.1.60:32400';
+  const doubanUrl = 'https://frodo.douban.com/api/v2';
+
+  try {
+    await page.goto('/eat/media/settings');
+
+    // 媒体服务：只改地址，凭据一律不碰（真凭据不该出现在测试库里）
+    await page.getByLabel('Plex 服务地址').fill(plexUrl);
+    const saved = waitFor(page, 'PUT', /\/media\/connector-settings\/plex$/);
+    await page.getByRole('button', { name: '保存 Plex' }).click();
+    const savedResponse = await saved;
+    expect(savedResponse.status(), await savedResponse.text()).toBe(200);
+
+    // 存下来的东西刷新之后还在，而且这条从「服务器默认」变成了「家庭设置」
+    await page.reload();
+    await expect(page.getByLabel('Plex 服务地址')).toHaveValue(plexUrl);
+    const reset = waitFor(page, 'DELETE', /\/media\/connector-settings\/plex$/);
+    await page.getByRole('button', { name: '恢复Plex默认设置' }).click();
+    expect((await reset).status()).toBe(200);
+    await expect(page.getByLabel('Plex 服务地址')).toHaveValue('');
+
+    // 搜索数据源
+    await page.getByRole('tab', { name: '搜索数据源' }).click();
+    await page.getByLabel('豆瓣 API 地址').fill(doubanUrl);
+    const sourceSaved = waitFor(page, 'PUT', /\/media\/metadata-sources\/douban$/);
+    await page.getByRole('button', { name: '保存 豆瓣' }).click();
+    const sourceResponse = await sourceSaved;
+    expect(sourceResponse.status(), await sourceResponse.text()).toBe(200);
+    await page.reload();
+    await page.getByRole('tab', { name: '搜索数据源' }).click();
+    await expect(page.getByLabel('豆瓣 API 地址')).toHaveValue(doubanUrl);
+
+    // 用户映射这一档：隔离库里两台媒体服务都没连上，给的是「怎么回事」而不是空白
+    await page.getByRole('tab', { name: '用户映射' }).click();
+    await expect(page.getByRole('button', { name: '刷新媒体用户' })).toBeVisible();
+  } finally {
+    await api.delete('/media/connector-settings/plex').catch(() => undefined);
+    await api.delete('/media/metadata-sources/douban').catch(() => undefined);
+  }
+});

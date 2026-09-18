@@ -95,10 +95,14 @@ export const viewingSessionStatus = z.enum(VIEWING_SESSION_STATUSES);
 export type ViewingSessionStatus = z.infer<typeof viewingSessionStatus>;
 
 export const MEDIA_SETTINGS_MODES = ['household', 'server_default'] as const;
+
 export const mediaSettingsMode = z.enum(MEDIA_SETTINGS_MODES);
+export type MediaSettingsMode = z.infer<typeof mediaSettingsMode>;
 
 export const mediaConnectorRole = z.enum(['library', 'automation']);
+export type MediaConnectorRole = z.infer<typeof mediaConnectorRole>;
 export const mediaCredentialKind = z.enum(['token', 'api_key']);
+export type MediaCredentialKind = z.infer<typeof mediaCredentialKind>;
 
 /** 海报与播放地址可能是相对签名路径，也可能是连接器给的绝对 URL——别用 .url()。 */
 const linkUrl = z.string();

@@ -25,4 +25,5 @@ export * from './travel';
 export * from './backups';
 export * from './activities';
 export * from './media';
+export * from './media-settings';
 export * from './media-watchlist';
