@@ -11,6 +11,7 @@ import {
   useRetryAgentRun,
   useSendAgentMessage,
 } from '../lib/queries';
+import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
 import {
   MessageBubble,
@@ -19,6 +20,7 @@ import {
   ToolResultGroup,
 } from '../components/agent-chat';
 import { ProposalGroupCard } from '../components/agent-memory-ui';
+import { AssistantSettings } from '../components/agent-settings-ui';
 import { SoftLink } from '../components/soft-link';
 import { Button, EmptyState, Input, Page, Panel } from '../components/ui';
 
@@ -41,6 +43,7 @@ function when(value: string) {
 }
 
 export function AssistantPage() {
+  const { session } = useAuth();
   const status = useAgentStatus();
   const conversations = useAgentConversations();
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -52,6 +55,7 @@ export function AssistantPage() {
   const archive = useArchiveAgentConversation();
   const proposalGroups = useAgentProposalGroups(Boolean(conversationId));
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
@@ -105,6 +109,13 @@ export function AssistantPage() {
       subtitle={runtimeHint}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          className="h-9 px-3 text-[13px]"
+          onClick={() => setSettingsOpen(true)}
+        >
+          设置
+        </Button>
         <SoftLink
           to="/me/assistant/memories"
           className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-ink-soft transition-colors duration-150 hover:bg-muted"
@@ -306,6 +317,13 @@ export function AssistantPage() {
           )}
         </Panel>
       </aside>
+
+      {settingsOpen ? (
+        <AssistantSettings
+          manager={session?.member.role !== 'member'}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
     </Page>
   );
 }

@@ -516,3 +516,38 @@ test('小管家记忆：记一条、确认、改内容、忘掉', async ({ page,
   expect((await forgotten).ok()).toBeTruthy();
   await expect(edited).toBeHidden();
 });
+
+test('小管家设置：开关运行方式、签发并作废配对码', async ({ page, isMobile }) => {
+  test.skip(isMobile, '设置是全家共用的一份，跑一个视口就够，两个并排跑会互相版本冲突');
+  await page.goto('/me/assistant');
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '小管家设置' });
+
+  // 运行方式：切到 Hermes 再切回来（乐观锁，要带 version）
+  const before = await dialog.getByRole('tab', { name: '本地摘要' }).getAttribute('aria-selected');
+  const switched = waitFor(page, 'PATCH', /\/agent\/settings$/);
+  await dialog.getByRole('tab', { name: 'Hermes' }).click();
+  expect((await switched).ok()).toBeTruthy();
+  await expect(dialog.getByRole('tab', { name: 'Hermes' })).toHaveAttribute('aria-selected', 'true');
+  if (before === 'true') {
+    const back = waitFor(page, 'PATCH', /\/agent\/settings$/);
+    await dialog.getByRole('tab', { name: '本地摘要' }).click();
+    expect((await back).ok()).toBeTruthy();
+  }
+
+  // 配对码：明文只回一次，页面上要看得到
+  await dialog.getByRole('button', { name: /爸爸/ }).click();
+  const issued = waitFor(page, 'POST', /\/agent\/channel-pairings$/);
+  await dialog.getByRole('button', { name: '生成一次性配对码' }).click();
+  const issuedResponse = await issued;
+  expect(issuedResponse.status(), await issuedResponse.text()).toBe(201);
+  const code = ((await issuedResponse.json()) as { data: { pairingCode: string | null } }).data
+    .pairingCode;
+  expect(code).toBeTruthy();
+  await expect(dialog.getByText(code!)).toBeVisible();
+
+  // 作废掉，别留一串能用的码
+  const revoked = waitFor(page, 'POST', /\/agent\/channel-pairings\/[^/]+\/revoke$/);
+  await dialog.getByRole('button', { name: /作废telegram的配对码/ }).click();
+  expect((await revoked).status()).toBe(201);
+});
