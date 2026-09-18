@@ -22,6 +22,8 @@ import { MemoriesPage } from './pages/memories';
 import { TravelPage } from './pages/travel';
 import { BackupsPage } from './pages/backups';
 import { ActivityPage } from './pages/activity';
+import { MediaPage } from './pages/media';
+import { MediaLibraryPage } from './pages/media-library';
 import { TravelPlanPage } from './pages/travel-plan';
 import { AssetDetailPage } from './pages/asset-detail';
 import { GuestInvitationPage } from './pages/guest-invitation';
@@ -86,6 +88,8 @@ export function App() {
           <Route path="/eat/recipes" element={<RecipesPage />} />
           <Route path="/eat/shopping" element={<ShoppingPage />} />
           <Route path="/eat/inventory" element={<InventoryPage />} />
+          <Route path="/eat/media" element={<MediaPage />} />
+          <Route path="/eat/media/library" element={<MediaLibraryPage />} />
 
           <Route path="/schedule" element={<Navigate to={landingPath(SCENES[2])} replace />} />
           <Route path="/schedule/calendar" element={<CalendarPage />} />

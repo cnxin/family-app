@@ -27,6 +27,8 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/house/travel', title: '家庭出行' },
   { path: '/house/backups', title: '系统备份' },
   { path: '/me/activity', title: '家庭动态' },
+  { path: '/eat/media', title: '家庭观影' },
+  { path: '/eat/media/library', title: '我的媒体库' },
   { path: '/me/profile', title: '我的' },
   { path: '/me/assistant', title: '问问小管家' },
   { path: '/me/assistant/memories', title: '小管家的记忆' },
@@ -44,12 +46,11 @@ for (const target of READY_PAGES) {
   });
 }
 
-// 拿一个还没搬的分段当样本；搬到它的时候记得换一个还没搬的
-test('没搬的分段落到桥接页，并给出旧版入口', async ({ page }) => {
-  await page.goto('/eat/media');
-  const legacy = page.locator('main').getByRole('link', { name: /旧版/ });
-  await expect(legacy).toBeVisible();
-  await expect(legacy).toHaveAttribute('href', /\/media$/);
+// 分段已经全部搬完，桥接页只剩「认不出来的分段」这一个分支了
+test('认不出来的分段给一句人话，不是白屏', async ({ page }) => {
+  await page.goto('/house/nope');
+  await expect(page.getByRole('heading', { name: '没有这一页' })).toBeVisible();
+  await expect(page.locator('main').getByRole('link', { name: '回今天' })).toBeVisible();
 });
 
 test('旧的一层路径会跳到新位置', async ({ page }) => {

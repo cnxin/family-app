@@ -48,7 +48,7 @@ export const SCENES: NavScene[] = [
       { key: 'recipes', label: '菜谱', path: '/eat/recipes', ready: true },
       { key: 'shopping', label: '购物', path: '/eat/shopping', ready: true },
       { key: 'inventory', label: '库存', path: '/eat/inventory', ready: true },
-      { key: 'media', label: '观影', legacy: '/media' },
+      { key: 'media', label: '观影', path: '/eat/media', ready: true },
     ],
   },
   {
