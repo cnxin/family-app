@@ -16,3 +16,4 @@ export * from './agent-memory';
 export * from './agent-settings';
 export * from './guests';
 export * from './guest-invitation';
+export * from './assets';

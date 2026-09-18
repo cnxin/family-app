@@ -70,7 +70,7 @@ export const SCENES: NavScene[] = [
     icon: '🧰',
     path: '/house',
     segments: [
-      { key: 'assets', label: '资产', legacy: '/home-assets' },
+      { key: 'assets', label: '资产', path: '/house/assets', ready: true },
       { key: 'finance', label: '财务', legacy: '/finance', managerOnly: true },
       { key: 'points', label: '积分', path: '/house/points', ready: true },
       { key: 'knowledge', label: '知识库', legacy: '/knowledge' },

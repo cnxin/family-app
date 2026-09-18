@@ -4,6 +4,7 @@ import type {
   CalendarEntry,
   Dish,
   HouseholdPoll,
+  HomeAsset,
   HouseholdReminder,
   ManagedMember,
   PointsAccount,
@@ -29,6 +30,12 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
     void client.prefetchQuery({
       queryKey: ['household-members'],
       queryFn: () => api<ManagedMember[]>('/household/members'),
+    });
+  },
+  '/house/assets': (client) => {
+    void client.prefetchQuery({
+      queryKey: ['assets', 'all'],
+      queryFn: () => api<HomeAsset[]>('/assets?status=all'),
     });
   },
   '/house/points': (client) => {

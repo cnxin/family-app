@@ -20,6 +20,7 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/house/points', title: '积分奖励' },
   { path: '/house/members', title: '家庭成员' },
   { path: '/house/guests', title: '访客' },
+  { path: '/house/assets', title: '家庭资产' },
   { path: '/me/profile', title: '我的' },
   { path: '/me/assistant', title: '问问小管家' },
   { path: '/me/assistant/memories', title: '小管家的记忆' },

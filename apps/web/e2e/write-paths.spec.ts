@@ -610,3 +610,46 @@ test('访客：新增访客、安排来访、生成并撤销邀请链接', async
     if (guestId) await api.patch(`/guests/${guestId}`, { isActive: false });
   }
 });
+
+test('资产：登记一件家电、补档案、停用', async ({ page, request }) => {
+  const api = apiClient(request);
+  const name = stamp('资产');
+  let assetId: string | null = null;
+
+  try {
+    await page.goto('/house/assets');
+    await page.getByRole('button', { name: '+ 登记资产' }).click();
+    const form = page.getByRole('dialog', { name: '登记家庭资产' });
+    await form.getByLabel('资产名称').fill(name);
+    await form.getByLabel('存放位置').fill('客厅');
+    const created = waitFor(page, 'POST', /\/assets$/);
+    await form.getByRole('button', { name: '保存资产' }).click();
+    const createdResponse = await created;
+    expect(createdResponse.status(), await createdResponse.text()).toBe(201);
+    assetId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
+    await expect(form).toBeHidden();
+
+    // 从列表点进详情
+    await page.getByRole('link', { name: new RegExp(name) }).first().click();
+    await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+
+    // 编辑档案：补一个品牌，详情右栏立刻能看到
+    await page.getByRole('button', { name: '编辑档案' }).click();
+    const editor = page.getByRole('dialog', { name: `编辑「${name}」` });
+    await editor.getByLabel('品牌').fill('e2e 牌');
+    const patched = waitFor(page, 'PATCH', /\/assets\/[^/]+$/);
+    await editor.getByRole('button', { name: '保存资产' }).click();
+    expect((await patched).status()).toBe(200);
+    await expect(editor).toBeHidden();
+    await expect(page.getByText('e2e 牌')).toBeVisible();
+
+    // 停用：按钮换成「恢复使用」
+    await page.getByRole('button', { name: '停用资产' }).click();
+    const retired = waitFor(page, 'PATCH', /\/assets\/[^/]+$/);
+    await page.getByRole('button', { name: '确认停用' }).click();
+    expect((await retired).status()).toBe(200);
+    await expect(page.getByRole('button', { name: '恢复使用' })).toBeVisible();
+  } finally {
+    if (assetId) await api.patch(`/assets/${assetId}`, { status: 'retired' });
+  }
+});
