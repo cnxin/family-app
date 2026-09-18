@@ -82,9 +82,11 @@ const testEnvironment = {
 const browserEnvironment = {
   ...testEnvironment,
   NODE_ENV: 'development',
-  // 新客户端的 Vite dev server 直连隔离 API，要自己剥 /api 前缀
+  // 新客户端的 Vite dev server 直连隔离 API，要自己剥 /api 前缀；
+  // E2E_ISOLATED 让 Playwright 不去复用「恰好在这个端口上」的别的 dev server
   FAMILY_API_ORIGIN: API_URL,
   FAMILY_API_STRIP_PREFIX: '1',
+  E2E_ISOLATED: '1',
 };
 
 function configuredDatabasePassword() {

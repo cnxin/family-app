@@ -17,6 +17,7 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/schedule/reminders', title: '提醒中心' },
   { path: '/schedule/notifications', title: '消息' },
   { path: '/schedule/polls', title: '家庭投票' },
+  { path: '/house/points', title: '积分奖励' },
 ];
 
 for (const target of READY_PAGES) {
@@ -32,10 +33,10 @@ for (const target of READY_PAGES) {
 }
 
 test('没搬的分段落到桥接页，并给出旧版入口', async ({ page }) => {
-  await page.goto('/house/points');
+  await page.goto('/house/knowledge');
   const legacy = page.locator('main').getByRole('link', { name: /旧版/ });
   await expect(legacy).toBeVisible();
-  await expect(legacy).toHaveAttribute('href', /\/points$/);
+  await expect(legacy).toHaveAttribute('href', /\/knowledge$/);
 });
 
 test('旧的一层路径会跳到新位置', async ({ page }) => {

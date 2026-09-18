@@ -243,6 +243,9 @@ export default function XxxPage() {
 - `str.replace` 批量改 JSX 时锚点要带上下文，`</div>) : null}` 这种模式一个文件里经常有两处。
 - 旧客户端 `family-navigation.spec.ts` 有一条偶发 401 的 flaky（首页零 console 错误断言），一次红一次绿，不改旧客户端代码就再跑一次；**不要放宽断言**。
 - 演示库（本机 8088 那套）里有我之前手工造的测试数据（9 条日历、5 条库存、2 批次、2 购物项、2 条划菜通知）；A3 做完后可以清库重新 `seed -- --demo`。
+- Playwright 的 `webServer.reuseExistingServer` 是个陷阱：vite 没有 `--strictPort` 时端口被占会**静默换端口**，
+  于是隔离跑复用到一台代理去 8088（演示库）的 dev server，症状是登录 401「账号或密码不正确」，
+  跟密码、seed、限流全都没关系。现在隔离跑传 `E2E_ISOLATED=1` 禁用复用，`web dev` 也加了 `--strictPort`。
 - 老页面字段名别猜：点菜项是 `requestedById`（不是 `orderedById`），`/menus?date=` 一次返回三餐，提醒来源 `/reminder-sources?start&end`。
 
 ---
@@ -256,7 +259,7 @@ export default function XxxPage() {
 | A3 seed --demo | ☑ | | 改成走 HTTP 的 `apps/api/scripts/demo-data.mjs`（`corepack pnpm demo`，本机加 `API_URL=http://localhost:8088/api`）：13 个域、幂等、日期相对今天；`test:web:next` 起隔离 API 后自动跑一遍，冒烟不再是空态 |
 | B0 检查 dish/recipe-edit/canteen 覆盖情况 | ☑ | | `canteen` 是旧客户端给普通成员的入口页（新 IA 用今天页 + managerOnly 覆盖）；`dish/[id]` 的做法版本/谁会做/加菜篮、`recipe-edit` 的食材/步骤/链接都在新菜谱页；**缺的是 `dish-edit` 的菜品基本信息**（菜名/分类/难度/耗时/口味/照片/下架）——已补 `components/dish-editor.tsx` + 菜谱页「+ 新建菜品」「编辑」，写路径用例 +1 |
 | B1 投票 | ☑ | | `/schedule/polls`：列表筛选、发起/编辑（有人投过就锁候选项）、单多选投票/改票/撤票、结束/重开/删除、?pollId= 聚焦、?create=1；新增 `lib/routes.ts` 把后端 targetPath 换算成新路径（通知、日历条目共用）；旧一级路径跳转现在保留查询串 |
-| B2 积分 | ☐ | | |
+| B2 积分 | ☑ | | `/house/points`：余额条 + 三段（家庭奖励 / 兑换审批 / 积分流水）；奖励增删改停用、申请兑换（带「预计积分变化」）、管理员确认/拒绝、申请人取消、撤销已确认、反向冲销流水；?redemptionId= 聚焦。顺手修了一个坑：Playwright 的 `reuseExistingServer` 会复用「恰好在这个端口上」的别的 dev server，把 /api 代理到错后端 → 登录 401；隔离跑现在传 `E2E_ISOLATED=1` 不复用，`web dev` 也加了 `--strictPort` |
 | B3 成员 | ☐ | | |
 | B4 个人 | ☐ | | |
 | B5 问问小管家 | ☐ | | |

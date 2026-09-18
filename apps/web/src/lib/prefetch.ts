@@ -5,6 +5,8 @@ import type {
   Dish,
   HouseholdPoll,
   HouseholdReminder,
+  PointsAccount,
+  Reward,
   InventoryItem,
   Menu,
   RecipeDish,
@@ -22,6 +24,16 @@ import { calendarRange, startOfMonth } from '../components/calendar-month';
  * 剩下的交给页面自己。
  */
 const PREFETCH: Record<string, (client: QueryClient) => void> = {
+  '/house/points': (client) => {
+    void client.prefetchQuery({
+      queryKey: ['points-accounts'],
+      queryFn: () => api<PointsAccount[]>('/points/accounts'),
+    });
+    void client.prefetchQuery({
+      queryKey: ['rewards', true],
+      queryFn: () => api<Reward[]>('/rewards?includeInactive=true'),
+    });
+  },
   '/schedule/polls': (client) => {
     void client.prefetchQuery({
       queryKey: ['polls'],

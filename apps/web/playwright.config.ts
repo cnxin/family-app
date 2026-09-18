@@ -64,7 +64,9 @@ export default defineConfig({
   webServer: {
     command: `corepack pnpm exec vite --host localhost --port ${webPort} --strictPort`,
     url: baseURL,
-    reuseExistingServer: true,
+    // 隔离跑（run-web-tests --client web）必须自己起 dev server：复用一个「恰好在这个端口上」
+    // 的服务器会把 /api 代理到别的后端，表现出来是登录 401，很难查。本机手动跑时才允许复用。
+    reuseExistingServer: !process.env.E2E_ISOLATED,
     timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',

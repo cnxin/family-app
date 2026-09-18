@@ -265,3 +265,63 @@ test('投票：发起、投一票、结束、删除', async ({ page, request }) 
     if (pollId) await api.delete(`/polls/${pollId}`);
   }
 });
+
+test('积分：新增奖励、申请兑换、确认、撤销', async ({ page, request }) => {
+  const api = apiClient(request);
+  // 奖励只能停用不能删，所以用固定名字：隔离库里走「新增」那条路，
+  // 本机演示库上重复跑就复用同一行，不会越跑越多。
+  const name = 'e2e·兑换测试奖励';
+  const existing = (await api.get<{ id: string; name: string }[]>('/rewards?includeInactive=true')).find(
+    (one) => one.name === name,
+  );
+  let rewardId = existing?.id ?? null;
+
+  try {
+    await page.goto('/house/points');
+    if (existing) {
+      await api.patch(`/rewards/${existing.id}`, { isActive: true, cost: 1 });
+      await page.reload();
+    } else {
+      await page.getByRole('button', { name: '+ 新增奖励' }).click();
+      const dialog = page.getByRole('dialog', { name: '新增奖励' });
+      await dialog.getByPlaceholder('比如：选一次周末电影').fill(name);
+      await dialog.getByLabel('需要多少积分').fill('1');
+      const created = waitFor(page, 'POST', /\/rewards$/);
+      await dialog.getByRole('button', { name: '保存奖励' }).click();
+      const createResponse = await created;
+      expect(createResponse.status(), await createResponse.text()).toBe(201);
+      rewardId = ((await createResponse.json()) as { data: { id: string } }).data.id;
+      await expect(dialog).toBeHidden();
+    }
+
+    // 先给自己发够分，再兑换
+    await api.post('/points/adjustments', {
+      memberId: api.memberId,
+      delta: 5,
+      note: 'e2e 兑换测试发分',
+      idempotencyKey: `e2e-${Date.now()}`,
+    });
+    await page.reload();
+
+    await page.getByRole('button', { name: `兑换${name}` }).click();
+    const redeemed = waitFor(page, 'POST', /\/rewards\/[^/]+\/redemptions$/);
+    await page.getByRole('dialog', { name: `兑换「${name}」？` }).getByRole('button', { name: '确认兑换' }).click();
+    expect((await redeemed).status()).toBe(201);
+
+    // 切到兑换记录，管理员确认
+    await page.getByRole('tab', { name: /兑换审批/ }).click();
+    await page.getByRole('button', { name: `确认兑换${name}` }).first().click();
+    const decided = waitFor(page, 'POST', /\/reward-redemptions\/[^/]+\/decision$/);
+    await page.getByRole('dialog', { name: '确认这笔兑换？' }).getByRole('button', { name: '确认通过' }).click();
+    expect((await decided).status()).toBe(201);
+
+    // 撤销：退回积分
+    await page.getByRole('button', { name: `撤销兑换${name}` }).first().click();
+    const reversed = waitFor(page, 'POST', /\/reward-redemptions\/[^/]+\/reverse$/);
+    await page.getByRole('dialog', { name: '撤销已确认的兑换？' }).getByRole('button', { name: '撤销并退回' }).click();
+    expect((await reversed).status()).toBe(201);
+    await expect(page.getByText('已撤销').first()).toBeVisible();
+  } finally {
+    if (rewardId) await api.patch(`/rewards/${rewardId}`, { isActive: false });
+  }
+});

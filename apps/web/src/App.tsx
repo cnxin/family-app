@@ -12,6 +12,7 @@ import { CalendarPage } from './pages/calendar';
 import { RemindersPage } from './pages/reminders';
 import { NotificationsPage } from './pages/notifications';
 import { PollsPage } from './pages/polls';
+import { PointsPage } from './pages/points';
 import { Shell } from './components/shell';
 import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
@@ -26,6 +27,7 @@ const REDIRECTS: [string, string][] = [
   ['/supplies', '/eat/shopping'],
   ['/eat/supplies', '/eat/shopping'],
   ['/polls', '/schedule/polls'],
+  ['/points', '/house/points'],
   ['/calendar', '/schedule/calendar'],
   ['/reminders', '/schedule/reminders'],
   ['/notifications', '/schedule/notifications'],
@@ -63,6 +65,7 @@ export function App() {
           <Route path="/schedule/polls" element={<PollsPage />} />
 
           <Route path="/house" element={<Navigate to={landingPath(SCENES[3])} replace />} />
+          <Route path="/house/points" element={<PointsPage />} />
           <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
 
           {/* 没搬过来的分段统一落到旧版入口页 */}

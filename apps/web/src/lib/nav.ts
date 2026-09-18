@@ -72,7 +72,7 @@ export const SCENES: NavScene[] = [
     segments: [
       { key: 'assets', label: '资产', legacy: '/home-assets' },
       { key: 'finance', label: '财务', legacy: '/finance', managerOnly: true },
-      { key: 'points', label: '积分', legacy: '/points' },
+      { key: 'points', label: '积分', path: '/house/points', ready: true },
       { key: 'knowledge', label: '知识库', legacy: '/knowledge' },
       { key: 'memories', label: '回忆', legacy: '/memories' },
       { key: 'travel', label: '出行', legacy: '/travel' },
