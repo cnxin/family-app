@@ -8,3 +8,4 @@ export * from './reminders';
 export * from './notifications';
 export * from './polls';
 export * from './points';
+export * from './members';

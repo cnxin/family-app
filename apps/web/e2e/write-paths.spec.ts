@@ -325,3 +325,54 @@ test('积分：新增奖励、申请兑换、确认、撤销', async ({ page, re
     if (rewardId) await api.patch(`/rewards/${rewardId}`, { isActive: false });
   }
 });
+
+test('成员：生成邀请码再撤销、改掌勺偏好', async ({ page }) => {
+  const name = stamp('新成员');
+  await page.goto('/house/members');
+
+  // 邀请码只显示一次，所以创建后就在对话框里断言它出现了
+  await page.getByRole('button', { name: '+ 邀请成员' }).click();
+  const invite = page.getByRole('dialog', { name: '邀请家庭成员' });
+  await invite.getByLabel('邀请谁').fill(name);
+  const created = waitFor(page, 'POST', /\/household\/invitations$/);
+  await invite.getByRole('button', { name: '生成邀请码' }).click();
+  const createResponse = await created;
+  expect(createResponse.status(), await createResponse.text()).toBe(201);
+  const token = ((await createResponse.json()) as { data: { invitationToken: string } }).data
+    .invitationToken;
+  expect(token.length).toBeGreaterThan(20);
+  await expect(page.getByRole('dialog', { name: '邀请码生成好了' }).getByText(token)).toBeVisible();
+  await page.getByRole('button', { name: '知道了' }).click();
+
+  // 侧栏里能看到，撤销掉（用按钮判断在不在，别用名字——toast 里也有名字）
+  const revokeButton = page.getByRole('button', { name: `撤销${name}的邀请` });
+  await expect(revokeButton).toBeVisible();
+  await revokeButton.click();
+  const revoked = waitFor(page, 'DELETE', /\/household\/invitations\/[^/]+$/);
+  await page.getByRole('dialog', { name: '撤销这个邀请？' }).getByRole('button', { name: '撤销邀请' }).click();
+  expect((await revoked).ok()).toBeTruthy();
+  await expect(revokeButton).toBeHidden();
+
+  // 改自己的资料：角色不给改，掌勺偏好能改
+  await page.getByRole('button', { name: '编辑爸爸' }).click();
+  const editor = page.getByRole('dialog', { name: '编辑「爸爸」' });
+  await expect(editor.getByText('不能改自己的角色')).toBeVisible();
+  const before = await editor.getByRole('checkbox', { name: '经常掌勺' }).getAttribute('aria-checked');
+  await editor.getByRole('checkbox', { name: '经常掌勺' }).click();
+  const saved = waitFor(page, 'PATCH', /\/household\/members\/[^/]+$/);
+  await editor.getByRole('button', { name: '保存成员资料' }).click();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(editor).toBeHidden();
+
+  // 改回去，别影响别的用例
+  await page.getByRole('button', { name: '编辑爸爸' }).click();
+  const again = page.getByRole('dialog', { name: '编辑「爸爸」' });
+  await expect(again.getByRole('checkbox', { name: '经常掌勺' })).toHaveAttribute(
+    'aria-checked',
+    before === 'true' ? 'false' : 'true',
+  );
+  await again.getByRole('checkbox', { name: '经常掌勺' }).click();
+  const restored = waitFor(page, 'PATCH', /\/household\/members\/[^/]+$/);
+  await again.getByRole('button', { name: '保存成员资料' }).click();
+  expect((await restored).ok()).toBeTruthy();
+});

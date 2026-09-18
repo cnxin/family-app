@@ -18,6 +18,7 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/schedule/notifications', title: '消息' },
   { path: '/schedule/polls', title: '家庭投票' },
   { path: '/house/points', title: '积分奖励' },
+  { path: '/house/members', title: '家庭成员' },
 ];
 
 for (const target of READY_PAGES) {
