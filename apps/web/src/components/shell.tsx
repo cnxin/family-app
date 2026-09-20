@@ -173,7 +173,7 @@ export function Shell() {
 
       <div className="flex min-h-full flex-col lg:h-dvh lg:pl-[224px]">
         {/* 手机：顶栏只留当前位置和两个开关，功能切换全部交给底部标签 */}
-        <header className="sticky top-0 z-20 border-b border-border bg-bg/85 backdrop-blur-xl lg:hidden">
+        <header className="vt-chrome-top sticky top-0 z-20 border-b border-border bg-bg/85 backdrop-blur-xl lg:hidden">
           <div className="flex h-14 w-full items-center gap-1 px-4">
             <button
               type="button"

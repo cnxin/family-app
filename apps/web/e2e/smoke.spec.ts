@@ -49,6 +49,33 @@ for (const target of READY_PAGES) {
   });
 }
 
+/**
+ * 页面整体不横向滚动，不等于卡片里的东西没撑破卡片——首页三餐卡里那排菜品小图
+ * 就这么溢出过 11px（四个固定 48px 的方块比卡片能用的宽度还宽），而整页并不溢出。
+ * 所以这里逐个卡片量一遍。
+ */
+test('首页：卡片里没有元素撑破自己的边框', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  const bad = await page.evaluate(() => {
+    const out: string[] = [];
+    document.querySelectorAll('main a, main article, main section > div').forEach((card) => {
+      const box = card.getBoundingClientRect();
+      if (!box.width) return;
+      card.querySelectorAll('*').forEach((child) => {
+        const inner = child.getBoundingClientRect();
+        if (inner.width && (inner.right > box.right + 0.5 || inner.left < box.left - 0.5)) {
+          out.push(
+            `${card.textContent?.slice(0, 12)} 里的 ${child.tagName} 超出 ${Math.round(inner.right - box.right)}px`,
+          );
+        }
+      });
+    });
+    return out;
+  });
+  expect(bad, '有元素画到了卡片外面').toEqual([]);
+});
+
 // 分段已经全部搬完，桥接页只剩「认不出来的分段」这一个分支了
 test('认不出来的分段给一句人话，不是白屏', async ({ page }) => {
   await page.goto('/house/nope');

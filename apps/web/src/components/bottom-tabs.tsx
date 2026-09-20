@@ -177,7 +177,7 @@ function TabBar({
   return (
     <nav
       ref={navRef}
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 lg:hidden"
+      className="vt-chrome-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 lg:hidden"
       aria-label="主导航"
     >
       {/* 中间那个按钮要凸出到栏外面，所以这一行不能裁剪 */}
@@ -191,7 +191,9 @@ function TabBar({
           const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
             prefetchOn(prefetch, scene);
             if (!segments.length) {
-              soft(scene.path);
+              // 已经站在这一页了就什么也不做——再导航一次会平白走一遍切页动画，
+              // 看着就是「点一下闪了一下」
+              if (pathname !== scene.path) soft(scene.path);
               return;
             }
             const tab = event.currentTarget.getBoundingClientRect();
@@ -212,7 +214,7 @@ function TabBar({
                 aria-current={isActive ? 'page' : undefined}
                 onPointerEnter={() => prefetchOn(prefetch, scene)}
                 onPointerDown={onPointerDown}
-                className="flex flex-1 flex-col items-center gap-0.5 pb-2 pt-1 transition-transform duration-150 active:scale-[0.92]"
+                className="flex flex-1 select-none touch-manipulation flex-col items-center gap-0.5 pb-2 pt-1 transition-transform duration-150 active:scale-[0.92]"
               >
                 <span
                   className={
@@ -243,8 +245,8 @@ function TabBar({
               onPointerDown={onPointerDown}
               aria-haspopup={segments.length ? 'menu' : undefined}
               className={
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] ' +
-                'transition-[color,transform] duration-150 active:scale-[0.94] ' +
+                'flex flex-1 select-none touch-manipulation flex-col items-center gap-0.5 py-2 ' +
+                'text-[11px] transition-[color,transform] duration-150 active:scale-[0.94] ' +
                 (isActive ? 'font-medium text-accent' : 'text-ink-soft')
               }
             >

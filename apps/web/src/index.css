@@ -47,19 +47,42 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 切页用交叉淡入 + 一点点上浮，只作用在主体（view-transition-name: page），
-   顶栏底栏留在原地——整屏淡入会让人觉得"闪了一下"，局部淡入才像同一个页面在换内容。 */
+/* 切页只动主体（view-transition-name: page），顶栏底栏留在原地。
+   这里是「渐隐再渐现」，不是交叉淡入：两页内容差得远的时候，重叠的那段时间里
+   旧页面会透在新页面上，看着像凭空弹出一堆东西——上一版就是这个毛病。
+   所以旧的先走干净（100ms），新的等 70ms 再进来，两边几乎不重叠。 */
 ::view-transition-old(page) {
-  animation: 120ms cubic-bezier(0.4, 0, 1, 1) both page-out;
+  animation: 100ms cubic-bezier(0.4, 0, 1, 1) both page-out;
 }
 ::view-transition-new(page) {
-  animation: 180ms cubic-bezier(0, 0, 0.2, 1) both page-in;
+  animation: 190ms cubic-bezier(0, 0, 0.2, 1) 70ms both page-in;
 }
 @keyframes page-out {
   to { opacity: 0; }
 }
 @keyframes page-in {
   from { opacity: 0; transform: translateY(6px); }
+}
+
+/* 顶栏和底栏各给一个自己的名字。不给的话它们被算进 root 那一组，而主体那张快照
+   是画在所有内容之上的（包括 position: fixed 的底栏），切页时底栏会被旧页面的
+   残影糊住——手机上点「今天」那一下看到的就是这个。给了名字就各走各的，
+   而且它们前后长得一样，所以直接不做动画，稳稳待着。 */
+.vt-chrome-top {
+  view-transition-name: chrome-top;
+}
+.vt-chrome-bottom {
+  view-transition-name: chrome-bottom;
+}
+::view-transition-old(chrome-top),
+::view-transition-old(chrome-bottom) {
+  animation: none;
+  opacity: 0;
+}
+::view-transition-new(chrome-top),
+::view-transition-new(chrome-bottom) {
+  animation: none;
+  opacity: 1;
 }
 
 /* 系统里关了动效就别动 */

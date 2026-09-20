@@ -13,7 +13,11 @@ function DishTile({ item }: { item: MenuItem }) {
     <span
       title={item.dish.name}
       className={
-        'grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-[19px] ' +
+        // 格子跟着卡片宽度缩，不能 shrink-0：四个 48px 的方块加间距是 210px，
+        // 比卡片里能用的宽度还宽，实测撑出去 11px。max-w 是另一头的保险——
+        // 只有一道菜的时候别把这一格拉成一条横幅
+        'grid h-12 min-w-0 max-w-[56px] flex-1 place-items-center overflow-hidden rounded-lg ' +
+        'bg-muted text-[19px] ' +
         (item.status === 'done' ? 'opacity-55' : '')
       }
     >
@@ -34,7 +38,7 @@ function MealCard({ menu, date }: { menu: Menu; date: string }) {
   return (
     <SoftLink
       to={`/eat/kitchen?date=${date}`}
-      className="flex min-w-0 flex-col rounded-card border border-border bg-surface p-3 transition-colors duration-150 hover:border-ink-soft/35 hover:bg-muted/40"
+      className="flex min-w-0 flex-col overflow-hidden rounded-card border border-border bg-surface p-3 transition-colors duration-150 hover:border-ink-soft/35 hover:bg-muted/40"
     >
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold">{MEAL_LABELS[menu.mealType]}</span>
@@ -66,7 +70,7 @@ function MealCard({ menu, date }: { menu: Menu; date: string }) {
               <DishTile key={item.id} item={item} />
             ))}
             {live.length > 3 ? (
-              <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-muted text-[12px] text-ink-soft">
+              <span className="grid h-12 min-w-0 max-w-[56px] flex-1 place-items-center rounded-lg bg-muted text-[12px] text-ink-soft">
                 +{live.length - 3}
               </span>
             ) : null}
