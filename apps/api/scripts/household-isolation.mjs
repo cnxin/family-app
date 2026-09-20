@@ -298,6 +298,26 @@ try {
     name: '隔离测试成员',
     role: 'member',
   });
+  const moduleBaseline = await request('/system/modules', defaultToken);
+  const foreignModuleBaseline = await request('/system/modules', foreignToken);
+  const foreignAssetId = randomUUID();
+  try {
+    await db.query(`INSERT INTO home_assets (id,"householdId",name,category,"createdById") VALUES ($1,$2,'隔离资产','appliance',$3)`, [foreignAssetId, ids.household, ids.member]);
+    await db.query(`INSERT INTO household_module_overrides (household_id,key,override,updated_by) VALUES ($1,'assets','off',$2)`, [ids.household, ids.member]);
+    const localModules = await request('/system/modules', defaultToken);
+    const foreignModules = await request('/system/modules', foreignToken);
+    assert(JSON.stringify(localModules.body.data) === JSON.stringify(moduleBaseline.body.data), '其他家庭资产及 override 不改变本家庭任一模块状态');
+    const assets = foreignModules.body.data.modules.find((row) => row.key === 'assets');
+    assert(assets.hasData && assets.override === 'off', '普通成员 GET 能看到自己家庭 hasData 与 override');
+    const rejected = await request('/system/modules/assets', foreignToken, 'PATCH', { override: 'on' });
+    assert(rejected.status === 403, '普通成员不能覆盖家庭模块显示设置');
+  } finally {
+    await db.query('DELETE FROM household_module_overrides WHERE household_id=$1', [ids.household]);
+    await db.query('DELETE FROM home_assets WHERE id=$1', [foreignAssetId]);
+  }
+  const foreignModuleAfter = await request('/system/modules', foreignToken);
+  assert(JSON.stringify(foreignModuleAfter.body.data) === JSON.stringify(foreignModuleBaseline.body.data), '跨家庭夹具清理后恢复原有模块状态');
+
   const oldToken = signToken({
     sub: ids.account,
     accountId: ids.account,

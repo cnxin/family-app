@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 275 个端点（POST 116 / GET 86 / PATCH 41 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 275 个。
+共 277 个端点（POST 116 / GET 87 / PATCH 42 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 277 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -28,7 +28,7 @@
 | reminders | 5 | 5 |
 | shopping | 5 | 5 |
 | smart-menu | 4 | 4 |
-| system | 8 | 8 |
+| system | 10 | 10 |
 | tasks | 5 | 5 |
 | travel | 21 | 21 |
 | upload | 1 | 1 |
@@ -373,7 +373,7 @@
 | POST | `/smart-menu-plans/:id/adopt` | `SmartMenuController.adopt` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
 | POST | `/smart-menu-plans/:id/poll` | `SmartMenuController.createPoll` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
 
-## system（8）
+## system（10）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -385,6 +385,8 @@
 | POST | `/system/backups/runs` | `SystemBackupController.queueBackup` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
 | PATCH | `/system/backups/runs/:id/cancel` | `SystemBackupController.cancelRun` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
 | POST | `/system/backups/runs/:id/restore-drills` | `SystemBackupController.queueRestoreDrill` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
+| GET | `/system/modules` | `SystemModulesController.list` | 登录 | ✓ | `apps/api/src/system/system-modules.controller.ts` |
+| PATCH | `/system/modules/:key` | `SystemModulesController.update` | `manage_integrations` | ✓ | `apps/api/src/system/system-modules.controller.ts` |
 
 ## tasks（5）
 

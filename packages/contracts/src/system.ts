@@ -1,3 +1,4 @@
+// 模块显示规则：visible = override === 'on' || (override !== 'off' && hasData)
 import { z } from 'zod';
 import {
   idParams,
@@ -13,6 +14,25 @@ import { defineEndpoint } from './registry';
 // 备份策略与任务经 presentPolicy() / presentRun() 逐字段挑选。bigint 列（*Bytes）在 pg 驱动里是字符串，
 // 响应原样回传字符串，客户端自己 Number()。运行时数据（容量、worker 心跳）在没跑过 worker 时都是 null，
 // 所以一律 nullable 而不是 optional——字段总在，值可能为空。health 两个端点是 @Public 的探针。
+
+// shelf 模块 key 的唯一来源；core / settings 不参与 hasData。
+export const SHELF_MODULE_KEYS = [
+  'recipes', 'reminders', 'polls', 'inventory', 'assets', 'finance', 'points',
+  'guests', 'media', 'travel', 'memories', 'knowledge', 'activity', 'assistant',
+] as const;
+export const shelfModuleKey = z.enum(SHELF_MODULE_KEYS);
+export type ShelfModuleKey = z.infer<typeof shelfModuleKey>;
+export const moduleOverride = z.enum(['on', 'off']).nullable();
+export type ModuleOverride = z.infer<typeof moduleOverride>;
+export const systemModuleStateSchema = z.object({
+  key: shelfModuleKey,
+  hasData: z.boolean(),
+  override: moduleOverride,
+});
+export type SystemModuleState = z.infer<typeof systemModuleStateSchema>;
+export const systemModulesSchema = z.object({ modules: z.array(systemModuleStateSchema) });
+export const updateModuleOverrideBody = z.object({ override: moduleOverride });
+export type UpdateModuleOverrideBody = z.infer<typeof updateModuleOverrideBody>;
 
 export const BACKUP_SCHEDULE_FREQUENCIES = ['daily', 'weekly'] as const;
 export const backupScheduleFrequency = z.enum(BACKUP_SCHEDULE_FREQUENCIES);
@@ -129,6 +149,20 @@ export const queueBackupRunBody = z.object({
 // ---- 端点 -------------------------------------------------------------------
 
 export const system = {
+  modules: defineEndpoint({
+    method: 'GET',
+    path: '/system/modules',
+    summary: '家庭 shelf 模块的数据存在性与显示覆盖（所有成员）',
+    response: systemModulesSchema,
+  }),
+  updateModule: defineEndpoint({
+    method: 'PATCH',
+    path: '/system/modules/:key',
+    summary: '更新模块显示覆盖；null 删除覆盖（manage_integrations）',
+    params: z.object({ key: shelfModuleKey }),
+    body: updateModuleOverrideBody,
+    response: systemModuleStateSchema,
+  }),
   backups: defineEndpoint({
     method: 'GET',
     path: '/system/backups',

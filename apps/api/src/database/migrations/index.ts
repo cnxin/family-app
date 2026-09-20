@@ -1,3 +1,4 @@
+import { AddHouseholdModuleOverrides1785232400000 } from './1785232400000-add-household-module-overrides';
 import { InitialSchema1785226400000 } from './1785226400000-initial-schema';
 import { AddHouseholdScope1785226500000 } from './1785226500000-add-household-scope';
 import { HardenAuthAndOrders1785226600000 } from './1785226600000-harden-auth-and-orders';
@@ -120,4 +121,5 @@ export const ALL_MIGRATIONS = [
   AddFamilyFinance1785232100000,
   AddSubscriptionAsset1785232200000,
   AddSubscriptionRenewalCycle1785232300000,
+  AddHouseholdModuleOverrides1785232400000,
 ];

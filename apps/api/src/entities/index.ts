@@ -9,6 +9,7 @@ import {
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
+  PrimaryColumn,
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
@@ -7709,7 +7710,35 @@ export class SmartMenuCandidate {
   createdAt: Date;
 }
 
+@Entity('household_module_overrides')
+@Check('CHK_household_module_overrides_value', "override IN ('on', 'off')")
+export class HouseholdModuleOverride {
+  @PrimaryColumn('uuid', { name: 'household_id', primaryKeyConstraintName: 'PK_household_module_overrides' })
+  householdId: string;
+
+  @PrimaryColumn({ type: 'varchar', length: 32, primaryKeyConstraintName: 'PK_household_module_overrides' })
+  key: string;
+
+  @Column({ type: 'varchar', length: 3 })
+  override: 'on' | 'off';
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt: Date;
+
+  @Column('uuid', { name: 'updated_by' })
+  updatedBy: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'household_id', foreignKeyConstraintName: 'FK_household_module_overrides_household' })
+  household: Household;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'updated_by', foreignKeyConstraintName: 'FK_household_module_overrides_updated_by' })
+  member: Member;
+}
+
 export const ALL_ENTITIES = [
+  HouseholdModuleOverride,
   Account,
   Household,
   Member,

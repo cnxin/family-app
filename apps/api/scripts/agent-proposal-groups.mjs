@@ -91,6 +91,12 @@ async function runMigrationPhase() {
     let latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
+    if (latest[0]?.name === 'AddHouseholdModuleOverrides1785232400000') {
+      await AppDataSource.undoLastMigration();
+      latest = await AppDataSource.query(
+        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+      );
+    }
     if (latest[0]?.name === 'AddSubscriptionRenewalCycle1785232300000') {
       await AppDataSource.undoLastMigration();
       latest = await AppDataSource.query(

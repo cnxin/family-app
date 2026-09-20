@@ -1,3 +1,5 @@
+import { SystemModulesController } from './system-modules.controller';
+import { SystemModulesService } from './system-modules.service';
 import {
   BadRequestException,
   Body,
@@ -827,7 +829,7 @@ class HealthController {
 
 @Module({
   imports: [TypeOrmModule.forFeature([BackupPolicy, BackupRun, Member, Notification])],
-  controllers: [HealthController, SystemBackupController],
-  providers: [SystemBackupService],
+  controllers: [HealthController, SystemBackupController, SystemModulesController],
+  providers: [SystemBackupService, SystemModulesService],
 })
 export class SystemModule {}

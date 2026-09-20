@@ -82,15 +82,52 @@
 
 「空域隐身」需要知道一个域有没有数据。客户端挨个打列表接口是 14 个 shelf 域的请求，不可接受；加一个聚合端点。
 
+#### F3 hasData 映射（2026-09-21，先于实现确认）
+
+所有 SQL 分支都按当前家庭过滤；现有表实际列名为 `"householdId"`，新 overrides 表按要求用 `household_id`。
+同一域多张表用一个 `SELECT EXISTS(… UNION ALL … LIMIT 1)`，各域与 override 查询并行；activity 是明确的常量例外。
+历史 / 已归档业务记录仍算「用过」，不把当前列表筛选当存在性判断。
+
+| key（与 nav shelf 一致） | 表 / hasData 条件 | 家庭前导索引（已核对迁移及隔离库 pg_indexes） |
+| --- | --- | --- |
+| recipes | `dishes` 存在记录，包含下架菜 | `IDX_dishes_household_active` |
+| reminders | `reminders`：未取消，且 `status='scheduled' OR remindAt > now()`；已发送过去 / 已取消不算 | `IDX_reminders_household_status` |
+| polls | `polls` 存在记录，含关闭 / 归档 | `IDX_polls_household_active` |
+| inventory | `inventory_items` 存在记录，零库存也算 | `IDX_inventory_household` |
+| assets | `home_assets` 存在记录，含停用 | `IDX_home_assets_household_status` |
+| finance | `finance_accounts` / `finance_transactions` / `finance_budgets` 任一有记录；懒建默认分类不算 | `IDX_finance_accounts_household_active` / `IDX_finance_transactions_household_occurred` / `IDX_finance_budgets_household_month` |
+| points | `points_ledger` / `rewards` 任一有记录；懒建零余额 `points_accounts` 不算 | `IDX_points_ledger_household_created` / `IDX_rewards_household_active` |
+| guests | `guests` / `visits` 任一有记录，含历史 | `IDX_guests_household_name` / `IDX_visits_household_start` |
+| media | `household_media` 片单有记录，或 `integrations`（plex / emby / moviepilot）有非空 baseUrl，或 `household_media_source_configs` 有非空 baseUrl / credentialHint；已保存但停用的连接配置仍算，部署级默认源不算家庭配置 | `IDX_household_media_household_status` / `IDX_integrations_household` / `IDX_household_media_source_configs_household` |
+| travel | `travel_plans` 有记录，含完成 / 归档；单独模板不算 | `IDX_travel_plans_household_dates` |
+| memories | `family_memories` 有记录，含归档 | `IDX_family_memories_household_date` |
+| knowledge | `knowledge_articles` 有记录，含归档 | `IDX_knowledge_articles_household_active` |
+| activity | 固定 true，不读活动表 | 不适用 |
+| assistant | `agent_settings.enabled=true`；未建设置时与 `/agent/status` 默认一致：`agentDataKey()!=null`。只读，不懒建设置、不探测 runtime | `UQ_agent_settings_household`；默认分支 `households` 主键 |
+
+- **边界说明**：media 只算家庭明确保存的配置，避免默认可用 Bangumi 导致所有空家庭恒真；这点在汇报单列，若以后要把部署默认也计入，需再统一口径。reminders 将取消排除在「未来」之外。积分、财务按上述实体口径，不靠默认空账户 / 分类制造非空。
+- **PATCH 权限**：沿用 `manage_integrations`（现有家庭连接 / 配置管理 capability，owner/admin 有、member 无），不新增 capability，不写角色判断。
+- **范围**：仅 apps/api、packages/contracts、docs；F4 前不改 nav 或前端接线。前置修复 `776e1d3`、`7a9a519` 已完成，最新 CI `35524045838` 四项全绿；首笔 CI 被后续推送并发取消，不记为通过。
+
 - **端点**（放 `system` 模块）：
   - `GET /system/modules` → `{ modules: [{ key, hasData, override }] }`。`key` 与 `nav.ts` 的分段 key 对齐（assets / finance / guests / travel / knowledge / memories / polls / points / media / inventory / recipes / reminders / activity / assistant）。`hasData` 用 `SELECT EXISTS(… WHERE household_id = $1 LIMIT 1)` 逐域算，一次请求内并行；`override` 是 `'on' | 'off' | null`。
-  - `PATCH /system/modules/:key` body `{ override: 'on' | 'off' | null }`，需要 `owner/admin`。
-- **存储（2026-09-20 已拍板）**：按 F0 结论使用独立表 `household_module_overrides(household_id, key, override, updated_at)`，主键 `(household_id, key)`；不向备份专用表塞通用设置。迁移照旧走 TypeORM。
+  - `PATCH /system/modules/:key` body `{ override: 'on' | 'off' | null }`，使用现有 `manage_integrations` capability。
+- **存储（2026-09-20 已拍板）**：按 F0 结论使用独立表 `household_module_overrides(household_id, key, override, updated_at, updated_by)`，主键 `(household_id, key)`；不向备份专用表塞通用设置。迁移照旧走 TypeORM。
 - **契约**：`packages/contracts/src/system.ts` 加两组 schema；`key` 用枚举，`docs/api-inventory.md` 同步（275 → 277）。
 - **校验直接用 Zod 管道**（`@ZodBody/@ZodParam`），不要再写 class-validator DTO。
-- **黑盒**：`apps/api/scripts/system-modules.mjs`——空家庭全 `hasData=false`；造一件资产后 assets 变 true；override 写入/清除；普通成员 PATCH 403；`household-isolation.mjs` 补一条跨家庭看不到对方的 override。
+- **黑盒**：`apps/api/scripts/system-modules.mjs`——空家庭业务域 `hasData=false`，activity 恒 true、assistant 与 status.enabled 一致；造一件资产后 assets 变 true；override 写入/清除；普通成员 PATCH 403；`household-isolation.mjs` 补一条跨家庭看不到对方的 override。
 - **显示规则**（写进契约文件头注释，客户端照这个算）：`visible = override === 'on' || (override !== 'off' && hasData)`。
 - **提交**：`feat(api): 模块状态端点，支撑空域隐身`
+
+#### F3 本轮验收备注
+
+- 契约统一导出 14 个 shelf key，与 nav.ts 逐个比对值及顺序一致；GET 成员可读、PATCH 使用 `manage_integrations`，未知 key / 非法 override 返回 400。
+- 每个有查询的域只有一条 EXISTS，各 UNION 分支均带家庭边界；模块黑盒逐表覆盖其他家庭不可见，隔离脚本另验证 override 不串家庭。
+- `household_module_overrides` 只允许 on/off，null 删行，保留 updated_at / updated_by；没有改任何现有表结构、没有新增现有表索引。映射涉及表均有家庭前导索引，缺索引清单为空。
+- 隔离库 `family_app_test_3be6a1ef415a4b7f8bd2d9c2c0478d4f` 实跑 up → down → up 成功：down 删除新表、再次 up 只恢复该迁移，其他表索引定义不变，随后 schema drift 与全量 API 通过。
+- 本地验证：先 build:packages；最终 typecheck / lint 通过（43 条既有 warning），完整 test:api 通过、test:web:next 157 passed / 5 skipped / 0 failed；四张家里页截图重新生成到 `.tmp-shots/f2-*` 并逐张复看，无空白页、横向溢出或撞色。
+- 两次本地 API 失败均已改代码再验收：旧迁移演练写死尾迁移；新财务流水夹具试图 DELETE 不可变记录。分别补回退入口、采用随隔离库销毁的独立流水家庭，不跳断言或关闭触发器；见 refactor-plan 教训 21。
+- 唯一口径待后续确认：媒体 hasData 不计部署级默认源，仅计家庭明确配置或片单；其余按上方映射执行。未开始 F4。
 
 ### F4 · 空域隐身 + 手动开启 + 每人置顶 ［M］
 
@@ -300,7 +337,7 @@
 | F0 盘点 | ☑ | `c2d9ea9` · `docs: 信息架构收敛盘点` | 24 项逐行完成（core 7 / shelf 14 / settings 3），内嵌设置另记。① 今天已聚合三餐、今日及后两天任务、当日日历、提醒、购物、动态和未读统计；② system 只有备份专用 `backup_policies` / `backup_runs`，无通用家庭设置，F3 按独立 overrides 表分支；③ 掌勺经 `PATCH /members/me/preferences` 存 `members.prefersCooking`，记忆经 `GET/PATCH /agent/profile` 存 `agent_member_profiles.memoryEnabled`（版本锁），置顶仍默认本机，服务端同步待用户确认。无顶层归层调整；路径漂移、今日既有区块、成员设置可达性及页内新建的深链边界详见上方 D。typecheck / lint 通过（API 43 条既有 warning）；仅文档，不开始 F1。 |
 | F1 导航分层 | ☑ | `f5e096f` · `feat(web): 导航分层，常驻项收敛到七个` | 导航分层、桌面七项 / 手机四项、今天头像及路由占位完成；typecheck / lint 通过，全量新端浏览器验收 139 passed / 5 skipped，四图已人工复看，已 push，CI `35504482867` 四项全绿；详见上方 F1 备注，未开始 F2。 |
 | F2 家里页 | ☑ | `bd4b7d7` · `feat(web): 家里页，低频功能的启动台` | 启动台、缓存状态、角色过滤预取及旧根落点修正完成；typecheck / lint 通过（API 43 条既有 warning），全量新端 157 passed / 5 skipped / 0 failed，四图已复看；已 push，CI `35520971609` 第 2 次四项全绿（首跑旧端任务备注定位器匹配到日历缓存页与任务页两处，未改代码重跑通过）；详见 F2 备注，未开始 F3。 |
-| F3 模块状态端点 | ☐ | | |
+| F3 模块状态端点 | ◐ | 待 CI 后回填 | 14 key 及两个端点完成；typecheck / lint（43 条既有 warning）、全量 API、新端 157 passed / 5 skipped 通过，277/277 契约；隔离库 up → down → up 与 schema drift 通过，仅 API / contracts / docs，待 push / CI。 |
 | F4 隐身 / 开启 / 置顶 | ☐ | | |
 | F5 需要留意 | ☐ | | |
 | F6 ⌘K 动作 | ☐ | | |

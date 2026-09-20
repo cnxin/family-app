@@ -125,6 +125,7 @@ const BUSINESS_SCRIPTS = [
   'moviepilot-webhook',
   'media-library',
   'playback-webhook',
+  'system-modules',
   'household-isolation',
   'security-consistency',
   'shopping-inventory',
@@ -345,6 +346,7 @@ try {
     await runScript('scripts/agent-proposal-groups.mjs', '--migration');
     await runScript('scripts/agent-routines.mjs', '--migration');
     await runScript('scripts/agent-profiles.mjs', '--migration');
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/check-module-migration.ts']);
     await runProcess(process.execPath, [
       '-r',
       'ts-node/register',
