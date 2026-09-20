@@ -1,0 +1,278 @@
+# 小管家 · 信息架构收敛执行计划（Phase F，交接给执行 agent）
+
+> 放进仓库 `docs/ia-plan.md`。自包含：读完就能开工。
+> 硬规矩、SOP、提交格式全部沿用 `docs/execution-plan.md` §1～§3，这里不重复。
+> 设计稿（结构示意，配色字体不算数）：https://claude.ai/artifact/3wPCxr9NFSFBjauGCpmPRJ
+>
+> **本文件覆盖 `execution-plan.md` §0 里「框架已定型、不要再动框架」这一条中关于导航的部分。**
+> 用户已于 2026-09-20 点头：五场景导航改成下面这套。`Page/Panel`、`SoftLink`、预取、骨架屏、动效规范都不动。
+>
+> **排期：插在 C1 之后、C2 家庭试用之前。** 家里人的第一印象应该是收敛后的样子，试用反馈才有用。
+> E（Home Assistant）排在 F 之后，HA 的「今天页卡片」直接用 F5 的机制，不另做一套。
+
+---
+
+## 0. 为什么做、做成什么样
+
+问题：24 个分段全是同等权重的「目的地」，五场景只是给功能清单分了组。功能都有用，但一堆摆着头疼。
+
+原则一句话：**高频功能你去找它，低频功能它来找你。**
+
+| 层 | 是什么 | 怎么到达 |
+| --- | --- | --- |
+| 常驻（core） | 每天用的：今天、点菜、厨房、购物、日历、任务、消息 | 桌面侧栏固定项；手机底部 4 个 tab |
+| 架上（shelf） | 有用但低频：菜谱、库存、提醒、投票、积分、观影、资产、财务、访客、出行、知识库、回忆、家庭动态、问问小管家、（将来）智能家居 | ① 今天页有事才出卡片 ② ⌘K 搜页面或动作 ③ 上下文里的入口 ④「家里」启动台 ⑤ 成员自己钉到导航 |
+| 设置（settings） | 运维性质：成员、备份、观影连接器、外部通知渠道、助理设置、个人 | 一页「家庭设置」集中列出 |
+
+**不删任何页面，不改任何页面内部。** 这次只动「怎么到达」。
+
+收敛后的形态：
+
+- **手机**：底部 4 个 tab——今天 / 吃饭 / 日程 / 家里。「我的」缩成今天页右上角头像。吃饭、日程仍按下弹气泡，但气泡里只列 core 分段（吃饭 = 点菜·厨房·购物；日程 = 日历·任务·消息）。今天、家里直达，不弹气泡。
+- **桌面**：侧栏不再是手风琴。从上到下：品牌 → ⌘K 搜索框 → 7 个 core 平铺 →「我钉住的」→（弹性空白）→ 家里（全部功能）→ 家庭设置 → 成员头像。
+- **家里页** `/home`：三段——我钉住的 / 家里在用的 / 还可以开启。
+- **今天页**：新增「需要留意」区，低频域在这里按需冒出来。
+
+---
+
+## 1. 任务清单
+
+工作量档位同 execution-plan：S ≤ 半天，M ≈ 1 天，L ≈ 2 天。按 F0 → F8 顺序做，每个一个提交。
+
+### F0 · 盘点 ［S］
+
+- **先读**：`apps/web/src/lib/nav.ts`、`components/shell.tsx`（及它拆出去的文件）、`components/command-palette.tsx`、`pages/today.tsx`、`lib/prefetch.ts`、`lib/routes.ts`、`App.tsx`。
+- **产出**：在本文件末尾「盘点表」里，给现有每个分段填一行：
+  路径 · 归哪一层（按 §0 的表，有异议写备注）· 现在有哪些上下文入口（从哪些别的页能跳进来）· 是否支持 `?create=1` 之类的深链 · 有没有「空态」判断可以复用。
+- **同时确认三件事并写进备注**：
+  1. `today.tsx` 现在已经聚合了哪些东西（别重做）；
+  2. `system` 模块里有没有现成的「家庭级设置」存储（F3 要用）；
+  3. 成员级偏好现在存哪（`/me/profile` 的「经常掌勺」「启用记忆」走的哪个端点、哪张表——F4 的置顶要不要跟着存服务端，看这个）。
+- **不改代码。** 提交：`docs: 信息架构收敛盘点`
+
+### F1 · `nav.ts` 分层模型 + 导航外壳 ［M］
+
+- **改 `lib/nav.ts`**：每个分段加 `tier: 'core' | 'shelf' | 'settings'`，加 `glyph`（一个汉字，家里页图块用，如 资/账/客/行/影/票/分/库/知/忆）。保留 `SCENES` 以便气泡菜单和旧路径换算继续工作，但新增导出：
+  - `coreSegments()`：按固定顺序返回 7 个 core；
+  - `shelfSegments(member)`：返回 shelf，已按 `managerOnly` 过滤；
+  - `settingsSegments(member)`。
+- **改 `shell.tsx`**：
+  - 桌面 Sidebar 按 §0 的顺序重排，去掉手风琴；「我钉住的」这一组 F4 才有数据，F1 先留空组件（空就不渲染标题）。
+  - 手机 BottomTabs 从 5 个改 4 个；今天、家里 `onPointerDown` 直接导航，吃饭、日程保留气泡但只列 core。
+  - 头像入口：今天页 `Page` 的 `actions` 里放头像按钮 → `/me/profile`（手机端唯一的「我的」入口；桌面在侧栏底部）。
+- **路由**：URL 一律不变（`/house/assets` 还是 `/house/assets`）。新增 `/home`（F2 做页面，F1 先放占位）和 `/settings`（F7）。原来落到场景首页的路径（如 `/house`、`/me`）`Navigate` 到 `/home`。
+- **⌘K 不受影响**：它本来就搜全部分段，这一步之后它是 shelf 的主要入口之一，确认 shelf 分段全部搜得到。
+- **测试**：`e2e/nav.spec.ts` 改写——桌面侧栏点「任务」；手机 4 个 tab 都在、按「吃饭」弹气泡且只有 3 项、按「家里」直达 `/home`；⌘K 输「资产」能到 `/house/assets`。冒烟的路径数组不变（页面都还在）。
+- **验收**：390 / 1280、亮 / 暗四张截图；手机底栏 4 项等宽、触控区 ≥ 44px。
+- **提交**：`feat(web): 导航分层，常驻项收敛到七个`
+
+### F2 · 「家里」启动台 `/home` ［M］
+
+- **页面** `pages/home.tsx`（≤ 400 行，图块拆 `components/home-tile.tsx`）：
+  - 顶部：标题「家里」+ 右侧「编辑置顶」（F4 接线，F2 先不渲染）+ 一条点了就开 ⌘K 的搜索条。
+  - 「家里在用的」：shelf 分段的图块网格（手机 3 列、桌面 `repeat(auto-fill, minmax(140px, 1fr))`）。图块 = 汉字 glyph 方块 + 名称 + **一行状态**。
+  - 底部一行「家庭设置 ›」→ `/settings`（只给 `isManager`；普通成员这一行是「个人」→ `/me/profile`）。
+- **状态行的规矩**：只用**已经在缓存里**的数据派生（今天页的留意区会把这些查询拉下来），没有现成数据就不显示这一行。**禁止为了状态行新增请求**——这页的价值是一眼扫完，不是又一个仪表盘。
+- F2 阶段「还可以开启」先不做，所有 shelf 都列在「在用的」。
+- **预取**：`prefetch.ts` 给 `/home` 配的就是留意区那几条查询。
+- **测试**：冒烟数组加 `/home`；一条用例：从家里点「资产」到达 `/house/assets`。
+- **提交**：`feat(web): 家里页，低频功能的启动台`
+
+### F3 · 后端：模块状态端点 ［M］
+
+「空域隐身」需要知道一个域有没有数据。客户端挨个打列表接口是 13 个请求，不可接受；加一个聚合端点。
+
+- **端点**（放 `system` 模块）：
+  - `GET /system/modules` → `{ modules: [{ key, hasData, override }] }`。`key` 与 `nav.ts` 的分段 key 对齐（assets / finance / guests / travel / knowledge / memories / polls / points / media / inventory / recipes / reminders / activity / assistant）。`hasData` 用 `SELECT EXISTS(… WHERE household_id = $1 LIMIT 1)` 逐域算，一次请求内并行；`override` 是 `'on' | 'off' | null`。
+  - `PATCH /system/modules/:key` body `{ override: 'on' | 'off' | null }`，需要 `owner/admin`。
+- **存储**：按 F0 的结论。有现成的家庭级设置表就加一个 jsonb 列 `module_overrides`；没有就新建 `household_module_overrides(household_id, key, override, updated_at)`，主键 `(household_id, key)`。迁移照旧走 TypeORM。
+- **契约**：`packages/contracts/src/system.ts` 加两组 schema；`key` 用枚举，`docs/api-inventory.md` 同步（275 → 277）。
+- **校验直接用 Zod 管道**（`@ZodBody/@ZodParam`），不要再写 class-validator DTO。
+- **黑盒**：`apps/api/scripts/system-modules.mjs`——空家庭全 `hasData=false`；造一件资产后 assets 变 true；override 写入/清除；普通成员 PATCH 403；`household-isolation.mjs` 补一条跨家庭看不到对方的 override。
+- **显示规则**（写进契约文件头注释，客户端照这个算）：`visible = override === 'on' || (override !== 'off' && hasData)`。
+- **提交**：`feat(api): 模块状态端点，支撑空域隐身`
+
+### F4 · 空域隐身 + 手动开启 + 每人置顶 ［M］
+
+- **hook**：`useModules()`（`['system','modules']`，`staleTime` 5 分钟）。**每个域的「新建」mutation 的 `onSuccess` 里顺手 `invalidateQueries(['system','modules'])`**——否则加完第一件资产它还躺在「还可以开启」里。用一个 `invalidateModules()` 小函数统一，别散写。
+- **家里页**：shelf 按上面的 `visible` 分成「家里在用的」和「还可以开启」。后者是列表行：glyph + 名称 + 一句话说它是干什么的 + 「开启」按钮（管理员 PATCH `override:'on'`；普通成员点开是直接进那一页，不写 override）。管理员在图块的长按 / 右键菜单里有「收起来」（`override:'off'`）。
+- **隐身只影响家里页和侧栏**：⌘K 照样搜得到，深链照样打得开，今天页的留意卡片照样出——**隐身不是禁用**。
+- **置顶**：
+  - 存储：先存 `localStorage`（键 `fa.pins.<memberId>`，try/catch，读不到当空），每台设备各自记。F0 如果发现成员偏好已有服务端存储且加字段很便宜，就存服务端并在备注里说明；否则不要为它开新表。
+  - 入口：家里页「编辑置顶」进入编辑态，图块右上角出现钉子切换；上限 4 个。
+  - 效果：桌面侧栏「我钉住的」列出来；手机在家里页最上面单独一组「我钉住的 · 只有你看得到」。core 分段不可钉（本来就在）。
+- **测试**：空库里家里页「在用的」为空或只有少数、「还可以开启」有内容；造一件资产后资产图块上移；钉住观影后桌面侧栏出现「观影」，刷新仍在。
+- **提交**：`feat(web): 空域隐身、手动开启与个人置顶`
+
+### F5 · 今天页「需要留意」 ［L］
+
+这是整套方案里最要紧的一块：低频域靠它「来找你」。
+
+- **先读**：F0 记下的 `today.tsx` 现状；`pages/assets.tsx` 右栏「临近事项」的派生逻辑（搬出来复用，别再写一份）。
+- **形态**：`components/attention/` 目录。
+  - `rules.ts`：一组纯函数，每条规则 `(data, member, today) => AttentionItem | null`。`AttentionItem = { key, domain, title, when, to, actionLabel, dueAt }`。**纯函数、不碰 React**，将来要进 `packages/core`，现在就按那个标准写，配 Vitest 单测。
+  - `use-attention.ts`：拉各域查询（全部复用现有 hook），喂给规则，按 `dueAt` 升序，返回列表。
+  - `attention-card.tsx`：域标签 + 时间 + 一句话标题 + 主动作按钮 +「稍后」。
+- **规则清单**（阈值写成 `rules.ts` 顶部的常量）：
+
+  | 域 | 出卡条件 | 主动作 | 谁看得到 |
+  | --- | --- | --- | --- |
+  | 资产 | 维护 ≤ 7 天或已逾期；订阅续费 ≤ 3 天或已逾期；保修 ≤ 30 天到期 | 看这件资产 | 全家 |
+  | 访客 | 来访 ≤ 7 天且当天还没有菜单 | 去点菜（带日期） | 全家 |
+  | 访客 | 有待处理的访客点菜请求 | 去处理 | 管理员 |
+  | 出行 | 出发 ≤ 7 天且清单有未处理项 | 看清单 | 全家 |
+  | 库存 | 有批次 ≤ 3 天过期 | 看库存 | 全家 |
+  | 投票 | 进行中且我还没投 | 去投票 | 本人 |
+  | 积分 | 有待审批的兑换 | 去审批 | 管理员 |
+  | 财务 | 本月某分类预算已超 | 看预算 | 管理员 |
+  | 备份 | 最近一次失败，或 worker 离线 | 看备份 | 管理员 |
+  | 智能家居 | 预留，E 阶段接 | | |
+
+- **四条硬规矩**：
+  1. **一个域最多一张卡**，多条合并（「3 件资产快到期」），点进去再看明细。
+  2. **每张卡必须有一个一步到位的动作**，没有动作的信息不配出卡，那是消息页的事。
+  3. **卡片是派生状态，不是消息**：事情办了卡就自己没了，没有已读未读，不落库。它和消息页的分工——消息说「发生了什么」，留意说「还有什么没办」。
+  4. **最多显示 5 张**，多的折成「还有 N 件」展开。没事的时候这一区整个不渲染，不要放「一切安好」的空态。
+- **稍后**：`localStorage` 记 `{ key, until: 明天 0 点 }`，到点自己回来。不做服务端。
+- **布局**：手机在「我的任务」下面；桌面是右栏（≥ 1024px 两栏：左 = 今晚 + 任务，右 = 需要留意）。右栏没卡片时左栏撑满，**不留空白**（用户明确在乎这个）。
+- **性能**：这几条查询同时是 `/` 和 `/home` 的预取内容；普通成员不要拉管理员才用得到的那几条。
+- **测试**：`rules.ts` 每条规则一组单测（到期前一天 / 当天 / 逾期 / 已办）；e2e 一条：造一件 3 天后要维护的资产 → 今天页出现卡片 → 点主动作到资产详情 → 完成维护 → 回今天页卡片消失。
+- **提交**：`feat(web): 今天页「需要留意」，低频功能有事才出现`
+
+### F6 · ⌘K 搜动作 ［M］
+
+- **`lib/actions.ts`**：动作注册表。每条 `{ id, label, keywords[], domain, to }`，`to` 是带深链参数的路径。首批：
+  记一笔支出 / 记一笔收入（财务）、加个来访（访客）、新建行程（出行）、登记一件资产、发起投票、记一条回忆、写一篇说明（知识库）、加一条提醒、加日程、加任务、加到购物清单、新建菜品。
+- **统一深链约定**：`?create=1`（需要区分类型的加 `&kind=expense`）。投票页已经支持；F0 盘点表里没支持的页面各补几行——**只加「读到参数就打开现成的新建弹窗、然后把参数从 URL 上抹掉」，不改弹窗本身**。
+- **`command-palette.tsx`**：结果分三组——动作 / 页面 / 菜品（现有）。动作排最前。手机上从今天页和家里页的搜索条打开，同一个组件，底部上推的 sheet 形态。
+- **「交给小管家」**：只有 `agent status.enabled === true` 才在结果末尾出现一行，把当前输入带到 `/me/assistant?draft=<输入>`（对话页读到 `draft` 填进输入框，不自动发送）。没启用就完全不出现，不要放灰掉的入口。
+- **没开启的域也能搜到动作**：用一次之后该域 `hasData` 变真，自然出现在家里页——这是「功能随着用而长出来」的闭环，e2e 要覆盖。
+- **测试**：⌘K 输「记一」→ 回车 → 到 `/house/finance` 且记账弹窗是开的、URL 上没有残留参数；空库里输「回忆」→ 新建一条 → 家里页出现回忆图块。
+- **提交**：`feat(web): ⌘K 支持搜动作，低频功能一句话直达`
+
+### F7 · 「家庭设置」集中页 `/settings` ［S］
+
+- 一页列表，每行：名称 + 一句话 + 当前状态（如「备份：昨天 03:00 成功」「3 位成员」，同样只用缓存里有的）。
+  行：成员 → `/house/members`、备份 → `/house/backups`、观影连接 → `/eat/media/settings`、外部通知渠道 → 消息页的「外部渠道」分段、小管家设置 → `/me/assistant`（打开设置弹窗的深链）、功能开关 → 家里页的「还可以开启」。
+- `managerOnly`。普通成员访问 `/settings` → `Navigate` 到 `/me/profile`。
+- 原页面都不动，只是多了一个集中入口、少了导航里的位置。
+- **提交**：`feat(web): 家庭设置集中页`
+
+### F8 · 收口 ［S］
+
+- `e2e`：全量 `test:web:next` 绿；手机 / 桌面、亮 / 暗把今天、家里、⌘K、设置四处截图过一遍。
+- 文档：
+  - `docs/refactor-plan.md` Phase 4 里「信息架构已定（2026-09-17）」那几段后面补一段「2026-09-20 收敛」，指向本文件；教训列表续编号，至少写一条：**功能多不等于导航多——导航的容量按每天用的算，其余靠事件、搜索和上下文到达**。
+  - `docs/execution-plan.md` §0 那句「不要再动框架」改成指向本文件；进度表加 F0～F8。
+  - `docs/home-assistant-plan.md` §4.3「今天页一张卡」改成「接入 F5 的 attention 规则」，§4.1 的分段归到 shelf。
+- **提交**：`docs: 信息架构收敛收口`
+
+---
+
+## 2. 不做的事（别顺手做）
+
+- 不删页面、不合并页面、不改任何页面内部布局。
+- 不改视觉语言。设计稿的配色和字体只是为了看结构，实现沿用现有 token 与 `.claude/skills/apple-design`。
+- 不按模块开关去裁剪小管家的 28 个工具——有道理，但属于 agent 重建那一轮，先记在这里。
+- 不做「使用频率统计后自动调整导航」。置顶是人手动钉的，导航不会自己变，家里人才记得住东西在哪。
+- 留意卡片不落库、不推送。要推送的走现有提醒 / 通知。
+
+## 3. 需要用户拍板的（执行 agent 遇到就停下来问）
+
+1. F0 盘点后如果认为某个分段归错了层（比如家里其实天天看菜谱），列出来问，不要自己挪。
+2. 置顶存本机还是存服务端——默认本机；如果用户希望手机和电脑同步，再加。
+3. 留意规则的阈值（7 天 / 3 天 / 30 天）是拍脑袋的初值，C2 试用期间按家里人的反馈调。
+
+---
+
+## 盘点表（F0 填）
+
+### 盘点口径（2026-09-20）
+
+- 基线：`refactor/phase-0-safety-net`，代码提交 `1828cdc`；仅盘点，不修改路由、权限、页面或分层实现。
+- 现有导航共 **24 项**：`SCENES` 内 21 个分段 + 独立「今天」+ `PINNED` 的小管家、个人设置。下表逐项列出，按 §0 标为 **core 7 / shelf 14 / settings 3**；层是计划归属，不表示代码已有 `tier`。观影连接器、外部通知渠道、助理设置另列为内嵌设置入口，不冒充独立导航分段。智能家居尚未接入，不计入现有项。
+- 已读 F0 指定文件，并追到 `bottom-tabs.tsx`（含 `SceneMenu`）、`nav-prefetch.ts`、`account-menu.tsx`、`legacy-bridge.tsx`，以及相关页面、拆分视图、查询 hook、后端目标链接与实体。当前工具未提供 fast-context 搜索，采用本地源码检索交叉核对。
+- 共用入口：21 个场景分段均可从桌面手风琴 / 手机气泡进入（`managerOnly` 过滤）；⌘K 搜索 `SCENES` 的页面和菜品，**未收录 `PINNED` 两项，且使用 `visibleSegments(scene, true)`，未按成员身份过滤管理员项**。下表侧重这些全局入口以外的上下文入口。
+- 「动态链接」指家庭动态及今天页「家里最近」按记录的 `targetPath` 跳转；「消息链接」指消息记录的目标链接；「助理结果」指对话结果/提案中的跳转。它们不是每个域必有的固定按钮，只在返回相应目标时出现。`routes.ts` 能映射路径不等于目标页能消费查询参数。
+- 空态均按**查询成功后**判断；当前筛选、日期区间、权限范围内无结果，不等于全家庭从未使用该域。不能直接把页面的 `data ?? []` 或筛选空态当 F3 的 `hasData`，也不能把加载失败算空库。
+- 结构稿已按 README 读完四份 HTML；只记录区块和顺序，不采纳样式或示例数据。示意稿资产卡的「加进购物清单」与 F5 的「看这件资产」不同，以 F5 为准；搜索稿省略了「菜品」，F6 明确保留。
+
+| 分段 | 路径（当前规范路径） | 层 | 现有上下文入口 | `?create=1` / 其他深链 | 可复用空态与备注 |
+| --- | --- | --- | --- | --- | --- |
+| 今天 `today` | `/` | core | 外壳品牌按钮、手机中央「今天」、⌘K；桥接错误页「回今天」 | 不适用；无新建参数 | `today.tsx` 的 `todays.length`、`events.length` 及侧栏各数组空态；不是单一域的空库判断。现有聚合详见下文与 F0 进度备注。 |
+| 点菜 `order` | `/eat/order` | core | 厨房「回去点菜」；菜谱可加菜到共享购物车，但该动作本身不导航到点菜 | 否；未读 `date` / `mealType`；日期、餐次来自 `CartProvider`，不是 URL | `order.tsx`：`visible.length === 0` 为菜品筛选空态，`cart.entries.length === 0` 为购物车空态；基础菜品可用 `dishes.data`，菜单是否有菜需另判。F5 的「去点菜（带日期）」现不能直接复用。 |
+| 厨房 `kitchen` | `/eat/kitchen` | core | 点菜「去厨房」、今天三餐卡及标题入口、购物空态、日历菜单条目、提醒来源；菜单动态/消息和助理结果 | 否；入口虽带 `?date=…&mealType=…`，页面仅 `useState(today)`，未消费日期/餐次参数 | `kitchen.tsx`：所选日无菜品（`!anyItems`，不等于无菜单）、`menu.items.length` / 活跃菜品数；只表示所选日/餐次。生成购物清单只写数据并 toast，不是到购物页的链接。 |
+| 菜谱 `recipes` | `/eat/recipes` | shelf | ⌘K 的菜品结果会导航到 `?dish=<id>`；未发现其他页面的固定跨页菜谱入口 | 否；`?dish=` 实际未读取，不能称为详情定位已支持 | `recipes.tsx`：`visible.length === 0` 含关键词/分类筛选；基础 `recipes.data` 可判当前菜谱列表。已有 `dishEdit='new'` 的新菜品弹窗，尚未接 URL。 |
+| 日历 `calendar` | `/schedule/calendar` | core | 今天「今天还有」标题入口；提醒来源；助理日程结果、日历目标消息 | 否；支持 `?view=month/week/agenda`；未读 `date` / `eventId` | `calendar.tsx`：`rows` 为当前视图区间，`dayRows.length` 为单天空态；不可代表全库没有日程。已有事件新建弹窗。 |
+| 任务 `tasks` | `/schedule/tasks` | core | 今天统计及「全部任务」、日历任务条目、提醒来源；任务动态/消息、助理结果 | 否；未读 `taskId` / `date` | `tasks.tsx`：`byDate.size === 0` 为当前任务区间空态；新建任务是页内输入，不是弹窗，F6 不能直接套“打开现成弹窗”。 |
+| 提醒 `reminders` | `/schedule/reminders` | shelf | 今天统计/右栏、日历条目铃铛、投票卡、资产详情维护计划、行程详情 | 不支持裸 `create`；已支持 `sourceModule` + `sourceId` + 可选 `occurrenceDate` 打开并预选来源；关闭时清参 | `useReminders('all')` 的全列表可复用；页面 `rows` 另有状态筛选、`pending` 为待提醒数。`ReminderForm` 是已有新建弹窗。提醒“查看来源”仅菜单/任务/日历走新版，其余仍 `legacyUrl` 打开旧版，不可误记为全域新版入口。 |
+| 投票 `polls` | `/schedule/polls` | shelf | 观影概览「观影投票」；投票动态/消息（含提醒消息）；提醒页来源仍去旧版 | **是**，`?create=1` 开表单；但关闭表单才清 URL，非打开即清。`?pollId=` 高亮目标，已结束投票切全部 | `usePolls()` 拉 `status=all`，`rows.length` 可判接口全列表；`visible.length` / `openCount` 只代表状态筛选或进行中。 |
+| 消息 `notifications` | `/schedule/notifications` | core；外部渠道管理另列 settings | 今天未读统计、个人页「去消息页设置渠道」；全局导航 / ⌘K | 不适用通用新建；`view` / `scope` / `module` 均为本地 state，未读取 `?view=settings` / `?view=deliveries`；渠道新建弹窗未接 URL | `notifications.tsx`：`rows.length === 0` 受未读/全部及业务域筛选影响，只代表当前成员消息；`channelRows.length`、投递列表另有空态，不能互相替代。 |
+| 库存 `inventory` | `/house/inventory` | shelf | 全局导航/⌘K；未发现其他页固定跳入链接。购物入库、资产维护耗材会改库存，但不是导航入口 | 否；无记录定位参数 | `inventory-view.tsx`：`list.length` 为库存物品空态；另有批次 `activeBatches`、`expiring`、`expired`，不能只凭物品列表否定批次有数据。当前批次 hook 用 7 天临期窗口，F5 的 3 天规则不能直接照搬该状态。 |
+| 购物 `shopping` | `/house/shopping` | core | 今天统计和购物侧栏；助理购物结果。厨房生成、库存补货、资产维护加耗材是写入清单，不是固定跳转 | 否；未读 `date`；日期是页面本地 state | `shopping-view.tsx`：`items.length` 是所选日期清单空态；`!checked` 可派生待买数。手动添加是常驻页内表单，非新建弹窗；F6 需确认聚焦方式。 |
+| 资产 `assets` | `/house/assets`；详情 `/house/assets/:id` | shelf | 日历维护条目及今天对应条目；资产动态/消息、助理结果；详情有返回列表；提醒来源仍去旧版 | 不支持 `create`；支持详情路径 `/:id`；旧目标的 `assetId` / `planId` 查询参数在列表页未读取 | `useAssets('all')` 的 `rows.length` 可复用；`visible` 为状态/分类筛选。`nextPlan`、`dueLabel` 和临近事项派生可参考，但当前阈值是维护 30 天、续费 14 天，且不含保修，详见备注。 |
+| 财务 `finance` | `/house/finance` | shelf（保留 `managerOnly`） | 财务动态及助理结果 | 否；不读 `kind`，现有 `TransactionForm` 由 `recording` 控制 | `finance.tsx` 的 `rows` 是账户，不是流水；`finance-ledger.tsx` 的 `rows.length` 是当月筛选流水，预算/分类又独立。没有现成单一的域级空态；已有默认账户/分类时尤其不能据此认定有使用数据。 |
+| 积分 `points` | `/house/points` | shelf | 积分动态、奖励兑换消息 | 不支持 `create`；`?redemptionId=` 切兑换记录并标记目标 | `rewardRows`、`redemptionRows`、积分流水各有空态；`pendingCount` 可供留意规则。账户/零余额不是“用过积分”的充分证据，不能只数 `points_accounts`。 |
+| 访客 `guests` | `/house/guests`；公开邀请 `/guest/:token` | shelf | 日历来访及今天对应条目；访客动态/消息；公开邀请链接是给访客的独立页面，不是家庭导航项 | 否；后端会给 `?visitId=`，但 `guests.tsx` 未消费；公开 token 路由已支持 | `visitRows` / `guestRows` / `wifiRows` 各有空态；`upcoming`、`pendingMeals` 已派生。安排来访的 `VisitForm` 已有；不能只看未来来访数判断整个域无数据。 |
+| 成员 `members` | `/house/members` | settings（`managerOnly`） | 个人页「管理成员」；成员动态目标链接 | 否；邀请/编辑由本地弹窗 state 控制 | `rows`、`visible`、`activeCount`、`pendingInvites` 可复用；正常已登录家庭至少有自己，不按空域隐藏。 |
+| 备份 `backups` | `/house/backups` | settings（`managerOnly`） | 备份操作动态/失败和容量消息 | 否；备份/恢复演练通过现有确认弹窗，不应套通用新建动作 | `useBackupDashboard(canManage)` 的 `runs.length === 0` 为尚无运行记录；不等于没有策略。状态、worker、容量已有 dashboard 数据可供 F5；本轮未触发备份或恢复。 |
+| 观影 `media` | `/life/media`；子页 `/library`、`/watchlist`、`/history`（均在此前缀下） | shelf；连接设置子页单列 settings | 投票卡 → 片单 `?mediaId=`；日历/今天日历条目、观影动态/消息、助理结果；概览与片库/片单/历史互链 | 不支持 `create`；片单支持 `?mediaId=` 打开编辑框并清参、`?filter=`；概览不读 `mediaId`，后端 `/media?mediaId=` 只到概览 | 概览 `rows` / `scheduled.length`、片库与历史列表各自有空态；“未排片”不等于没有片单、片库或播放历史，F3 需明确聚合口径。 |
+| 出行 `travel` | `/life/travel`；详情 `/life/travel/:id` | shelf | 日历行程及今天对应条目；行程动态、提醒消息、助理结果；详情返回列表；提醒来源仍去旧版 | 不支持 `create`；`?planId=` 跳详情；支持 `/:id`；`?view=templates` 未读取 | `travel.tsx` 当前状态列表 `rows.length`，打包模板独立查询/空态；可复用行程清单状态但不能把“计划中为空”当整域为空。 |
+| 回忆 `memories` | `/life/memories` | shelf | 回忆动态、助理结果 | 不支持 `create`；`?memoryId=` 在当前查询结果命中时开详情并清参，未命中（例如已归档）不会自动切筛选 | `memories.tsx` 的 `rows.length` 受状态/分类/关键词限制；已有 `MemoryEditor` 新建弹窗。详情的来源链接可回到关联域。 |
+| 知识库 `knowledge` | `/life/knowledge` | shelf | 知识库动态、助理结果 `?articleId=` | 不支持 `create`；`?articleId=` 在当前查询结果命中时开详情并清参；未自动切到归档记录 | `knowledge.tsx` 的 `rows.length` 受状态/分类/关键词限制；已有 `KnowledgeEditor` 新建弹窗。 |
+| 家庭动态 `activity` | `/life/activity` | shelf | 今天「家里最近」的「全部动态」 | 不适用；无新建弹窗、不读筛选参数 | `useActivities(scope)` + `groupByDay` 的 `groups.length`，受 scope 和 `limit=100` 约束；可用成功的 `scope=all` 列表判当前是否有动态，不要新增空态端点请求。 |
+| 问问小管家 `assistant` | `/me/assistant`；个人记忆 `/me/assistant/memories` | shelf；家庭助理设置弹窗单列 settings | 桌面搜索下方固定入口、手机顶栏按钮、个人页「去问问小管家」、记忆页返回对话；**当前不在 ⌘K** | 不支持 `create`；`draft` 和“打开设置”参数均未实现；记忆有独立路径 | `assistant.tsx` 的会话 `rows.length`、当前消息 `messages.length` 和 `useAgentStatus()` 状态可复用，但“无对话”和“未启用”不是同一回事。 |
+| 个人设置 `profile` | `/me/profile` | settings（本人可访问，非 `managerOnly`） | 桌面固定入口、手机头像菜单；助理个人档案结果；`/me` 重定向 | 不适用；密码/退出为本地确认弹窗，无 URL 开关 | 来自登录 session 和 `useAgentProfile()`，没有整页“家庭空库”含义。必须保留普通成员入口，不能随管理员家庭设置一起隐藏。 |
+
+### 内嵌设置入口（不是新增分段）
+
+| 设置内容 | 当前路径 / 宿主 | 现有入口与权限 | 深链、空态与后续边界 |
+| --- | --- | --- | --- |
+| 观影连接器 / 搜索数据源 / 用户映射 | `/life/media/settings`（旧 `/eat/media/settings` 已重定向） | 观影概览管理入口；媒体设置动态/消息；管理员才能操作 | 支持 `?section=services/sources/users`；各设置面板按连接配置/映射显示状态，没有统一模块空态。F7 不应改回旧规范路径。 |
+| 外部通知渠道 | `/schedule/notifications` 的「外部渠道」 | 消息页分段、个人页「去消息页设置渠道」；新增/管理渠道需管理员，但个人接收范围对普通成员仍有意义 | `view` 只是本地 state；旧目标 `?view=settings` / `?view=deliveries` 不会切分段，`channelRows.length` 只表示渠道列表。F7 的直达目前缺 URL 接线，不得将成员接收偏好一并移到管理员独占入口。 |
+| 助理设置 | `/me/assistant` 内 `AssistantSettings` 弹窗 | 对话页「设置」按钮所有成员可见；运行方式、配对码管理仅管理员可见，成员仍可查看可见渠道，并按 `canRevoke` 解绑；个人记忆偏好在个人页 | `settingsOpen` 为本地 state，无打开设置深链；管理员读取 `/agent/settings`，渠道使用独立查询；未配置/不可用状态不能当作整个 assistant 域无数据。 |
+
+### F0 核实结论与待确认项
+
+**A. 今天页已聚合的内容（不要重做）**
+
+- `pages/today.tsx` + `components/today-hero.tsx` / `today-meals.tsx` / `today-aside.tsx`：日期与问候；4 项统计（今日待办、待买、当天待提醒、未读消息）；早中晚三餐的菜品/主厨/完成进度；今日全家任务（不是只限“我的”，按 `canUpdate` 控制勾选），并列出接下来两天 pending 任务最多 4 项；当天日历非 task/menu 条目；当天 scheduled 提醒最多 5 条、当天未购清单最多 6 项、近期家庭动态最多 8 条。
+- 现用查询：`useMenusOfDate(today)`、`useTaskRange(today, today+2)`、`useReminders('scheduled')`、`useShoppingList(today)`、`useCalendarEntries(today, today)`、`useActivities('all')`、`useNotifications()`；任务勾选复用 `useUpdateOccurrence()`。提醒实际上按 `remindAt.slice(0,10) === today` 筛选，未再比较当前时刻，勿把注释“还没到点”当成额外实现。
+- `/` 的预取已覆盖菜单、任务、当天日历、动态 **4 组**，尚未覆盖今天页另用的提醒/购物/消息；`prefetch.ts` 只做完整路径精确匹配，`/home` 和 `/settings` 均不存在。当前没有 attention 规则/卡片机制。
+
+**B. 家庭级设置存储**
+
+- `apps/api/src/system/system.module.ts` 仅注册 `BackupPolicy`、`BackupRun`、`Member`、`Notification`；现有家庭级配置是备份专用 `backup_policies`（`householdId` 唯一），不是通用设置表，另有执行记录 `backup_runs`。没有通用 `household_settings`、`module_overrides` 或现成模块状态端点。
+- `entities/index.ts` 的 `households` 仅名称、slug、timezone 和时间戳；`agent_settings`、`household_media_source_configs` 等是其他域的专用配置，不是 system 的通用家庭设置。F3 应按“无通用表”的既定分支考虑独立 `household_module_overrides`，不把导航开关塞进备份策略或助理配置。本轮不建表、不改迁移。
+
+**C. 成员偏好存储**
+
+- 「经常掌勺」：`profile.tsx` → `lib/queries/profile.ts::useUpdateCookingPreference` → `PATCH /members/me/preferences`（body `{ prefersCooking }`）→ `auth/auth.module.ts::updatePreferences` → `members.prefersCooking`。后端以当前 `memberId + accountId + householdId` 查本人。
+- 「启用记忆」：`useAgentProfile` / `useUpdateAgentProfile` → `GET/PATCH /agent/profile`（PATCH 带 `{ memoryEnabled, expectedVersion }`）→ `agent/agent.service.ts::updateProfile` → `agent_member_profiles.memoryEnabled`，唯一约束 `(householdId, memberId)`、`version` 乐观锁。二者都是服务端偏好，但并无通用任意偏好 JSON / 现成置顶字段。
+- F4 置顶仍按 §3 **默认本机**记录，不因“已有服务端偏好”就擅自扩字段。若要跨设备同步，需要你确认后才评估成员端点/契约/迁移；不借助智能体档案存通用导航偏好，不为本轮增加新表。F4 中“便宜就存服务端”的文字与 §3 的用户拍板边界，执行时以后者为准。
+
+**D. 仅记录，不自行调整的差异 / 疑问**
+
+1. **规范路径与计划例子有漂移**：当前购物/库存是 `/house/*`，观影/出行/回忆/知识库/动态是 `/life/*`；旧 `/eat/shopping`、`/eat/inventory`、`/eat/media/*`、`/house/travel`、`/house/knowledge`、`/house/memories`、`/me/activity` 已由 `App.tsx` 保留重定向。F1 应理解“URL 一律不变”为保留当前规范路径和旧兼容入口，而不是把代码改回计划里的旧例子；请在 F1 前确认此口径。当前 `/house` 落库存、`/life` 落观影、`/me` 落个人，不能沿用旧五场景假设漏掉 `/life`。
+2. **今日布局有新增内容**：当前三餐、全家今日待办、当天其他安排与右栏提醒/购物/动态，已多于示意稿的“今晚 + 我的任务”。F5 要改成左右两栏时，这些既有区块应如何保留，需要先明确，不能照稿删掉或把全家任务默默改成本人任务。
+3. **分层异议**：24 个顶层项均先按 §0 归层，本轮不提出擅自提升/下沉；但 settings 不全是家庭管理员配置：个人设置、消息页个人接收偏好及小管家设置中的成员渠道入口必须保留普通成员可达性。这属于入口/权限边界，不把消息整页归 settings，也不把小管家对话整页归 settings。
+4. **F6 的最小改动边界**：任务、购物已有的是页内新建输入，不是弹窗；需你确认可否用 `?create=1` 聚焦/滚到现成输入并清参，而不新造弹窗。投票需补“打开即清参”；F7 的渠道分段/助理设置、F5 的点菜日期也缺深链接线，盘点表已区分，不能只做链接就宣称一步直达。
+5. **F5 派生复用边界**：资产当前只筛 active 资产，启用维护计划 ≤30 天（含逾期）、订阅续费 ≤14 天（含逾期），排序后到详情；已有 `daysUntil`、`nextPlan`、`dueLabel`，未纳入保修。F5 的 7/3/30 天是另一组规则，不能原样复制当前 `upcoming`，也不在 F0 调阈值。
+6. **F3 空域口径**：积分账户、默认财务账户/分类、懒建助理配置，以及已归档记录/媒体片库/出行模板等，会影响 `hasData`。这里仅标出不能拿 UI 筛选空态代替 EXISTS 的原因；F3 应先明确各域存在性查询的业务表与状态范围。计划文字称“13 个请求”，实际 key 清单是 **14 个 shelf 域**，实现按枚举逐项核对，不漏 assistant/activity。
+7. **范围与验证**：本轮仅填写本文件。`corepack pnpm typecheck && corepack pnpm lint` 通过；API lint 为 0 error / 43 条既有 warning，mobile/web lint 通过。没有改 API、没有运行写数据的业务验收或页面视觉验收，没有开始 F1。结构稿当前为用户提供的未跟踪文件，未修改、未代为加入本提交。
+
+## 进度表
+
+| 任务 | 状态 | 提交 | 备注 |
+| --- | --- | --- | --- |
+| F0 盘点 | ☑ | `docs: 信息架构收敛盘点`（本提交） | 24 项逐行完成（core 7 / shelf 14 / settings 3），内嵌设置另记。① 今天已聚合三餐、今日及后两天任务、当日日历、提醒、购物、动态和未读统计；② system 只有备份专用 `backup_policies` / `backup_runs`，无通用家庭设置，F3 按独立 overrides 表分支；③ 掌勺经 `PATCH /members/me/preferences` 存 `members.prefersCooking`，记忆经 `GET/PATCH /agent/profile` 存 `agent_member_profiles.memoryEnabled`（版本锁），置顶仍默认本机，服务端同步待用户确认。无顶层归层调整；路径漂移、今日既有区块、成员设置可达性及页内新建的深链边界详见上方 D。typecheck / lint 通过（API 43 条既有 warning）；仅文档，不开始 F1。 |
+| F1 导航分层 | ☐ | | |
+| F2 家里页 | ☐ | | |
+| F3 模块状态端点 | ☐ | | |
+| F4 隐身 / 开启 / 置顶 | ☐ | | |
+| F5 需要留意 | ☐ | | |
+| F6 ⌘K 动作 | ☐ | | |
+| F7 家庭设置 | ☐ | | |
+| F8 收口 | ☐ | | |
+
+状态：☐ 未开始 · ◐ 进行中 · ☑ 完成 · ✗ 放弃（写原因）
