@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>今天</title>
+<!-- 结构示意稿：只看信息层级与布局，配色/字体不算数，实现沿用现有 token 与 apple-design 规范 -->
+<style>
+body{margin:0;font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;background:#f4f1ea;color:#1f1d1a}
+a{color:#2f6b4f;text-decoration:none}a:hover{color:#23523c}
+button{font-family:inherit}
+body{display:flex;justify-content:center}</style>
+</head>
+<body>
+<div style="width: 390px; height: 1300px; box-sizing: border-box; display: flex; flex-direction: column; background: #f4f1ea;">
+<main style="display: flex; flex-direction: column; gap: 24px; padding: 24px 20px;">
+<header style="display: flex; justify-content: space-between; align-items: center;">
+<div style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 13px; color: #6b655c;">9 月 20 日 · 周日</span><h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 28px; font-weight: 700;">晚上好，King</h1></div>
+<a href="#" aria-label="我的" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 999px; background: #e3ebe5; color: #23523c; font-weight: 700;">K</a>
+</header>
+<a href="search-mobile.html" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 16px; background: #fffdf8; border: 1px solid #e4dfd3; border-radius: 14px; color: #6b655c; font-size: 15px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg><span>找功能，或者直接说：记一笔、加个来访…</span></a>
+<section style="display: flex; flex-direction: column; gap: 12px;">
+<h2 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 18px; font-weight: 600;">今晚吃什么</h2>
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 18px; background: #2f6b4f; color: #ffffff; border-radius: 20px;">
+<div style="display: flex; justify-content: space-between; align-items: baseline;"><span style="font-size: 13px; color: #d5e6dc;">晚餐 · 18:30 · 妈妈掌勺</span><span style="font-size: 13px; color: #d5e6dc;">3 道</span></div>
+<div style="font-family: 'Noto Serif SC', serif; font-size: 22px; font-weight: 600; line-height: 1.5;">番茄牛腩、清炒时蔬、紫菜蛋花汤</div>
+<div style="display: flex; gap: 8px;"><a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 12px; background: #ffffff; color: #23523c; font-size: 14px; font-weight: 500;">去厨房</a><a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #8fb8a2; color: #ffffff; font-size: 14px;">再点一道</a></div>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; justify-content: space-between; align-items: baseline;"><h2 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 18px; font-weight: 600;">我的任务</h2><a href="#" style="font-size: 13px;">全部任务</a></div>
+<div style="display: flex; flex-direction: column; padding: 4px 16px 8px; background: #fffdf8; border: 1px solid #e4dfd3; border-radius: 16px;">
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 0; font-size: 15px;"><input type="checkbox" style="width: 22px; height: 22px; accent-color: #2f6b4f;"><span style="flex-grow: 1;">倒垃圾</span><span style="font-size: 12px; color: #6b655c;">+5 分</span></label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 0; border-top: 1px solid #eee9dd; font-size: 15px;"><input type="checkbox" style="width: 22px; height: 22px; accent-color: #2f6b4f;"><span style="flex-grow: 1;">给阳台的花浇水</span><span style="font-size: 12px; color: #6b655c;">每周日</span></label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 0; border-top: 1px solid #eee9dd; font-size: 15px;"><input type="checkbox" style="width: 22px; height: 22px; accent-color: #2f6b4f;"><span style="flex-grow: 1;">取快递</span><span style="font-size: 12px; color: #6b655c;">今天</span></label>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 12px;">
+<div style="display: flex; justify-content: space-between; align-items: baseline;"><h2 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 18px; font-weight: 600;">需要留意</h2><span style="font-size: 13px; color: #6b655c;">3 件</span></div>
+<article style="display: flex; flex-direction: column; gap: 10px; padding: 16px; background: #fffdf8; border: 1px solid #e4dfd3; border-radius: 16px;">
+<div style="display: flex; align-items: center; gap: 8px;"><span style="padding: 2px 8px; border-radius: 999px; background: #f6ead2; color: #7a4e0d; font-size: 12px; font-weight: 500;">资产</span><span style="font-size: 12px; color: #6b655c;">9 月 23 日</span></div>
+<div style="font-size: 16px; font-weight: 500; line-height: 1.45;">净水器滤芯 3 天后该换了</div>
+<div style="display: flex; gap: 8px;"><button type="button" style="min-height: 44px; padding: 0 16px; border: none; border-radius: 12px; background: #2f6b4f; color: #ffffff; font-size: 14px; font-weight: 500;">加进购物清单</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #d6d0c2; border-radius: 12px; background: transparent; color: #1f1d1a; font-size: 14px;">稍后</button></div>
+</article>
+<article style="display: flex; flex-direction: column; gap: 10px; padding: 16px; background: #fffdf8; border: 1px solid #e4dfd3; border-radius: 16px;">
+<div style="display: flex; align-items: center; gap: 8px;"><span style="padding: 2px 8px; border-radius: 999px; background: #f6ead2; color: #7a4e0d; font-size: 12px; font-weight: 500;">访客</span><span style="font-size: 12px; color: #6b655c;">9 月 26 日 · 4 位</span></div>
+<div style="font-size: 16px; font-weight: 500; line-height: 1.45;">周六张叔一家来吃饭，还没定菜</div>
+<div style="display: flex; gap: 8px;"><button type="button" style="min-height: 44px; padding: 0 16px; border: none; border-radius: 12px; background: #2f6b4f; color: #ffffff; font-size: 14px; font-weight: 500;">去点菜</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #d6d0c2; border-radius: 12px; background: transparent; color: #1f1d1a; font-size: 14px;">稍后</button></div>
+</article>
+<article style="display: flex; flex-direction: column; gap: 10px; padding: 16px; background: #fffdf8; border: 1px solid #e4dfd3; border-radius: 16px;">
+<div style="display: flex; align-items: center; gap: 8px;"><span style="padding: 2px 8px; border-radius: 999px; background: #f6ead2; color: #7a4e0d; font-size: 12px; font-weight: 500;">出行</span><span style="font-size: 12px; color: #6b655c;">10 月 1 日出发</span></div>
+<div style="font-size: 16px; font-weight: 500; line-height: 1.45;">国庆出行清单还剩 5 项没准备</div>
+<div style="display: flex; gap: 8px;"><button type="button" style="min-height: 44px; padding: 0 16px; border: none; border-radius: 12px; background: #2f6b4f; color: #ffffff; font-size: 14px; font-weight: 500;">看清单</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #d6d0c2; border-radius: 12px; background: transparent; color: #1f1d1a; font-size: 14px;">稍后</button></div>
+</article>
+</section>
+</main>
+<nav aria-label="主导航" style="margin-top: auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0px; padding: 8px 12px 20px; background: #fffdf8; border-top: 1px solid #e4dfd3;">
+<a href="today-mobile.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; min-height: 44px; color: #2f6b4f; font-size: 12px; font-weight: 700;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"></path></svg>今天</a>
+<a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; min-height: 44px; color: #6b655c; font-size: 12px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11h16a8 8 0 0 1-16 0zM9 7c0-1.5 1-1.5 1-3M14 7c0-1.5 1-1.5 1-3"></path></svg>吃饭</a>
+<a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; min-height: 44px; color: #6b655c; font-size: 12px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"></rect><path d="M4 10h16M9 3v4M15 3v4"></path></svg>日程</a>
+<a href="home-mobile.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; min-height: 44px; color: #6b655c; font-size: 12px; font-weight: 400;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"></rect><rect x="13" y="4" width="7" height="7" rx="1.5"></rect><rect x="4" y="13" width="7" height="7" rx="1.5"></rect><rect x="13" y="13" width="7" height="7" rx="1.5"></rect></svg>家里</a>
+</nav>
+</div>
+</body>
+</html>
