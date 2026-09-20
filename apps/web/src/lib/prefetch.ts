@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type {
   AppNotification,
+  AuthSession,
   CalendarEntry,
   Dish,
   HouseholdActivity,
@@ -16,6 +17,7 @@ import type {
   ShoppingItem,
   TaskOccurrence,
 } from '@family/contracts';
+import { prefetchAttention } from './attention-prefetch';
 import { api } from './api';
 import { shiftDays, todayISO } from './queries';
 import { calendarRange, startOfMonth } from '../components/calendar-month';
@@ -137,7 +139,8 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
   },
 };
 
-export function prefetchRoute(client: QueryClient, path: string) {
+export function prefetchRoute(client: QueryClient, path: string, member?: AuthSession['member']) {
+  if (path === '/home' && member) prefetchAttention(client, member);
   PREFETCH[path]?.(client);
 }
 

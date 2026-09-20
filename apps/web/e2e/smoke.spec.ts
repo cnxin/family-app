@@ -7,6 +7,7 @@ import { expectNoHorizontalOverflow, watchPageErrors } from './helpers';
  */
 export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/', title: /好，/ },
+  { path: '/home', title: '家里' },
   { path: '/eat/order', title: '点菜' },
   { path: '/eat/kitchen', title: '菜单安排' },
   { path: '/eat/recipes', title: '菜谱' },

@@ -111,11 +111,15 @@ test('⌘K：所有 shelf 均可搜索到并打开，个人设置也保留', asy
   }
 });
 
-test('旧场景根路径统一去家里；叶子路径与旧深链保持兼容', async ({ page }) => {
-  for (const root of ['/eat', '/schedule', '/house', '/life', '/me']) {
-    await page.goto(root);
-    await expect(page).toHaveURL(/\/home$/);
-    await expect(page.locator('main h1')).toHaveText('家里');
+test('旧场景根路径保留各自落点；叶子路径与旧深链保持兼容', async ({ page }) => {
+  const roots = [
+    ['/eat', '/eat/order'], ['/schedule', '/schedule/calendar'],
+    ['/house', '/home'], ['/me', '/home'], ['/life', '/life/media'],
+  ];
+  for (const [from, to] of roots) {
+    await page.goto(`${from}?from=legacy`);
+    await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe(`${to}?from=legacy`);
+    await expect(page.locator('main h1')).toBeVisible();
   }
   const aliases = [
     ['/eat/shopping?date=2026-09-20', '/house/shopping?date=2026-09-20'],
