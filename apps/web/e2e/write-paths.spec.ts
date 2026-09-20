@@ -845,7 +845,7 @@ test('知识库：写一篇、改一版、还原回上一版、归档', async ({
   let articleId: string | null = null;
 
   try {
-    await page.goto('/house/knowledge');
+    await page.goto('/life/knowledge');
     await page.getByRole('button', { name: '+ 写一篇' }).click();
     const editor = page.getByRole('dialog', { name: '写一篇' });
     await editor.getByLabel('标题').fill(title);
@@ -911,7 +911,7 @@ test('回忆：记一条、放一张照片、归档', async ({ page, request }) 
   let memoryId: string | null = null;
 
   try {
-    await page.goto('/house/memories');
+    await page.goto('/life/memories');
     await page.getByRole('button', { name: '+ 记一条' }).click();
     const editor = page.getByRole('dialog', { name: '记一条回忆' });
     await editor.getByLabel('标题').fill(title);
@@ -963,7 +963,7 @@ test('出行：建行程、加一项清单、打勾、完成这趟', async ({ pa
   let planId: string | null = null;
 
   try {
-    await page.goto('/house/travel');
+    await page.goto('/life/travel');
     await page.getByRole('button', { name: '+ 新建行程' }).click();
     const form = page.getByRole('dialog', { name: '安排一趟出行' });
     await form.getByLabel('行程名称').fill(title);
@@ -1036,7 +1036,7 @@ test('出行模板：建一个模板、套进行程、再归档模板', async ({
     planId = plan.id;
 
     // 建模板
-    await page.goto('/house/travel');
+    await page.goto('/life/travel');
     await page.getByRole('tab', { name: '打包模板' }).click();
     await page.getByRole('button', { name: '+ 新建模板' }).click();
     const form = page.getByRole('dialog', { name: '新建打包模板' });
@@ -1052,7 +1052,7 @@ test('出行模板：建一个模板、套进行程、再归档模板', async ({
     await expect(page.getByRole('article', { name: templateTitle })).toContainText('2 项');
 
     // 套进刚才那个行程
-    await page.goto(`/house/travel/${plan.id}`);
+    await page.goto(`/life/travel/${plan.id}`);
     await page.getByRole('button', { name: '套用模板' }).click();
     const picker = page.getByRole('dialog', { name: '选一个打包模板' });
     await picker.getByRole('button', { name: templateTitle }).click();
@@ -1068,7 +1068,7 @@ test('出行模板：建一个模板、套进行程、再归档模板', async ({
     await picker.getByRole('button', { name: '关闭' }).click();
 
     // 归档模板
-    await page.goto('/house/travel');
+    await page.goto('/life/travel');
     await page.getByRole('tab', { name: '打包模板' }).click();
     const archived = waitFor(page, 'POST', /\/travel-templates\/[^/]+\/archive$/);
     await page.getByRole('button', { name: `归档${templateTitle}` }).click();
@@ -1168,7 +1168,7 @@ test('家庭动态：写点什么就能在时间线上看到，点一下跳到�
     idempotencyKey: `e2e-activity-${Date.now()}`,
   });
 
-  await page.goto('/me/activity');
+  await page.goto('/life/activity');
   await expect(page.getByRole('heading', { name: '家庭动态', level: 1 })).toBeVisible();
   // 今天这一组里应该有刚才那条，而且能点进搬好的知识库页
   await expect(page.getByText(new RegExp(name))).toBeVisible();
@@ -1186,7 +1186,7 @@ test('片单：手动加一部、发起观影投票、再改成已排期', async
   let pollId: string | null = null;
 
   try {
-    await page.goto('/eat/media/watchlist');
+    await page.goto('/life/media/watchlist');
     await page.getByRole('button', { name: '+ 加进片单' }).click();
     const form = page.getByRole('dialog', { name: '加进家庭片单' });
     // 隔离库里三个元数据源都没配，所以走手动这条路
@@ -1238,7 +1238,7 @@ test('观影设置：改媒体服务地址和搜索数据源，再恢复服务�
   const doubanUrl = 'https://frodo.douban.com/api/v2';
 
   try {
-    await page.goto('/eat/media/settings');
+    await page.goto('/life/media/settings');
 
     // 媒体服务：只改地址，凭据一律不碰（真凭据不该出现在测试库里）
     await page.getByLabel('Plex 服务地址').fill(plexUrl);

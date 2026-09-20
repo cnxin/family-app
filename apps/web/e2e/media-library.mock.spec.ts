@@ -69,7 +69,7 @@ test('片库（mock）：海报能出来，加片单之后按钮变成已在片�
     });
   });
 
-  await page.goto('/eat/media/library');
+  await page.goto('/life/media/library');
   await expect(page.getByRole('heading', { name: '我的媒体库', level: 1 })).toBeVisible();
 
   const card = page.getByRole('article', { name: 'e2e 测试片' });

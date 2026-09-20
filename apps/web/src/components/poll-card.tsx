@@ -195,7 +195,7 @@ export function PollCard({
         </SoftLink>
         {poll.sourceModule === 'media' && poll.sourceId ? (
           <SoftLink
-            to={`/eat/media/watchlist?mediaId=${poll.sourceId}`}
+            to={`/life/media/watchlist?mediaId=${poll.sourceId}`}
             className="h-9 rounded-lg px-2 text-[13px] leading-9 text-ink-soft transition-colors duration-150 hover:bg-muted"
           >
             🎬 看片单

@@ -10,8 +10,8 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/eat/order', title: '点菜' },
   { path: '/eat/kitchen', title: '菜单安排' },
   { path: '/eat/recipes', title: '菜谱' },
-  { path: '/eat/shopping', title: '购物清单' },
-  { path: '/eat/inventory', title: '家庭库存' },
+  { path: '/house/shopping', title: '购物清单' },
+  { path: '/house/inventory', title: '家庭库存' },
   { path: '/schedule/calendar', title: '家庭日历' },
   { path: '/schedule/tasks', title: '家庭任务' },
   { path: '/schedule/reminders', title: '提醒中心' },
@@ -22,16 +22,16 @@ export const READY_PAGES: { path: string; title: RegExp | string }[] = [
   { path: '/house/guests', title: '访客' },
   { path: '/house/assets', title: '家庭资产' },
   { path: '/house/finance', title: '家庭财务' },
-  { path: '/house/knowledge', title: '家庭知识库' },
-  { path: '/house/memories', title: '家庭回忆' },
-  { path: '/house/travel', title: '家庭出行' },
+  { path: '/life/knowledge', title: '家庭知识库' },
+  { path: '/life/memories', title: '家庭回忆' },
+  { path: '/life/travel', title: '家庭出行' },
   { path: '/house/backups', title: '系统备份' },
-  { path: '/me/activity', title: '家庭动态' },
-  { path: '/eat/media', title: '家庭观影' },
-  { path: '/eat/media/library', title: '我的媒体库' },
-  { path: '/eat/media/history', title: '观看记录' },
-  { path: '/eat/media/watchlist', title: '家庭片单' },
-  { path: '/eat/media/settings', title: '观影设置' },
+  { path: '/life/activity', title: '家庭动态' },
+  { path: '/life/media', title: '家庭观影' },
+  { path: '/life/media/library', title: '我的媒体库' },
+  { path: '/life/media/history', title: '观看记录' },
+  { path: '/life/media/watchlist', title: '家庭片单' },
+  { path: '/life/media/settings', title: '观影设置' },
   { path: '/me/profile', title: '我的' },
   { path: '/me/assistant', title: '问问小管家' },
   { path: '/me/assistant/memories', title: '小管家的记忆' },
@@ -61,8 +61,10 @@ test('旧的一层路径会跳到新位置', async ({ page }) => {
   await expect(page).toHaveURL(/\/schedule\/tasks$/);
 });
 
-test('切换深色模式后页面仍可读', async ({ page }) => {
+test('切换深色模式后页面仍可读', async ({ page, isMobile }) => {
   await page.goto('/schedule/tasks');
+  // 手机上主题开关收进了头像菜单（「我的」不再占一个底部标签）
+  if (isMobile) await page.getByRole('button', { name: '账号与设置' }).click();
   await page.getByRole('button', { name: '切换到深色' }).first().click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const colors = await page.evaluate(() => {
@@ -70,6 +72,7 @@ test('切换深色模式后页面仍可读', async ({ page }) => {
     return { bg: body.backgroundColor, fg: body.color };
   });
   expect(colors.bg).not.toBe(colors.fg);
+  if (isMobile) await page.getByRole('button', { name: '账号与设置' }).click();
   await page.getByRole('button', { name: '切换到浅色' }).first().click();
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'dark');
 });

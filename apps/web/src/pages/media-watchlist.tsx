@@ -104,7 +104,7 @@ export function MediaWatchlistPage() {
       title="家庭片单"
       subtitle={
         <>
-          <SoftLink to="/eat/media" className="text-accent hover:underline">
+          <SoftLink to="/life/media" className="text-accent hover:underline">
             ← 家庭观影
           </SoftLink>
           {' · '}

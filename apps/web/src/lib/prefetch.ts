@@ -86,14 +86,14 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
       staleTime: 5 * 60_000,
     });
   },
-  '/eat/shopping': (client) => {
+  '/house/shopping': (client) => {
     const today = todayISO();
     void client.prefetchQuery({
       queryKey: ['shopping', today],
       queryFn: () => api<ShoppingItem[]>(`/shopping-list?date=${today}`),
     });
   },
-  '/eat/inventory': (client) => {
+  '/house/inventory': (client) => {
     void client.prefetchQuery({
       queryKey: ['inventory'],
       queryFn: () => api<InventoryItem[]>('/inventory'),

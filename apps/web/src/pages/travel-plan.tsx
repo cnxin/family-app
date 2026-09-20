@@ -78,7 +78,7 @@ export function TravelPlanPage() {
             emoji="✈️"
             title="打不开这个行程"
             hint={
-              <SoftLink to="/house/travel" className="text-accent hover:underline">
+              <SoftLink to="/life/travel" className="text-accent hover:underline">
                 回出行列表 →
               </SoftLink>
             }
@@ -143,7 +143,7 @@ export function TravelPlanPage() {
       title={plan.title}
       subtitle={
         <>
-          <SoftLink to="/house/travel" className="text-accent hover:underline">
+          <SoftLink to="/life/travel" className="text-accent hover:underline">
             ← 家庭出行
           </SoftLink>
           {' · '}

@@ -88,7 +88,7 @@ export function MediaLibraryPage() {
       title="我的媒体库"
       subtitle={
         <>
-          <SoftLink to="/eat/media" className="text-accent hover:underline">
+          <SoftLink to="/life/media" className="text-accent hover:underline">
             ← 家庭观影
           </SoftLink>
           {' · '}
@@ -213,7 +213,7 @@ export function MediaLibraryPage() {
                       ) : null}
                       {item.householdMediaId ? (
                         <SoftLink
-                          to={`/eat/media/watchlist?mediaId=${item.householdMediaId}`}
+                          to={`/life/media/watchlist?mediaId=${item.householdMediaId}`}
                           className="inline-flex h-8 items-center rounded-lg px-2 text-[12px] text-accent hover:bg-muted"
                         >
                           已在片单
@@ -283,7 +283,7 @@ export function MediaLibraryPage() {
               ) : null}
               {detail.householdMediaId ? (
                 <SoftLink
-                  to={`/eat/media/watchlist?mediaId=${detail.householdMediaId}`}
+                  to={`/life/media/watchlist?mediaId=${detail.householdMediaId}`}
                   className="inline-flex h-10 items-center rounded-lg px-4 text-sm text-accent hover:bg-muted"
                 >
                   去片单看看

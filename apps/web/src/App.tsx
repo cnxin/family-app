@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import { LoginPage } from './pages/login';
 import { TodayPage } from './pages/today';
@@ -36,7 +36,7 @@ import { AgentMemoriesPage } from './pages/agent-memories';
 import { Shell } from './components/shell';
 import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
-import { SCENES, landingPath } from './lib/nav';
+import { landingPath, sceneByKey } from './lib/nav';
 
 /** 旧路径（一层）保留跳转，免得家里人存的书签全废掉；查询串原样带过去（通知里的 ?pollId= 靠它）。 */
 const REDIRECTS: [string, string][] = [
@@ -44,8 +44,20 @@ const REDIRECTS: [string, string][] = [
   ['/order', '/eat/order'],
   ['/kitchen', '/eat/kitchen'],
   ['/recipes', '/eat/recipes'],
-  ['/supplies', '/eat/shopping'],
-  ['/eat/supplies', '/eat/shopping'],
+  ['/supplies', '/house/shopping'],
+  ['/eat/supplies', '/house/shopping'],
+  // 2026-09-20 重分类之前的位置，留着不然家里人存的链接全废
+  ['/eat/shopping', '/house/shopping'],
+  ['/eat/inventory', '/house/inventory'],
+  ['/eat/media', '/life/media'],
+  ['/eat/media/library', '/life/media/library'],
+  ['/eat/media/history', '/life/media/history'],
+  ['/eat/media/watchlist', '/life/media/watchlist'],
+  ['/eat/media/settings', '/life/media/settings'],
+  ['/house/knowledge', '/life/knowledge'],
+  ['/house/memories', '/life/memories'],
+  ['/house/travel', '/life/travel'],
+  ['/me/activity', '/life/activity'],
   ['/polls', '/schedule/polls'],
   ['/points', '/house/points'],
   ['/members', '/house/members'],
@@ -57,6 +69,13 @@ const REDIRECTS: [string, string][] = [
   ['/reminders', '/schedule/reminders'],
   ['/notifications', '/schedule/notifications'],
 ];
+
+/** 带一个参数的老路径搬家：/house/travel/:id → /life/travel/:id */
+function RedirectTravelPlan() {
+  const { id } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={`/life/travel/${id ?? ''}${search}`} replace />;
+}
 
 function RedirectKeepingSearch({ to }: { to: string }) {
   const { search } = useLocation();
@@ -85,40 +104,42 @@ export function App() {
         <Route element={<Shell />}>
           <Route path="/" element={<TodayPage />} />
 
-          <Route path="/eat" element={<Navigate to={landingPath(SCENES[1])} replace />} />
+          <Route path="/eat" element={<Navigate to={landingPath(sceneByKey('eat'))} replace />} />
           <Route path="/eat/order" element={<OrderPage />} />
           <Route path="/eat/kitchen" element={<KitchenPage />} />
           <Route path="/eat/recipes" element={<RecipesPage />} />
-          <Route path="/eat/shopping" element={<ShoppingPage />} />
-          <Route path="/eat/inventory" element={<InventoryPage />} />
-          <Route path="/eat/media" element={<MediaPage />} />
-          <Route path="/eat/media/library" element={<MediaLibraryPage />} />
-          <Route path="/eat/media/history" element={<MediaHistoryPage />} />
-          <Route path="/eat/media/watchlist" element={<MediaWatchlistPage />} />
-          <Route path="/eat/media/settings" element={<MediaSettingsPage />} />
-
-          <Route path="/schedule" element={<Navigate to={landingPath(SCENES[2])} replace />} />
+          
+          <Route path="/schedule" element={<Navigate to={landingPath(sceneByKey('schedule'))} replace />} />
           <Route path="/schedule/calendar" element={<CalendarPage />} />
           <Route path="/schedule/tasks" element={<TasksPage />} />
           <Route path="/schedule/reminders" element={<RemindersPage />} />
           <Route path="/schedule/notifications" element={<NotificationsPage />} />
           <Route path="/schedule/polls" element={<PollsPage />} />
 
-          <Route path="/house" element={<Navigate to={landingPath(SCENES[3])} replace />} />
+          <Route path="/house" element={<Navigate to={landingPath(sceneByKey('house'))} replace />} />
+          <Route path="/house/inventory" element={<InventoryPage />} />
+          <Route path="/house/shopping" element={<ShoppingPage />} />
           <Route path="/house/points" element={<PointsPage />} />
           <Route path="/house/members" element={<MembersPage />} />
           <Route path="/house/guests" element={<GuestsPage />} />
           <Route path="/house/assets" element={<AssetsPage />} />
           <Route path="/house/finance" element={<FinancePage />} />
-          <Route path="/house/knowledge" element={<KnowledgePage />} />
-          <Route path="/house/memories" element={<MemoriesPage />} />
-          <Route path="/house/travel" element={<TravelPage />} />
           <Route path="/house/backups" element={<BackupsPage />} />
-          <Route path="/house/travel/:id" element={<TravelPlanPage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />
-          <Route path="/me" element={<Navigate to={landingPath(SCENES[4])} replace />} />
+          <Route path="/life" element={<Navigate to={landingPath(sceneByKey('life'))} replace />} />
+          <Route path="/life/media" element={<MediaPage />} />
+          <Route path="/life/media/library" element={<MediaLibraryPage />} />
+          <Route path="/life/media/history" element={<MediaHistoryPage />} />
+          <Route path="/life/media/watchlist" element={<MediaWatchlistPage />} />
+          <Route path="/life/media/settings" element={<MediaSettingsPage />} />
+          <Route path="/life/travel" element={<TravelPage />} />
+          <Route path="/life/travel/:id" element={<TravelPlanPage />} />
+          <Route path="/life/memories" element={<MemoriesPage />} />
+          <Route path="/life/knowledge" element={<KnowledgePage />} />
+          <Route path="/life/activity" element={<ActivityPage />} />
+
+          <Route path="/me" element={<Navigate to="/me/profile" replace />} />
           <Route path="/me/profile" element={<ProfilePage />} />
-          <Route path="/me/activity" element={<ActivityPage />} />
           <Route path="/me/assistant" element={<AssistantPage />} />
           <Route path="/me/assistant/memories" element={<AgentMemoriesPage />} />
 
@@ -126,6 +147,9 @@ export function App() {
           <Route path="/eat/:segment" element={<LegacyBridge />} />
           <Route path="/schedule/:segment" element={<LegacyBridge />} />
           <Route path="/house/:segment" element={<LegacyBridge />} />
+          <Route path="/house/travel/:id" element={<RedirectTravelPlan />} />
+
+          <Route path="/life/:segment" element={<LegacyBridge />} />
           <Route path="/me/:segment" element={<LegacyBridge />} />
 
           {REDIRECTS.map(([from, to]) => (

@@ -225,7 +225,7 @@ export function TodayPage() {
           grow={false}
           title={`要买的${toBuy.length ? ` · ${toBuy.length}` : ''}`}
           right={
-            <Link to="/eat/shopping" className="shrink-0 text-[13px] text-accent hover:underline">
+            <Link to="/house/shopping" className="shrink-0 text-[13px] text-accent hover:underline">
               购物清单
             </Link>
           }

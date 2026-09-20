@@ -70,7 +70,7 @@ export function MediaPage() {
                   return (
                     <SoftLink
                       key={entry.id}
-                      to={`/eat/media/watchlist?mediaId=${entry.id}`}
+                      to={`/life/media/watchlist?mediaId=${entry.id}`}
                       className={
                         'flex items-center gap-3 px-3.5 py-2.5 hover:bg-muted ' +
                         (index ? 'border-t border-border' : '')
@@ -100,14 +100,14 @@ export function MediaPage() {
 
       <aside className="flex shrink-0 flex-col gap-4 lg:w-[300px]">
         <Panel title="去哪儿看" grow={false}>
-          <SoftLink to="/eat/media/watchlist" className="flex items-center gap-2 px-3.5 py-2.5 hover:bg-muted">
+          <SoftLink to="/life/media/watchlist" className="flex items-center gap-2 px-3.5 py-2.5 hover:bg-muted">
             <span className="text-[15px]">🎬</span>
             <div className="min-w-0 flex-1">
               <p className="text-[14px]">家庭片单</p>
               <p className="text-[12px] text-ink-soft">{rows.length} 部影视</p>
             </div>
           </SoftLink>
-          <SoftLink to="/eat/media/library" className="flex items-center gap-2 px-3.5 py-2.5 hover:bg-muted">
+          <SoftLink to="/life/media/library" className="flex items-center gap-2 px-3.5 py-2.5 hover:bg-muted">
             <span className="text-[15px]">📚</span>
             <div className="min-w-0 flex-1">
               <p className="text-[14px]">我的媒体库</p>
@@ -125,7 +125,7 @@ export function MediaPage() {
             </div>
           </SoftLink>
           <SoftLink
-            to="/eat/media/history"
+            to="/life/media/history"
             className="flex items-center gap-2 border-t border-border px-3.5 py-2.5 hover:bg-muted"
           >
             <span className="text-[15px]">⏱️</span>
@@ -136,7 +136,7 @@ export function MediaPage() {
           </SoftLink>
           {canManage ? (
             <SoftLink
-              to="/eat/media/settings"
+              to="/life/media/settings"
               className="flex items-center gap-2 border-t border-border px-3.5 py-2.5 hover:bg-muted"
             >
               <span className="text-[15px]">⚙️</span>

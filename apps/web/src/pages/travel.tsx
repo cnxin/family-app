@@ -27,7 +27,7 @@ export function TravelPage() {
   // 日历和活动流给的是 /travel?planId=…，搬过来直接转到详情页
   const wanted = params.get('planId');
   if (wanted) {
-    navigate(`/house/travel/${wanted}`, { replace: true });
+    navigate(`/life/travel/${wanted}`, { replace: true });
   }
 
   return (
@@ -96,7 +96,7 @@ export function TravelPage() {
               return (
                 <SoftLink
                   key={plan.id}
-                  to={`/house/travel/${plan.id}`}
+                  to={`/life/travel/${plan.id}`}
                   className="flex flex-col rounded-card border border-border px-3.5 py-3 transition-colors duration-150 hover:bg-muted"
                 >
                   <div className="flex items-start gap-2">
@@ -141,7 +141,7 @@ export function TravelPage() {
           editing={null}
           onSaved={(plan) => {
             setComposing(false);
-            navigate(`/house/travel/${plan.id}`);
+            navigate(`/life/travel/${plan.id}`);
           }}
           onClose={() => setComposing(false)}
         />

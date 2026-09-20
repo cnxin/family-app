@@ -79,7 +79,7 @@ export function MediaHistoryPage() {
       title="观看记录"
       subtitle={
         <>
-          <SoftLink to="/eat/media" className="text-accent hover:underline">
+          <SoftLink to="/life/media" className="text-accent hover:underline">
             ← 家庭观影
           </SoftLink>
           {' · '}

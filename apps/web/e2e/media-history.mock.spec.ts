@@ -42,7 +42,7 @@ test('观看记录（mock）：进度条、参与的人、接着看的入口', a
     });
   });
 
-  await page.goto('/eat/media/history');
+  await page.goto('/life/media/history');
   await expect(page.getByRole('heading', { name: '观看记录', level: 1 })).toBeVisible();
 
   const card = page.getByRole('article', { name: 'e2e 正在放的片' });
