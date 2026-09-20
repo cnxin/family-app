@@ -1230,12 +1230,12 @@ test('家庭成员可浏览核心页面且布局不横向溢出', async (
   await expect(page.getByRole('checkbox', { name: `完成${taskTitle}` })).toBeVisible();
 
   await page.getByRole('button', { name: `编辑${taskTitle}` }).click();
-  // 备注文案必须带 fixtureSuffix：三个 project 共用同一个隔离库，写死的文案会在第二、
-  // 第三个 project 跑到这里时匹配到 2～3 个元素，strict mode 直接判失败。
+  // 日历保留页也会展示同一任务的备注；限定到包含精确完成复选框的任务行，不能全页匹配。
   const editedNote = `浏览器端已编辑任务-${fixtureSuffix}`;
   await page.getByLabel('任务备注').fill(editedNote);
   await page.getByRole('button', { name: '保存修改', exact: true }).click();
-  await expect(page.getByText(editedNote, { exact: true })).toBeVisible();
+  const editedTaskRow = page.getByRole('checkbox', { name: `完成${taskTitle}`, exact: true }).locator('..');
+  await expect(editedTaskRow.getByText(editedNote, { exact: true })).toBeVisible();
 
   await page.getByRole('checkbox', { name: `完成${taskTitle}` }).click();
   await page.getByRole('button', { name: '已处理', exact: true }).click();
