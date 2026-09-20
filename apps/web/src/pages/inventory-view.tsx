@@ -14,6 +14,7 @@ import { pushToast } from '../lib/toast';
 import { Button, Card, Dialog, EmptyState, Page, Panel, SectionTitle } from '../components/ui';
 import { BatchDialog, CATEGORY_EMOJI, InventoryEditor } from '../components/inventory-editor';
 import { InventoryLog } from '../components/inventory-log';
+import { RestockPanel } from '../components/inventory-restock';
 import { ListSkeleton } from '../components/skeleton';
 
 function Stat({ value, label, tone }: { value: number; label: string; tone?: 'warm' | 'danger' }) {
@@ -275,6 +276,13 @@ export function InventoryView() {
 
       {/* 宽屏时把「会过期」和「动过什么」放右边一列，窄屏自动落回下面 */}
       <aside className="flex min-h-0 min-w-0 flex-col gap-4 lg:w-[340px] lg:flex-none">
+      <RestockPanel
+        low={low}
+        pending={needsShopping}
+        busy={restocking}
+        onRestock={(targets) => void addRestock(targets)}
+      />
+
       {activeBatches.length ? (
         <div className="mt-5">
           <SectionTitle>批次与保质期</SectionTitle>

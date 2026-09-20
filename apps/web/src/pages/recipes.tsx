@@ -5,7 +5,7 @@ import { CATEGORY_EMOJI, useCart } from '../lib/cart';
 import { MEAL_LABELS, useRecipes, useRemoveSkill, useUpsertSkill } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Input, Page, Panel } from '../components/ui';
+import { Button, Card, Dialog, Input, Page, Panel } from '../components/ui';
 import { RecipeEditor } from '../components/recipe-editor';
 import { DishEditor } from '../components/dish-editor';
 
@@ -29,11 +29,11 @@ function VariantView({
   const variant = variants.find((one) => one.id === current) ?? variants[0];
 
   if (!variant) {
-    return <p className="px-4 py-5 text-[13.5px] text-ink-soft">这道菜还没写做法</p>;
+    return <p className="py-6 text-center text-[13.5px] text-ink-soft">这道菜还没写做法</p>;
   }
 
   return (
-    <div className="flex flex-col gap-4 px-4 py-4">
+    <div className="flex flex-col gap-4">
       {variants.length > 1 ? (
         <div className="flex flex-wrap gap-2">
           {variants.map((one) => (
@@ -149,6 +149,9 @@ export function RecipesPage() {
   const [category, setCategory] = useState<DishCategory | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
+  // 做法弹窗要从完整列表里取：换了搜索词或分类也不该把已经打开的那一份关掉
+  const openDish = (recipes.data ?? []).find((dish) => dish.id === open) ?? null;
+
   const word = keyword.trim();
   const visible = useMemo(
     () =>
@@ -207,15 +210,11 @@ export function RecipesPage() {
           <p className="px-1 py-6 text-sm text-ink-soft">没有匹配的菜</p>
         ) : (
           visible.map((dish) => {
-            const expanded = open === dish.id;
             const variants = dish.recipeVariants.filter((one) => !one.isArchived);
             const mySkill = dish.skills.some((skill) => skill.member.id === session?.member.id);
             const editingHere = editor?.dishId === dish.id;
             return (
-              <Card
-                key={dish.id}
-                className={`overflow-hidden ${expanded ? 'lg:col-span-2' : ''}`}
-              >
+              <Card key={dish.id} className="overflow-hidden">
                 <div className="flex gap-3 p-3">
                   <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted">
                     {dish.photoUrl ? (
@@ -263,10 +262,10 @@ export function RecipesPage() {
                       <Button
                         variant="ghost"
                         className="ml-auto h-8 px-2 text-[13px]"
-                        aria-expanded={expanded}
-                        onClick={() => setOpen(expanded ? null : dish.id)}
+                        aria-label={`看${dish.name}的做法`}
+                        onClick={() => setOpen(dish.id)}
                       >
-                        {expanded ? '收起做法' : '看做法'}
+                        看做法
                       </Button>
                       <Button
                         variant="ghost"
@@ -326,13 +325,6 @@ export function RecipesPage() {
                     }
                     onClose={() => setEditor(null)}
                   />
-                ) : expanded ? (
-                  <div className="border-t border-border bg-muted/40">
-                    <VariantView
-                      dish={dish}
-                      onEdit={(variantId) => setEditor({ dishId: dish.id, variantId })}
-                    />
-                  </div>
                 ) : null}
               </Card>
             );
@@ -341,12 +333,39 @@ export function RecipesPage() {
       </div>
       </Panel>
 
+      {openDish ? (
+        <Dialog
+          title={`${openDish.name} 的做法`}
+          maxWidth={680}
+          onClose={() => setOpen(null)}
+          footer={
+            <Button
+              className="h-9 w-full"
+              onClick={() => {
+                setOpen(null);
+                setEditor({ dishId: openDish.id, variantId: null });
+              }}
+            >
+              加我的做法
+            </Button>
+          }
+        >
+          <VariantView
+            dish={openDish}
+            onEdit={(variantId) => {
+              setOpen(null);
+              setEditor({ dishId: openDish.id, variantId });
+            }}
+          />
+        </Dialog>
+      ) : null}
+
       {dishEdit ? (
         <DishEditor
           key={dishEdit === 'new' ? 'new' : dishEdit.id}
           editing={dishEdit === 'new' ? null : dishEdit}
           onClose={() => setDishEdit(null)}
-          onCreated={(dish) => setOpen(dish.id)}
+          onCreated={(dish) => setEditor({ dishId: dish.id, variantId: null })}
         />
       ) : null}
     </Page>
