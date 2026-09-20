@@ -701,6 +701,8 @@ test('资产维护：排计划、关联耗材、完成一次、加条资料再�
     await planCard.getByRole('button', { name: '完成维护' }).click();
     const completion = page.getByRole('dialog', { name: '确认完成维护' });
     await expect(completion.getByRole('article', { name: supplyName })).toContainText('够扣');
+    // 表单按所选日期中午提交；显式选过去日期，避免凌晨执行时变成未来时间。
+    await completion.getByLabel('实际完成日期').fill(isoDate(-1));
     await completion.getByRole('tab', { name: '顺便扣库存' }).click();
     const completed = waitFor(page, 'POST', /\/maintenance-plans\/[^/]+\/complete$/);
     await completion.getByRole('button', { name: /确认完成、扣库并推进日期/ }).click();

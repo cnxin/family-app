@@ -43,7 +43,7 @@ test('家里冷启动：14 个 shelf、无状态伪零，也不逐图块拉列�
   await expect(page).toHaveURL(/\/settings$/);
 });
 
-test('家里点资产到规范路径；异步预取到缓存后状态行跟着更新', async ({ page }) => {
+test('家里点资产到规范路径；异步预取成功后也不展示载入计数', async ({ page }) => {
   await page.goto('/home');
   const tile = page.locator('[data-home-grid]').getByRole('link', { name: '资产', exact: true });
   await expect(tile.locator('[data-home-status]')).toHaveCount(0);
@@ -51,8 +51,8 @@ test('家里点资产到规范路径；异步预取到缓存后状态行跟着�
   await tile.hover();
   const response = await responsePromise;
   expect(response.status()).toBe(200);
-  const body = await response.json();
-  await expect(tile.locator('[data-home-status]')).toHaveText(`已载入 ${body.data.length} 件资产`);
+  expect(Array.isArray((await response.json()).data)).toBe(true);
+  await expect(tile.locator('[data-home-status]')).toHaveCount(0);
   await tile.click();
   await expect(page).toHaveURL(/\/house\/assets$/);
   await expect(page.locator('main h1')).toHaveText('家庭资产');
@@ -69,18 +69,18 @@ test('家里搜索条复用快速跳转，搜索资产仍可直达', async ({ pa
   await expect(page).toHaveURL(/\/house\/assets$/);
 });
 
-test('从菜谱回家里复用已有缓存；状态行不补发菜谱请求', async ({ page, isMobile }) => {
+test('从菜谱回家里不展示缓存计数，也不补发菜谱请求', async ({ page, isMobile }) => {
   const responsePromise = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/recipes');
   await page.goto('/eat/recipes');
   const response = await responsePromise;
   expect(response.status()).toBe(200);
-  const body = await response.json();
+  expect(Array.isArray((await response.json()).data)).toBe(true);
   await page.waitForLoadState('networkidle');
   const paths = watchRequests(page);
   await homeNavigation(page, isMobile).click();
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByRole('link', { name: '菜谱', exact: true }).locator('[data-home-status]'))
-    .toHaveText(`已载入 ${body.data.length} 道菜谱`);
+    .toHaveCount(0);
   await page.waitForLoadState('networkidle');
   expect(paths.some((path) => path.startsWith('/api/recipes'))).toBe(false);
 });

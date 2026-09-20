@@ -1,10 +1,8 @@
 import type { NavSegment } from '../lib/nav';
-import { useHomeStatus } from '../lib/home-status';
 import { usePrefetch } from './nav-prefetch';
 import { SoftLink } from './soft-link';
 
 export function HomeTile({ segment }: { segment: NavSegment }) {
-  const status = useHomeStatus(segment.key);
   const prefetch = usePrefetch();
   if (!segment.path) return null;
   return (
@@ -18,7 +16,6 @@ export function HomeTile({ segment }: { segment: NavSegment }) {
         {segment.glyph}
       </span>
       <span className="max-w-full text-[13px] font-medium leading-5 text-ink">{segment.label}</span>
-      {status && <span data-home-status className="max-w-full truncate text-[11px] leading-4 text-ink-soft" title={status}>{status}</span>}
     </SoftLink>
   );
 }
