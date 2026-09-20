@@ -3,6 +3,7 @@ import type {
   AppNotification,
   CalendarEntry,
   Dish,
+  HouseholdActivity,
   HouseholdPoll,
   HomeAsset,
   HouseholdReminder,
@@ -63,6 +64,14 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
     void client.prefetchQuery({
       queryKey: ['tasks', today, shiftDays(today, 2)],
       queryFn: () => api<TaskOccurrence[]>(`/tasks?start=${today}&end=${shiftDays(today, 2)}`),
+    });
+    void client.prefetchQuery({
+      queryKey: ['calendar', today, today],
+      queryFn: () => api<CalendarEntry[]>(`/calendar?start=${today}&end=${today}`),
+    });
+    void client.prefetchQuery({
+      queryKey: ['activities', 'all'],
+      queryFn: () => api<HouseholdActivity[]>('/activities?scope=all&limit=100'),
     });
   },
   '/eat/order': (client) => {

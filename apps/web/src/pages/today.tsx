@@ -1,18 +1,23 @@
-import { Link } from 'react-router-dom';
-import type { Menu, MenuItem } from '@family/contracts';
 import { useAuth } from '../lib/auth';
 import {
-  MEAL_LABELS,
   shiftDays,
   todayISO,
+  useActivities,
+  useCalendarEntries,
   useMenusOfDate,
+  useNotifications,
   useReminders,
   useShoppingList,
   useTaskRange,
   useUpdateOccurrence,
 } from '../lib/queries';
+import { toNewRoute } from '../lib/routes';
 import { Checkbox, EmptyState, Page, Panel } from '../components/ui';
 import { Skeleton } from '../components/skeleton';
+import { SoftLink } from '../components/soft-link';
+import { TodayStats, type TodayStat } from '../components/today-hero';
+import { TodayMeals } from '../components/today-meals';
+import { TodayActivity, TodayReminders, TodayShopping } from '../components/today-aside';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -21,26 +26,19 @@ function greeting() {
   return '晚上好';
 }
 
-function clock(value: string) {
+/** 「9月20日 星期六」——首页得先告诉人今天是几号，这是「今天」这两个字的前提。 */
+function dateLine(date: Date) {
+  const day = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' }).format(date);
+  const week = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(date);
+  return `${day} ${week}`;
+}
+
+function hhmm(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   }).format(new Date(value));
-}
-
-/** 这一餐的一句话：几道菜、谁在做、到哪步了。 */
-function mealLine(menu: Menu) {
-  const live = menu.items.filter((item: MenuItem) => item.status !== 'rejected');
-  if (!live.length) return '还没点';
-  const done = live.filter((item: MenuItem) => item.status === 'done').length;
-  const names = live
-    .slice(0, 3)
-    .map((item: MenuItem) => item.dish?.name ?? '')
-    .filter(Boolean)
-    .join('、');
-  const more = live.length > 3 ? ` 等 ${live.length} 道` : '';
-  return `${names}${more}${done ? ` · 已上桌 ${done}/${live.length}` : ''}`;
 }
 
 export function TodayPage() {
@@ -51,6 +49,9 @@ export function TodayPage() {
   const menus = useMenusOfDate(today);
   const reminders = useReminders('scheduled');
   const shopping = useShoppingList(today);
+  const calendar = useCalendarEntries(today, today);
+  const activities = useActivities('all');
+  const notifications = useNotifications();
   const update = useUpdateOccurrence();
 
   const all = range.data ?? [];
@@ -59,89 +60,59 @@ export function TodayPage() {
   const open = todays.filter((item) => item.status === 'pending');
   const unclaimed = open.filter((item) => !item.assigneeId);
 
-  const meals = menus.data ?? [];
-  const anyDish = meals.some((menu) => menu.items.some((item) => item.status !== 'rejected'));
-
   // 只看今天之内还没到点的提醒——「今天」这一页不该把下周的事也摆出来
   const todayReminders = (reminders.data ?? [])
     .filter((one) => one.remindAt.slice(0, 10) === today)
     .sort((a, b) => a.remindAt.localeCompare(b.remindAt));
 
   const toBuy = (shopping.data ?? []).filter((item) => !item.checked);
+  const unread = (notifications.data ?? []).filter((one) => !one.readAt).length;
+  // 日历里的 task / menu 就是上面那两块，首页再列一遍等于同一件事说三次
+  const events = (calendar.data ?? [])
+    .filter((one) => one.module !== 'task' && one.module !== 'menu')
+    .sort((a, b) => (a.startsAt ?? '').localeCompare(b.startsAt ?? ''));
+
+  const stats: TodayStat[] = [
+    { key: 'task', label: '今天要做', value: open.length, unit: '件', to: '/schedule/tasks', tone: 'accent' },
+    { key: 'buy', label: '要买的', value: toBuy.length, unit: '样', to: '/house/shopping', tone: 'warm' },
+    { key: 'remind', label: '待提醒', value: todayReminders.length, unit: '条', to: '/schedule/reminders' },
+    { key: 'unread', label: '未读消息', value: unread, unit: '条', to: '/schedule/notifications', tone: 'warm' },
+  ];
 
   return (
     <Page
       title={`${greeting()}，${session?.member.name ?? ''}`}
       subtitle={
         range.isPending
-          ? '正在读取今天的安排…'
-          : open.length === 0
-            ? '今天没有待办了'
-            : `今天还有 ${open.length} 件${unclaimed.length ? ` · ${unclaimed.length} 件没人认领` : ''}`
+          ? `${dateLine(new Date())} · 正在读今天的安排…`
+          : `${dateLine(new Date())} · ${
+              open.length === 0
+                ? '今天没有待办了'
+                : `还有 ${open.length} 件${unclaimed.length ? `，${unclaimed.length} 件没人认领` : ''}`
+            }`
       }
+      toolbar={<TodayStats stats={stats} />}
     >
       {/* 左栏是「今天要做什么」，右栏是「顺带要知道的」 */}
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <Panel
-          grow={false}
-          title="今天吃什么"
-          right={
-            <Link to="/eat/kitchen" className="shrink-0 text-[13px] text-accent hover:underline">
+        <section>
+          <div className="mb-2 flex items-baseline justify-between px-1">
+            <h2 className="text-[13px] font-semibold tracking-wide text-ink-soft">今天吃什么</h2>
+            <SoftLink to="/eat/kitchen" className="text-[13px] text-accent hover:underline">
               去厨房
-            </Link>
-          }
-        >
-          {menus.isPending ? (
-            <div className="px-3.5 py-3">
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="mt-3 h-4 w-1/2" />
-            </div>
-          ) : !anyDish ? (
-            <EmptyState
-              emoji="🍚"
-              title="今天还没点菜"
-              hint={
-                <Link to="/eat/order" className="text-accent hover:underline">
-                  去点菜 →
-                </Link>
-              }
-            />
-          ) : (
-            meals.map((menu) => {
-              const live = menu.items.filter((item) => item.status !== 'rejected');
-              return (
-                <Link
-                  key={menu.id}
-                  to={`/eat/kitchen?date=${today}`}
-                  className="flex items-center gap-3 border-b border-border px-3.5 py-2.5 transition-colors duration-150 last:border-b-0 hover:bg-muted"
-                >
-                  <span className="w-10 shrink-0 text-[13px] font-medium text-ink-soft">
-                    {MEAL_LABELS[menu.mealType]}
-                  </span>
-                  <span
-                    className={
-                      'min-w-0 flex-1 truncate text-sm ' + (live.length ? '' : 'text-ink-soft')
-                    }
-                  >
-                    {mealLine(menu)}
-                  </span>
-                  {menu.chef ? (
-                    <span className="shrink-0 text-[12px] text-ink-soft">
-                      {menu.chef.avatarEmoji} {menu.chef.name}
-                    </span>
-                  ) : null}
-                </Link>
-              );
-            })
-          )}
-        </Panel>
+            </SoftLink>
+          </div>
+          <TodayMeals menus={menus.data ?? []} date={today} pending={menus.isPending} />
+        </section>
 
+        {/* 桌面上并排：竖着摞的话下面那块被顶出屏幕，上面那块又空一大片 */}
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
         <Panel
           title="今日待办"
           right={
-            <Link to="/schedule/tasks" className="shrink-0 text-[13px] text-accent hover:underline">
+            <SoftLink to="/schedule/tasks" className="shrink-0 text-[13px] text-accent hover:underline">
               全部任务
-            </Link>
+            </SoftLink>
           }
         >
           {range.isPending ? (
@@ -153,7 +124,7 @@ export function TodayPage() {
           ) : range.isError ? (
             <p className="px-3.5 py-6 text-sm text-danger">读不到任务，检查一下后端是否在跑</p>
           ) : todays.length === 0 ? (
-            <EmptyState emoji="✅" title="今天没有安排任务" />
+            <EmptyState emoji="✅" title="今天没有安排任务" hint="轻松一天" />
           ) : (
             todays.map((item) => (
               <div
@@ -180,94 +151,90 @@ export function TodayPage() {
                 >
                   {item.task.title}
                 </span>
-                <span className="shrink-0 text-xs text-ink-soft">
-                  {item.assignee?.name ?? '待认领'}
-                </span>
-              </div>
-            ))
-          )}
-        </Panel>
-      </div>
-
-      <aside className="flex min-h-0 flex-col gap-4 lg:w-[320px] lg:flex-none">
-        <Panel
-          grow={false}
-          title={`待提醒${todayReminders.length ? ` · ${todayReminders.length}` : ''}`}
-          right={
-            <Link
-              to="/schedule/reminders"
-              className="shrink-0 text-[13px] text-accent hover:underline"
-            >
-              全部
-            </Link>
-          }
-        >
-          {todayReminders.length ? (
-            todayReminders.slice(0, 5).map((one) => (
-              <div
-                key={one.id}
-                className="flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 last:border-b-0"
-              >
-                <span className="shrink-0 text-[13px] font-medium tabular-nums">
-                  {clock(one.remindAt)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[13px]">
-                  {one.source?.title ?? '原事项已不可用'}
-                </span>
-              </div>
-            ))
-          ) : (
-            <p className="px-3.5 py-4 text-[13px] text-ink-soft">今天没有要提醒的事</p>
-          )}
-        </Panel>
-
-        <Panel
-          grow={false}
-          title={`要买的${toBuy.length ? ` · ${toBuy.length}` : ''}`}
-          right={
-            <Link to="/house/shopping" className="shrink-0 text-[13px] text-accent hover:underline">
-              购物清单
-            </Link>
-          }
-        >
-          {toBuy.length ? (
-            toBuy.slice(0, 6).map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-2.5 border-b border-border px-3.5 py-2 last:border-b-0"
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px]">
-                  {item.ingredient?.name ?? item.customName ?? '未知'}
-                </span>
-                {item.totalQty ? (
-                  <span className="shrink-0 text-[12px] text-ink-soft">
-                    {Number(item.totalQty)} {item.unit ?? ''}
+                {item.assignee ? (
+                  <span className="shrink-0 text-xs text-ink-soft">
+                    {item.assignee.avatarEmoji} {item.assignee.name}
+                  </span>
+                ) : item.status === 'pending' ? (
+                  // 做完的就别再喊「待认领」了
+                  <span className="shrink-0 rounded-full bg-warm-soft px-2 py-0.5 text-[11px] text-warm">
+                    待认领
                   </span>
                 ) : null}
               </div>
             ))
-          ) : (
-            <p className="px-3.5 py-4 text-[13px] text-ink-soft">今天没有要买的</p>
           )}
+
+          {/* 接下来两天压在今天下面，灰一点——是提醒不是任务 */}
+          {later.length ? (
+            <div className="border-t border-border bg-muted/40">
+              <p className="px-3.5 pb-1 pt-2 text-[11.5px] font-medium text-ink-soft">接下来两天</p>
+              {later.slice(0, 4).map((item) => (
+                <div key={item.id} className="flex items-center gap-2.5 px-3.5 pb-2">
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink-soft">
+                    {item.task.title}
+                  </span>
+                  <span className="shrink-0 font-mono text-[12px] text-ink-soft">
+                    {item.dueDate.slice(5)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </Panel>
 
-        <Panel title="接下来两天">
-          {later.length ? (
-            later.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-2.5 border-b border-border px-3.5 py-2 last:border-b-0"
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px]">{item.task.title}</span>
-                <span className="shrink-0 font-mono text-[12px] text-ink-soft">
-                  {item.dueDate.slice(5)}
-                </span>
-              </div>
-            ))
+        <Panel
+          title={`今天还有${events.length ? ` · ${events.length}` : ''}`}
+          right={
+            <SoftLink to="/schedule/calendar" className="shrink-0 text-[13px] text-accent hover:underline">
+              日历
+            </SoftLink>
+          }
+        >
+          {calendar.isPending ? (
+            <div className="px-3.5 py-3">
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          ) : events.length === 0 ? (
+            <p className="px-3.5 py-4 text-[13px] text-ink-soft">日历上没有别的安排了</p>
           ) : (
-            <p className="px-3.5 py-4 text-[13px] text-ink-soft">这两天没有别的安排</p>
+            events.map((entry) => {
+              const target = toNewRoute(entry.targetPath);
+              const body = (
+                <>
+                  <span className="w-11 shrink-0 text-[12px] font-medium tabular-nums text-ink-soft">
+                    {entry.startsAt ? hhmm(entry.startsAt) : '全天'}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[13.5px]">{entry.title}</span>
+                  {entry.summary ? (
+                    <span className="hidden shrink-0 truncate text-[12px] text-ink-soft sm:block">
+                      {entry.summary}
+                    </span>
+                  ) : null}
+                </>
+              );
+              const cls =
+                'flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 last:border-b-0';
+              return target ? (
+                <SoftLink key={entry.id} to={target} className={`${cls} hover:bg-muted`}>
+                  {body}
+                </SoftLink>
+              ) : (
+                <div key={entry.id} className={cls}>
+                  {body}
+                </div>
+              );
+            })
           )}
         </Panel>
+        </div>
+
+      </div>
+
+      <aside className="flex min-h-0 flex-col gap-4 lg:w-[320px] lg:flex-none">
+        <TodayReminders items={todayReminders} />
+        <TodayShopping items={toBuy} />
+        <TodayActivity items={activities.data ?? []} />
       </aside>
     </Page>
   );
