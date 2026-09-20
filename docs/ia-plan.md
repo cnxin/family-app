@@ -275,7 +275,7 @@
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
 | F0 盘点 | ☑ | `c2d9ea9` · `docs: 信息架构收敛盘点` | 24 项逐行完成（core 7 / shelf 14 / settings 3），内嵌设置另记。① 今天已聚合三餐、今日及后两天任务、当日日历、提醒、购物、动态和未读统计；② system 只有备份专用 `backup_policies` / `backup_runs`，无通用家庭设置，F3 按独立 overrides 表分支；③ 掌勺经 `PATCH /members/me/preferences` 存 `members.prefersCooking`，记忆经 `GET/PATCH /agent/profile` 存 `agent_member_profiles.memoryEnabled`（版本锁），置顶仍默认本机，服务端同步待用户确认。无顶层归层调整；路径漂移、今日既有区块、成员设置可达性及页内新建的深链边界详见上方 D。typecheck / lint 通过（API 43 条既有 warning）；仅文档，不开始 F1。 |
-| F1 导航分层 | ◐ | `feat(web): 导航分层，常驻项收敛到七个`（本提交） | 导航分层、桌面七项 / 手机四项、今天头像及路由占位完成；typecheck / lint 通过，全量新端浏览器验收 139 passed / 5 skipped，四图已人工复看；待提交后 CI 确认，详见上方 F1 备注。 |
+| F1 导航分层 | ☑ | `f5e096f` · `feat(web): 导航分层，常驻项收敛到七个` | 导航分层、桌面七项 / 手机四项、今天头像及路由占位完成；typecheck / lint 通过，全量新端浏览器验收 139 passed / 5 skipped，四图已人工复看，已 push，CI `35504482867` 四项全绿；详见上方 F1 备注，未开始 F2。 |
 | F2 家里页 | ☐ | | |
 | F3 模块状态端点 | ☐ | | |
 | F4 隐身 / 开启 / 置顶 | ☐ | | |
