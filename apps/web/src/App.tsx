@@ -36,7 +36,7 @@ import { AgentMemoriesPage } from './pages/agent-memories';
 import { Shell } from './components/shell';
 import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
-import { landingPath, sceneByKey } from './lib/nav';
+import { NavigationPlaceholder } from './pages/navigation-placeholder';
 
 /** 旧路径（一层）保留跳转，免得家里人存的书签全废掉；查询串原样带过去（通知里的 ?pollId= 靠它）。 */
 const REDIRECTS: [string, string][] = [
@@ -103,20 +103,22 @@ export function App() {
       <Routes>
         <Route element={<Shell />}>
           <Route path="/" element={<TodayPage />} />
+          <Route path="/home" element={<NavigationPlaceholder />} />
+          <Route path="/settings" element={<NavigationPlaceholder settings />} />
 
-          <Route path="/eat" element={<Navigate to={landingPath(sceneByKey('eat'))} replace />} />
+          <Route path="/eat" element={<Navigate to="/home" replace />} />
           <Route path="/eat/order" element={<OrderPage />} />
           <Route path="/eat/kitchen" element={<KitchenPage />} />
           <Route path="/eat/recipes" element={<RecipesPage />} />
           
-          <Route path="/schedule" element={<Navigate to={landingPath(sceneByKey('schedule'))} replace />} />
+          <Route path="/schedule" element={<Navigate to="/home" replace />} />
           <Route path="/schedule/calendar" element={<CalendarPage />} />
           <Route path="/schedule/tasks" element={<TasksPage />} />
           <Route path="/schedule/reminders" element={<RemindersPage />} />
           <Route path="/schedule/notifications" element={<NotificationsPage />} />
           <Route path="/schedule/polls" element={<PollsPage />} />
 
-          <Route path="/house" element={<Navigate to={landingPath(sceneByKey('house'))} replace />} />
+          <Route path="/house" element={<Navigate to="/home" replace />} />
           <Route path="/house/inventory" element={<InventoryPage />} />
           <Route path="/house/shopping" element={<ShoppingPage />} />
           <Route path="/house/points" element={<PointsPage />} />
@@ -126,7 +128,7 @@ export function App() {
           <Route path="/house/finance" element={<FinancePage />} />
           <Route path="/house/backups" element={<BackupsPage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />
-          <Route path="/life" element={<Navigate to={landingPath(sceneByKey('life'))} replace />} />
+          <Route path="/life" element={<Navigate to="/home" replace />} />
           <Route path="/life/media" element={<MediaPage />} />
           <Route path="/life/media/library" element={<MediaLibraryPage />} />
           <Route path="/life/media/history" element={<MediaHistoryPage />} />
@@ -138,7 +140,7 @@ export function App() {
           <Route path="/life/knowledge" element={<KnowledgePage />} />
           <Route path="/life/activity" element={<ActivityPage />} />
 
-          <Route path="/me" element={<Navigate to="/me/profile" replace />} />
+          <Route path="/me" element={<Navigate to="/home" replace />} />
           <Route path="/me/profile" element={<ProfilePage />} />
           <Route path="/me/assistant" element={<AssistantPage />} />
           <Route path="/me/assistant/memories" element={<AgentMemoriesPage />} />

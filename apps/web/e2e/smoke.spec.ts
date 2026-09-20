@@ -88,18 +88,16 @@ test('旧的一层路径会跳到新位置', async ({ page }) => {
   await expect(page).toHaveURL(/\/schedule\/tasks$/);
 });
 
-test('切换深色模式后页面仍可读', async ({ page, isMobile }) => {
+test('切换深色模式后页面仍可读', async ({ page }) => {
   await page.goto('/schedule/tasks');
-  // 手机上主题开关收进了头像菜单（「我的」不再占一个底部标签）
-  if (isMobile) await page.getByRole('button', { name: '账号与设置' }).click();
-  await page.getByRole('button', { name: '切换到深色' }).first().click();
+  // 主题开关留在手机顶栏 / 桌面侧栏；个人入口移到今天页，不影响换主题。
+  await page.getByRole('button', { name: '切换到深色' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const colors = await page.evaluate(() => {
     const body = getComputedStyle(document.body);
     return { bg: body.backgroundColor, fg: body.color };
   });
   expect(colors.bg).not.toBe(colors.fg);
-  if (isMobile) await page.getByRole('button', { name: '账号与设置' }).click();
-  await page.getByRole('button', { name: '切换到浅色' }).first().click();
+  await page.getByRole('button', { name: '切换到浅色' }).click();
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'dark');
 });

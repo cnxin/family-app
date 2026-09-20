@@ -261,12 +261,21 @@
 6. **F3 空域口径**：积分账户、默认财务账户/分类、懒建助理配置，以及已归档记录/媒体片库/出行模板等，会影响 `hasData`。这里仅标出不能拿 UI 筛选空态代替 EXISTS 的原因；F3 应先明确各域存在性查询的业务表与状态范围。计划文字称“13 个请求”，实际 key 清单是 **14 个 shelf 域**，实现按枚举逐项核对，不漏 assistant/activity。
 7. **范围与验证**：本轮仅填写本文件。`corepack pnpm typecheck && corepack pnpm lint` 通过；API lint 为 0 error / 43 条既有 warning，mobile/web lint 通过。没有改 API、没有运行写数据的业务验收或页面视觉验收，没有开始 F1。结构稿当前为用户提供的未跟踪文件，未修改、未代为加入本提交。
 
+## F1 实现备注（2026-09-20）
+
+- **模型与入口**：24 项均补齐 `tier` / 单字 `glyph`，按 F0 的 core 7 / shelf 14 / settings 3 落地，无提升或下沉。桌面七项平铺，底部家里 / 管理员家庭设置 / 本人头像；「我钉住的」保留空组件，不渲染空标题。手机四项等宽，今天 / 家里按下直达，吃饭 / 日程各三项 core；键盘 Enter / Space 也可操作。
+- **路径口径**：按 F1 的“URL 一律不变”保留当前规范叶子 URL 和旧兼容重定向。购物仍是 `/house/shopping`，但归手机「吃饭」，菜单归属不再由 URL 前缀决定；五个旧场景根 `/eat`、`/schedule`、`/house`、`/life`、`/me` 统一去 `/home`。`/home` 与 `/settings` 只有占位及搜索出口，不提前做 F2 / F7；普通成员不能进入家庭设置占位页。
+- **搜索与成员权限**：纠正计划中“⌘K 本来就搜全部分段”的现状假设：补入小管家、个人设置，改为使用按成员过滤的分层列表；管理员全部 14 个 shelf 均有导航测试，普通成员保留本人设置 / 小管家，隐藏财务 / 成员 / 备份。菜品搜索保留，没有增加 F6 的动作或分组。
+- **头像与主题**：手机固定的个人导航入口移至今天页 `Page.actions`，桌面留在侧栏底部；全局搜索仍可搜到个人设置。主题按钮保留在手机顶栏 / 桌面底部，退出仍走现有个人页；同步调整主题冒烟交互，既有冒烟路径数组不变。今天既有三餐、任务、日历与右栏内容未改，截图中的空餐卡 / 无安排面板保留既有布局，F5 的布局问题仍待届时拍板。
+- **验收范围**：`corepack pnpm typecheck && corepack pnpm lint` 通过（API 43 条既有 warning，0 error）；`corepack pnpm test:web:next` 全量 139 passed / 5 skipped（3 个视口限定用例、2 个既有手机端助理用例），无失败。新增四张亮 / 暗、390×844 / 1280×800 的截图测试，覆盖横向溢出、零 `pageerror`、导航触控区 ≥44px、手机头像同行；人工复看未见白屏、导航溢出或亮暗撞色。截图保存在 `.tmp-shots/f1-{390x844,1280x800}-{light,dark}.png`，不提交。无 API、`packages/*` 或 workflow 改动；未开始 F2，置顶存储 / 空域规则 / 留意阈值均未实现。
+- **经验**：本轮新增教训 17（导航层级不要绑 URL，搜索补齐独立入口与权限），与代码同提交；本机需用原生 arm64 运行测试以匹配已安装的 Rollup 原生包，未为此改依赖或锁文件。
+
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
-| F0 盘点 | ☑ | `docs: 信息架构收敛盘点`（本提交） | 24 项逐行完成（core 7 / shelf 14 / settings 3），内嵌设置另记。① 今天已聚合三餐、今日及后两天任务、当日日历、提醒、购物、动态和未读统计；② system 只有备份专用 `backup_policies` / `backup_runs`，无通用家庭设置，F3 按独立 overrides 表分支；③ 掌勺经 `PATCH /members/me/preferences` 存 `members.prefersCooking`，记忆经 `GET/PATCH /agent/profile` 存 `agent_member_profiles.memoryEnabled`（版本锁），置顶仍默认本机，服务端同步待用户确认。无顶层归层调整；路径漂移、今日既有区块、成员设置可达性及页内新建的深链边界详见上方 D。typecheck / lint 通过（API 43 条既有 warning）；仅文档，不开始 F1。 |
-| F1 导航分层 | ☐ | | |
+| F0 盘点 | ☑ | `c2d9ea9` · `docs: 信息架构收敛盘点` | 24 项逐行完成（core 7 / shelf 14 / settings 3），内嵌设置另记。① 今天已聚合三餐、今日及后两天任务、当日日历、提醒、购物、动态和未读统计；② system 只有备份专用 `backup_policies` / `backup_runs`，无通用家庭设置，F3 按独立 overrides 表分支；③ 掌勺经 `PATCH /members/me/preferences` 存 `members.prefersCooking`，记忆经 `GET/PATCH /agent/profile` 存 `agent_member_profiles.memoryEnabled`（版本锁），置顶仍默认本机，服务端同步待用户确认。无顶层归层调整；路径漂移、今日既有区块、成员设置可达性及页内新建的深链边界详见上方 D。typecheck / lint 通过（API 43 条既有 warning）；仅文档，不开始 F1。 |
+| F1 导航分层 | ◐ | `feat(web): 导航分层，常驻项收敛到七个`（本提交） | 导航分层、桌面七项 / 手机四项、今天头像及路由占位完成；typecheck / lint 通过，全量新端浏览器验收 139 passed / 5 skipped，四图已人工复看；待提交后 CI 确认，详见上方 F1 备注。 |
 | F2 家里页 | ☐ | | |
 | F3 模块状态端点 | ☐ | | |
 | F4 隐身 / 开启 / 置顶 | ☐ | | |

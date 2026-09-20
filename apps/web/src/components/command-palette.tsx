@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSoftNavigate } from './soft-link';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Dish } from '@family/contracts';
-import { SCENES, legacyUrl, visibleSegments } from '../lib/nav';
+import { coreSegments, shelfSegments, settingsSegments, legacyUrl } from '../lib/nav';
+import { useAuth } from '../lib/auth';
 import { prefetchSearchSources } from '../lib/prefetch';
 
 /** 顶栏那个按钮也要能开，用一个自定义事件把两边接起来，免得再拉一层 context。 */
@@ -25,6 +26,7 @@ interface Entry {
 const NO_DISHES: Dish[] = [];
 
 export function CommandPalette() {
+  const { session } = useAuth();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -73,31 +75,18 @@ export function CommandPalette() {
   const dishes = (client.getQueryData(['dishes']) as Dish[] | undefined) ?? NO_DISHES;
 
   const entries = useMemo<Entry[]>(() => {
-    const pages: Entry[] = [];
-    for (const scene of SCENES) {
-      if (!scene.segments.length) {
-        pages.push({
-          id: scene.key,
-          label: scene.label,
-          hint: '场景',
-          kind: 'page',
-          go: () => navigate(scene.path),
-        });
-        continue;
-      }
-      for (const segment of visibleSegments(scene, true)) {
-        pages.push({
-          id: `${scene.key}/${segment.key}`,
-          label: segment.label,
-          hint: segment.ready ? scene.label : `${scene.label} · 旧版`,
-          kind: 'page',
-          go: () =>
-            segment.ready && segment.path
-              ? navigate(segment.path)
-              : window.open(legacyUrl(segment.legacy ?? '/'), '_blank', 'noopener'),
-        });
-      }
-    }
+    // shelf 不再常驻导航，但搜索必须完整；权限过滤与家里页共用分层模型。
+    const pages: Entry[] = [
+      ...coreSegments(), ...shelfSegments(session?.member), ...settingsSegments(session?.member),
+    ].map((segment) => ({
+      id: segment.key,
+      label: segment.label,
+      hint: segment.tier === 'settings' ? '设置' : '页面',
+      kind: 'page',
+      go: () => segment.ready && segment.path
+        ? navigate(segment.path)
+        : window.open(legacyUrl(segment.legacy ?? '/'), '_blank', 'noopener'),
+    }));
     const dishEntries: Entry[] = dishes.slice(0, 200).map((dish) => ({
       id: `dish-${dish.id}`,
       label: dish.name,
@@ -106,7 +95,7 @@ export function CommandPalette() {
       go: () => navigate(`/eat/recipes?dish=${dish.id}`),
     }));
     return [...pages, ...dishEntries];
-  }, [dishes, navigate]);
+  }, [dishes, navigate, session?.member]);
 
   const results = useMemo(() => {
     const keyword = query.trim().toLowerCase();

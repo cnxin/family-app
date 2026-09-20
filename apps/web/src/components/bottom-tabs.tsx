@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  CENTER_TAB_KEY,
-  inScene,
+  mobileTabOf,
   landingPath,
   mobileTabs,
-  sceneOf,
   visibleSegments,
 } from '../lib/nav';
 import type { NavScene, NavSegment } from '../lib/nav';
@@ -135,7 +132,7 @@ function SceneMenu({
                 active={current}
                 onNavigate={requestClose}
                 className={
-                  'relative flex items-center justify-center px-3 py-[9px] text-[13.5px] ' +
+                  'relative flex min-h-11 items-center justify-center px-3 py-[9px] text-[13.5px] ' +
                   'tracking-[0.01em] transition-colors duration-100 ' +
                   // 分隔线内缩一点，不顶到两边——顶满会把每一行框成一个格子
                   'after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-0 ' +
@@ -170,8 +167,7 @@ function TabBar({
   const { pathname } = useLocation();
   const prefetch = usePrefetch();
   const soft = useSoftNavigate();
-  const here = inScene(pathname);
-  const active = sceneOf(pathname);
+  const active = mobileTabOf(pathname);
   const navRef = useRef<HTMLElement>(null);
 
   return (
@@ -180,15 +176,14 @@ function TabBar({
       className="vt-chrome-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 lg:hidden"
       aria-label="主导航"
     >
-      {/* 中间那个按钮要凸出到栏外面，所以这一行不能裁剪 */}
+      {/* 四项等宽，今天不再凸出；栏高与现有页面底部避让保持一致。 */}
       <div className="flex items-stretch">
         {mobileTabs().map((scene) => {
           const segments = visibleSegments(scene, manager);
-          const isActive = here && scene.key === active.key;
-          const center = scene.key === CENTER_TAB_KEY;
+          const isActive = scene.key === active;
 
           // 按下就弹，不等抬手——等 click 的那一下延迟，手感立刻就塌了
-          const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+          const activate = (button: HTMLButtonElement) => {
             prefetchOn(prefetch, scene);
             if (!segments.length) {
               // 已经站在这一页了就什么也不做——再导航一次会平白走一遍切页动画，
@@ -196,7 +191,7 @@ function TabBar({
               if (pathname !== scene.path) soft(scene.path);
               return;
             }
-            const tab = event.currentTarget.getBoundingClientRect();
+            const tab = button.getBoundingClientRect();
             const bar = navRef.current?.getBoundingClientRect();
             onOpenMenu({
               scene,
@@ -205,47 +200,23 @@ function TabBar({
             });
           };
 
-          if (center) {
-            return (
-              <button
-                key={scene.key}
-                type="button"
-                aria-label={scene.label}
-                aria-current={isActive ? 'page' : undefined}
-                onPointerEnter={() => prefetchOn(prefetch, scene)}
-                onPointerDown={onPointerDown}
-                className="flex flex-1 select-none touch-manipulation flex-col items-center gap-0.5 pb-2 pt-1 transition-transform duration-150 active:scale-[0.92]"
-              >
-                <span
-                  className={
-                    // 从栏里长出来一块：环用页面底色描一圈，看着像浮在上面而不是贴上去
-                    '-mt-6 grid size-[52px] place-items-center rounded-full text-[22px] leading-none ' +
-                    'shadow-[0_6px_16px_rgba(0,0,0,0.18)] ring-4 ring-bg transition-colors duration-150 ' +
-                    (isActive ? 'bg-accent text-white' : 'bg-surface text-ink')
-                  }
-                >
-                  {scene.icon}
-                </span>
-                <span
-                  className={
-                    'text-[11px] ' + (isActive ? 'font-medium text-accent' : 'text-ink-soft')
-                  }
-                >
-                  {scene.label}
-                </span>
-              </button>
-            );
-          }
-
           return (
             <button
               key={scene.key}
               type="button"
               onPointerEnter={() => prefetchOn(prefetch, scene)}
-              onPointerDown={onPointerDown}
+              onPointerDown={(event) => {
+                if (event.button === 0) activate(event.currentTarget);
+              }}
+              onClick={(event) => {
+                // pointerdown 已处理触摸/鼠标；detail=0 留给键盘与辅助技术。
+                if (event.detail === 0) activate(event.currentTarget);
+              }}
+              aria-label={scene.label}
+              aria-current={isActive ? 'page' : undefined}
               aria-haspopup={segments.length ? 'menu' : undefined}
               className={
-                'flex flex-1 select-none touch-manipulation flex-col items-center gap-0.5 py-2 ' +
+                'flex h-14 min-w-0 flex-1 select-none touch-manipulation flex-col items-center justify-center gap-1 py-2 ' +
                 'text-[11px] transition-[color,transform] duration-150 active:scale-[0.94] ' +
                 (isActive ? 'font-medium text-accent' : 'text-ink-soft')
               }

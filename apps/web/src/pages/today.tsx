@@ -91,6 +91,15 @@ export function TodayPage() {
                 : `还有 ${open.length} 件${unclaimed.length ? `，${unclaimed.length} 件没人认领` : ''}`
             }`
       }
+      actions={
+        <SoftLink
+          to="/me/profile"
+          aria-label="个人设置"
+          className="grid size-11 shrink-0 place-items-center rounded-full bg-muted text-xl transition-colors duration-150 hover:bg-accent-soft lg:hidden"
+        >
+          <span aria-hidden="true">{session?.member.avatarEmoji ?? '我'}</span>
+        </SoftLink>
+      }
       toolbar={<TodayStats stats={stats} />}
     >
       {/* 左栏是「今天要做什么」，右栏是「顺带要知道的」 */}

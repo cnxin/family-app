@@ -1,24 +1,14 @@
-/**
- * 全站信息架构：五个「场景」对应家里人真的会说出口的五件事
- * （今天怎么样 / 吃什么 / 什么时候做什么 / 家里的东西和钱 / 家庭生活），
- * 业务域收在场景下面当分段。三层封顶：场景 → 分段 → 抽屉，
- * 不再出现旧客户端那种 22 个页面靠 href:null 藏起来的情况。
- *
- * 2026-09-20 重分类：原来「吃饭」底下塞了购物、库存、观影，前两个是家里的物资、
- * 后一个是娱乐，都不是「今天吃什么」。现在按家里人嘴里说的话重新分：
- *   吃饭 = 点菜 / 厨房 / 菜谱          （吃什么、怎么做）
- *   家里 = 库存 / 购物 / 资产 / 财务 … （家里有什么、花了多少）
- *   生活 = 观影 / 出行 / 回忆 / 知识库 （一家人一起干的事）
- * 「我的」不再占一个底部标签——个人设置和问问小管家是工具不是分类，
- * 见下面的 PINNED，手机放顶栏、桌面钉在侧栏上方。
- *
- * ready=false 的分段是还没搬到新客户端的，暂时给一个「在旧版打开」的出口，
- * 搬完一个就把 path 填上、ready 改 true，别的地方不用动。
- */
+import type { AuthSession } from '@family/contracts';
+
+/** 场景保留规范路径；导航层级和手机菜单独立组织，不再由 URL 决定功能权重。 */
+export type NavTier = 'core' | 'shelf' | 'settings';
+type NavMember = Pick<AuthSession['member'], 'role'> | null | undefined;
 
 export interface NavSegment {
   key: string;
   label: string;
+  tier: NavTier;
+  glyph: string;
   /** 新客户端里的路径；没搬过来时为空 */
   path?: string;
   /** 旧客户端（8088）里的路径，用于「在旧版打开」 */
@@ -51,9 +41,9 @@ export const SCENES: NavScene[] = [
     icon: '🍚',
     path: '/eat',
     segments: [
-      { key: 'order', label: '点菜', path: '/eat/order', ready: true },
-      { key: 'kitchen', label: '厨房', path: '/eat/kitchen', ready: true },
-      { key: 'recipes', label: '菜谱', path: '/eat/recipes', ready: true },
+      { key: 'order', tier: 'core', glyph: '点', label: '点菜', path: '/eat/order', ready: true },
+      { key: 'kitchen', tier: 'core', glyph: '厨', label: '厨房', path: '/eat/kitchen', ready: true },
+      { key: 'recipes', tier: 'shelf', glyph: '菜', label: '菜谱', path: '/eat/recipes', ready: true },
     ],
   },
   {
@@ -62,11 +52,11 @@ export const SCENES: NavScene[] = [
     icon: '📅',
     path: '/schedule',
     segments: [
-      { key: 'calendar', label: '日历', path: '/schedule/calendar', ready: true },
-      { key: 'tasks', label: '任务', path: '/schedule/tasks', ready: true },
-      { key: 'reminders', label: '提醒', path: '/schedule/reminders', ready: true },
-      { key: 'polls', label: '投票', path: '/schedule/polls', ready: true },
-      { key: 'notifications', label: '消息', path: '/schedule/notifications', ready: true },
+      { key: 'calendar', tier: 'core', glyph: '历', label: '日历', path: '/schedule/calendar', ready: true },
+      { key: 'tasks', tier: 'core', glyph: '待', label: '任务', path: '/schedule/tasks', ready: true },
+      { key: 'reminders', tier: 'shelf', glyph: '醒', label: '提醒', path: '/schedule/reminders', ready: true },
+      { key: 'polls', tier: 'shelf', glyph: '票', label: '投票', path: '/schedule/polls', ready: true },
+      { key: 'notifications', tier: 'core', glyph: '信', label: '消息', path: '/schedule/notifications', ready: true },
     ],
   },
   {
@@ -74,16 +64,16 @@ export const SCENES: NavScene[] = [
     label: '家里',
     icon: '🧰',
     path: '/house',
-    // 天天要看的（库存、购物）排前面，管理性质的（成员、备份）沉到后面
+    // 保留已有路径分组；购物在 core 与手机「吃饭」里呈现，不搬 URL。
     segments: [
-      { key: 'inventory', label: '库存', path: '/house/inventory', ready: true },
-      { key: 'shopping', label: '购物', path: '/house/shopping', ready: true },
-      { key: 'assets', label: '资产', path: '/house/assets', ready: true },
-      { key: 'finance', label: '财务', path: '/house/finance', ready: true, managerOnly: true },
-      { key: 'points', label: '积分', path: '/house/points', ready: true },
-      { key: 'guests', label: '访客', path: '/house/guests', ready: true },
-      { key: 'members', label: '成员', path: '/house/members', ready: true, managerOnly: true },
-      { key: 'backups', label: '备份', path: '/house/backups', ready: true, managerOnly: true },
+      { key: 'inventory', tier: 'shelf', glyph: '库', label: '库存', path: '/house/inventory', ready: true },
+      { key: 'shopping', tier: 'core', glyph: '购', label: '购物', path: '/house/shopping', ready: true },
+      { key: 'assets', tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
+      { key: 'finance', tier: 'shelf', glyph: '账', label: '财务', path: '/house/finance', ready: true, managerOnly: true },
+      { key: 'points', tier: 'shelf', glyph: '分', label: '积分', path: '/house/points', ready: true },
+      { key: 'guests', tier: 'shelf', glyph: '客', label: '访客', path: '/house/guests', ready: true },
+      { key: 'members', tier: 'settings', glyph: '员', label: '成员', path: '/house/members', ready: true, managerOnly: true },
+      { key: 'backups', tier: 'settings', glyph: '备', label: '备份', path: '/house/backups', ready: true, managerOnly: true },
     ],
   },
   {
@@ -92,44 +82,83 @@ export const SCENES: NavScene[] = [
     icon: '✨',
     path: '/life',
     segments: [
-      { key: 'media', label: '观影', path: '/life/media', ready: true },
-      { key: 'travel', label: '出行', path: '/life/travel', ready: true },
-      { key: 'memories', label: '回忆', path: '/life/memories', ready: true },
-      { key: 'knowledge', label: '知识库', path: '/life/knowledge', ready: true },
-      { key: 'activity', label: '家庭动态', path: '/life/activity', ready: true },
+      { key: 'media', tier: 'shelf', glyph: '影', label: '观影', path: '/life/media', ready: true },
+      { key: 'travel', tier: 'shelf', glyph: '行', label: '出行', path: '/life/travel', ready: true },
+      { key: 'memories', tier: 'shelf', glyph: '忆', label: '回忆', path: '/life/memories', ready: true },
+      { key: 'knowledge', tier: 'shelf', glyph: '知', label: '知识库', path: '/life/knowledge', ready: true },
+      { key: 'activity', tier: 'shelf', glyph: '动', label: '家庭动态', path: '/life/activity', ready: true },
     ],
   },
 ];
 
-/**
- * 不占底部标签、但要随手够得着的两个入口。
- * 「问问小管家」是工具不是分类，塞进任何一个场景都别扭，而且塞进去就等于降一级；
- * 「个人设置」是设置，按惯例挂在头像后面。手机放顶栏，桌面钉在侧栏搜索框下面。
- */
-export interface NavPinned {
-  key: string;
-  label: string;
+/** 历史独立入口：只保留注册信息，不再永久置顶；用户置顶由 F4 接线。 */
+export interface NavPinned extends NavSegment {
   icon: string;
   path: string;
 }
 
 export const PINNED: NavPinned[] = [
-  { key: 'assistant', label: '问问小管家', icon: '💬', path: '/me/assistant' },
-  { key: 'profile', label: '个人设置', icon: '⚙️', path: '/me/profile' },
+  { key: 'assistant', label: '问问小管家', tier: 'shelf', glyph: '问', icon: '💬', path: '/me/assistant', ready: true },
+  { key: 'profile', label: '个人设置', tier: 'settings', glyph: '我', icon: '⚙️', path: '/me/profile', ready: true },
 ];
 
-/** 手机底部标签的顺序：左二 · 中间那个大的 · 右二。中间放最常开的「今天」。 */
-export const MOBILE_TAB_KEYS = ['eat', 'schedule', 'today', 'house', 'life'] as const;
-export const CENTER_TAB_KEY = 'today';
+export const TODAY: NavSegment = {
+  key: 'today', label: '今天', tier: 'core', glyph: '今', path: '/', ready: true,
+};
+const CORE_KEYS = ['today', 'order', 'kitchen', 'shopping', 'calendar', 'tasks', 'notifications'];
+
+export function allSegments() {
+  return [TODAY, ...SCENES.flatMap((scene) => scene.segments), ...PINNED];
+}
+
+function allowed(segment: NavSegment, member: NavMember) {
+  return !segment.managerOnly || member?.role === 'owner' || member?.role === 'admin';
+}
+
+export function coreSegments() {
+  const segments = allSegments();
+  return CORE_KEYS.map((key) => segments.find((segment) => segment.key === key)!);
+}
+
+export function shelfSegments(member: NavMember) {
+  return allSegments().filter((segment) => segment.tier === 'shelf' && allowed(segment, member));
+}
+
+export function settingsSegments(member: NavMember) {
+  return allSegments().filter((segment) => segment.tier === 'settings' && allowed(segment, member));
+}
+
+export function matchesPath(pathname: string, path: string) {
+  return pathname === path || (path !== '/' && pathname.startsWith(path + '/'));
+}
+
+/** 购物路径留在 /house 下，但交互上属于「吃饭」；只展示三项 core。 */
+export function mobileTabs(): NavScene[] {
+  const core = coreSegments();
+  const pick = (keys: string[]) => keys.map((key) => core.find((segment) => segment.key === key)!);
+  return [
+    sceneByKey('today'),
+    { ...sceneByKey('eat'), segments: pick(['order', 'kitchen', 'shopping']) },
+    { ...sceneByKey('schedule'), segments: pick(['calendar', 'tasks', 'notifications']) },
+    { key: 'home', label: '家里', icon: '🧰', path: '/home', segments: [] },
+  ];
+}
+
+export function mobileTabOf(pathname: string) {
+  if (pathname === '/') return 'today';
+  const tab = mobileTabs().find((one) =>
+    one.segments.some((segment) => segment.path && matchesPath(pathname, segment.path)),
+  );
+  if (tab) return tab.key;
+  // 个人页不是「家里」的下级，不借点亮另一个 tab 冒充当前位置。
+  if (matchesPath(pathname, '/me/profile')) return undefined;
+  return 'home';
+}
 
 export function sceneByKey(key: string) {
   const scene = SCENES.find((one) => one.key === key);
   if (!scene) throw new Error(`没有这个场景：${key}`);
   return scene;
-}
-
-export function mobileTabs() {
-  return MOBILE_TAB_KEYS.map((key) => sceneByKey(key));
 }
 
 /** 场景落地时该去哪个分段：优先第一个搬过来的，全没搬就去第一个。 */
