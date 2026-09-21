@@ -357,7 +357,9 @@ try {
 
   console.log('2. 维护计划、提醒与并发幂等');
   const performedAt = new Date(Date.now() - 60_000);
-  const performedDate = dateOnly(performedAt);
+  const performedDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(performedAt);
   const dueDate = performedDate;
   const plan = await request(
     `/assets/${asset.data.id}/maintenance-plans`,
@@ -547,6 +549,7 @@ try {
       new Set(recordIds).size === 1 &&
       completions.filter((response) => response.data.alreadyCompleted).length === 1 &&
       completions[0].data.plan.nextDueDate === addUtcDays(performedDate, 30) &&
+      completions[0].data.record.performedOn === performedDate &&
       completions.every((response) => response.data.transactions.length === 1) &&
       Number(completions[0].data.transactions[0].quantityAfter) === 0,
     '并发完成维护只追加一条记录、整组扣库一次并推进周期',

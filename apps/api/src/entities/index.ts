@@ -3844,6 +3844,9 @@ export class MaintenanceRecord {
   @Column({ type: 'timestamptz' })
   performedAt: Date;
 
+  @Column({ type: 'date' })
+  performedOn: string;
+
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
   cost: string | null;
 

@@ -117,7 +117,7 @@ export function useCompleteMaintenance() {
   return useAssetMutation<
     {
       planId: string;
-      performedAt: string;
+      performedOn: string;
       cost: number | null;
       note: string | null;
       consumeInventory: boolean;

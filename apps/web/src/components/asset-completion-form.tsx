@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useHouseholdToday } from '../lib/use-household-today';
 import type { MaintenancePlan } from '@family/contracts';
 import {
   assetDateLabel,
@@ -32,7 +33,8 @@ export function CompletionForm({
   const complete = useCompleteMaintenance();
   const addShopping = useAddMaintenanceShoppingItems();
 
-  const [performedOn, setPerformedOn] = useState(todayISO());
+  const householdToday = useHouseholdToday();
+  const [performedOn, setPerformedOn] = useState(householdToday);
   const [shoppingDate, setShoppingDate] = useState(todayISO());
   const [mode, setMode] = useState<'skip' | 'consume'>('skip');
   const [cost, setCost] = useState('');
@@ -64,8 +66,7 @@ export function CompletionForm({
       {
         assetId,
         planId: plan.id,
-        // 锚在当天中午再转 UTC：直接用 00:00 会在东八区变成前一天
-        performedAt: new Date(`${performedOn}T12:00:00`).toISOString(),
+        performedOn,
         cost: price,
         note: note.trim() || null,
         consumeInventory: mode === 'consume',

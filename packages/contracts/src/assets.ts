@@ -175,6 +175,7 @@ export const maintenanceRecordRecordSchema = z.object({
   performedById: uuid,
   performedBy: memberSchema,
   performedAt: isoDateTime,
+  performedOn: dateOnly,
   cost: numericString.nullable(),
   note: z.string().nullable(),
   idempotencyKey: z.string(),
@@ -298,6 +299,7 @@ export const updateMaintenancePlanBody = createMaintenancePlanBody
 
 export const completeMaintenanceBody = z.object({
   performedAt: isoDateOrDateTime.optional(),
+  performedOn: dateOnly.optional(),
   cost: money.nullish(),
   note: z.string().max(1000).nullish(),
   consumeInventory: z.boolean().optional(),

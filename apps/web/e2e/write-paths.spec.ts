@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { addDays, householdToday } from '@family/shared';
 import { apiClient, isoDate, stamp } from './helpers';
 
 /**
@@ -701,8 +702,8 @@ test('资产维护：排计划、关联耗材、完成一次、加条资料再�
     await planCard.getByRole('button', { name: '完成维护' }).click();
     const completion = page.getByRole('dialog', { name: '确认完成维护' });
     await expect(completion.getByRole('article', { name: supplyName })).toContainText('够扣');
-    // 表单按所选日期中午提交；显式选过去日期，避免凌晨执行时变成未来时间。
-    await completion.getByLabel('实际完成日期').fill(isoDate(-1));
+    // 保持默认的家庭「今天」；不再为了绕开时钟竞态手工填昨天。
+    await expect(completion.getByLabel('实际完成日期')).toHaveValue(householdToday('Asia/Shanghai'));
     await completion.getByRole('tab', { name: '顺便扣库存' }).click();
     const completed = waitFor(page, 'POST', /\/maintenance-plans\/[^/]+\/complete$/);
     await completion.getByRole('button', { name: /确认完成、扣库并推进日期/ }).click();
@@ -1276,3 +1277,43 @@ test('观影设置：改媒体服务地址和搜索数据源，再恢复服务�
     await api.delete('/media/metadata-sources/douban').catch(() => undefined);
   }
 });
+
+// 隔离测试库里的 x-test-clock 仅在 NODE_ENV=test 生效；页面时间使用 Playwright 时钟。
+for (const time of ['07:00', '23:30']) {
+  test(`资产维护：家庭 ${time} 用默认今天完成，明天被拒`, async ({ page, request }) => {
+    const api = apiClient(request);
+    const today = householdToday('Asia/Shanghai');
+    const frozenNow = `${today}T${time}:00+08:00`;
+    await page.clock.install({ time: new Date(frozenNow) });
+    const asset = await api.post<{ id: string }>('/assets', {
+      name: stamp('日期边界设备'), category: 'appliance',
+    });
+    try {
+      const plan = await api.post<{ id: string }>(`/assets/${asset.id}/maintenance-plans`, {
+        title: stamp('日期边界计划'), frequencyDays: 30, nextDueDate: today,
+      });
+      await page.route(/\/maintenance-plans\/[^/]+\/complete$/, (route) =>
+        route.continue({ headers: { ...route.request().headers(), 'x-test-clock': frozenNow } }));
+      await page.goto(`/house/assets/${asset.id}`);
+      const card = page.getByRole('button', { name: '完成维护' }).first();
+      await card.click();
+      let dialog = page.getByRole('dialog', { name: '确认完成维护' });
+      await expect(dialog.getByLabel('实际完成日期')).toHaveValue(today);
+      await dialog.getByLabel('实际完成日期').fill(addDays(today, 1));
+      const rejected = waitFor(page, 'POST', /\/maintenance-plans\/[^/]+\/complete$/);
+      await dialog.getByRole('button', { name: /确认完成/ }).click();
+      expect((await rejected).status()).toBe(400);
+      await dialog.getByRole('button', { name: '关闭' }).click();
+      await card.click();
+      dialog = page.getByRole('dialog', { name: '确认完成维护' });
+      await expect(dialog.getByLabel('实际完成日期')).toHaveValue(today);
+      const accepted = waitFor(page, 'POST', /\/maintenance-plans\/[^/]+\/complete$/);
+      await dialog.getByRole('button', { name: /确认完成/ }).click();
+      expect((await accepted).status()).toBe(201);
+      const details = await api.get<{ maintenanceRecords: { planId: string; performedOn: string }[] }>(`/assets/${asset.id}`);
+      expect(details.maintenanceRecords.some((item) => item.planId === plan.id && item.performedOn === today)).toBe(true);
+    } finally {
+      await api.patch(`/assets/${asset.id}`, { status: 'retired' });
+    }
+  });
+}
