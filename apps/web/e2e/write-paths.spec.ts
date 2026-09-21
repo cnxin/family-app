@@ -468,9 +468,7 @@ test('外部渠道：新增、改接收范围、发测试、删除', async ({ pa
   await expect(card).toBeHidden();
 });
 
-test('小管家记忆：记一条、确认、改内容、忘掉', async ({ page, isMobile }) => {
-  // 只在一个视口跑：同一个人同一类记忆只能有一条生效，两个 project 并排跑会互相 409
-  test.skip(isMobile, '记忆是按 (成员, 类别) 唯一的，跑一个视口就够');
+test('小管家记忆：记一条、确认、改内容、忘掉', async ({ page }) => {
   const content = stamp('记忆');
   await page.goto('/me/assistant/memories');
 
@@ -518,8 +516,7 @@ test('小管家记忆：记一条、确认、改内容、忘掉', async ({ page,
   await expect(edited).toBeHidden();
 });
 
-test('小管家设置：开关运行方式、签发并作废配对码', async ({ page, isMobile }) => {
-  test.skip(isMobile, '设置是全家共用的一份，跑一个视口就够，两个并排跑会互相版本冲突');
+test('小管家设置：开关运行方式、签发并作废配对码', async ({ page }) => {
   await page.goto('/me/assistant');
   await page.getByRole('button', { name: '设置', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '小管家设置' });
