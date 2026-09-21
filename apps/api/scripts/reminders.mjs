@@ -33,8 +33,8 @@ async function login(loginName) {
   return response.data;
 }
 
-async function waitForReminderStatus(token, reminderId, status) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+async function waitForReminderStatus(token, reminderId, status, attempts = 40) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const response = await request('/reminders?status=all', token);
     const reminder = response.data.find((item) => item.id === reminderId);
     if (reminder?.status === status) return reminder;
@@ -167,10 +167,11 @@ try {
     '/notifications?includeRead=true&module=reminder',
     dad.token,
   );
+  // 给请求创建和投递轮询留出足够余量，不再依赖亚秒级机器速度。
   const dueReminder = await request('/reminders', mom.token, 'POST', {
     sourceModule: 'calendar',
     sourceId: event.data.id,
-    remindAt: new Date(Date.now() + 700).toISOString(),
+    remindAt: new Date(Date.now() + 3_000).toISOString(),
     recipientIds: [dadMember.id, momMember.id],
   });
   assert(dueReminder.status === 201, '可以为多个家庭成员设置近期提醒');
@@ -206,11 +207,12 @@ try {
   );
   assert(editSent.status === 409, '已发送提醒保持不可变');
 
+  // 删除来源必须发生在投递前；十秒余量避免负载稍高时与 worker 竞速。
   const invalidated = await request('/reminders', mom.token, 'POST', {
     sourceModule: 'task',
     sourceId: task.data.id,
     occurrenceDate: TEST_DATE,
-    remindAt: new Date(Date.now() + 900).toISOString(),
+    remindAt: new Date(Date.now() + 10_000).toISOString(),
     recipientIds: [momMember.id],
   });
   created.reminderIds.push(invalidated.data.id);
@@ -219,6 +221,7 @@ try {
     mom.token,
     invalidated.data.id,
     'cancelled',
+    140, // 来源失效由到期轮询处理；十秒裕量外再等至少四秒。
   );
   assert(
     autoCancelled.cancelReason === 'source_unavailable',
