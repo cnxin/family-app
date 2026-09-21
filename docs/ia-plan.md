@@ -380,7 +380,7 @@
 | F1 导航分层 | ☑ | `f5e096f` · `feat(web): 导航分层，常驻项收敛到七个` | 导航分层、桌面七项 / 手机四项、今天头像及路由占位完成；typecheck / lint 通过，全量新端浏览器验收 139 passed / 5 skipped，四图已人工复看，已 push，CI `35504482867` 四项全绿；详见上方 F1 备注，未开始 F2。 |
 | F2 家里页 | ☑ | `bd4b7d7` · `feat(web): 家里页，低频功能的启动台` | 启动台、缓存状态、角色过滤预取及旧根落点修正完成；typecheck / lint 通过（API 43 条既有 warning），全量新端 157 passed / 5 skipped / 0 failed，四图已复看；已 push，CI `35520971609` 第 2 次四项全绿（首跑旧端任务备注定位器匹配到日历缓存页与任务页两处，未改代码重跑通过）；详见 F2 备注，未开始 F3。 |
 | F3 模块状态端点 | ☑ | `9af1821` · `feat(api): 模块状态端点，支撑空域隐身` | 14 key 及两个端点完成；typecheck / lint（43 条既有 warning）、全量 API、新端 157 passed / 5 skipped 通过，277/277 契约；隔离库 up → down → up 与 schema drift 通过，仅 API / contracts / docs；已 push，CI `35525677173` 首跑四项全绿；回填提交 `a62595c` 的 CI `35550675759` 首跑旧 `agent.mjs:156` 问答消息断言失败，未改代码重跑 API 后全绿。2026-09-21 已定位并独立修复：detail 原为 messages/runs 并行读，回答与 completed 原不在同一事务；`97c30e4` 改为事务写入、先 runs 后 messages，原用例循环 30/30 及全量 API 通过，CI `35555080712` 首跑四项全绿。媒体不计部署默认源；manage_integrations 语义略偏，仅影响显示，暂不新增 capability。 |
-| F4 隐身 / 开启 / 置顶 | ☑ | `feat(web): 空域隐身、手动开启与个人置顶`（哈希 / CI 推送后回填） | 外壳级模块缓存、失败放行、开启 / 收起 / 撤销及每人本机 4 项置顶完成；逐域失效核对见 F4 表。typecheck / lint 通过（43 条既有 warning），全量新端 179 passed / 5 skipped / 0 failed；四张亮暗截图已逐张复看，无白屏、溢出或撞色。仅 apps/web / docs；F4.5 只登记，未开始 F5。 |
+| F4 隐身 / 开启 / 置顶 | ☑ | `82827a5` · `feat(web): 空域隐身、手动开启与个人置顶` | 外壳级模块缓存、失败放行、开启 / 收起 / 撤销及每人本机 4 项置顶完成；逐域失效核对见 F4 表。typecheck / lint 通过（43 条既有 warning），全量新端 179 passed / 5 skipped / 0 failed；四张亮暗截图已逐张复看，无白屏、溢出或撞色。仅 apps/web / docs；已 push，CI `35556935338` 首跑四项全绿，无未改代码重跑。F4.5 只登记，未开始 F5。 |
 | F4.5 时区与日期口径盘点 | ☐ | | 仅登记，待 F4 后盘点与用户确认；本轮不执行。 |
 | F5 需要留意 | ☐ | | |
 | F6 ⌘K 动作 | ☐ | | |
