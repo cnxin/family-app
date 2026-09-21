@@ -64,7 +64,7 @@ import {
 import { InventoryModule } from '../inventory/inventory.module';
 import { InventoryTransactionsService } from '../inventory/inventory-transactions.service';
 import { PRIVATE_ASSET_UPLOAD_DIR, UPLOAD_DIR } from '../upload/upload.module';
-import { addDays, compare, householdToday, isUniqueViolation, todayInShanghai } from '@family/shared';
+import { addDays, compare, householdToday, isUniqueViolation } from '@family/shared';
 
 const ASSET_CATEGORIES: AssetCategory[] = [
   'appliance',
@@ -697,7 +697,8 @@ export class AssetsService {
     dto: RenewSubscriptionDto,
     user: JwtUser,
   ) {
-    const renewedOn = dateOnly(dto.renewedOn ?? todayInShanghai(), '续费完成日期')!;
+    const timezone = (await this.dataSource.getRepository(Household).findOneByOrFail({ id: user.householdId })).timezone;
+    const renewedOn = dateOnly(dto.renewedOn ?? householdToday(timezone, this.clock.now()), '续费完成日期')!;
     await this.dataSource.transaction(async (manager) => {
       const asset = await this.lockAsset(id, user.householdId, manager);
       if (asset.category !== 'subscription' || asset.status !== 'active') {

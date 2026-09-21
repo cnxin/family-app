@@ -1,3 +1,6 @@
+import { householdToday, monthRange } from '@family/shared';
+import { Clock } from '../common/clock';
+import { Household } from '../entities';
 import {
   BadRequestException,
   Body,
@@ -287,25 +290,6 @@ function normalized(value?: string | null) {
   return value?.trim() || null;
 }
 
-function currentMonth() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-  }).format(new Date());
-}
-
-function monthRange(month: string) {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-    throw new BadRequestException('月份必须使用 YYYY-MM 格式');
-  }
-  const [year, monthNumber] = month.split('-').map(Number);
-  const next = monthNumber === 12
-    ? `${year + 1}-01-01`
-    : `${year}-${String(monthNumber + 1).padStart(2, '0')}-01`;
-  return { start: `${month}-01`, end: next };
-}
-
 function assertDate(value: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
@@ -325,6 +309,7 @@ export class FinanceService {
     @InjectRepository(FinanceBudget)
     private readonly budgets: Repository<FinanceBudget>,
     private readonly dataSource: DataSource,
+    private readonly clock: Clock,
   ) {}
 
   async listAccounts(user: JwtUser, includeInactive = false) {
@@ -605,12 +590,7 @@ export class FinanceService {
         currency: 'CNY',
         title: `撤销：${original.title}`.slice(0, 120),
         note: normalized(dto.note),
-        occurredOn: new Intl.DateTimeFormat('en-CA', {
-          timeZone: 'Asia/Shanghai',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }).format(new Date()),
+        occurredOn: await this.today(user.householdId),
         categoryId: original.categoryId,
         actorId: user.memberId,
         actorName: user.name,
@@ -639,8 +619,13 @@ export class FinanceService {
     });
   }
 
+  private async today(householdId: string): Promise<string> {
+    const timezone = (await this.dataSource.getRepository(Household).findOneByOrFail({ id: householdId })).timezone;
+    return householdToday(timezone, this.clock.now());
+  }
+
   async listTransactions(query: FinanceTransactionQueryDto, user: JwtUser) {
-    const month = query.month ?? currentMonth();
+    const month = (query.month ?? (await this.today(user.householdId)).slice(0, 7));
     const { start, end } = monthRange(month);
     if (query.accountId) await this.requireAccount(query.accountId, user.householdId, this.dataSource.manager, true);
     const builder = this.transactions
@@ -661,7 +646,7 @@ export class FinanceService {
   }
 
   async summary(monthValue: string | undefined, user: JwtUser) {
-    const month = monthValue ?? currentMonth();
+    const month = (monthValue ?? (await this.today(user.householdId)).slice(0, 7));
     const { start, end } = monthRange(month);
     const [accounts, categories, budgets, spendingRows, totalsRows] = await Promise.all([
       this.listAccounts(user, true),

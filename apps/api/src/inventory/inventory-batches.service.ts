@@ -1,3 +1,4 @@
+import { Clock } from '../common/clock';
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
@@ -9,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import {
+  Household,
   InventoryBatch,
   InventoryBatchMovement,
   InventoryBatchMovementSourceType,
@@ -16,7 +18,7 @@ import {
   InventoryItem,
   InventoryTransaction,
 } from '../entities';
-import { addDays, daysBetween, todayInShanghai } from '@family/shared';
+import { addDays, diffDays, householdToday, todayInShanghai } from '@family/shared';
 
 const MAX_QUANTITY = 99_999_999.99;
 
@@ -62,9 +64,9 @@ function validDate(value: string | null | undefined, label: string) {
   return value;
 }
 
-function normalizeDates(input: BatchDatesInput) {
+function normalizeDates(input: BatchDatesInput, today: string) {
   const dates = {
-    receivedOn: validDate(input.receivedOn, '入库日期') ?? todayInShanghai(),
+    receivedOn: validDate(input.receivedOn, '入库日期') ?? today,
     productionDate: validDate(input.productionDate, '生产日期'),
     expiresOn: validDate(input.expiresOn, '到期日期'),
     openedOn: validDate(input.openedOn, '开封日期'),
@@ -79,8 +81,7 @@ function normalizeDates(input: BatchDatesInput) {
   return dates;
 }
 
-function statusFor(batch: InventoryBatch, warningDays: number) {
-  const current = todayInShanghai();
+function statusFor(batch: InventoryBatch, warningDays: number, current: string) {
   if (Number(batch.quantity) <= 0) return 'consumed' as const;
   if (!batch.expiresOn) return 'undated' as const;
   if (batch.expiresOn < current) return 'expired' as const;
@@ -110,7 +111,13 @@ export class InventoryBatchesService {
     @InjectRepository(InventoryBatchMovement)
     private readonly movements: Repository<InventoryBatchMovement>,
     private readonly dataSource: DataSource,
+    private readonly clock: Clock,
   ) {}
+
+  private async today(householdId: string): Promise<string> {
+    const timezone = (await this.dataSource.getRepository(Household).findOneByOrFail({ id: householdId })).timezone;
+    return householdToday(timezone, this.clock.now());
+  }
 
   async list(
     householdId: string,
@@ -131,7 +138,8 @@ export class InventoryBatchesService {
       },
       order: { expiresOn: 'ASC', receivedOn: 'ASC', createdAt: 'ASC' },
     });
-    const presented = rows.map((batch) => this.present(batch, warningDays));
+    const today = await this.today(householdId);
+    const presented = rows.map((batch) => this.present(batch, warningDays, today));
     if (status === 'all') return presented;
     if (status === 'active') {
       return presented.filter((batch) => Number(batch.quantity) > 0);
@@ -152,10 +160,11 @@ export class InventoryBatchesService {
         batch,
       ]);
     }
+    const today = await this.today(householdId);
     return new Map(
       items.map((item) => [
         item.id,
-        this.summary(item, byItem.get(item.id) ?? [], warningDays),
+        this.summary(item, byItem.get(item.id) ?? [], warningDays, today),
       ]),
     );
   }
@@ -169,7 +178,7 @@ export class InventoryBatchesService {
     }
     const idempotencyKey = input.idempotencyKey.trim();
     if (!idempotencyKey) throw new BadRequestException('需要提供幂等键');
-    const dates = normalizeDates(input);
+    const dates = normalizeDates(input, await this.today(user.householdId));
     const id = await this.dataSource.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `inventory-batch-key:${user.householdId}:${idempotencyKey}`,
@@ -279,7 +288,7 @@ export class InventoryBatchesService {
         expiresOn:
           input.expiresOn === undefined ? batch.expiresOn : input.expiresOn,
         openedOn: input.openedOn === undefined ? batch.openedOn : input.openedOn,
-      });
+      }, await this.today(user.householdId));
       Object.assign(batch, dates);
       batch.version += 1;
       await manager.getRepository(InventoryBatch).save(batch);
@@ -304,7 +313,7 @@ export class InventoryBatchesService {
       sourceId: input.sourceId,
     });
     if (existing) return existing;
-    const dates = normalizeDates(input.dates);
+    const dates = normalizeDates(input.dates, await this.today(input.actor.householdId));
     const batch = await manager.getRepository(InventoryBatch).save(
       manager.getRepository(InventoryBatch).create({
         householdId: input.actor.householdId,
@@ -512,19 +521,20 @@ export class InventoryBatchesService {
   private async get(id: string, householdId: string) {
     const batch = await this.batches.findOneBy({ id, householdId });
     if (!batch) throw new NotFoundException('库存批次不存在');
-    return this.present(batch, 7);
+    return this.present(batch, 7, await this.today(householdId));
   }
 
   private summary(
     item: InventoryItem,
     batches: InventoryBatch[],
     warningDays: number,
+    today: string,
   ) {
     const active = batches.filter((batch) => Number(batch.quantity) > 0);
     const trackedQuantity = roundQuantity(
       active.reduce((sum, batch) => sum + Number(batch.quantity), 0),
     );
-    const statuses = active.map((batch) => statusFor(batch, warningDays));
+    const statuses = active.map((batch) => statusFor(batch, warningDays, today));
     return {
       trackedQuantity,
       untrackedQuantity: Math.max(
@@ -542,13 +552,13 @@ export class InventoryBatchesService {
     };
   }
 
-  private present(batch: InventoryBatch, warningDays: number) {
-    const status = statusFor(batch, warningDays);
+  private present(batch: InventoryBatch, warningDays: number, today: string) {
+    const status = statusFor(batch, warningDays, today);
     return {
       ...batch,
       status,
       daysRemaining: batch.expiresOn
-        ? daysBetween(todayInShanghai(), batch.expiresOn)
+        ? diffDays(today, batch.expiresOn)
         : null,
     };
   }
@@ -565,7 +575,7 @@ export class InventoryBatchesService {
       productionDate: batch.productionDate,
       expiresOn: batch.expiresOn,
       openedOn: batch.openedOn,
-      status: statusFor(batch, 7),
+      status: statusFor(batch, 7, todayInShanghai()),
       quantityBefore,
       quantity,
       quantityAfter,

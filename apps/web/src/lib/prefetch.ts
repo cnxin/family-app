@@ -139,8 +139,8 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
   },
 };
 
-export function prefetchRoute(client: QueryClient, path: string, member?: AuthSession['member']) {
-  if (path === '/home' && member) prefetchAttention(client, member);
+export function prefetchRoute(client: QueryClient, path: string, session?: AuthSession | null) {
+  if (path === '/home' && session) prefetchAttention(client, session);
   PREFETCH[path]?.(client);
 }
 

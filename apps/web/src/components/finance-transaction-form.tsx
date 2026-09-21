@@ -1,10 +1,9 @@
+import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
 import type { FinanceAccount, FinanceCategory } from '@family/contracts';
 import {
-  financeToday,
   isMoneyInput,
   monthLabel,
-  monthNow,
   useCreateFinanceTransaction,
   yuan,
 } from '../lib/queries';
@@ -29,6 +28,7 @@ export function TransactionForm({
   categories: FinanceCategory[];
   onClose: () => void;
 }) {
+  const today = useHouseholdToday();
   const create = useCreateFinanceTransaction();
   const usable = accounts.filter((one) => one.isActive);
 
@@ -43,7 +43,7 @@ export function TransactionForm({
   // 翻到往月记账时默认落在那个月的 1 号：旧客户端一律默认今天，
   // 结果人在 7 月的页面上记完，账却记到了 9 月，看起来像是没保存成功。
   const [occurredOn, setOccurredOn] = useState(
-    month === monthNow() ? financeToday() : `${month}-01`,
+    month === today.slice(0, 7) ? today : `${month}-01`,
   );
   const [note, setNote] = useState('');
   const [message, setMessage] = useState<string | null>(null);

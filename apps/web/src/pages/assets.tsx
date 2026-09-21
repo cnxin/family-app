@@ -1,11 +1,10 @@
+import { addDays, diffDays } from '@family/shared';
+import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
 import type { AssetCategory, HomeAsset } from '@family/contracts';
 import {
   ASSET_CATEGORY_LABELS,
   assetDateLabel,
-  daysUntil,
-  todayISO,
-  shiftDays,
   useAssets,
 } from '../lib/queries';
 import { AssetForm } from '../components/asset-form';
@@ -27,8 +26,8 @@ const CATEGORY_EMOJI: Record<AssetCategory, string> = {
 };
 
 /** 到期短语：逾期最响，其次今天，再往后按天数说。 */
-export function dueLabel(date: string) {
-  const days = daysUntil(date);
+export function dueLabel(date: string, today: string) {
+  const days = diffDays(today, date);
   if (days < 0) return { text: `逾期 ${-days} 天`, urgent: true };
   if (days === 0) return { text: '今天到期', urgent: true };
   if (days <= 30) return { text: `${days} 天后`, urgent: false };
@@ -46,15 +45,15 @@ export function nextPlan(asset: HomeAsset) {
     );
 }
 
-function AssetCard({ asset }: { asset: HomeAsset }) {
+function AssetCard({ asset, today }: { asset: HomeAsset; today: string }) {
   const plan = nextPlan(asset);
   const status =
     asset.category === 'subscription'
       ? asset.renewsOn
-        ? { text: `下次续费 · ${dueLabel(asset.renewsOn).text}`, urgent: daysUntil(asset.renewsOn) <= 14 }
+        ? { text: `下次续费 · ${dueLabel(asset.renewsOn, today).text}`, urgent: diffDays(today, asset.renewsOn) <= 14 }
         : { text: '还没设续费日期', urgent: false }
       : plan
-        ? { text: `${plan.title} · ${dueLabel(plan.nextDueDate).text}`, urgent: dueLabel(plan.nextDueDate).urgent }
+        ? { text: `${plan.title} · ${dueLabel(plan.nextDueDate, today).text}`, urgent: dueLabel(plan.nextDueDate, today).urgent }
         : { text: '暂无维护计划', urgent: false };
 
   return (
@@ -113,7 +112,8 @@ export function AssetsPage() {
 
   // 临近事项：30 天内（含逾期）的维护，和 14 天内要续的订阅——后者逾期也要看见，
   // 旧页面把逾期的续费算漏了，续晚了反而不提醒说不过去。
-  const horizon = shiftDays(todayISO(), 30);
+  const today = useHouseholdToday();
+  const horizon = addDays(today, 30);
   const duePlans = active.flatMap((asset) =>
     asset.maintenancePlans
       .filter((plan) => plan.isEnabled && plan.nextDueDate <= horizon)
@@ -121,7 +121,7 @@ export function AssetsPage() {
   );
   const dueRenewals = active
     .filter((asset) => asset.category === 'subscription' && asset.renewsOn)
-    .filter((asset) => daysUntil(asset.renewsOn!) <= 14)
+    .filter((asset) => diffDays(today, asset.renewsOn!) <= 14)
     .map((asset) => ({ asset, title: '续费', date: asset.renewsOn! }));
   const upcoming = [...duePlans, ...dueRenewals].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -179,7 +179,7 @@ export function AssetsPage() {
         ) : (
           <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map((asset) => (
-              <AssetCard key={asset.id} asset={asset} />
+              <AssetCard key={asset.id} asset={asset} today={today} />
             ))}
           </div>
         )}
@@ -193,7 +193,7 @@ export function AssetsPage() {
             </p>
           ) : (
             upcoming.map((one, index) => {
-              const due = dueLabel(one.date);
+              const due = dueLabel(one.date, today);
               return (
                 <SoftLink
                   key={`${one.asset.id}-${one.title}-${one.date}`}

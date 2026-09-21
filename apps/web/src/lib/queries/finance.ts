@@ -43,24 +43,6 @@ export function isMoneyInput(raw: string) {
   return /^\d+(\.\d{1,2})?$/.test(raw.trim());
 }
 
-/** 家里的账按上海时区记，和后端 currentMonth() 一致，不跟着浏览器所在时区飘。 */
-function shanghai(date = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-}
-
-export function financeToday() {
-  return shanghai();
-}
-
-export function monthNow() {
-  return shanghai().slice(0, 7);
-}
-
 export function shiftMonth(month: string, delta: number) {
   const [year, index] = month.split('-').map(Number);
   const moved = new Date(Date.UTC(year, index - 1 + delta, 1));

@@ -18,12 +18,13 @@ function assert(condition, message) {
   console.log(`  ✓ ${message}`);
 }
 
-async function request(path, token, method = 'GET', body) {
+async function request(path, token, method = 'GET', body, extraHeaders = {}) {
   const response = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...extraHeaders,
     },
     body: body == null ? undefined : JSON.stringify(body),
   });
@@ -94,6 +95,22 @@ const other = {
 try {
   const owner = await login('爸爸');
   const member = await login('妈妈');
+
+  // UTC 和上海已进入十月，洛杉矶仍在九月；默认月界须随家庭而非服务器走。
+  const householdId = owner.member.householdId;
+  const originalTimezone = (await db.query('SELECT timezone FROM households WHERE id = $1', [householdId])).rows[0].timezone;
+  await db.query('UPDATE households SET timezone = $1 WHERE id = $2', ['America/Los_Angeles', householdId]);
+  try {
+    const frozen = { 'x-test-clock': '2026-10-01T06:30:00Z' };
+    const summaryAtBoundary = await request('/finance/summary', owner.accessToken, 'GET', undefined, frozen);
+    assert(summaryAtBoundary.status === 200 && summaryAtBoundary.data.month === '2026-09',
+      '财务默认摘要按家庭时区划定月份，而非 UTC 或固定上海');
+    const transactionsAtBoundary = await request('/finance/transactions', owner.accessToken, 'GET', undefined, frozen);
+    assert(transactionsAtBoundary.status === 200 && Array.isArray(transactionsAtBoundary.data),
+      '财务默认流水在非上海家庭月界可读取');
+  } finally {
+    await db.query('UPDATE households SET timezone = $1 WHERE id = $2', [originalTimezone, householdId]);
+  }
 
   console.log('1. 默认分类、账户权限和家庭范围');
   const categories = await request('/finance/categories', member.accessToken);

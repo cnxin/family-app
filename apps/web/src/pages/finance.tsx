@@ -1,7 +1,7 @@
+import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
 import {
   monthLabel,
-  monthNow,
   shiftMonth,
   useFinanceAccounts,
   useFinanceCategories,
@@ -32,7 +32,9 @@ export function FinancePage() {
   const { session } = useAuth();
   const canManage = session?.member.role !== 'member';
 
-  const [month, setMonth] = useState(monthNow());
+  const today = useHouseholdToday();
+  const currentMonth = today.slice(0, 7);
+  const [month, setMonth] = useState(currentMonth);
   const [view, setView] = useState<View>('overview');
   const [recording, setRecording] = useState(false);
 
@@ -75,7 +77,7 @@ export function FinancePage() {
               variant="ghost"
               className="h-8 px-2 text-[13px]"
               aria-label="下个月"
-              disabled={month >= monthNow()}
+              disabled={month >= currentMonth}
               onClick={() => setMonth(shiftMonth(month, 1))}
             >
               ›

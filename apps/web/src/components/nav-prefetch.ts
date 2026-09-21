@@ -9,13 +9,13 @@ export function usePrefetch() {
   const { session } = useAuth();
   return {
     bind: (path: string) => ({
-      onPointerEnter: () => prefetchRoute(client, path, session?.member),
-      onPointerDown: () => prefetchRoute(client, path, session?.member),
+      onPointerEnter: () => prefetchRoute(client, path, session),
+      onPointerDown: () => prefetchRoute(client, path, session),
     }),
     /** 弹出面板时把这一组都预取掉——面板停留的那一两秒正好用来拉数据。 */
     all: (segments: NavSegment[]) => {
       for (const segment of segments) {
-        if (segment.ready && segment.path) prefetchRoute(client, segment.path, session?.member);
+        if (segment.ready && segment.path) prefetchRoute(client, segment.path, session);
       }
     },
   };

@@ -1,3 +1,4 @@
+import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
 import type { HomeAsset, MaintenanceConsumable, MaintenancePlan } from '@family/contracts';
 import {
@@ -60,6 +61,7 @@ function ConsumableRow({
 }
 
 export function AssetPlansPanel({ asset }: { asset: HomeAsset }) {
+  const today = useHouseholdToday();
   const update = useUpdateMaintenancePlan();
   const removeConsumable = useRemoveMaintenanceConsumable();
   const [adding, setAdding] = useState(false);
@@ -99,7 +101,7 @@ export function AssetPlansPanel({ asset }: { asset: HomeAsset }) {
         <EmptyState emoji="🔧" title="还没有维护计划" hint="定期要做的保养可以排进来" />
       ) : (
         asset.maintenancePlans.map((plan, index) => {
-          const due = dueLabel(plan.nextDueDate);
+          const due = dueLabel(plan.nextDueDate, today);
           return (
             <article
               key={plan.id}
