@@ -24,6 +24,7 @@ import { Between, Repository } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   CalendarEvent,
+  Household,
   HouseholdMedia,
   MaintenancePlan,
   MealType,
@@ -32,7 +33,7 @@ import {
   Visit,
 } from '../entities';
 import { TasksModule, TasksService } from '../tasks/tasks.module';
-import { parseDateOnly } from '@family/shared';
+import { addDays, householdToday, parseDateOnly, startOfHouseholdDay } from '@family/shared';
 
 class CalendarRangeDto {
   @IsISO8601({ strict: true })
@@ -155,6 +156,7 @@ export class CalendarService {
     @InjectRepository(HouseholdMedia)
     private readonly householdMedia: Repository<HouseholdMedia>,
     @InjectRepository(Visit) private readonly visits: Repository<Visit>,
+    @InjectRepository(Household) private readonly households: Repository<Household>,
     @InjectRepository(MaintenancePlan)
     private readonly maintenancePlans: Repository<MaintenancePlan>,
     @InjectRepository(TravelPlan)
@@ -171,6 +173,10 @@ export class CalendarService {
     if ((endTime - startTime) / 86_400_000 > 370) {
       throw new BadRequestException('单次最多查询 371 天');
     }
+
+    const timezone = (await this.households.findOneByOrFail({ id: user.householdId })).timezone;
+    const visitStart = startOfHouseholdDay(timezone, start);
+    const visitEnd = new Date(startOfHouseholdDay(timezone, addDays(end, 1)).getTime() - 1);
 
     const [
       events,
@@ -225,7 +231,7 @@ export class CalendarService {
         where: {
           householdId: user.householdId,
           status: 'scheduled',
-          startsAt: Between(new Date(`${start}T00:00:00.000Z`), new Date(`${end}T23:59:59.999Z`)),
+          startsAt: Between(visitStart, visitEnd),
         },
         relations: { hostMember: true, guests: { guest: true } },
         order: { startsAt: 'ASC' },
@@ -335,7 +341,7 @@ export class CalendarService {
         id: `visit:${visit.id}`,
         sourceId: visit.id,
         module: 'guest' as const,
-        date: visit.startsAt.toISOString().slice(0, 10),
+        date: householdToday(timezone, visit.startsAt),
         startsAt: visit.startsAt.toISOString(),
         endsAt: visit.endsAt?.toISOString() ?? null,
         title: visit.title,
@@ -503,6 +509,7 @@ export class CalendarController {
       Menu,
       HouseholdMedia,
       Visit,
+      Household,
       MaintenancePlan,
       TravelPlan,
     ]),

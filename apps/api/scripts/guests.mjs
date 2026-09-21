@@ -100,8 +100,8 @@ assert(invalidVisit.status === 400, '来访计划拒绝倒置时间范围');
 
 const created = await request('/visits', adminToken, 'POST', {
   title: '访客验收晚餐',
-  startsAt: `${VISIT_DATE}T18:30:00.000Z`,
-  endsAt: `${VISIT_DATE}T21:00:00.000Z`,
+  startsAt: `${VISIT_DATE}T10:30:00.000Z`,
+  endsAt: `${VISIT_DATE}T13:00:00.000Z`,
   note: '请在门铃处确认',
   guestIds: [guest.id],
   guestWifiProfileId: wifiProfile.id,
@@ -130,6 +130,38 @@ assert(
   calendar.status === 200 && calendar.body.data.some((entry) => entry.module === 'guest' && entry.sourceId === visit.id),
   '统一日历聚合已安排的来访计划',
 );
+
+// 上海家庭 07:00 是前一个 UTC 日期的 23:00；来访归家庭日期，不归 UTC 前一天。
+const morningStartsAt = new Date(`${VISIT_DATE}T00:00:00.000Z`);
+morningStartsAt.setUTCHours(morningStartsAt.getUTCHours() - 1);
+const previousDate = morningStartsAt.toISOString().slice(0, 10);
+const morningVisit = await request('/visits', adminToken, 'POST', {
+  title: '清晨来访日界', startsAt: morningStartsAt.toISOString(), guestIds: [guest.id],
+});
+assert(morningVisit.status === 201, '清晨来访安排成功');
+const [onFamilyDay, onPreviousDay] = await Promise.all([
+  request(`/calendar?start=${VISIT_DATE}&end=${VISIT_DATE}`, adminToken),
+  request(`/calendar?start=${previousDate}&end=${previousDate}`, adminToken),
+]);
+assert(
+  onFamilyDay.body.data.some((row) => row.module === 'guest' && row.sourceId === morningVisit.body.data.id && row.date === VISIT_DATE) &&
+    !onPreviousDay.body.data.some((row) => row.module === 'guest' && row.sourceId === morningVisit.body.data.id),
+  '上海 07:00 的来访在当天日历可见，前一天日历不出现',
+);
+const morningInvite = await request(`/visits/${morningVisit.body.data.id}/invitations`, adminToken, 'POST', {
+  guestId: guest.id, expiresInHours: 24, allowsMealRequests: true,
+});
+assert(morningInvite.status === 201, '清晨来访邀请创建成功');
+const morningToken = morningInvite.body.data.invitationToken;
+const morningPreview = await request(`/guest-invitations/${morningToken}`, null);
+const morningOptions = await request(`/guest-invitations/${morningToken}/meal-options`, null);
+assert(
+  morningPreview.body.data.mealRequestDates.includes(VISIT_DATE) &&
+    !morningPreview.body.data.mealRequestDates.includes(previousDate) &&
+    morningOptions.body.data.some((menu) => menu.mealDate === VISIT_DATE && menu.items.some((item) => item.id === visitMenuItem.id)),
+  '上海 07:00 当天可点菜，不误归到前一天',
+);
+await request(`/visits/${morningVisit.body.data.id}`, adminToken, 'PATCH', { status: 'cancelled' });
 
 const moviePollCreated = await request('/polls', adminToken, 'POST', {
   title: '访客观影验收投票',
