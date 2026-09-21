@@ -37,14 +37,13 @@ export function useModules() {
     ...query,
     initialLoading: !query.isError && !states,
     state,
-    // 错误优先于旧缓存：即使缓存里 off，也必须放行。
+    // 本家庭的成功缓存优先（含 off）；只有没有可用缓存时才放行。
     visible: (key: string) => {
-      if (query.isError) return true;
       const entry = state(key);
       return !entry || entry.override === 'on' || (entry.override !== 'off' && entry.hasData);
     },
     // F5 只用主动 off 抑制卡片，不能拿 visible 代替。
-    explicitlyHidden: (key: string) => !query.isError && state(key)?.override === 'off',
+    explicitlyHidden: (key: string) => state(key)?.override === 'off',
   };
 }
 

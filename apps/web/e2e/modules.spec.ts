@@ -94,7 +94,7 @@ test('模块请求 500：全部 shelf 放行，不能把功能藏到还可以开
   await expect(page.getByRole('heading', { name: '还可以开启' })).toHaveCount(0);
 });
 
-test('首次等待用骨架；后台刷新保留缓存；失败忽略旧 off 全部放行', async ({ page, request }) => {
+test('首次等待用骨架；后台刷新失败仍沿用成功缓存中的 off', async ({ page, request }) => {
   await emptyModuleHousehold(page, request);
   let release!: () => void;
   let barrier = new Promise<void>((resolve) => { release = resolve; });
@@ -109,15 +109,21 @@ test('首次等待用骨架；后台刷新保留缓存；失败忽略旧 off 全
   await expect(page.locator('[data-home-available]')).toHaveCount(0);
   release();
   await expect(active(page, 'activity')).toBeVisible();
-  // 先存下 off，再让后续后台刷新失败，验证不能继续依旧缓存隐藏它。
+  // 先成功缓存 off，再让后续后台刷新失败，验证它保持收起。
   await hide(page, 'activity', '家庭动态');
   await expect(available(page, 'activity')).toContainText('已收起');
   barrier = new Promise<void>((resolve) => { release = resolve; });
   await available(page, 'media').getByRole('button', { name: '开启', exact: true }).click();
   await expect(page.getByRole('status', { name: '正在加载家里的功能' })).toHaveCount(0);
   await expect(available(page, 'activity')).toContainText('已收起');
+  const failed = page.waitForResponse((response) => response.url().endsWith('/system/modules') && response.status() === 500);
   fail = true; release();
-  await expect(page.locator('[data-home-grid] a')).toHaveCount(14);
+  await failed;
+  // 等待此次刷新结束（mutation 的 onSuccess 会等待模块查询），不能只断言旧画面。
+  await expect(available(page, 'activity').getByRole('button', { name: '重新开启' })).toBeEnabled();
+  await expect(available(page, 'activity')).toContainText('已收起');
+  await expect(active(page, 'activity')).toHaveCount(0);
+  await expect(available(page, 'assets')).toBeVisible();
 });
 
 test('置顶最多四个、本机刷新保留、收起保留记录且重开恢复', async ({ page, request, isMobile }) => {
