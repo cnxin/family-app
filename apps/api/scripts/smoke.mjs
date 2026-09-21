@@ -22,10 +22,12 @@ function assert(cond, msg) {
   console.log(`  ✓ ${msg}`);
 }
 
-({ token } = await api('/auth/login', 'POST', {
+const session = await api('/auth/login', 'POST', {
   loginName: '爸爸',
   password: 'family1234',
-}));
+});
+({ token } = session);
+assert(session.householdTimezone === 'Asia/Shanghai', '登录会话附带家庭时区');
 const members = await api('/members');
 const mom = members.find((m) => m.name === '妈妈');
 

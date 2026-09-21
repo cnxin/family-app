@@ -231,6 +231,9 @@ importers:
       '@family/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@family/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@tanstack/react-query':
         specifier: ^5.90.2
         version: 5.101.4(react@19.2.3)

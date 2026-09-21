@@ -4,8 +4,17 @@ import { z } from 'zod';
 
 /** UUID 主键。 */
 export const uuid = z.uuid();
-/** YYYY-MM-DD。 */
-export const dateOnly = z.iso.date();
+/** 真实存在的纯日历日期；不代表 UTC 零点或任意时刻。 */
+export const PlainDate = z.iso.date().refine((value) => {
+  const [year, month, day] = value.split('-').map(Number);
+  const roundTrip = new Date(0);
+  roundTrip.setUTCFullYear(year, month - 1, day);
+  return roundTrip.getUTCFullYear() === year &&
+    roundTrip.getUTCMonth() === month - 1 && roundTrip.getUTCDate() === day;
+}, '不是有效的日历日期');
+export type PlainDate = z.infer<typeof PlainDate>;
+/** 保持原契约的 dateOnly 名称，升级为严格纯日期校验。 */
+export const dateOnly = PlainDate;
 /** ISO 8601 时间戳（API 序列化 Date 后的形态）。 */
 export const isoDateTime = z.iso.datetime({ offset: true });
 /** 可为 null 的 ISO 时间戳。 */

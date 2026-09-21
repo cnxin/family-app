@@ -620,6 +620,7 @@ class AuthService {
       refreshToken,
       account: accountProfile(account),
       member: memberProfile(member),
+      householdTimezone: (await this.households.findOneByOrFail({ id: member.householdId })).timezone,
     };
   }
 }

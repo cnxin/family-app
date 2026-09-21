@@ -62,3 +62,65 @@ export function daysBetween(start: string, end: string): number {
 export function dateString(value: Date | string | number): string {
   return new Date(value).toISOString().slice(0, 10);
 }
+
+/** 纯日期比较，不把日期投影为真实时刻。 */
+export function compare(left: string, right: string): -1 | 0 | 1 {
+  parseDateOnly(left, '日期');
+  parseDateOnly(right, '日期');
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** 两个纯日历日期之间的天数（end - start），跨夏令时仍按日历天计。 */
+export function diffDays(start: string, end: string): number {
+  parseDateOnly(start, '开始日期');
+  parseDateOnly(end, '结束日期');
+  return daysBetween(start, end);
+}
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function calendarFormatter(timezone: string): Intl.DateTimeFormat {
+  let formatter = formatters.get(timezone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    formatters.set(timezone, formatter);
+  }
+  return formatter;
+}
+
+/** 家庭所在地的日历今天，和执行进程、设备所在时区无关。 */
+export function householdToday(timezone: string, now: Date = new Date()): string {
+  return calendarFormatter(timezone).format(now);
+}
+
+/** 一个月的纯日期区间，[start, end)，右边界是下个月首日。 */
+export function monthRange(month: string): { start: string; end: string } {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new RangeError('月份必须使用 YYYY-MM 格式');
+  const start = `${month}-01`;
+  parseDateOnly(start, '月份');
+  const [year, index] = month.split('-').map(Number);
+  return {
+    start,
+    end: `${String(year + Math.floor(index / 12)).padStart(4, '0')}-${String((index % 12) + 1).padStart(2, '0')}-01`,
+  };
+}
+
+/** 家庭指定日开始的真实时刻。只用于日界查询 / 计时，不用于纯日期存储。 */
+export function startOfHouseholdDay(timezone: string, date: string): Date {
+  parseDateOnly(date, '日期');
+  const formatter = calendarFormatter(timezone); // 无效 IANA 时区在此抛 RangeError
+  const midnightUtc = Date.parse(`${date}T00:00:00.000Z`);
+  // IANA 偏移可到 +14/-12，夏令时可能恰在午夜跳变；二分找最早属于目标日的毫秒。
+  let low = midnightUtc - 2 * DAY_MS;
+  let high = midnightUtc + 2 * DAY_MS;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    if (formatter.format(new Date(middle)) < date) low = middle + 1;
+    else high = middle;
+  }
+  if (formatter.format(new Date(low)) !== date) {
+    throw new RangeError(`${timezone} 的 ${date} 不存在`);
+  }
+  return new Date(low);
+}

@@ -43,6 +43,7 @@ export const authSessionSchema = z.object({
   refreshToken: z.string(),
   account: accountProfileSchema,
   member: memberProfileSchema,
+  householdTimezone: z.string().min(1),
 });
 export type AuthSession = z.infer<typeof authSessionSchema>;
 

@@ -20,7 +20,7 @@ export async function emptyModuleHousehold(page: Page, request: APIRequestContex
   let fixture;
   try { fixture = await createModuleHousehold(db, role); } finally { await db.end(); }
   const session: AuthSession = {
-    token: fixture.token, accessToken: fixture.token, refreshToken: '',
+    token: fixture.token, accessToken: fixture.token, refreshToken: '', householdTimezone: 'Asia/Shanghai',
     account: { id: fixture.accountId, loginName: fixture.accountId, requiresPasswordSetup: false },
     member: { id: fixture.memberId, householdId: fixture.householdId, name: '模块测试成员', avatarEmoji: '家',
       role: role as AuthSession['member']['role'], prefersCooking: false, disabledAt: null, createdAt: new Date().toISOString() },

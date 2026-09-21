@@ -6,6 +6,7 @@ import { AssetsModule } from './assets/assets.module';
 import { AuthModule } from './auth/auth.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { databaseOptions } from './database/database.options';
+import { ClockModule } from './common/clock';
 import { DishesModule } from './dishes/dishes.module';
 import { GuestsModule } from './guests/guests.module';
 import { FinanceModule } from './finance/finance.module';
@@ -29,6 +30,7 @@ import { UploadModule } from './upload/upload.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot(databaseOptions()),
+    ClockModule,
     ActivitiesModule,
     AgentModule,
     AssetsModule,

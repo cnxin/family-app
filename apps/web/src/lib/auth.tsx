@@ -73,6 +73,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setAuthHandlers({ refresh: null, unauthorized: null });
   }, [apply, signOut]);
 
+  // 旧版缓存的会话不含家庭时区：沿现有续期接口补齐，不丢失登录态。
+  useEffect(() => {
+    if (!session || session.householdTimezone) return;
+    let active = true;
+    void api<AuthSession>('/auth/refresh', {
+      method: 'POST', auth: false, body: { refreshToken: session.refreshToken },
+    }).then((next) => { if (active) apply(next); }).catch(() => { /* 等待正常续期，旧会话不强制登出 */ });
+    return () => { active = false; };
+  }, [session, apply]);
+
   const value = useMemo<AuthValue>(
     () => ({
       session,

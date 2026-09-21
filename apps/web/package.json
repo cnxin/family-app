@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@family/contracts": "workspace:*",
+    "@family/shared": "workspace:*",
     "@tanstack/react-query": "^5.90.2",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
