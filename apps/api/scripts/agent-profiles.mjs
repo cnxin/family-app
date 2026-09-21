@@ -47,46 +47,20 @@ async function login(loginName) {
 async function runMigrationPhase() {
   await AppDataSource.initialize();
   try {
-    let latest = await AppDataSource.query(
-      `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+    // 按已应用的迁移顺序定位专项目标；新增迁移无需再更新本脚本的名称列表。
+    const applied = await AppDataSource.query(
+      `SELECT name FROM app_migrations ORDER BY id DESC`,
     );
-    // 后续资产维护迁移先回退，再演练既有 agent 迁移的 down/up。
-    if (latest[0]?.name === 'AddMaintenancePerformedOn1785232500000') {
-      await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
+    const targetIndex = applied.findIndex((row) => row.name === 'AddAgentWeeklyReport1785231900000');
+    assert(targetIndex >= 0, '专项目标迁移必须已经应用');
+    for (const migration of applied.slice(0, targetIndex)) {
+      const latestBeforeUndo = await AppDataSource.query(
         `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
       );
-    }
-    if (latest[0]?.name === 'AddHouseholdModuleOverrides1785232400000') {
+      assert(latestBeforeUndo[0]?.name === migration.name, '只回退目标之后的迁移');
       await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
-        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-      );
     }
-    if (latest[0]?.name === 'AddSubscriptionRenewalCycle1785232300000') {
-      await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
-        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-      );
-    }
-    if (latest[0]?.name === 'AddSubscriptionAsset1785232200000') {
-      await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
-        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-      );
-    }
-    if (latest[0]?.name === 'AddFamilyFinance1785232100000') {
-      await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
-        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-      );
-    }
-    if (latest[0]?.name === 'AddAgentProposalGroups1785232000000') {
-      await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
-        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-      );
-    }
+    const latest = await AppDataSource.query(`SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`);
     assert(
       latest[0]?.name === 'AddAgentWeeklyReport1785231900000',
       '专项演练从 A7.4-B 周报迁移开始',

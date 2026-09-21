@@ -63,22 +63,24 @@ async function login(loginName) {
 async function runMigrationPhase() {
   await AppDataSource.initialize();
   try {
+    // 新增迁移自动回退到订阅周期专项演练的位置，之后的历史专项断言保留。
+    const applied = await AppDataSource.query(
+      `SELECT name FROM app_migrations ORDER BY id DESC`,
+    );
+    const targetIndex = applied.findIndex(
+      (row) => row.name === 'AddSubscriptionRenewalCycle1785232300000',
+    );
+    assert(targetIndex >= 0, '订阅周期目标迁移必须已经应用');
+    for (const migration of applied.slice(0, targetIndex)) {
+      const current = await AppDataSource.query(
+        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+      );
+      assert(current[0]?.name === migration.name, '只回退目标之后的迁移');
+      await AppDataSource.undoLastMigration();
+    }
     let latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
-    // 后续资产维护迁移先回退，再演练既有 agent 迁移的 down/up。
-    if (latest[0]?.name === 'AddMaintenancePerformedOn1785232500000') {
-      await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
-        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-      );
-    }
-    if (latest[0]?.name === 'AddHouseholdModuleOverrides1785232400000') {
-      await AppDataSource.undoLastMigration();
-      latest = await AppDataSource.query(
-        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
-      );
-    }
     if (latest[0]?.name === 'AddSubscriptionRenewalCycle1785232300000') {
       await AppDataSource.undoLastMigration();
       latest = await AppDataSource.query(

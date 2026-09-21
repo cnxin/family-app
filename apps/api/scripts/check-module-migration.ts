@@ -9,15 +9,24 @@ async function main() {
   const db = new DataSource({ ...databaseOptions(), migrationsRun: false });
   await db.initialize();
   try {
-    const maintenanceName = 'AddMaintenancePerformedOn1785232500000';
-    const newest = await db.query('SELECT name FROM app_migrations ORDER BY timestamp DESC LIMIT 1');
-    assert.equal(newest[0]?.name, maintenanceName, '维护日期迁移必须是最新迁移');
-    await db.undoLastMigration({ transaction: 'all' });
     const name = 'AddHouseholdModuleOverrides1785232400000';
-    const applied = await db.query(
-      'SELECT name FROM app_migrations ORDER BY timestamp DESC LIMIT 1',
+    const applied: { name: string }[] = await db.query(
+      'SELECT name FROM app_migrations ORDER BY id DESC',
     );
-    assert.equal(applied[0]?.name, name, '只回滚目标迁移，不碰其他迁移');
+    const targetIndex = applied.findIndex((row) => row.name === name);
+    assert(targetIndex >= 0, '模块目标迁移必须已经应用');
+    // 自动回退后续迁移（包括新加的迁移），只验证模块表本身的 up/down/up。
+    for (const migration of applied.slice(0, targetIndex)) {
+      const current: { name: string }[] = await db.query(
+        'SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1',
+      );
+      assert.equal(current[0]?.name, migration.name, '只回退目标之后的迁移');
+      await db.undoLastMigration({ transaction: 'all' });
+    }
+    const latest: { name: string }[] = await db.query(
+      'SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1',
+    );
+    assert.equal(latest[0]?.name, name, '回退只到模块迁移为止');
     const snapshot = async () =>
       db.query(`SELECT tablename, indexname, indexdef FROM pg_indexes
       WHERE schemaname = 'public' AND tablename <> 'household_module_overrides' ORDER BY tablename, indexname`);
@@ -45,7 +54,7 @@ async function main() {
     const rerun = await db.runMigrations({ transaction: 'all' });
     assert.deepEqual(
       rerun.map((migration) => migration.name),
-      [name, maintenanceName],
+      applied.slice(0, targetIndex + 1).reverse().map((migration) => migration.name),
     );
     assert.deepEqual(await snapshot(), before);
     console.log('  ✓ 模块迁移再次 up：仅目标迁移恢复，现有表与索引不变');
