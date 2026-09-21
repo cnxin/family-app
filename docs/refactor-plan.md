@@ -320,6 +320,16 @@
     临时库的独立家庭，随隔离库删除，不关闭触发器或放松业务约束。
 
 
+22. **完成状态与回答必须原子提交，读取也要有先后。** F3 回填 CI 的
+    `agent.mjs:156` 并非无害偶发：detail 并行读 messages/runs，两个 READ COMMITTED
+    快照可能跨过完成提交；写侧也把回答、completed、会话更新时间分开提交。
+    限定修复为同一事务写三者，先读 runs 再读 messages（后者快照不早于前者），
+    不靠 completed 后追加轮询掩盖问题。原幂等发送与首次 completed 响应断言支持
+    `AGENT_CONSISTENCY_ITERATIONS=30`：2026-09-21 全量 API 实跑 30/30 通过，
+    typecheck / lint 通过（43 条既有 warning）。本地首轮事务锁查询因 eager
+    关联加入外连接而失败，禁用该锁查询的 eager 加载后重验通过；未扩大模块改动。
+
+
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 
 目标：用两个真实模块验证新栈，产出可比较的数据。

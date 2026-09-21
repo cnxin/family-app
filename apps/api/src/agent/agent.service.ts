@@ -261,25 +261,25 @@ export class AgentService {
 
   async detail(id: string, user: JwtUser) {
     const conversation = await this.requireConversation(id, user, false);
-    const [messages, runs] = await Promise.all([
-      this.messages.find({
-        where: {
-          conversationId: conversation.id,
-          householdId: user.householdId,
-        },
-        order: { createdAt: 'ASC' },
-        take: 100,
-      }),
-      this.runs.find({
-        where: {
-          conversationId: conversation.id,
-          householdId: user.householdId,
-          requestedByMemberId: user.memberId,
-        },
-        order: { createdAt: 'DESC' },
-        take: 50,
-      }),
-    ]);
+    // Read runs first: a completed run and its answer commit together; the later
+    // message snapshot must not precede the run snapshot.
+    const runs = await this.runs.find({
+      where: {
+        conversationId: conversation.id,
+        householdId: user.householdId,
+        requestedByMemberId: user.memberId,
+      },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+    const messages = await this.messages.find({
+      where: {
+        conversationId: conversation.id,
+        householdId: user.householdId,
+      },
+      order: { createdAt: 'ASC' },
+      take: 100,
+    });
     const runIds = runs.map((run) => run.id);
     const [toolEvents, linkedMessages, retries] = runIds.length
       ? await Promise.all([
@@ -893,34 +893,42 @@ export class AgentService {
         });
         result.content = `Hermes 暂时不可用，下面由本地家庭摘要回答。\n\n${result.content}`;
       }
-      const current = await this.runs.findOneBy({ id: run.id });
-      if (!current || current.status === 'cancelled') return;
       const encrypted = encryptAgentContent(
         result.content,
         run.householdId,
         run.conversationId,
       );
-      if (encrypted) {
-        await this.messages.save(
-          this.messages.create({
+      await this.dataSource.transaction(async (manager) => {
+        const runs = manager.getRepository(AgentRun);
+        const current = await runs.findOne({
+          where: { id: run.id, householdId: run.householdId },
+          lock: { mode: 'pessimistic_write' },
+          loadEagerRelations: false,
+        });
+        if (!current || current.status === 'cancelled') return;
+        if (encrypted) {
+          const messages = manager.getRepository(AgentMessage);
+          await messages.save(messages.create({
             householdId: run.householdId,
             conversationId: run.conversationId,
             memberId: null,
             runId: run.id,
             role: 'assistant',
             ...encrypted,
-          }),
-        );
-      }
-      await this.runs.update(run.id, {
-        status: 'completed',
-        finishedAt: new Date(),
-        inputTokens: result.inputTokens ?? null,
-        outputTokens: result.outputTokens ?? null,
-        errorCode: fallback ? 'HERMES_UNAVAILABLE_FALLBACK' : null,
-        errorMessage: null,
+          }));
+        }
+        await runs.update(run.id, {
+          status: 'completed',
+          finishedAt: new Date(),
+          inputTokens: result.inputTokens ?? null,
+          outputTokens: result.outputTokens ?? null,
+          errorCode: fallback ? 'HERMES_UNAVAILABLE_FALLBACK' : null,
+          errorMessage: null,
+        });
+        await manager.getRepository(AgentConversation).update(run.conversationId, {
+          updatedAt: new Date(),
+        });
       });
-      await this.conversations.update(run.conversationId, { updatedAt: new Date() });
     } catch (error) {
       const current = await this.runs.findOneBy({ id: run.id });
       if (!current || current.status === 'cancelled') return;
