@@ -201,6 +201,15 @@
 
 完成后全量 `corepack pnpm test:api` 与 `corepack pnpm test:web:next`、push、等 CI、回填进度表；**不开始 F5**。家庭时区修改 / 新家庭浏览器时区默认归 F7；目的地时刻、小管家定时 / 工具、其余显示归后置。遇见新一类时区问题先问，不顺手扩范围。
 
+#### F4.6 本轮验收备注（2026-09-21）
+
+- a 的 `PlainDate` 与纯日期函数放在 `packages/contracts/src/system.ts`（契约类型）及 `packages/shared/src/date.ts`（API / Web 共用实现）：shared 已是两端共同依赖，避免 API / Web 各复制日期算法；不引入日期库。Web 的 `useHouseholdToday()` 在 `apps/web/src/lib/use-household-today.ts`，跨家庭零点自动刷新。
+- b 资产维护迁移在隔离库实跑 up → down → up；默认今天在家庭 07:00 / 23:30 成功、明天拒绝，旧端仅 `performedAt` 兼容黑盒通过。c 覆盖上海家庭 07:00 的来访归日、当日日历与点菜。
+- d 只改 F5 会消费的资产临近、库存保质期 / 入库默认日、财务月界路径；库存 `presentAllocation()` 的流水展示仍使用旧 `todayInShanghai()`，列为后置，未扩大范围。
+- API 全量首次失败根因是旧 agent 迁移演练把“最新迁移”写死；`63dcd9d` 只补三处回退维护日期迁移及迁移检查脚本，随后全量通过。新端全量为 185 passed / 3 skipped；3 条 skipped 是视口限定（桌面侧栏、手机底栏 / 手机导航）或既有的单视口共享状态用例，不是本轮新增跳过。
+- e 将提醒 700ms / 900ms 改为 3s / 10s，并延长来源失效轮询窗口；连续 20/20 通过。f 取消两条小管家手机端 skip，workers=1 下连续 5/5 通过。
+- Clock 本轮注入覆盖 `assets`（维护完成、订阅续费默认日）、`inventory`（列表 / 汇总 / 入库日期）、`finance`（默认月份 / 撤销记账日），访客 / 日历改用家庭日界函数但仍直接读取业务时间点；其余 API `new Date()` / `Date.now()`（邀请、提醒生产逻辑、访客状态时间点、附件签名 TTL、agent / worker 定时等）留后置。Web 日期输入、资产临近、财务表单 / 预取已改用 `useHouseholdToday()`。
+
 ### F5 · 今天页「需要留意」 ［L］
 
 这是整套方案里最要紧的一块：低频域靠它「来找你」。
@@ -401,7 +410,7 @@
 | F3 模块状态端点 | ☑ | `9af1821` · `feat(api): 模块状态端点，支撑空域隐身` | 14 key 及两个端点完成；typecheck / lint（43 条既有 warning）、全量 API、新端 157 passed / 5 skipped 通过，277/277 契约；隔离库 up → down → up 与 schema drift 通过，仅 API / contracts / docs；已 push，CI `35525677173` 首跑四项全绿；回填提交 `a62595c` 的 CI `35550675759` 首跑旧 `agent.mjs:156` 问答消息断言失败，未改代码重跑 API 后全绿。2026-09-21 已定位并独立修复：detail 原为 messages/runs 并行读，回答与 completed 原不在同一事务；`97c30e4` 改为事务写入、先 runs 后 messages，原用例循环 30/30 及全量 API 通过，CI `35555080712` 首跑四项全绿。媒体不计部署默认源；manage_integrations 语义略偏，仅影响显示，暂不新增 capability。 |
 | F4 隐身 / 开启 / 置顶 | ☑ | `82827a5` · `feat(web): 空域隐身、手动开启与个人置顶` | 外壳级模块缓存、无缓存失败放行（有缓存保留 off）、开启 / 收起 / 撤销及每人本机 4 项置顶完成；逐域失效核对见 F4 表。typecheck / lint 通过（43 条既有 warning），全量新端 179 passed / 5 skipped / 0 failed；四张亮暗截图已逐张复看，无白屏、溢出或撞色。仅 apps/web / docs；已 push，CI `35556935338` 首跑四项全绿，无未改代码重跑。后续缓存边界修复 `b212e47`（CI `35560665929` 首跑全绿）；新端 CI `643a363`（CI `35561356642` 首跑五项全绿，新 job 8分37秒）。F4.5 见下行，未开始 F5。 |
 | F4.5 时区与日期口径盘点 | ☑ | 本提交 · `docs: 时区与日期口径盘点` | [盘点报告](timezone-audit.md)：26 个 date 列及时间点边界、容器实测、22 条日期相关 E2E + 2 条时间戳 mock、29 组 API 场景；确认维护中午转换与来访 UTC 日界风险，统一家庭时区和分批修法待拍板；仅文档，未修时区，未开始 F5。 |
-| F4.6 家庭日期口径（a–f） | ☐ | | 已拍板，顺序执行六个独立提交；完成后回填哈希及 CI。 |
+| F4.6 家庭日期口径（a–f） | ☑ | `4e2c57b` / `fbf899a` / `bf9ec21` / `c000598` / `328ccbe` / `96e3403`（另：`63dcd9d` 验收脚本兼容修复） | 六步按序完成；a–d 各自通过 typecheck / lint / 相关测试，e 提醒 20/20、f 手机小管家 5/5；全量 `test:api`、`test:web:next`（185 passed / 3 skipped）通过；CI `35613750741` 五项全绿，已 push。Clock 覆盖维护 / 资产续费 / 库存 / 财务及 b–d 日期路径；库存流水展示仍保留旧上海日期，其他后置项见 F4.6 备注。|
 | F5 需要留意 | ☐ | | |
 | F6 ⌘K 动作 | ☐ | | |
 | F7 家庭设置 | ☐ | | |
