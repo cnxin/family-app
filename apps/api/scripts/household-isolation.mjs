@@ -32,12 +32,13 @@ function sha256(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-async function request(path, token, method = 'GET', body) {
+async function request(path, token, method = 'GET', body, extraHeaders = {}) {
   const response = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...extraHeaders,
     },
     body: body == null ? undefined : JSON.stringify(body),
   });
@@ -301,6 +302,7 @@ try {
   const moduleBaseline = await request('/system/modules', defaultToken);
   const foreignModuleBaseline = await request('/system/modules', foreignToken);
   const foreignAssetId = randomUUID();
+  const foreignMaintenancePlanId = randomUUID();
   try {
     await db.query(`INSERT INTO home_assets (id,"householdId",name,category,"createdById") VALUES ($1,$2,'隔离资产','appliance',$3)`, [foreignAssetId, ids.household, ids.member]);
     await db.query(`INSERT INTO household_module_overrides (household_id,key,override,updated_by) VALUES ($1,'assets','off',$2)`, [ids.household, ids.member]);
@@ -311,8 +313,26 @@ try {
     assert(assets.hasData && assets.override === 'off', '普通成员 GET 能看到自己家庭 hasData 与 override');
     const rejected = await request('/system/modules/assets', foreignToken, 'PATCH', { override: 'on' });
     assert(rejected.status === 403, '普通成员不能覆盖家庭模块显示设置');
+    await db.query('DELETE FROM household_module_overrides WHERE household_id=$1', [ids.household]);
+    await db.query(
+      `INSERT INTO maintenance_plans
+         (id,"householdId","assetId",title,"frequencyDays","nextDueDate","createdById")
+       VALUES ($1,$2,$3,'隔离维护',30,'2026-09-22',$4)`,
+      [foreignMaintenancePlanId, ids.household, foreignAssetId, ids.member],
+    );
+    const frozen = { 'x-test-clock': '2026-09-21T04:00:00.000Z' };
+    const localAttention = await request('/today/attention', defaultToken, 'GET', undefined, frozen);
+    const foreignAttention = await request('/today/attention', foreignToken, 'GET', undefined, frozen);
+    assert(
+      localAttention.status === 200 &&
+        !localAttention.body.data.items.some((item) => item.entity?.id === foreignAssetId) &&
+        foreignAttention.status === 200 &&
+        foreignAttention.body.data.items.some((item) => item.domain === 'assets' && item.entity?.id === foreignAssetId),
+      '今天页留意条目不跨家庭泄露',
+    );
   } finally {
     await db.query('DELETE FROM household_module_overrides WHERE household_id=$1', [ids.household]);
+    await db.query('DELETE FROM maintenance_plans WHERE id=$1', [foreignMaintenancePlanId]);
     await db.query('DELETE FROM home_assets WHERE id=$1', [foreignAssetId]);
   }
   const foreignModuleAfter = await request('/system/modules', foreignToken);

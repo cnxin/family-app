@@ -24,6 +24,7 @@ import { ShoppingModule } from './shopping/shopping.module';
 import { SmartMenuModule } from './smart-menu/smart-menu.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
+import { TodayModule } from './today/today.module';
 import { TravelModule } from './travel/travel.module';
 import { UploadModule } from './upload/upload.module';
 
@@ -53,6 +54,7 @@ import { UploadModule } from './upload/upload.module';
     SmartMenuModule,
     SystemModule,
     TasksModule,
+    TodayModule,
     TravelModule,
     UploadModule,
   ],

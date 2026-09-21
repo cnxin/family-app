@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 277 个端点（POST 116 / GET 87 / PATCH 42 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 277 个。
+共 278 个端点（POST 116 / GET 88 / PATCH 42 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 278 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -30,6 +30,7 @@
 | smart-menu | 4 | 4 |
 | system | 10 | 10 |
 | tasks | 5 | 5 |
+| today | 1 | 1 |
 | travel | 21 | 21 |
 | upload | 1 | 1 |
 
@@ -397,6 +398,12 @@
 | PATCH | `/tasks/:id` | `TasksController.update` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
 | DELETE | `/tasks/:id` | `TasksController.archive` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
 | PATCH | `/tasks/:taskId/instances/:dueDate` | `TasksController.updateOccurrence` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
+
+## today（1）
+
+| 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
+| --- | --- | --- | --- | :-: | --- |
+| GET | `/today/attention` | `TodayAttentionController.get` | 登录 | ✓ | `apps/api/src/today/today-attention.controller.ts` |
 
 ## travel（21）
 
