@@ -9,6 +9,10 @@ async function main() {
   const db = new DataSource({ ...databaseOptions(), migrationsRun: false });
   await db.initialize();
   try {
+    const maintenanceName = 'AddMaintenancePerformedOn1785232500000';
+    const newest = await db.query('SELECT name FROM app_migrations ORDER BY timestamp DESC LIMIT 1');
+    assert.equal(newest[0]?.name, maintenanceName, '维护日期迁移必须是最新迁移');
+    await db.undoLastMigration({ transaction: 'all' });
     const name = 'AddHouseholdModuleOverrides1785232400000';
     const applied = await db.query(
       'SELECT name FROM app_migrations ORDER BY timestamp DESC LIMIT 1',
@@ -41,7 +45,7 @@ async function main() {
     const rerun = await db.runMigrations({ transaction: 'all' });
     assert.deepEqual(
       rerun.map((migration) => migration.name),
-      [name],
+      [name, maintenanceName],
     );
     assert.deepEqual(await snapshot(), before);
     console.log('  ✓ 模块迁移再次 up：仅目标迁移恢复，现有表与索引不变');

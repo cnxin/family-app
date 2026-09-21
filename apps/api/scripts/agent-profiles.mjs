@@ -50,6 +50,13 @@ async function runMigrationPhase() {
     let latest = await AppDataSource.query(
       `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
     );
+    // 后续资产维护迁移先回退，再演练既有 agent 迁移的 down/up。
+    if (latest[0]?.name === 'AddMaintenancePerformedOn1785232500000') {
+      await AppDataSource.undoLastMigration();
+      latest = await AppDataSource.query(
+        `SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1`,
+      );
+    }
     if (latest[0]?.name === 'AddHouseholdModuleOverrides1785232400000') {
       await AppDataSource.undoLastMigration();
       latest = await AppDataSource.query(
