@@ -1,7 +1,15 @@
+import { SHELF_MODULE_KEYS } from '@family/contracts';
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { authFiles, expectNoHorizontalOverflow, watchPageErrors } from './helpers';
+
+// F2 结构 / 预取回归保持全功能可见；F4 状态变化在 modules.spec.ts 用真实空家庭验收。
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/system/modules', (route) => route.fulfill({ json: {
+    data: { modules: SHELF_MODULE_KEYS.map((key) => ({ key, hasData: true, override: null })) },
+  } }));
+});
 
 const homeNavigation = (page: Page, mobile: boolean) => mobile
   ? page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name: '家里', exact: true })
@@ -34,11 +42,11 @@ test('家里冷启动：14 个 shelf、无状态伪零，也不逐图块拉列�
   await expect(page.getByRole('heading', { name: '家里在用的' })).toBeVisible();
   await expect(page.locator('[data-home-grid] a')).toHaveCount(14);
   await expect(page.locator('[data-home-status]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '编辑置顶' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '编辑置顶' })).toBeVisible();
   await expect(page.getByText('还可以开启', { exact: true })).toHaveCount(0);
   await page.waitForLoadState('networkidle');
-  // 冷启动连留意区也不主动拉；预取只由导航意图触发。
-  expect(paths).toEqual([]);
+  // 模块状态是外壳级查询；留意源仍只由导航意图预取。
+  expect(paths).toEqual(['/api/system/modules']);
   await page.locator('main').getByRole('link', { name: '家庭设置', exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
 });

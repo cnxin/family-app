@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateTaskBody,
@@ -34,7 +35,10 @@ export function useUpdateOccurrence() {
         method: 'PATCH',
         body: input.body,
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => {
+      void invalidateModules(client);
+      return client.invalidateQueries({ queryKey: ['tasks'] });
+    },
   });
 }
 
@@ -43,6 +47,9 @@ export function useCreateTask() {
   return useMutation({
     mutationFn: (body: CreateTaskBody) =>
       api<HouseholdTask>('/tasks', { method: 'POST', body }),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => {
+      void invalidateModules(client);
+      return client.invalidateQueries({ queryKey: ['tasks'] });
+    },
   });
 }

@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AgentMemoryItem,
@@ -109,6 +110,7 @@ export function useAgentProposalGroups(enabled: boolean) {
 }
 
 function invalidateGroups(client: ReturnType<typeof useQueryClient>) {
+  void invalidateModules(client);
   void client.invalidateQueries({ queryKey: ['agent-proposal-groups'] });
   void client.invalidateQueries({ queryKey: ['agent-conversation'] });
   void client.invalidateQueries({ queryKey: ['notifications'] });

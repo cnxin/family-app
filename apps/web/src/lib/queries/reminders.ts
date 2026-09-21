@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateReminderBody,
@@ -42,6 +43,7 @@ export function useUpsertReminder() {
           })
         : api<HouseholdReminder>('/reminders', { method: 'POST', body }),
     onSuccess: () => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['reminders'] });
       void client.invalidateQueries({ queryKey: ['notifications'] });
     },
@@ -53,6 +55,9 @@ export function useCancelReminder() {
   return useMutation({
     mutationFn: (id: string) =>
       api<HouseholdReminder>(`/reminders/${id}`, { method: 'DELETE' }),
-    onSuccess: () => void client.invalidateQueries({ queryKey: ['reminders'] }),
+    onSuccess: () => {
+      void invalidateModules(client);
+      void client.invalidateQueries({ queryKey: ['reminders'] });
+    },
   });
 }

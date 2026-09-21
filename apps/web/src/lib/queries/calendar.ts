@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CalendarEntry, CalendarEvent, CreateCalendarEventBody } from '@family/contracts';
 import { api } from '../api';
@@ -22,7 +23,10 @@ export function useUpsertCalendarEvent() {
             body: input.body,
           })
         : api<CalendarEvent>('/calendar-events', { method: 'POST', body: input.body }),
-    onSuccess: () => void client.invalidateQueries({ queryKey: ['calendar'] }),
+    onSuccess: () => {
+      void invalidateModules(client);
+      return client.invalidateQueries({ queryKey: ['calendar'] });
+    },
   });
 }
 
@@ -31,6 +35,9 @@ export function useDeleteCalendarEvent() {
   return useMutation({
     mutationFn: (id: string) =>
       api<{ id: string; removed: true }>(`/calendar-events/${id}`, { method: 'DELETE' }),
-    onSuccess: () => void client.invalidateQueries({ queryKey: ['calendar'] }),
+    onSuccess: () => {
+      void invalidateModules(client);
+      return client.invalidateQueries({ queryKey: ['calendar'] });
+    },
   });
 }

@@ -143,6 +143,35 @@
 - **测试**：空库里家里页「在用的」为空或只有少数、「还可以开启」有内容；造一件资产后资产图块上移；钉住观影后桌面侧栏出现「观影」，刷新仍在。
 - **提交**：`feat(web): 空域隐身、手动开启与个人置顶`
 
+#### F4 · 逐域失效核对（2026-09-21）
+
+`invalidateModules(client)` 统一刷新 `['system','modules']`；外壳常驻订阅，家里和侧栏共用缓存。
+表中的停用 / 归档仍按 F3 全量实体口径存在，不擅改 hasData 规则；无硬删除入口的域明确标出。
+
+| key | 对照 F3 的新建 / 删除及相关 mutation | 统一接线 / 结论 |
+| --- | --- | --- |
+| recipes | 菜品新建、更新、删除（软停用） | `menus.ts` 的 create / update / remove dish 均失效；做法 / 熟练度不独立产生 dishes |
+| reminders | 新建、改时间、取消 | `reminders.ts` 两个 hook 均失效；资产维护、来访、出行、日历、任务、投票派生更新也失效；小管家单提案 / 提案组确认同样覆盖 |
+| polls | 新建 / 修改、关闭 / 重开、归档 DELETE | `invalidatePollSideEffects`；投票改票不改变存在性 |
+| inventory | 物品新建 / 修改 / DELETE；批次与采购收货可创建物品 | `invalidateInventory`，包含 `shopping.ts` 收货入口；零数量仍有数据 |
+| assets | 登记、更新 / 停用、续费；维护计划 / 资料变更 | `invalidateAssets`；现有客户端无资产硬删除入口；维护相关写入沿同一 helper |
+| finance | 账户新建 / 停用、记账 / 冲销、预算 upsert / DELETE | `useFinanceMutation` 统一失效；分类不算数据，但复用同一刷新入口 |
+| points | 奖励新建 / 停用、积分调整 / 冲销、兑换审批等 | `invalidatePoints`；任务完成可生成 ledger，同步失效；无 ledger 硬删除入口 |
+| guests | 客人新建 / 编辑 / 匿名化、来访新建 / 修改 | `invalidateGuests`；现有客户端无客人 / 来访硬删除入口；邀请 / Wi-Fi 复用刷新 |
+| media | 片单新建 / 修改 / DELETE、媒体库加片单、连接器 / 搜索源保存及重置 DELETE | `useWatchlistMutation` 成功回调、`useMediaMutation`、`useSettingsMutation`；不计部署默认源 |
+| travel | 行程新建 / 更新 / 归档 / 状态变更 | `useTravelMutation`；归档仍有数据，模板不单独算数据；无行程硬删除入口 |
+| memories | 家庭回忆新建 / 更新 / 归档及照片增删 | `useMemoryMutation` / 照片 hook；归档仍有数据，无回忆硬删除入口；智能体私有记忆不属于本表 |
+| knowledge | 文章新建 / 更新 / 归档 / 版本恢复 | `useKnowledgeMutation`；归档仍有数据，无文章硬删除入口 |
+| activity | 固定 true | 无独立创建 / 删除 mutation，无需额外失效 |
+| assistant | 家庭智能体 enabled 设置更新 | `useUpdateAgentSettings`；个人 profile / 配对不影响家庭 status.enabled |
+
+#### F4 · 验收方式
+
+- 空域回归不是依赖演示库恰巧为空：仅在 `family_app_web_test_*` 隔离库复用 F3 鉴权夹具创建新家庭，其他场景用真实 PATCH 构造 on / off，库销毁时清理；不碰演示家庭。
+- 资产从真实空域用现有登记表单 POST 创建，经导航返回家里验证自动上移，不刷新页面；覆盖 on / off / null、撤销、普通成员只导航、500 全放行（含旧 off 缓存）、初始骨架和后台保留缓存、4 个置顶上限、44px 点击区、本机持久化 / 成员隔离 / 存储失败、长按 / 右键 / Escape。
+- F2 原结构 / 导航意图回归固定模块查询为全可见，避免新状态规则改变旧断言；F4 状态测试则用真实 API。截图 `.tmp-shots/f4-{390x844,1280x800}-{light,dark}.png` 使用真实家庭状态，不照搬示意稿数据或样式。
+- 前置一致性修复独立提交 `97c30e4`；原问答断言 30/30、全量 API、typecheck / lint 通过，CI `35555080712` 首跑四项全绿。F4.5 仅登记，F5 未执行。
+
 ### F4.5 · 时区与日期口径盘点 ［S］
 
 - **起因**：「上午用默认今天完成资产维护被判为未来时间」。仅盘点，不改代码；本轮只登记，不执行。
@@ -350,8 +379,8 @@
 | F0 盘点 | ☑ | `c2d9ea9` · `docs: 信息架构收敛盘点` | 24 项逐行完成（core 7 / shelf 14 / settings 3），内嵌设置另记。① 今天已聚合三餐、今日及后两天任务、当日日历、提醒、购物、动态和未读统计；② system 只有备份专用 `backup_policies` / `backup_runs`，无通用家庭设置，F3 按独立 overrides 表分支；③ 掌勺经 `PATCH /members/me/preferences` 存 `members.prefersCooking`，记忆经 `GET/PATCH /agent/profile` 存 `agent_member_profiles.memoryEnabled`（版本锁），置顶仍默认本机，服务端同步待用户确认。无顶层归层调整；路径漂移、今日既有区块、成员设置可达性及页内新建的深链边界详见上方 D。typecheck / lint 通过（API 43 条既有 warning）；仅文档，不开始 F1。 |
 | F1 导航分层 | ☑ | `f5e096f` · `feat(web): 导航分层，常驻项收敛到七个` | 导航分层、桌面七项 / 手机四项、今天头像及路由占位完成；typecheck / lint 通过，全量新端浏览器验收 139 passed / 5 skipped，四图已人工复看，已 push，CI `35504482867` 四项全绿；详见上方 F1 备注，未开始 F2。 |
 | F2 家里页 | ☑ | `bd4b7d7` · `feat(web): 家里页，低频功能的启动台` | 启动台、缓存状态、角色过滤预取及旧根落点修正完成；typecheck / lint 通过（API 43 条既有 warning），全量新端 157 passed / 5 skipped / 0 failed，四图已复看；已 push，CI `35520971609` 第 2 次四项全绿（首跑旧端任务备注定位器匹配到日历缓存页与任务页两处，未改代码重跑通过）；详见 F2 备注，未开始 F3。 |
-| F3 模块状态端点 | ☑ | `9af1821` · `feat(api): 模块状态端点，支撑空域隐身` | 14 key 及两个端点完成；typecheck / lint（43 条既有 warning）、全量 API、新端 157 passed / 5 skipped 通过，277/277 契约；隔离库 up → down → up 与 schema drift 通过，仅 API / contracts / docs；已 push，CI `35525677173` 首跑四项全绿；回填提交 `a62595c` 的 CI `35550675759` 首跑旧 `agent.mjs:156` 问答消息断言失败，未改代码重跑 API 后全绿。待查：detail 并行读取 messages/runs 可能得到非一致快照，测试看到 completed 时消息尚未出现在该响应；日志不足以证实，未改智能体业务。未开始 F4。 |
-| F4 隐身 / 开启 / 置顶 | ☐ | | |
+| F3 模块状态端点 | ☑ | `9af1821` · `feat(api): 模块状态端点，支撑空域隐身` | 14 key 及两个端点完成；typecheck / lint（43 条既有 warning）、全量 API、新端 157 passed / 5 skipped 通过，277/277 契约；隔离库 up → down → up 与 schema drift 通过，仅 API / contracts / docs；已 push，CI `35525677173` 首跑四项全绿；回填提交 `a62595c` 的 CI `35550675759` 首跑旧 `agent.mjs:156` 问答消息断言失败，未改代码重跑 API 后全绿。2026-09-21 已定位并独立修复：detail 原为 messages/runs 并行读，回答与 completed 原不在同一事务；`97c30e4` 改为事务写入、先 runs 后 messages，原用例循环 30/30 及全量 API 通过，CI `35555080712` 首跑四项全绿。媒体不计部署默认源；manage_integrations 语义略偏，仅影响显示，暂不新增 capability。 |
+| F4 隐身 / 开启 / 置顶 | ☑ | `feat(web): 空域隐身、手动开启与个人置顶`（哈希 / CI 推送后回填） | 外壳级模块缓存、失败放行、开启 / 收起 / 撤销及每人本机 4 项置顶完成；逐域失效核对见 F4 表。typecheck / lint 通过（43 条既有 warning），全量新端 179 passed / 5 skipped / 0 failed；四张亮暗截图已逐张复看，无白屏、溢出或撞色。仅 apps/web / docs；F4.5 只登记，未开始 F5。 |
 | F4.5 时区与日期口径盘点 | ☐ | | 仅登记，待 F4 后盘点与用户确认；本轮不执行。 |
 | F5 需要留意 | ☐ | | |
 | F6 ⌘K 动作 | ☐ | | |

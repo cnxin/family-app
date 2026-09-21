@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AddMenuItemsBody,
@@ -109,6 +110,7 @@ export function useCreateDish() {
   return useMutation({
     mutationFn: (body: UpsertDishBody) => api<Dish>('/dishes', { method: 'POST', body }),
     onSuccess: () => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['dishes'] });
       void client.invalidateQueries({ queryKey: ['recipes'] });
     },
@@ -121,6 +123,7 @@ export function useUpdateDish() {
     mutationFn: (input: { id: string; body: UpsertDishBody }) =>
       api<Dish>(`/dishes/${input.id}`, { method: 'PATCH', body: input.body }),
     onSuccess: () => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['dishes'] });
       void client.invalidateQueries({ queryKey: ['recipes'] });
     },
@@ -133,6 +136,7 @@ export function useRemoveDish() {
   return useMutation({
     mutationFn: (id: string) => api<Dish>(`/dishes/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['dishes'] });
       void client.invalidateQueries({ queryKey: ['recipes'] });
     },

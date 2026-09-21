@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   TravelChecklistCategory,
@@ -73,6 +74,7 @@ function useTravelMutation<TInput, TResult>(run: (input: TInput) => Promise<TRes
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
+      void invalidateModules(client);
       for (const key of [
         'travel-plans',
         'travel-plan',

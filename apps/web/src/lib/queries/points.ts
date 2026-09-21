@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AdjustmentBody,
@@ -16,6 +17,7 @@ export function idempotencyKey() {
 }
 
 function invalidatePoints(client: ReturnType<typeof useQueryClient>) {
+  void invalidateModules(client);
   for (const key of [
     'points-accounts',
     'points-ledger',

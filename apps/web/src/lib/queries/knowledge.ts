@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   KnowledgeArticle,
@@ -52,6 +53,7 @@ function useKnowledgeMutation<TInput>(run: (input: TInput) => Promise<KnowledgeA
   return useMutation({
     mutationFn: run,
     onSuccess: (article) => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['knowledge'] });
       void client.invalidateQueries({ queryKey: ['knowledge-revisions', article.id] });
       void client.invalidateQueries({ queryKey: ['activities'] });

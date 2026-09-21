@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AgentChannelPairing,
@@ -16,6 +17,7 @@ export function useUpdateAgentSettings() {
       runtimeKind?: AgentRuntimeKind;
     }) => api<AgentSettings>('/agent/settings', { method: 'PATCH', body }),
     onSuccess: (settings) => {
+      void invalidateModules(client);
       client.setQueryData(['agent-settings'], settings);
       void client.invalidateQueries({ queryKey: ['agent-status'] });
     },

@@ -1,3 +1,6 @@
+import { PinsProvider } from '../lib/pins';
+import { useModules } from '../lib/queries/modules';
+import { PinnedNavigation } from './pinned-navigation';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
@@ -8,11 +11,6 @@ import { applyTheme, readTheme } from '../lib/theme';
 import { Button } from './ui';
 import { openPalette } from './command-palette';
 import { SoftLink, useSoftNavigate } from './soft-link';
-
-/** F4 才接成员置顶；没有内容时不留空标题。 */
-function PinnedNavigation() {
-  return null;
-}
 
 function Sidebar() {
   const { pathname } = useLocation();
@@ -44,6 +42,13 @@ function Sidebar() {
 }
 
 export function Shell() {
+  const { session } = useAuth();
+  // 常驻订阅即外壳级预取，今天页进入也会为侧栏准备模块状态。
+  useModules();
+  return <PinsProvider key={session!.member.id} memberId={session!.member.id}><ShellLayout /></PinsProvider>;
+}
+
+function ShellLayout() {
   const { session } = useAuth();
   const { pathname } = useLocation();
   const soft = useSoftNavigate();

@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   FinanceAccount,
@@ -107,6 +108,7 @@ function useFinanceMutation<TInput, TResult>(run: (input: TInput) => Promise<TRe
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['finance'] });
       // 每一笔写操作后端都会记一条家庭动态
       void client.invalidateQueries({ queryKey: ['activities'] });

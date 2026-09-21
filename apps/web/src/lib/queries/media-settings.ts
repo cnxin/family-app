@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   MediaConnectorKind,
@@ -43,6 +44,7 @@ function useSettingsMutation<TInput, TResult>(
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
+      void invalidateModules(client);
       for (const key of [...keys, 'media-connectors']) {
         void client.invalidateQueries({ queryKey: [key] });
       }

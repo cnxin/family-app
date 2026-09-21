@@ -1,4 +1,4 @@
-import type { AuthSession } from '@family/contracts';
+import { shelfModuleKey, type AuthSession, type ShelfModuleKey } from '@family/contracts';
 
 /** 场景保留规范路径；导航层级和手机菜单独立组织，不再由 URL 决定功能权重。 */
 export type NavTier = 'core' | 'shelf' | 'settings';
@@ -43,7 +43,7 @@ export const SCENES: NavScene[] = [
     segments: [
       { key: 'order', tier: 'core', glyph: '点', label: '点菜', path: '/eat/order', ready: true },
       { key: 'kitchen', tier: 'core', glyph: '厨', label: '厨房', path: '/eat/kitchen', ready: true },
-      { key: 'recipes', tier: 'shelf', glyph: '菜', label: '菜谱', path: '/eat/recipes', ready: true },
+      { key: shelfModuleKey.enum.recipes, tier: 'shelf', glyph: '菜', label: '菜谱', path: '/eat/recipes', ready: true },
     ],
   },
   {
@@ -54,8 +54,8 @@ export const SCENES: NavScene[] = [
     segments: [
       { key: 'calendar', tier: 'core', glyph: '历', label: '日历', path: '/schedule/calendar', ready: true },
       { key: 'tasks', tier: 'core', glyph: '待', label: '任务', path: '/schedule/tasks', ready: true },
-      { key: 'reminders', tier: 'shelf', glyph: '醒', label: '提醒', path: '/schedule/reminders', ready: true },
-      { key: 'polls', tier: 'shelf', glyph: '票', label: '投票', path: '/schedule/polls', ready: true },
+      { key: shelfModuleKey.enum.reminders, tier: 'shelf', glyph: '醒', label: '提醒', path: '/schedule/reminders', ready: true },
+      { key: shelfModuleKey.enum.polls, tier: 'shelf', glyph: '票', label: '投票', path: '/schedule/polls', ready: true },
       { key: 'notifications', tier: 'core', glyph: '信', label: '消息', path: '/schedule/notifications', ready: true },
     ],
   },
@@ -66,12 +66,12 @@ export const SCENES: NavScene[] = [
     path: '/house',
     // 保留已有路径分组；购物在 core 与手机「吃饭」里呈现，不搬 URL。
     segments: [
-      { key: 'inventory', tier: 'shelf', glyph: '库', label: '库存', path: '/house/inventory', ready: true },
+      { key: shelfModuleKey.enum.inventory, tier: 'shelf', glyph: '库', label: '库存', path: '/house/inventory', ready: true },
       { key: 'shopping', tier: 'core', glyph: '购', label: '购物', path: '/house/shopping', ready: true },
-      { key: 'assets', tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
-      { key: 'finance', tier: 'shelf', glyph: '账', label: '财务', path: '/house/finance', ready: true, managerOnly: true },
-      { key: 'points', tier: 'shelf', glyph: '分', label: '积分', path: '/house/points', ready: true },
-      { key: 'guests', tier: 'shelf', glyph: '客', label: '访客', path: '/house/guests', ready: true },
+      { key: shelfModuleKey.enum.assets, tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
+      { key: shelfModuleKey.enum.finance, tier: 'shelf', glyph: '账', label: '财务', path: '/house/finance', ready: true, managerOnly: true },
+      { key: shelfModuleKey.enum.points, tier: 'shelf', glyph: '分', label: '积分', path: '/house/points', ready: true },
+      { key: shelfModuleKey.enum.guests, tier: 'shelf', glyph: '客', label: '访客', path: '/house/guests', ready: true },
       { key: 'members', tier: 'settings', glyph: '员', label: '成员', path: '/house/members', ready: true, managerOnly: true },
       { key: 'backups', tier: 'settings', glyph: '备', label: '备份', path: '/house/backups', ready: true, managerOnly: true },
     ],
@@ -82,11 +82,11 @@ export const SCENES: NavScene[] = [
     icon: '✨',
     path: '/life',
     segments: [
-      { key: 'media', tier: 'shelf', glyph: '影', label: '观影', path: '/life/media', ready: true },
-      { key: 'travel', tier: 'shelf', glyph: '行', label: '出行', path: '/life/travel', ready: true },
-      { key: 'memories', tier: 'shelf', glyph: '忆', label: '回忆', path: '/life/memories', ready: true },
-      { key: 'knowledge', tier: 'shelf', glyph: '知', label: '知识库', path: '/life/knowledge', ready: true },
-      { key: 'activity', tier: 'shelf', glyph: '动', label: '家庭动态', path: '/life/activity', ready: true },
+      { key: shelfModuleKey.enum.media, tier: 'shelf', glyph: '影', label: '观影', path: '/life/media', ready: true },
+      { key: shelfModuleKey.enum.travel, tier: 'shelf', glyph: '行', label: '出行', path: '/life/travel', ready: true },
+      { key: shelfModuleKey.enum.memories, tier: 'shelf', glyph: '忆', label: '回忆', path: '/life/memories', ready: true },
+      { key: shelfModuleKey.enum.knowledge, tier: 'shelf', glyph: '知', label: '知识库', path: '/life/knowledge', ready: true },
+      { key: shelfModuleKey.enum.activity, tier: 'shelf', glyph: '动', label: '家庭动态', path: '/life/activity', ready: true },
     ],
   },
 ];
@@ -98,7 +98,7 @@ export interface NavPinned extends NavSegment {
 }
 
 export const PINNED: NavPinned[] = [
-  { key: 'assistant', label: '问问小管家', tier: 'shelf', glyph: '问', icon: '💬', path: '/me/assistant', ready: true },
+  { key: shelfModuleKey.enum.assistant, label: '问问小管家', tier: 'shelf', glyph: '问', icon: '💬', path: '/me/assistant', ready: true },
   { key: 'profile', label: '个人设置', tier: 'settings', glyph: '我', icon: '⚙️', path: '/me/profile', ready: true },
 ];
 
@@ -121,7 +121,8 @@ export function coreSegments() {
 }
 
 export function shelfSegments(member: NavMember) {
-  return allSegments().filter((segment) => segment.tier === 'shelf' && allowed(segment, member));
+  return allSegments().filter((segment): segment is NavSegment & { key: ShelfModuleKey } =>
+    segment.tier === 'shelf' && allowed(segment, member));
 }
 
 export function settingsSegments(member: NavMember) {

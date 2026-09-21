@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AssetCategory,
@@ -65,6 +66,7 @@ export function useAsset(id: string | undefined) {
 }
 
 export function invalidateAssets(client: ReturnType<typeof useQueryClient>, id?: string) {
+  void invalidateModules(client);
   void client.invalidateQueries({ queryKey: ['assets'] });
   void client.invalidateQueries({ queryKey: ['asset', id] });
   // 资产和维护计划都是提醒的来源，停用会连带取消待发送的提醒

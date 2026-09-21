@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   HouseholdMedia,
@@ -101,6 +102,7 @@ function useWatchlistMutation<TInput, TResult>(
   const client = useQueryClient();
   return useMutation({
     mutationFn: run,
+    onSuccess: () => { void invalidateModules(client); },
     onSettled: () => {
       for (const key of keys) void client.invalidateQueries({ queryKey: [key] });
     },

@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreatedGuestInvitation,
@@ -31,6 +32,7 @@ export function useGuestWifiProfiles() {
 }
 
 function invalidateGuests(client: ReturnType<typeof useQueryClient>) {
+  void invalidateModules(client);
   for (const key of ['guests', 'visits', 'guest-wifi-profiles', 'calendar', 'notifications']) {
     void client.invalidateQueries({ queryKey: [key] });
   }

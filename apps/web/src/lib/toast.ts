@@ -4,6 +4,7 @@ export interface Toast {
   id: number;
   message: string;
   requestId?: string;
+  action?: { label: string; run: () => void };
 }
 
 type Listener = (toasts: Toast[]) => void;
@@ -24,11 +25,11 @@ export function subscribeToasts(listener: Listener) {
   };
 }
 
-export function pushToast(message: string, requestId?: string) {
-  const toast = { id: (seq += 1), message, requestId };
+export function pushToast(message: string, requestId?: string, action?: Toast['action']) {
+  const toast = { id: (seq += 1), message, requestId, action };
   toasts = [...toasts, toast];
   emit();
-  setTimeout(() => dismissToast(toast.id), 6000);
+  setTimeout(() => dismissToast(toast.id), action ? 10000 : 6000);
 }
 
 export function dismissToast(id: number) {

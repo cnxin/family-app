@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   BatchDatesInput,
@@ -13,6 +14,7 @@ import { api } from '../api';
 
 /** 一次库存变动会同时改动清单、流水、批次和菜单扣库预览，所以统一失效。 */
 export function invalidateInventory(client: ReturnType<typeof useQueryClient>) {
+  void invalidateModules(client);
   for (const key of [
     ['inventory'],
     ['inventory-transactions'],

@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AgentActionProposal,
@@ -109,6 +110,7 @@ export function useArchiveAgentConversation() {
 }
 
 function invalidateProposal(client: ReturnType<typeof useQueryClient>, conversationId: string) {
+  void invalidateModules(client);
   void client.invalidateQueries({ queryKey: ['agent-conversation', conversationId] });
   void client.invalidateQueries({ queryKey: ['notifications'] });
 }

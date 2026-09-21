@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FamilyMemory, FamilyMemoryCategory } from '@family/contracts';
 import { api, postForm } from '../api';
@@ -73,6 +74,7 @@ function useMemoryMutation<TInput>(run: (input: TInput) => Promise<FamilyMemory>
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['memories'] });
       void client.invalidateQueries({ queryKey: ['activities'] });
     },
@@ -131,6 +133,7 @@ export function useUploadMemoryPhoto() {
       return postForm<{ id: string }>(`/memories/${input.memoryId}/photos`, form);
     },
     onSuccess: () => {
+      void invalidateModules(client);
       void client.invalidateQueries({ queryKey: ['memories'] });
       void client.invalidateQueries({ queryKey: ['activities'] });
     },

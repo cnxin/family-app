@@ -1,3 +1,4 @@
+import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   HouseholdMedia,
@@ -72,6 +73,7 @@ function useMediaMutation<TInput, TResult>(run: (input: TInput) => Promise<TResu
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
+      void invalidateModules(client);
       for (const key of ['media-library', 'media', 'media-connectors', 'activities']) {
         void client.invalidateQueries({ queryKey: [key] });
       }
