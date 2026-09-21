@@ -139,6 +139,62 @@ jobs:
             apps/mobile/playwright-report
           retention-days: 7
 
+  # 新客户端独立隔离库；旧端 web-tests 保留到 C3。
+  # runner 负责迁移、种子 / demo、隔离 API；Playwright 自己启动 Vite :5181。
+  web-next-tests:
+    name: 新端 Web 回归（Playwright）
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: check
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: family
+          POSTGRES_PASSWORD: family123
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U family"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: corepack pnpm install --frozen-lockfile
+      # channel: 'chrome' 用 runner 自带的 Google Chrome，浏览器本体不用下；
+      # 但 playwright.config.ts 开了 video: 'retain-on-failure'，录像要 Playwright 自带的 ffmpeg，
+      # 干净 runner 上没有这个二进制，不装的话 browserContext.newPage() 直接抛错。
+      - name: 安装 Playwright ffmpeg（录像用）
+        run: corepack pnpm --filter web exec playwright install ffmpeg
+      - name: 运行 Playwright 回归
+        env:
+          CI: '1'
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5433'
+          DB_USER: family
+          DB_PASSWORD: family123
+        run: corepack pnpm test:web:next
+      - name: 上传失败截图与 trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-next-artifacts
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 7
+
   # 镜像构建：验证 Dockerfile 与工作区包（packages/*）的复制/构建顺序没有坏掉
   docker-build:
     name: 镜像构建
