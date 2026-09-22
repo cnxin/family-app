@@ -52,6 +52,20 @@ function addDays(value, days) {
   return date.toISOString().slice(0, 10);
 }
 
+async function addMenuDish(target, date) {
+  const existing = await db.query(
+    'SELECT id FROM menus WHERE "householdId"=$1 AND date=$2 AND "mealType"=\'dinner\'',
+    [target.householdId, date],
+  );
+  const menuId = existing.rows[0]?.id
+    ?? await insertScoped(db, target, 'menus', { date, mealType: 'dinner' });
+  const dishId = await insertScoped(db, target, 'dishes', { name: '红烧肉', category: '荤菜' });
+  await db.query(
+    'INSERT INTO menu_items ("menuId","dishId","requestedById") VALUES ($1,$2,$3)',
+    [menuId, dishId, target.memberId],
+  );
+}
+
 async function fixture(role = 'owner', timezone = 'Asia/Shanghai') {
   const created = await createModuleHousehold(db, role);
   created.retainUntilDatabaseDrop = true;
@@ -73,9 +87,9 @@ async function dateRule({ domain, kind, threshold, create, setDue, complete }) {
   const id = await create(target, addDays(TODAY, threshold + 1));
   assertAbsent(await attention(target), domain, `${domain}/${kind} 到期前一天不出现`);
   await setDue(target, id, addDays(TODAY, threshold));
-  assertItem(await attention(target), domain, { kind, dueOn: addDays(TODAY, threshold), overdue: false }, `${domain}/${kind} 阈值当天出现`);
+  assertItem(await attention(target), domain, { kind, kinds: [kind], dueOn: addDays(TODAY, threshold), overdue: false }, `${domain}/${kind} 阈值当天出现`);
   await setDue(target, id, addDays(TODAY, -1));
-  assertItem(await attention(target), domain, { kind, dueOn: addDays(TODAY, -1), overdue: true }, `${domain}/${kind} 逾期出现`);
+  assertItem(await attention(target), domain, { kind, kinds: [kind], dueOn: addDays(TODAY, -1), overdue: true }, `${domain}/${kind} 逾期出现`);
   await complete(target, id);
   assertAbsent(await attention(target), domain, `${domain}/${kind} 办完后消失`);
 }
@@ -119,9 +133,22 @@ try {
     setDue: (_, id, due) => db.query('UPDATE visits SET "startsAt"=$1 WHERE id=$2', [`${due}T02:00:00.000Z`, id]),
     complete: async (target, id) => {
       const [{ due }] = (await db.query(`SELECT ("startsAt" AT TIME ZONE 'Asia/Shanghai')::date::text AS due FROM visits WHERE id=$1`, [id])).rows;
-      await insertScoped(db, target, 'menus', { date: due, mealType: 'dinner' });
+      await addMenuDish(target, due);
     },
   });
+
+  const emptyMenuFixture = await fixture();
+  const emptyMenuDue = addDays(TODAY, 3);
+  await insertScoped(db, emptyMenuFixture, 'visits', {
+    title: '空菜单来访', startsAt: `${emptyMenuDue}T02:00:00.000Z`,
+    hostMemberId: emptyMenuFixture.memberId, createdById: emptyMenuFixture.memberId,
+  });
+  for (const mealType of ['breakfast', 'lunch', 'dinner']) {
+    await insertScoped(db, emptyMenuFixture, 'menus', { date: emptyMenuDue, mealType });
+  }
+  assertItem(await attention(emptyMenuFixture), 'guests', { kind: 'menu', kinds: ['menu'] }, '当天三条空菜单仍出卡');
+  await addMenuDish(emptyMenuFixture, emptyMenuDue);
+  assertAbsent(await attention(emptyMenuFixture), 'guests', '当天有一道菜后访客菜单卡消失');
 
   const guestRequestFixture = await fixture();
   const visitId = await insertScoped(db, guestRequestFixture, 'visits', {
@@ -136,9 +163,28 @@ try {
   const requestId = await insertScoped(db, guestRequestFixture, 'guest_meal_requests', {
     visitId, invitationId, mealDate: '2026-10-20', mealType: 'dinner', dishName: '红烧肉',
   });
-  assertItem(await attention(guestRequestFixture), 'guests', { kind: 'meal-request', overdue: false }, '待处理访客点菜请求出现');
+  assertItem(await attention(guestRequestFixture), 'guests', { kind: 'meal-request', kinds: ['meal-request'], overdue: false }, '待处理访客点菜请求出现');
   await db.query(`UPDATE guest_meal_requests SET status='accepted' WHERE id=$1`, [requestId]);
   assertAbsent(await attention(guestRequestFixture), 'guests', '访客点菜请求处理后消失');
+
+  const mixedGuestFixture = await fixture();
+  const mixedDue = addDays(TODAY, 2);
+  const mixedVisitId = await insertScoped(db, mixedGuestFixture, 'visits', {
+    title: '两种访客事项', startsAt: `${mixedDue}T02:00:00.000Z`,
+    hostMemberId: mixedGuestFixture.memberId, createdById: mixedGuestFixture.memberId,
+  });
+  const mixedGuestId = await insertScoped(db, mixedGuestFixture, 'guests', { name: '混合访客' });
+  const mixedInvitationId = await db.query(
+    `INSERT INTO guest_invitations ("visitId","guestId","tokenHash","expiresAt","allowsMealRequests","createdById")
+     VALUES ($1,$2,$3,$4,true,$5) RETURNING id`,
+    [mixedVisitId, mixedGuestId, randomUUID().replaceAll('-', ''), '2026-10-21T00:00:00.000Z', mixedGuestFixture.memberId],
+  ).then((result) => result.rows[0].id);
+  await insertScoped(db, mixedGuestFixture, 'guest_meal_requests', {
+    visitId: mixedVisitId, invitationId: mixedInvitationId, mealDate: mixedDue, mealType: 'dinner', dishName: '清蒸鱼',
+  });
+  const mixed = assertItem(await attention(mixedGuestFixture), 'guests', { count: 2 }, '访客同时有菜单和点菜请求时合并成一张卡');
+  assert.equal(mixed.kinds.length, 2, '合并条目 kinds 长度为 2');
+  assert.ok(mixed.kinds.includes('menu') && mixed.kinds.includes('meal-request'), 'kinds 同时包含两种访客事项');
 
   await dateRule({
     domain: 'travel', kind: 'checklist', threshold: 7,
@@ -271,6 +317,7 @@ try {
   }
   const sixty = assertItem(await attention(sixtyFixture), 'assets', { count: 60 }, '60 件资产全部计数，不受列表上限影响');
   assert.equal(sixty.entity, undefined, '合并条目不返回单一实体');
+  assert.deepEqual(sixty.kinds, ['maintenance'], '同一 kind 合并后 kinds 只有一种');
   assert.equal(sixty.key, 'assets:attention', '域 key 在数量变化时保持稳定');
 
   console.log('\n今天页留意端点测试全部通过');

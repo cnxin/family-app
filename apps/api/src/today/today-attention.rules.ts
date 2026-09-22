@@ -115,6 +115,7 @@ export class GuestMenuAttentionRule implements AttentionRule {
          AND NOT EXISTS (
            SELECT 1
              FROM menus m
+             JOIN menu_items mi ON mi."menuId" = m.id
             WHERE m."householdId" = v."householdId"
               AND m.date = (v."startsAt" AT TIME ZONE $3)::date
          )`,

@@ -134,10 +134,12 @@ export class TodayAttentionService {
             || (a.dueOn ?? '9999-99-99').localeCompare(b.dueOn ?? '9999-99-99'),
         );
         const first = sorted[0];
+        const kinds = [...new Set(sorted.map((entry) => entry.kind))];
         return {
           key: `${domain}:attention`,
           domain,
           kind: first.kind,
+          kinds,
           count: entries.length,
           ...(entries.length === 1 ? { entity: { id: first.id, name: first.name } } : {}),
           ...(first.dueOn ? { dueOn: first.dueOn } : {}),
