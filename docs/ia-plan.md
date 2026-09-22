@@ -251,6 +251,33 @@
 - **e2e**：造一件 3 天后维护的资产 → 今天页出卡 → 主动作到资产 → 用默认今天完成维护 → 回今天页卡片消失；点「稍后」后卡片消失且刷新仍不出现；普通成员看不到管理员卡片；收起资产后卡片消失；桌面无卡片时主区无空白；截图至少覆盖两张卡片及无卡桌面。
 - **提交**：`feat(api): 今天页留意端点，规则在服务端按家庭日期计算`；`feat(web): 今天页「需要留意」，低频功能有事才出现`。
 
+#### F5b · 实现备注（2026-09-22）
+
+- 文案在 `apps/web/src/lib/attention-copy.ts`，不放 `packages/shared`：跳转路径依赖 `routes.ts`。单件写成「净水器滤芯 3 天后该换了」，逾期是「已逾期 N 天」，多件是「3 件资产快到期」。
+- 来访记录没有餐次字段。「去点菜」默认 `mealType=dinner`。点菜页只消费 `date` / `mealType`，读完从 URL 抹掉。
+- 桌面 ≥1024px 的两栏在今天页自己的网格里。右栏只放留意；没有可见卡片时不渲染右栏。没有改共享的 `Page`。
+- 「稍后」键是 `fa.snooze.<memberId>`。`kinds.length > 1` 时主动作落到该域列表页。
+- 公开邀请页提交点菜请求后，失效发生在访客自己的浏览器里。家里人的今天页靠 1 分钟过期和重新聚焦，本轮不推送。见 refactor-plan 教训 25。
+
+##### 逐域失效核对
+
+`invalidateModules()` 会连带失效 `['today','attention']`。投票和备份另外直接失效留意。本轮补了两处：加菜（`useAddMenuItems`）和厨房确认扣库（`useConfirmConsumption`）。
+
+| 域 | 会改变留意结果的写入 | 失效 |
+| --- | --- | --- |
+| 资产维护 / 续费 / 保修 | 档案、续费、维护计划、完成维护，经 `invalidateAssets()` | 有 |
+| 访客来访、接受或婉拒点菜请求 | `invalidateGuests()` | 有 |
+| 访客当天还没有菜品 | `useAddMenuItems` 成功后失效留意。空菜单行不算有菜 | 有 |
+| 出行清单 | `useTravelMutation()` | 有 |
+| 库存临期批次 | 物品、批次、采购收货走 `invalidateInventory()`；厨房确认扣库走 `useConfirmConsumption()` | 有 |
+| 投票 | 新建、关闭、归档走模块失效；投票、改票、撤票在 `useVotePoll()` | 有 |
+| 积分兑换审批 | `invalidatePoints()` | 有 |
+| 财务预算超支 | `useFinanceMutation()` | 有 |
+| 备份失败或 worker 离线 | `useBackupMutation()`。worker 心跳不是页面写入，靠过期和重新聚焦 | 有 |
+| 收起模块 | `useSetModuleOverride()` | 有 |
+| 小管家确认提案 / 提案组 | 确认时走 `invalidateModules()` | 有 |
+| 公开邀请页提交点菜请求 | 只失效访客自己的查询客户端 | 不推送；家里人靠 1 分钟过期和重新聚焦 |
+
 ### F6 · ⌘K 搜动作 ［M］
 
 - **`lib/actions.ts`**：动作注册表。每条 `{ id, label, keywords[], domain, to }`，`to` 是带深链参数的路径。首批：

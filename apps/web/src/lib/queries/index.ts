@@ -27,3 +27,4 @@ export * from './activities';
 export * from './media';
 export * from './media-settings';
 export * from './media-watchlist';
+export * from './attention';

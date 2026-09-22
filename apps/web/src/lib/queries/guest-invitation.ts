@@ -7,6 +7,7 @@ import type {
   MealType,
 } from '@family/contracts';
 import { api } from '../api';
+import { invalidateAttention } from './attention';
 
 /**
  * 公开邀请页这一组全部 `auth: false`：访客没有家庭账号，令牌本身就是凭证。
@@ -83,6 +84,7 @@ export function useGuestMealRequests(token: string | undefined, enabled = true) 
 function invalidateMeals(client: ReturnType<typeof useQueryClient>, token: string | undefined) {
   void client.invalidateQueries({ queryKey: ['guest-meal-options', token] });
   void client.invalidateQueries({ queryKey: ['guest-meal-requests', token] });
+  void invalidateAttention(client);
 }
 
 /** 从菜单里选一道（幂等：再点一次拿回同一条请求）。 */

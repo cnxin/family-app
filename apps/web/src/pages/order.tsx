@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { Dish, DishCategory } from '@family/contracts';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import type { Dish, DishCategory, MealType } from '@family/contracts';
 import { DISH_CATEGORIES, MEAL_TYPES } from '@family/contracts';
+import { isDateOnly } from '@family/shared';
 import { CATEGORY_EMOJI, useCart } from '../lib/cart';
 import { useAuth } from '../lib/auth';
 import {
@@ -74,9 +75,25 @@ function DishCard({
   );
 }
 
+function isMeal(value: string | null): value is MealType {
+  return value === 'breakfast' || value === 'lunch' || value === 'dinner';
+}
+
 export function OrderPage() {
   const { session } = useAuth();
   const cart = useCart();
+  const [params, setParams] = useSearchParams();
+  const setTarget = cart.setTarget;
+  useEffect(() => {
+    const date = params.get('date');
+    if (!date) return;
+    const meal = params.get('mealType');
+    if (isDateOnly(date)) setTarget(date, isMeal(meal) ? meal : 'dinner');
+    const next = new URLSearchParams(params);
+    next.delete('date');
+    next.delete('mealType');
+    setParams(next, { replace: true });
+  }, [params, setParams, setTarget]);
   const today = todayISO();
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<DishCategory | null>(null);

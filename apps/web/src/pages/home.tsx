@@ -3,6 +3,8 @@ import { useAuth } from '../lib/auth';
 import { shelfSegments } from '../lib/nav';
 import { usePins, PIN_LIMIT } from '../lib/pins';
 import { useModules, useSetModuleOverride } from '../lib/queries/modules';
+import { useAttention } from '../lib/queries';
+import { attentionCopy } from '../lib/attention-copy';
 import { pushToast } from '../lib/toast';
 import { openPalette } from '../components/command-palette';
 import { HomeTile } from '../components/home-tile';
@@ -17,6 +19,7 @@ export default function HomePage() {
   const member = session?.member;
   const manager = member?.role === 'owner' || member?.role === 'admin';
   const modules = useModules();
+  const attention = useAttention();
   const update = useSetModuleOverride();
   const { pins } = usePins();
   const [editing, setEditing] = useState(false);
@@ -24,8 +27,9 @@ export default function HomePage() {
   const active = segments.filter((segment) => modules.visible(segment.key));
   const available = segments.filter((segment) => !modules.visible(segment.key));
   const pinned = pins.flatMap((key) => active.filter((segment) => segment.key === key));
-  const tile = (segment: typeof segments[number]) => (
-    <HomeTile key={segment.key} segment={segment} editing={editing} busy={update.isPending}
+  const tile = (segment: typeof segments[number]) => {
+    const item = attention.data?.items.find((entry) => entry.domain === segment.key);
+    return <HomeTile key={segment.key} segment={segment} status={item ? attentionCopy(item, attention.data?.today).title : undefined} editing={editing} busy={update.isPending}
       onHide={manager ? () => {
         const previous = modules.state(segment.key)?.override ?? null;
         update.mutate({ key: segment.key, override: 'off' }, { onSuccess: () => {
@@ -34,7 +38,7 @@ export default function HomePage() {
           } });
         } });
       } : undefined} />
-  );
+  };
   return (
     <Page title="家里" subtitle="家里的功能，都在这里"
       actions={<Button variant="ghost" className="min-h-11" aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? '完成置顶' : '编辑置顶'}</Button>}

@@ -45,3 +45,28 @@ export function toNewRoute(targetPath: string | null | undefined): string | null
   const rest = pathname.slice(hit[0].length);
   return `${hit[1]}${rest}${search ? `?${search}` : ''}`;
 }
+
+export const attentionRoutes = {
+  assets: '/house/assets', guests: '/house/guests', travel: '/life/travel', inventory: '/house/inventory', polls: '/schedule/polls', points: '/house/points', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/home',
+} as const;
+
+
+/** F5「需要留意」卡片的单步直达路径，所有文案层路径都集中从这里生成。 */
+export function attentionPath(item: {
+  domain: keyof typeof attentionRoutes;
+  kind: string;
+  kinds?: string[];
+  dueOn?: string;
+  entity?: { id: string };
+}): string {
+  if ((item.kinds?.length ?? 0) > 1) return attentionRoutes[item.domain];
+  if (item.domain === 'assets' && item.entity) return `${attentionRoutes.assets}/${encodeURIComponent(item.entity.id)}`;
+  if (item.domain === 'travel' && item.entity) return `${attentionRoutes.travel}/${encodeURIComponent(item.entity.id)}`;
+  if (item.domain === 'polls' && item.entity) return `${attentionRoutes.polls}?pollId=${encodeURIComponent(item.entity.id)}`;
+  if (item.domain === 'points' && item.entity) return `${attentionRoutes.points}?redemptionId=${encodeURIComponent(item.entity.id)}`;
+  // 来访记录没有餐次，默认晚餐；点菜页读到 date 后会把参数抹掉。
+  if (item.domain === 'guests' && item.kind === 'menu' && item.dueOn) {
+    return `/eat/order?date=${encodeURIComponent(item.dueOn)}&mealType=dinner`;
+  }
+  return attentionRoutes[item.domain];
+}

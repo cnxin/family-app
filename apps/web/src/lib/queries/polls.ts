@@ -1,4 +1,5 @@
 import { invalidateModules } from './modules';
+import { invalidateAttention } from './attention';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreatePollBody, HouseholdPoll, UpdatePollBody } from '@family/contracts';
 import { api } from '../api';
@@ -41,6 +42,7 @@ export function useVotePoll() {
         body: { optionIds: input.optionIds },
       }),
     onSuccess: (poll) => {
+      void invalidateAttention(client);
       client.setQueryData<HouseholdPoll[]>(['polls'], (current) =>
         current?.map((one) => (one.id === poll.id ? poll : one)),
       );

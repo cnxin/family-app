@@ -20,11 +20,6 @@ async function asMember(page: Page) {
   await page.addInitScript((value) => localStorage.setItem('family-app.session', JSON.stringify(value)), session);
 }
 
-const attentionPaths = [
-  '/api/assets?status=all', '/api/visits', '/api/travel-plans?status=active',
-  '/api/inventory-batches?status=active&days=7', '/api/polls?status=all',
-];
-const adminPaths = ['/api/reward-redemptions', '/api/finance/summary', '/api/system/backups'];
 
 function watchRequests(page: Page) {
   const paths: string[] = [];
@@ -41,12 +36,15 @@ test('家里冷启动：14 个 shelf、无状态伪零，也不逐图块拉列�
   await expect(page.locator('main h1')).toHaveText('家里');
   await expect(page.getByRole('heading', { name: '家里在用的' })).toBeVisible();
   await expect(page.locator('[data-home-grid] a')).toHaveCount(14);
-  await expect(page.locator('[data-home-status]')).toHaveCount(0);
+  await expect(page.locator('[data-home-status]').first()).toBeVisible();
+  for (const text of await page.locator('[data-home-status]').allTextContents()) {
+    expect(text.trim()).not.toMatch(/已载入|^\d+$/);
+  }
   await expect(page.getByRole('button', { name: '编辑置顶' })).toBeVisible();
   await expect(page.getByText('还可以开启', { exact: true })).toHaveCount(0);
   await page.waitForLoadState('networkidle');
-  // 模块状态是外壳级查询；留意源仍只由导航意图预取。
-  expect(paths).toEqual(['/api/system/modules']);
+  // 外壳还会读未读数；状态行只来自留意，不逐图块拉列表。
+  expect([...new Set(paths)].sort()).toEqual(['/api/notifications', '/api/system/modules', '/api/today/attention']);
   await page.locator('main').getByRole('link', { name: '家庭设置', exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
 });
@@ -54,13 +52,13 @@ test('家里冷启动：14 个 shelf、无状态伪零，也不逐图块拉列�
 test('家里点资产到规范路径；异步预取成功后也不展示载入计数', async ({ page }) => {
   await page.goto('/home');
   const tile = page.locator('[data-home-grid]').getByRole('link', { name: '资产', exact: true });
-  await expect(tile.locator('[data-home-status]')).toHaveCount(0);
+  await expect(tile.locator('[data-home-status]')).toBeVisible();
   const responsePromise = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/assets');
   await tile.hover();
   const response = await responsePromise;
   expect(response.status()).toBe(200);
   expect(Array.isArray((await response.json()).data)).toBe(true);
-  await expect(tile.locator('[data-home-status]')).toHaveCount(0);
+  await expect(tile.locator('[data-home-status]')).not.toHaveText(/已载入|^\d+$/);
   await tile.click();
   await expect(page).toHaveURL(/\/house\/assets$/);
   await expect(page.locator('main h1')).toHaveText('家庭资产');
@@ -103,9 +101,7 @@ for (const ordinary of [false, true]) {
     await homeNavigation(page, isMobile).click();
     await expect(page).toHaveURL(/\/home$/);
     await page.waitForLoadState('networkidle');
-    for (const path of attentionPaths) expect(paths).toContain(path);
-    for (const path of adminPaths) expect(paths.some((value) => value.startsWith(path))).toBe(!ordinary);
-    expect(paths.every((value) => attentionPaths.includes(value) || adminPaths.some((path) => value.startsWith(path)))).toBe(true);
+    expect(paths).toEqual(['/api/today/attention']);
     const main = page.locator('main');
     await expect(main.locator('[data-home-grid] a')).toHaveCount(ordinary ? 13 : 14);
     await expect(main.getByRole('link', { name: '财务', exact: true })).toHaveCount(ordinary ? 0 : 1);

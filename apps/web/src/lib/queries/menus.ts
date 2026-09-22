@@ -1,3 +1,4 @@
+import { invalidateAttention } from './attention';
 import { invalidateModules } from './modules';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -57,7 +58,10 @@ export function useAddMenuItems(date: string, mealType: MealType) {
   return useMutation({
     mutationFn: (input: { menuId: string; items: AddMenuItemsBody['items'] }) =>
       api<Menu>(`/menus/${input.menuId}/items`, { method: 'POST', body: { items: input.items } }),
-    onSuccess: (menu) => client.setQueryData(['menu', date, mealType], menu),
+    onSuccess: (menu) => {
+      client.setQueryData(['menu', date, mealType], menu);
+      void invalidateAttention(client);
+    },
   });
 }
 
@@ -207,6 +211,7 @@ export function useConfirmConsumption() {
     mutationFn: (menuId: string) =>
       api<InventoryActionResult>(`/menus/${menuId}/confirm-consumption`, { method: 'POST' }),
     onSuccess: (_, menuId) => {
+      void invalidateAttention(client);
       void client.invalidateQueries({ queryKey: ['menu-inventory-preview', menuId] });
       void client.invalidateQueries({ queryKey: ['inventory'] });
     },

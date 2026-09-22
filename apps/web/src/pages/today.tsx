@@ -2,13 +2,12 @@ import { useAuth } from '../lib/auth';
 import {
   shiftDays,
   todayISO,
-  useActivities,
   useCalendarEntries,
   useMenusOfDate,
-  useNotifications,
   useReminders,
   useShoppingList,
   useTaskRange,
+  useAttention,
   useUpdateOccurrence,
 } from '../lib/queries';
 import { toNewRoute } from '../lib/routes';
@@ -17,7 +16,8 @@ import { Skeleton } from '../components/skeleton';
 import { SoftLink } from '../components/soft-link';
 import { TodayStats, type TodayStat } from '../components/today-hero';
 import { TodayMeals } from '../components/today-meals';
-import { TodayActivity, TodayReminders, TodayShopping } from '../components/today-aside';
+import { TodayReminders, TodayShopping } from '../components/today-aside';
+import { AttentionSection, nextHouseholdMidnight, useAttentionSnooze } from '../components/attention-card';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -50,12 +50,17 @@ export function TodayPage() {
   const reminders = useReminders('scheduled');
   const shopping = useShoppingList(today);
   const calendar = useCalendarEntries(today, today);
-  const activities = useActivities('all');
-  const notifications = useNotifications();
+  const attention = useAttention();
   const update = useUpdateOccurrence();
+  const memberId = session?.member.id ?? '';
+  const { visible: visibleAttention, snooze } = useAttentionSnooze(attention.data?.items ?? [], memberId);
+  const attentionToday = attention.data?.today ?? today;
+  const timezone = session?.householdTimezone ?? 'Asia/Shanghai';
 
   const all = range.data ?? [];
   const todays = all.filter((item) => item.dueDate === today);
+  const mine = todays.filter((item) => item.assigneeId === memberId);
+  const family = todays.filter((item) => item.assigneeId !== memberId);
   const later = all.filter((item) => item.dueDate !== today && item.status === 'pending');
   const open = todays.filter((item) => item.status === 'pending');
   const unclaimed = open.filter((item) => !item.assigneeId);
@@ -66,7 +71,6 @@ export function TodayPage() {
     .sort((a, b) => a.remindAt.localeCompare(b.remindAt));
 
   const toBuy = (shopping.data ?? []).filter((item) => !item.checked);
-  const unread = (notifications.data ?? []).filter((one) => !one.readAt).length;
   // 日历里的 task / menu 就是上面那两块，首页再列一遍等于同一件事说三次
   const events = (calendar.data ?? [])
     .filter((one) => one.module !== 'task' && one.module !== 'menu')
@@ -76,7 +80,6 @@ export function TodayPage() {
     { key: 'task', label: '今天要做', value: open.length, unit: '件', to: '/schedule/tasks', tone: 'accent' },
     { key: 'buy', label: '要买的', value: toBuy.length, unit: '样', to: '/house/shopping', tone: 'warm' },
     { key: 'remind', label: '待提醒', value: todayReminders.length, unit: '条', to: '/schedule/reminders' },
-    { key: 'unread', label: '未读消息', value: unread, unit: '条', to: '/schedule/notifications', tone: 'warm' },
   ];
 
   return (
@@ -102,8 +105,14 @@ export function TodayPage() {
       }
       toolbar={<TodayStats stats={stats} />}
     >
-      {/* 左栏是「今天要做什么」，右栏是「顺带要知道的」 */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div
+        data-today-layout
+        className={
+          'flex min-h-0 w-full flex-1 flex-col gap-4 ' +
+          (visibleAttention.length ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start' : '')
+        }
+      >
+      <div data-today-main className="flex min-w-0 flex-col gap-4">
         <section>
           <div className="mb-2 flex items-baseline justify-between px-1">
             <h2 className="text-[13px] font-semibold tracking-wide text-ink-soft">今天吃什么</h2>
@@ -114,8 +123,6 @@ export function TodayPage() {
           <TodayMeals menus={menus.data ?? []} date={today} pending={menus.isPending} />
         </section>
 
-        {/* 桌面上并排：竖着摞的话下面那块被顶出屏幕，上面那块又空一大片 */}
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
         <Panel
           title="今日待办"
           right={
@@ -135,43 +142,51 @@ export function TodayPage() {
           ) : todays.length === 0 ? (
             <EmptyState emoji="✅" title="今天没有安排任务" hint="轻松一天" />
           ) : (
-            todays.map((item) => (
-              <div
-                key={item.id}
-                className="flex min-h-[48px] items-center gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0"
-              >
-                <Checkbox
-                  label={`完成${item.task.title}`}
-                  checked={item.status === 'done'}
-                  disabled={!item.canUpdate || update.isPending}
-                  onChange={() =>
-                    update.mutate({
-                      taskId: item.taskId,
-                      dueDate: item.dueDate,
-                      body: { status: item.status === 'done' ? 'pending' : 'done' },
-                    })
-                  }
-                />
-                <span
-                  className={
-                    'min-w-0 flex-1 truncate text-[15px] ' +
-                    (item.status === 'done' ? 'text-ink-soft line-through' : '')
-                  }
-                >
-                  {item.task.title}
-                </span>
-                {item.assignee ? (
-                  <span className="shrink-0 text-xs text-ink-soft">
-                    {item.assignee.avatarEmoji} {item.assignee.name}
-                  </span>
-                ) : item.status === 'pending' ? (
-                  // 做完的就别再喊「待认领」了
-                  <span className="shrink-0 rounded-full bg-warm-soft px-2 py-0.5 text-[11px] text-warm">
-                    待认领
-                  </span>
-                ) : null}
-              </div>
-            ))
+            <>
+              {([{ label: '我的', rows: mine }, { label: '全家', rows: family }] as const)
+                .filter((group) => group.rows.length)
+                .map((group) => (
+                  <div key={group.label}>
+                    <p className="px-3.5 pb-1 pt-2 text-[11.5px] font-medium text-ink-soft">{group.label}</p>
+                    {group.rows.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex min-h-[48px] items-center gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0"
+                      >
+                        <Checkbox
+                          label={`完成${item.task.title}`}
+                          checked={item.status === 'done'}
+                          disabled={!item.canUpdate || update.isPending}
+                          onChange={() =>
+                            update.mutate({
+                              taskId: item.taskId,
+                              dueDate: item.dueDate,
+                              body: { status: item.status === 'done' ? 'pending' : 'done' },
+                            })
+                          }
+                        />
+                        <span
+                          className={
+                            'min-w-0 flex-1 truncate text-[15px] ' +
+                            (item.status === 'done' ? 'text-ink-soft line-through' : '')
+                          }
+                        >
+                          {item.task.title}
+                        </span>
+                        {item.assignee ? (
+                          <span className="shrink-0 text-xs text-ink-soft">
+                            {item.assignee.avatarEmoji} {item.assignee.name}
+                          </span>
+                        ) : item.status === 'pending' ? (
+                          <span className="shrink-0 rounded-full bg-warm-soft px-2 py-0.5 text-[11px] text-warm">
+                            待认领
+                          </span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+            </>
           )}
 
           {/* 接下来两天压在今天下面，灰一点——是提醒不是任务 */}
@@ -236,15 +251,20 @@ export function TodayPage() {
             })
           )}
         </Panel>
-        </div>
 
-      </div>
-
-      <aside className="flex min-h-0 flex-col gap-4 lg:w-[320px] lg:flex-none">
         <TodayReminders items={todayReminders} />
         <TodayShopping items={toBuy} />
-        <TodayActivity items={activities.data ?? []} />
-      </aside>
+      </div>
+      {visibleAttention.length ? (
+        <aside data-today-attention className="min-w-0">
+          <AttentionSection
+            items={visibleAttention}
+            today={attentionToday}
+            onSnooze={(key) => snooze(key, nextHouseholdMidnight(attentionToday, timezone))}
+          />
+        </aside>
+      ) : null}
+      </div>
     </Page>
   );
 }

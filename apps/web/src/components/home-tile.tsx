@@ -5,11 +5,12 @@ import { usePins, PIN_LIMIT } from '../lib/pins';
 import { usePrefetch } from './nav-prefetch';
 import { SoftLink } from './soft-link';
 
-export function HomeTile({ segment, editing = false, onHide, busy = false }: {
+export function HomeTile({ segment, editing = false, onHide, busy = false, status }: {
   segment: NavSegment & { key: ShelfModuleKey };
   editing?: boolean;
   onHide?: () => void;
   busy?: boolean;
+  status?: string;
 }) {
   const prefetch = usePrefetch();
   const { pins, toggle } = usePins();
@@ -54,6 +55,7 @@ export function HomeTile({ segment, editing = false, onHide, busy = false }: {
         className={`flex h-full min-w-0 flex-col items-center gap-2 rounded-xl border border-border bg-surface p-2.5 text-center transition-colors duration-150 hover:bg-muted active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 lg:p-4 ${editing || onHide ? 'pt-11 lg:pt-11' : ''}`}>
         <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent-soft text-xl font-semibold text-accent">{segment.glyph}</span>
         <span className="max-w-full text-[13px] font-medium leading-5 text-ink">{segment.label}</span>
+        {status ? <span data-home-status className="max-w-full truncate text-[11px] leading-4 text-ink-soft">{status}</span> : null}
       </SoftLink>
       {editing ? (
         <button type="button" onClick={() => toggle(segment.key)} disabled={atLimit}

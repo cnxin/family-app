@@ -4,7 +4,6 @@ import type {
   AuthSession,
   CalendarEntry,
   Dish,
-  HouseholdActivity,
   HouseholdPoll,
   HomeAsset,
   HouseholdReminder,
@@ -16,6 +15,7 @@ import type {
   RecipeDish,
   ShoppingItem,
   TaskOccurrence,
+  TodayAttention,
 } from '@family/contracts';
 import { prefetchAttention } from './attention-prefetch';
 import { api } from './api';
@@ -57,7 +57,11 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
       queryFn: () => api<HouseholdPoll[]>('/polls?status=all'),
     });
   },
+  '/home': (client) => {
+    void client.prefetchQuery({ queryKey: ['today', 'attention'], queryFn: () => api<TodayAttention>('/today/attention') });
+  },
   '/': (client) => {
+    void client.prefetchQuery({ queryKey: ['today', 'attention'], queryFn: () => api<TodayAttention>('/today/attention') });
     const today = todayISO();
     void client.prefetchQuery({
       queryKey: ['menus-of-date', today],
@@ -70,10 +74,6 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
     void client.prefetchQuery({
       queryKey: ['calendar', today, today],
       queryFn: () => api<CalendarEntry[]>(`/calendar?start=${today}&end=${today}`),
-    });
-    void client.prefetchQuery({
-      queryKey: ['activities', 'all'],
-      queryFn: () => api<HouseholdActivity[]>('/activities?scope=all&limit=100'),
     });
   },
   '/eat/order': (client) => {
@@ -140,7 +140,7 @@ const PREFETCH: Record<string, (client: QueryClient) => void> = {
 };
 
 export function prefetchRoute(client: QueryClient, path: string, session?: AuthSession | null) {
-  if (path === '/home' && session) prefetchAttention(client, session);
+  if ((path === '/' || path === '/home') && session) prefetchAttention(client, session);
   PREFETCH[path]?.(client);
 }
 

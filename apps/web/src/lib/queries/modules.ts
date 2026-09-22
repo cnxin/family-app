@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { invalidateAttention } from './attention';
 import { systemModulesSchema, type ModuleOverride, type ShelfModuleKey, type SystemModuleState } from '@family/contracts';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -9,6 +10,7 @@ interface ModulesCache { householdId: string; modules: SystemModuleState[] }
 
 /** 所有影响 F3 hasData 的写操作都经过这里；失效会刷新外壳的常驻订阅。 */
 export function invalidateModules(client: QueryClient) {
+  void invalidateAttention(client);
   return client.invalidateQueries({ queryKey: modulesKey });
 }
 

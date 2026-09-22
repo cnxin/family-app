@@ -8,6 +8,7 @@ import type {
   UpdateBackupPolicyBody,
 } from '@family/contracts';
 import { api } from '../api';
+import { invalidateAttention } from './attention';
 
 export const BACKUP_KIND_LABELS: Record<BackupRunKind, string> = {
   backup: '完整备份',
@@ -67,6 +68,7 @@ function useBackupMutation<TInput, TResult>(run: (input: TInput) => Promise<TRes
   return useMutation({
     mutationFn: run,
     onSuccess: () => {
+      void invalidateAttention(client);
       void client.invalidateQueries({ queryKey: ['backup-dashboard'] });
       void client.invalidateQueries({ queryKey: ['notifications'] });
     },

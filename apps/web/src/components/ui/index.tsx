@@ -17,12 +17,16 @@ const variants = {
   outline: 'border border-border bg-surface text-ink hover:bg-muted',
 } as const;
 
+export function buttonClass(variant: keyof typeof variants = 'primary', className = '') {
+  return `${base} ${variants[variant]} h-10 px-4 ${className}`;
+}
+
 export function Button({
   variant = 'primary',
   className = '',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof variants }) {
-  return <button className={`${base} ${variants[variant]} h-10 px-4 ${className}`} {...props} />;
+  return <button className={buttonClass(variant, className)} {...props} />;
 }
 
 export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
