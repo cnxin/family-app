@@ -45,6 +45,7 @@ export function SoftLink({
   onNavigate?: () => void;
   onPointerEnter?: () => void;
   onPointerDown?: () => void;
+  'aria-label'?: string;
 }) {
   const soft = useSoftNavigate();
   return (

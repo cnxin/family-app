@@ -25,7 +25,8 @@ test('桌面侧栏：七项平铺，设置和头像在底部', async ({ page, is
   const sidebar = page.getByRole('navigation', { name: '功能导航' });
   await expect(sidebar.getByRole('link')).toHaveCount(coreLabels.length);
   for (const [index, label] of coreLabels.entries()) {
-    await expect(sidebar.getByRole('link').nth(index)).toHaveAccessibleName(label);
+    const name = label === '消息' ? /^消息/ : label;
+    await expect(sidebar.getByRole('link').nth(index)).toHaveAccessibleName(name);
   }
   await expect(sidebar.getByRole('button')).toHaveCount(0);
   await expect(sidebar.getByText('我钉住的')).toHaveCount(0);
@@ -71,8 +72,8 @@ test('手机四项等宽；吃饭与日程只留 core，购物仍用原路径', 
   await expect(nav.getByRole('button', { name: '吃饭', exact: true })).toHaveAttribute('aria-current', 'page');
   await nav.getByRole('button', { name: '日程', exact: true }).dispatchEvent('pointerdown');
   const schedule = page.getByRole('menu', { name: '日程的功能' });
-  await expect(schedule.getByRole('link')).toHaveText(['日历', '任务', '消息']);
-  await schedule.getByRole('link', { name: '消息', exact: true }).click();
+  await expect(schedule.getByRole('link')).toHaveText(['日历', '任务', /^消息/]);
+  await schedule.getByRole('link', { name: /^消息/ }).click();
   await expect(page).toHaveURL(/\/schedule\/notifications$/);
   await expect(schedule).toBeHidden();
   await expectNoHorizontalOverflow(page);

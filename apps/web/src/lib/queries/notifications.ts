@@ -17,6 +17,11 @@ export function useNotifications(includeRead = false) {
   });
 }
 
+/** 导航角标复用未读列表，不另开计数接口。 */
+export function useUnreadCount() {
+  return useNotifications().data?.length ?? 0;
+}
+
 export function useMarkNotificationRead() {
   const client = useQueryClient();
   return useMutation({

@@ -1,5 +1,6 @@
 import { PinsProvider } from '../lib/pins';
 import { useModules } from '../lib/queries/modules';
+import { useUnreadCount } from '../lib/queries/notifications';
 import { PinnedNavigation } from './pinned-navigation';
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
@@ -15,16 +16,19 @@ import { SoftLink, useSoftNavigate } from './soft-link';
 function Sidebar() {
   const { pathname } = useLocation();
   const prefetch = usePrefetch();
+  const unread = useUnreadCount();
   return (
     <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-2" aria-label="功能导航">
       {coreSegments().map((segment) => {
         const href = segment.path!;
         const current = matchesPath(pathname, href);
+        const badge = segment.key === 'notifications' && unread > 0;
         return (
           <SoftLink
             key={segment.key}
             to={href}
             active={current}
+            aria-label={badge ? `消息，${unread} 条未读` : undefined}
             {...prefetch.bind(href)}
             className={
               'mb-0.5 flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors duration-150 ' +
@@ -33,6 +37,9 @@ function Sidebar() {
           >
             <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-md bg-muted text-[12px]">{segment.glyph}</span>
             <span className="truncate">{segment.label}</span>
+            {badge ? (
+              <span data-unread-badge className="ml-auto min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] font-semibold tabular-nums text-white">{unread}</span>
+            ) : null}
           </SoftLink>
         );
       })}

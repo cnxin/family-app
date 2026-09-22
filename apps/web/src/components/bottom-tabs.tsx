@@ -9,6 +9,7 @@ import {
 import type { NavScene, NavSegment } from '../lib/nav';
 import { segmentHref, usePrefetch } from './nav-prefetch';
 import { SoftLink, useSoftNavigate } from './soft-link';
+import { useUnreadCount } from '../lib/queries/notifications';
 
 // ---- 手机：底部标签 + 上弹面板 -------------------------------------------------
 
@@ -44,10 +45,12 @@ const EXIT_MS = 170;
 function SceneMenu({
   anchor,
   segments,
+  unread,
   onClose,
 }: {
   anchor: MenuAnchor;
   segments: NavSegment[];
+  unread: number;
   onClose: () => void;
 }) {
   const { pathname } = useLocation();
@@ -142,7 +145,12 @@ function SceneMenu({
                     : 'font-medium text-ink active:bg-ink/[0.06]')
                 }
               >
-                <span className="truncate">{segment.label}</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="truncate">{segment.label}</span>
+                  {segment.key === 'notifications' && unread > 0 ? (
+                    <span data-unread-badge className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] font-semibold tabular-nums text-white">{unread}</span>
+                  ) : null}
+                </span>
               </SoftLink>
             );
           })}
@@ -159,9 +167,11 @@ function SceneMenu({
 
 function TabBar({
   manager,
+  unread,
   onOpenMenu,
 }: {
   manager: boolean;
+  unread: number;
   onOpenMenu: (anchor: MenuAnchor) => void;
 }) {
   const { pathname } = useLocation();
@@ -221,7 +231,12 @@ function TabBar({
                 (isActive ? 'font-medium text-accent' : 'text-ink-soft')
               }
             >
-              <span className="text-[17px] leading-none">{scene.icon}</span>
+              <span className="relative text-[17px] leading-none">
+                {scene.icon}
+                {scene.key === 'schedule' && unread > 0 ? (
+                  <span data-unread-dot aria-hidden="true" className="absolute -right-1.5 -top-0.5 size-2 rounded-full bg-danger" />
+                ) : null}
+              </span>
               <span className="flex items-center gap-0.5">
                 {scene.label}
                 {/* 有下级的挂个小三角，让人知道点了会弹出来 */}
@@ -242,12 +257,14 @@ function prefetchOn(prefetch: ReturnType<typeof usePrefetch>, scene: NavScene) {
 /** 底部标签 + 它弹出来的那个面板，状态在这儿闭环，外壳只管摆一个位置。 */
 export function BottomTabs({ manager }: { manager: boolean }) {
   const prefetch = usePrefetch();
+  const unread = useUnreadCount();
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
 
   return (
     <>
       <TabBar
         manager={manager}
+        unread={unread}
         onOpenMenu={(anchor) => {
           // 面板停留的那一两秒正好用来把这一组数据拉回来
           prefetch.all(visibleSegments(anchor.scene, manager));
@@ -258,6 +275,7 @@ export function BottomTabs({ manager }: { manager: boolean }) {
         <SceneMenu
           anchor={menu}
           segments={visibleSegments(menu.scene, manager)}
+          unread={unread}
           onClose={() => setMenu(null)}
         />
       ) : null}
