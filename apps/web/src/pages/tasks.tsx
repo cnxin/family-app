@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import { useAuth } from '../lib/auth';
 import {
   shiftDays,
@@ -19,6 +20,17 @@ export function TasksPage() {
   const update = useUpdateOccurrence();
   const create = useCreateTask();
   const [title, setTitle] = useState('');
+  const armFocus = useRef(false);
+  useCreateIntent(() => {
+    armFocus.current = true;
+  });
+  useEffect(() => {
+    if (!armFocus.current) return;
+    armFocus.current = false;
+    const node = document.getElementById('task-create');
+    node?.scrollIntoView({ block: 'center' });
+    node?.focus();
+  }, []);
 
   const byDate = new Map<string, typeof range.data>();
   for (const item of range.data ?? []) {
@@ -43,8 +55,10 @@ export function TasksPage() {
         <>
           <form onSubmit={add} className="flex gap-2">
             <Input
+              id="task-create"
               value={title}
               placeholder="加一件今天要做的事"
+              aria-label="任务内容"
               onChange={(event) => setTitle(event.target.value)}
             />
             <Button type="submit" disabled={!title.trim() || create.isPending} className="shrink-0">

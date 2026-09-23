@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import { useSearchParams } from 'react-router-dom';
 import type { KnowledgeArticle, KnowledgeArticleCategory } from '@family/contracts';
 import { KNOWLEDGE_CATEGORY_LABELS, useKnowledgeArticles } from '../lib/queries';
@@ -33,6 +34,7 @@ export function KnowledgePage() {
   const [selected, setSelected] = useState<KnowledgeArticle | null>(null);
   const [editing, setEditing] = useState<KnowledgeArticle | null>(null);
   const [composing, setComposing] = useState(false);
+  useCreateIntent(() => setComposing(true));
 
   const list = useKnowledgeArticles({ status, category, q });
   const rows = list.data ?? NO_ARTICLES;

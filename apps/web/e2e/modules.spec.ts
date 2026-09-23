@@ -31,8 +31,8 @@ test('空家庭：资产自动隐身，真实新建后不刷新页面就上移',
   await search.fill('资产');
   await search.press('Enter');
   await expect(page).toHaveURL(/\/house\/assets$/);
-  await page.getByRole('button', { name: '+ 登记资产' }).click();
   const form = page.getByRole('dialog', { name: '登记家庭资产' });
+  await expect(form).toBeVisible();
   await form.getByLabel('资产名称').fill('第一台洗衣机');
   const created = page.waitForResponse((r) => r.url().endsWith('/assets') && r.request().method() === 'POST');
   await form.getByRole('button', { name: '保存资产' }).click();

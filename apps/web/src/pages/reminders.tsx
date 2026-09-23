@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCreateIntent } from '../lib/create-intent';
 import type { HouseholdReminder, ReminderStatus } from '@family/contracts';
 import {
   ReminderForm,
@@ -152,6 +153,7 @@ export function RemindersPage() {
   const [filter, setFilter] = useState<ReminderStatus | 'all'>('scheduled');
   const [editing, setEditing] = useState<HouseholdReminder | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  useCreateIntent(() => setFormOpen(true));
   const [cancelling, setCancelling] = useState<HouseholdReminder | null>(null);
 
   const list = useReminders('all');

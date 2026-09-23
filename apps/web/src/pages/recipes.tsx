@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import type { DishCategory, RecipeDish } from '@family/contracts';
 import { DISH_CATEGORIES } from '@family/contracts';
 import { CATEGORY_EMOJI, useCart } from '../lib/cart';
@@ -145,6 +146,7 @@ export function RecipesPage() {
   const [editor, setEditor] = useState<{ dishId: string; variantId: string | null } | null>(null);
   // 菜品本身的编辑（菜名 / 分类 / 照片…）；'new' 表示新建
   const [dishEdit, setDishEdit] = useState<RecipeDish | 'new' | null>(null);
+  useCreateIntent(() => setDishEdit('new'));
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<DishCategory | null>(null);
   const [open, setOpen] = useState<string | null>(null);

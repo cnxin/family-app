@@ -22,22 +22,24 @@ export function TransactionForm({
   accounts,
   categories,
   onClose,
+  initialMode = 'expense',
 }: {
   month: string;
   accounts: FinanceAccount[];
   categories: FinanceCategory[];
   onClose: () => void;
+  initialMode?: Mode;
 }) {
   const today = useHouseholdToday();
   const create = useCreateFinanceTransaction();
   const usable = accounts.filter((one) => one.isActive);
 
-  const [mode, setMode] = useState<Mode>('expense');
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [amount, setAmount] = useState('');
   const [accountId, setAccountId] = useState(usable[0]?.id ?? '');
   const [toAccountId, setToAccountId] = useState(usable[1]?.id ?? '');
   const [categoryId, setCategoryId] = useState(
-    categories.find((one) => one.kind === 'expense' && one.isActive)?.id ?? '',
+    categories.find((one) => one.kind === initialMode && one.isActive)?.id ?? '',
   );
   const [title, setTitle] = useState('');
   // 翻到往月记账时默认落在那个月的 1 号：旧客户端一律默认今天，

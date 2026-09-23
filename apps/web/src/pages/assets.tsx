@@ -1,6 +1,7 @@
 import { addDays, diffDays } from '@family/shared';
 import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import type { AssetCategory, HomeAsset } from '@family/contracts';
 import {
   ASSET_CATEGORY_LABELS,
@@ -101,6 +102,7 @@ export function AssetsPage() {
   const [filter, setFilter] = useState<Filter>('active');
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [creating, setCreating] = useState(false);
+  useCreateIntent(() => setCreating(true));
 
   const rows = assets.data ?? NO_ASSETS;
   const active = rows.filter((asset) => asset.status === 'active');

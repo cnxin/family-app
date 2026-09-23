@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSoftNavigate } from './soft-link';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Dish } from '@family/contracts';
+import { ACTIONS } from '../lib/actions';
 import { coreSegments, shelfSegments, settingsSegments, legacyUrl } from '../lib/nav';
 import { useAuth } from '../lib/auth';
 import { prefetchSearchSources } from '../lib/prefetch';
+import { useAgentStatus } from '../lib/queries';
 
 /** 顶栏那个按钮也要能开，用一个自定义事件把两边接起来，免得再拉一层 context。 */
 export function openPalette() {
@@ -15,8 +17,12 @@ interface Entry {
   id: string;
   label: string;
   hint: string;
-  kind: 'page' | 'dish';
+  kind: 'action' | 'page' | 'dish' | 'agent';
   go: () => void;
+}
+
+function includes(text: string, keyword: string) {
+  return text.toLowerCase().includes(keyword);
 }
 
 /**
@@ -32,6 +38,7 @@ export function CommandPalette() {
   const [cursor, setCursor] = useState(0);
   const navigate = useSoftNavigate();
   const client = useQueryClient();
+  const agent = useAgentStatus();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -99,11 +106,40 @@ export function CommandPalette() {
 
   const results = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return entries.filter((entry) => entry.kind === 'page');
-    return entries
-      .filter((entry) => entry.label.toLowerCase().includes(keyword))
-      .slice(0, 20);
-  }, [entries, query]);
+    const pages = entries.filter((entry) => entry.kind === 'page');
+    const dishesOnly = entries.filter((entry) => entry.kind === 'dish');
+    if (!keyword) return pages;
+    const manager = session?.member.role === 'owner' || session?.member.role === 'admin';
+    const actions = ACTIONS.filter((action) => action.domain !== 'finance' || manager);
+    const named = actions.filter((action) => includes(action.label, keyword)).map((action) => ({
+      id: action.id,
+      label: action.label,
+      hint: '动作',
+      kind: 'action' as const,
+      go: () => navigate(action.to),
+    }));
+    const aliased = actions.filter(
+      (action) => !includes(action.label, keyword) && action.keywords.some((item) => includes(item, keyword)),
+    ).map((action) => ({
+      id: action.id,
+      label: action.label,
+      hint: '动作',
+      kind: 'action' as const,
+      go: () => navigate(action.to),
+    }));
+    const pageHits = pages.filter((entry) => includes(entry.label, keyword));
+    const dishHits = dishesOnly.filter((entry) => includes(entry.label, keyword));
+    const ask = agent.data?.enabled
+      ? [{
+          id: 'ask-agent',
+          label: '交给小管家',
+          hint: '把这句话带过去',
+          kind: 'agent' as const,
+          go: () => navigate(`/me/assistant?draft=${encodeURIComponent(query.trim())}`),
+        }]
+      : [];
+    return [...named, ...pageHits, ...aliased, ...dishHits, ...ask].slice(0, 20);
+  }, [agent.data?.enabled, entries, navigate, query, session?.member.role]);
 
   if (!open) return null;
 
@@ -113,9 +149,17 @@ export function CommandPalette() {
     entry.go();
   };
 
+  const groups = [
+    { title: '动作', items: results.filter((entry) => entry.kind === 'action') },
+    { title: '页面', items: results.filter((entry) => entry.kind === 'page') },
+    { title: '菜品', items: results.filter((entry) => entry.kind === 'dish') },
+    { title: '小管家', items: results.filter((entry) => entry.kind === 'agent') },
+  ];
+  let shown = 0;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 p-4 pt-[12vh] backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-start sm:p-4 sm:pt-[12vh]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) setOpen(false);
       }}
@@ -124,7 +168,7 @@ export function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="快速跳转"
-        className="flex max-h-[62vh] w-full max-w-[520px] flex-col overflow-hidden rounded-card border border-border bg-surface shadow-xl"
+        className="flex max-h-[62vh] w-full max-w-[520px] flex-col overflow-hidden rounded-t-card border border-border bg-surface shadow-xl sm:rounded-card"
       >
         <input
           ref={inputRef}
@@ -153,26 +197,37 @@ export function CommandPalette() {
         />
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1">
           {results.length ? (
-            results.map((entry, index) => (
-              <button
-                key={entry.id}
-                type="button"
-                onMouseEnter={() => setCursor(index)}
-                onClick={() => pick(entry)}
-                className={
-                  'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100 ' +
-                  (index === cursor ? 'bg-accent-soft' : '')
-                }
-              >
-                <span className="flex-1 truncate text-sm">{entry.label}</span>
-                <span className="shrink-0 text-[12px] text-ink-soft">{entry.hint}</span>
-              </button>
-            ))
+            groups.map((group) =>
+              group.items.length ? (
+                <div key={group.title}>
+                  <p className="px-4 pb-1 pt-2 text-[11px] font-medium text-ink-soft">{group.title}</p>
+                  {group.items.map((entry) => {
+                    const index = shown;
+                    shown += 1;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onMouseEnter={() => setCursor(index)}
+                        onClick={() => pick(entry)}
+                        className={
+                          'flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors duration-100 ' +
+                          (index === cursor ? 'bg-accent-soft' : '')
+                        }
+                      >
+                        <span className="flex-1 truncate text-sm">{entry.label}</span>
+                        <span className="shrink-0 text-[12px] text-ink-soft">{entry.hint}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null,
+            )
           ) : (
             <p className="px-4 py-6 text-center text-[13px] text-ink-soft">没找到「{query}」</p>
           )}
         </div>
-        <div className="shrink-0 border-t border-border px-4 py-2 text-[11px] text-ink-soft">
+        <div className="shrink-0 border-t border-border px-4 py-2 pb-[max(8px,env(safe-area-inset-bottom))] text-[11px] text-ink-soft sm:pb-2">
           ↑↓ 选择 · Enter 打开 · Esc 关闭
         </div>
       </div>

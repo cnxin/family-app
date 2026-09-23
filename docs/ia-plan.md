@@ -287,6 +287,8 @@
 | `date` | 点菜 `/eat/order` | 购物车日期切到这一天。没有合法 `meal` / `mealType` 时默认晚餐 |
 | `meal` | 点菜 `/eat/order` | 餐次切到 `breakfast` / `lunch` / `dinner`。F5 留意链接上的 `mealType` 同样认 |
 | `date` + `meal` | 厨房 `/eat/kitchen` | 日期切到这一天，并滚到该餐次 |
+| `create=1` | 动作注册表里的页面 | 打开现成的新建。任务、购物改为滚到输入框并聚焦。`kind=expense` 或 `income` 决定记账从支出还是收入开始 |
+| `draft` | 小管家 `/me/assistant` | 把搜索词填进输入框，不自动发送 |
 
 今天页空餐次走点菜，已有菜的餐次走厨房，都带上当天的 `date` 和这一餐的 `meal`。
 

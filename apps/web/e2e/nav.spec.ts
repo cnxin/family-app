@@ -103,10 +103,13 @@ test('手机今天与家里按下直达，键盘也能导航；今天头像是�
 test('⌘K：所有 shelf 均可搜索到并打开，个人设置也保留', async ({ page, isMobile }) => {
   await page.goto('/');
   for (const [name, path] of [...shelf, ['个人设置', '/me/profile']]) {
+    await page.keyboard.press('Escape');
     const input = await search(page, isMobile);
     await input.fill(name);
-    await expect(page.getByRole('dialog', { name: '快速跳转' }).getByRole('button').first()).toContainText(name);
-    await input.press('Enter');
+    const dialog = page.getByRole('dialog', { name: '快速跳转' });
+    const pageHit = dialog.getByRole('button', { name: new RegExp(`^${name}\\s+(页面|设置)$`) });
+    await expect(pageHit).toBeVisible();
+    await pageHit.click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(input).toBeHidden();
   }
@@ -145,7 +148,7 @@ test('普通成员：保留本人设置与小管家，导航/搜索不暴露管�
   const input = await search(page, isMobile);
   for (const name of ['财务', '成员', '备份']) {
     await input.fill(name);
-    await expect(page.getByRole('dialog', { name: '快速跳转' }).getByRole('button')).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: '快速跳转' }).getByRole('button', { name: new RegExp(name) })).toHaveCount(0);
   }
   await input.fill('问问小管家');
   await input.press('Enter');

@@ -1,5 +1,6 @@
 import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import {
   monthLabel,
   shiftMonth,
@@ -37,6 +38,11 @@ export function FinancePage() {
   const [month, setMonth] = useState(currentMonth);
   const [view, setView] = useState<View>('overview');
   const [recording, setRecording] = useState(false);
+  const [initialMode, setInitialMode] = useState<'expense' | 'income'>('expense');
+  useCreateIntent((kind) => {
+    setInitialMode(kind === 'income' ? 'income' : 'expense');
+    setRecording(true);
+  });
 
   const summary = useFinanceSummary(month);
   const accounts = useFinanceAccounts();
@@ -225,6 +231,7 @@ export function FinancePage() {
           month={month}
           accounts={rows}
           categories={categories.data ?? []}
+          initialMode={initialMode}
           onClose={() => setRecording(false)}
         />
       ) : null}

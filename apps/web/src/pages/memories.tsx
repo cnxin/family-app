@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import { useSearchParams } from 'react-router-dom';
 import type { FamilyMemory, FamilyMemoryCategory } from '@family/contracts';
 import {
@@ -27,6 +28,7 @@ export function MemoriesPage() {
   const [selected, setSelected] = useState<FamilyMemory | null>(null);
   const [editing, setEditing] = useState<FamilyMemory | null>(null);
   const [composing, setComposing] = useState(false);
+  useCreateIntent(() => setComposing(true));
 
   const list = useMemories({ status, category, q });
   const rows = list.data ?? NO_MEMORIES;

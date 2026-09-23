@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import type { ShoppingItem } from '@family/contracts';
 import { Link } from 'react-router-dom';
 import {
@@ -110,6 +111,17 @@ function ItemRow({
 /** 手动添加：垃圾袋、酱油这类不在菜单里的东西。 */
 function ManualAdd({ date }: { date: string }) {
   const add = useAddManualShoppingItem();
+  const armFocus = useRef(false);
+  useCreateIntent(() => {
+    armFocus.current = true;
+  });
+  useEffect(() => {
+    if (!armFocus.current) return;
+    armFocus.current = false;
+    const node = document.getElementById('shopping-create');
+    node?.scrollIntoView({ block: 'center' });
+    node?.focus();
+  }, []);
   const [name, setName] = useState('');
   const [qty, setQty] = useState('1');
   const [unit, setUnit] = useState('份');
@@ -142,6 +154,7 @@ function ManualAdd({ date }: { date: string }) {
       <SectionTitle>添加物品</SectionTitle>
       <Card className="p-3">
         <Input
+          id="shopping-create"
           value={name}
           placeholder="比如：垃圾袋、酱油"
           aria-label="物品名称"

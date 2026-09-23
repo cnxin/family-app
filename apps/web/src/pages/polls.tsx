@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useCreateIntent } from '../lib/create-intent';
 import type { HouseholdPoll } from '@family/contracts';
 import { useArchivePoll, usePolls, useSetPollStatus } from '../lib/queries';
 import { pushToast } from '../lib/toast';
@@ -25,15 +26,12 @@ export function PollsPage() {
   const [consumed, setConsumed] = useState<string | null>(null);
 
   const rows = polls.data ?? NO_POLLS;
-  // 从通知 / 日历带 ?pollId= 过来：已结束的要把筛选切到「全部」才看得见；?create=1 直接开表单
+  useCreateIntent(() => setForm({ editing: null }));
+  // 从通知 / 日历带 ?pollId= 过来：已结束的要把筛选切到「全部」才看得见
   const focused = focusedId ? rows.find((one) => one.id === focusedId) : undefined;
   if (focused && consumed !== focused.id) {
     setConsumed(focused.id);
     if (focused.status === 'closed') setFilter('all');
-  }
-  if (params.get('create') === '1' && consumed !== 'create') {
-    setConsumed('create');
-    setForm({ editing: null });
   }
 
   const visible = useMemo(

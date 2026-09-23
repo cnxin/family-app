@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { TravelPlan } from '@family/contracts';
 import { travelDateRange, travelStatusLabel, useTravelPlans } from '../lib/queries';
@@ -20,6 +21,7 @@ export function TravelPage() {
   const [status, setStatus] = useState<Status>('active');
   const [composing, setComposing] = useState(false);
   const [composingTemplate, setComposingTemplate] = useState(false);
+  useCreateIntent(() => setComposing(true));
 
   const list = useTravelPlans(status);
   const rows = list.data ?? NO_PLANS;

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { CalendarEntry } from '@family/contracts';
 import {
@@ -194,6 +195,7 @@ export function CalendarPage() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [dayOpen, setDayOpen] = useState<string | null>(null);
   const [form, setForm] = useState<{ editing: CalendarEntry | null } | null>(null);
+  useCreateIntent(() => setForm({ editing: null }));
   const [deleting, setDeleting] = useState<CalendarEntry | null>(null);
 
   // 每种视图要的区间不一样：月看六周、周看七天、流看往后一个月

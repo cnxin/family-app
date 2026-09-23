@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { AgentConversation } from '@family/contracts';
 import {
   useAgentConversation,
@@ -56,7 +57,17 @@ export function AssistantPage() {
   const proposalGroups = useAgentProposalGroups(Boolean(conversationId));
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [params, setParams] = useSearchParams();
   const [draft, setDraft] = useState('');
+  const [draftTaken, setDraftTaken] = useState(false);
+  const incoming = params.get('draft');
+  if (incoming && !draftTaken) {
+    setDraftTaken(true);
+    setDraft(incoming);
+    const next = new URLSearchParams(params);
+    next.delete('draft');
+    setParams(next, { replace: true });
+  }
   const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
 

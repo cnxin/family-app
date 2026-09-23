@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCreateIntent } from '../lib/create-intent';
 import type { Guest, GuestWifiProfile, Visit } from '@family/contracts';
 import {
   useAnonymizeGuest,
@@ -37,6 +38,7 @@ export function GuestsPage() {
   const [wifiForm, setWifiForm] = useState<GuestWifiProfile | 'new' | null>(null);
   const [inviteFor, setInviteFor] = useState<Visit | null>(null);
   const [anonymizing, setAnonymizing] = useState<Guest | null>(null);
+  useCreateIntent(() => setVisitForm('new'));
 
   const guestRows = guests.data ?? [];
   const visitRows = visits.data ?? [];
