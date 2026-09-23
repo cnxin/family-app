@@ -321,7 +321,7 @@ export function CalendarPage() {
       </Panel>
 
       {dayOpen ? (
-        <Dialog title={fullDate(dayOpen)} onClose={() => setDayOpen(null)} maxWidth={520}>
+        <Dialog title={fullDate(dayOpen)} onClose={() => setDayOpen(null)} maxWidth={520} place="center">
           {dayRows.length ? (
             <div className="-mx-4 -my-4">
               {dayRows.map((entry) => (

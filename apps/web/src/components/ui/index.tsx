@@ -139,8 +139,8 @@ export function Segmented<T extends string>({
 }
 
 /**
- * 模态框：手机上从底部铺满，桌面上居中。Esc 关闭，点遮罩关闭，
- * 打开时锁住 body 滚动——不锁的话背后的长列表会跟着手指一起动。
+ * 模态框。默认手机贴底、sm 起居中；`place="center"` 时手机也居中（日历日期详情）。
+ * Esc 关闭，点遮罩关闭，打开时锁住 body 滚动。
  */
 export function Dialog({
   title,
@@ -148,12 +148,14 @@ export function Dialog({
   children,
   footer,
   maxWidth = 480,
+  place = 'sheet',
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   maxWidth?: number;
+  place?: 'sheet' | 'center';
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -171,9 +173,13 @@ export function Dialog({
   // 一定要挂到 body 上：<main> 有 view-transition-name，自带一个层叠上下文，
   // 对话框留在里面的话 z-50 只在 main 内部算数，手机底部标签栏（z-30）会盖住对话框的底部按钮。
   // Playwright 抓到的第一个真 bug 就是这个：手机上「保存」被标签栏挡着点不到。
+  const centered = place === 'center';
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className={
+        'fixed inset-0 z-50 flex justify-center bg-black/35 backdrop-blur-[2px] ' +
+        (centered ? 'items-center p-4' : 'items-end p-0 sm:items-center sm:p-4')
+      }
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -182,8 +188,12 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        data-dialog-place={place}
         style={{ maxWidth }}
-        className="flex max-h-[88vh] w-full flex-col rounded-t-card border border-border bg-surface shadow-xl sm:rounded-card"
+        className={
+          'flex max-h-[88vh] w-full flex-col border border-border bg-surface shadow-xl ' +
+          (centered ? 'rounded-card' : 'rounded-t-card sm:rounded-card')
+        }
       >
         <div className="flex items-start gap-3 border-b border-border px-4 py-3">
           <h2 className="flex-1 text-[15px] font-semibold">{title}</h2>
