@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { MemberProfile, Menu, MenuItem } from '@family/contracts';
 import { Link } from 'react-router-dom';
 import {
@@ -12,6 +12,7 @@ import {
   useMenuMutations,
   useMenusOfDate,
 } from '../lib/queries';
+import { useMealDeepLink } from '../lib/meal-deep-link';
 import { pushToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
 import {
@@ -66,7 +67,7 @@ function MealSection({
   }
 
   return (
-    <section className="mt-6">
+    <section id={`meal-${menu.mealType}`} className="mt-6">
       <div className="mb-2 flex items-baseline justify-between px-1">
         <h2 className="text-[15px] font-semibold">{MEAL_LABELS[menu.mealType]}</h2>
         <span className="text-xs text-ink-soft">
@@ -258,10 +259,13 @@ function MealSection({
 export function KitchenPage() {
   const { session } = useAuth();
   const today = todayISO();
-  const [date, setDate] = useState(today);
+  const { date, setDate, locate } = useMealDeepLink(today);
   const [rejecting, setRejecting] = useState<{ item: MenuItem; reason: string } | null>(null);
 
   const menus = useMenusOfDate(date);
+  useEffect(() => {
+    locate(!menus.isPending);
+  }, [locate, menus.isPending, menus.data]);
   const members = useMembers();
   const generate = useGenerateShoppingList();
   const { updateItem } = useMenuMutations(date);

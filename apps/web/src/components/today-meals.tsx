@@ -35,9 +35,10 @@ function MealCard({ menu, date }: { menu: Menu; date: string }) {
   const done = live.filter((item) => item.status === 'done').length;
   const names = live.map((item) => item.dish.name).join('、');
 
+  const query = `date=${encodeURIComponent(date)}&meal=${menu.mealType}`;
   return (
     <SoftLink
-      to={`/eat/kitchen?date=${date}`}
+      to={live.length ? `/eat/kitchen?${query}` : `/eat/order?${query}`}
       className="flex min-w-0 flex-col overflow-hidden rounded-card border border-border bg-surface p-3 transition-colors duration-150 hover:border-ink-soft/35 hover:bg-muted/40"
     >
       <div className="flex items-center gap-2">
