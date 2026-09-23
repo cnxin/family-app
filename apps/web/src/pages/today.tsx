@@ -18,6 +18,7 @@ import { TodayStats, type TodayStat } from '../components/today-hero';
 import { TodayMeals } from '../components/today-meals';
 import { TodayReminders, TodayShopping } from '../components/today-aside';
 import { AttentionSection, nextHouseholdMidnight, useAttentionSnooze } from '../components/attention-card';
+import { TaskAssignee } from '../components/task-assignee';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -146,11 +147,12 @@ export function TodayPage() {
               {([{ label: '我的', rows: mine }, { label: '全家', rows: family }] as const)
                 .filter((group) => group.rows.length)
                 .map((group) => (
-                  <div key={group.label}>
+                  <div key={group.label} data-task-group={group.label === '我的' ? 'mine' : 'family'}>
                     <p className="px-3.5 pb-1 pt-2 text-[11.5px] font-medium text-ink-soft">{group.label}</p>
                     {group.rows.map((item) => (
                       <div
                         key={item.id}
+                        data-task-row={item.taskId}
                         className="flex min-h-[48px] items-center gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0"
                       >
                         <Checkbox
@@ -173,15 +175,7 @@ export function TodayPage() {
                         >
                           {item.task.title}
                         </span>
-                        {item.assignee ? (
-                          <span className="shrink-0 text-xs text-ink-soft">
-                            {item.assignee.avatarEmoji} {item.assignee.name}
-                          </span>
-                        ) : item.status === 'pending' ? (
-                          <span className="shrink-0 rounded-full bg-warm-soft px-2 py-0.5 text-[11px] text-warm">
-                            待认领
-                          </span>
-                        ) : null}
+                        {session ? <TaskAssignee item={item} member={session.member} /> : null}
                       </div>
                     ))}
                   </div>

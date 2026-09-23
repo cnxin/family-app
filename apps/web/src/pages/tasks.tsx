@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { useAuth } from '../lib/auth';
 import {
   shiftDays,
   todayISO,
@@ -7,10 +8,12 @@ import {
   useTaskRange,
   useUpdateOccurrence,
 } from '../lib/queries';
+import { TaskAssignee } from '../components/task-assignee';
 import { Button, Card, Checkbox, EmptyState, Input, Page, Panel, SectionTitle } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
 export function TasksPage() {
+  const { session } = useAuth();
   const today = todayISO();
   const range = useTaskRange(today, shiftDays(today, 13));
   const update = useUpdateOccurrence();
@@ -98,9 +101,7 @@ export function TasksPage() {
                   >
                     {item.task.title}
                   </span>
-                  <span className="shrink-0 text-xs text-ink-soft">
-                    {item.assignee?.name ?? '待认领'}
-                  </span>
+                  {session ? <TaskAssignee item={item} member={session.member} /> : null}
                 </div>
               ))}
             </Card>
