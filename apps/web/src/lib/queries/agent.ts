@@ -13,10 +13,11 @@ function requestKey(scope: string) {
   return `${scope}:${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function useAgentStatus() {
+export function useAgentStatus(enabled = true) {
   return useQuery({
     queryKey: ['agent-status'],
     queryFn: () => api<AgentStatus>('/agent/status'),
+    enabled,
     staleTime: 60_000,
   });
 }

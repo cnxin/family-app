@@ -38,7 +38,7 @@ export function CommandPalette() {
   const [cursor, setCursor] = useState(0);
   const navigate = useSoftNavigate();
   const client = useQueryClient();
-  const agent = useAgentStatus();
+  const agent = useAgentStatus(open);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
