@@ -331,10 +331,8 @@ class AuthService {
 
   async bootstrap(dto: BootstrapDto) {
     verifyOneTimeBootstrapSecret(dto.bootstrapSecret);
-    const timezone = dto.timezone?.trim() || 'Asia/Shanghai';
-    if (!validTimezone(timezone)) {
-      throw new BadRequestException('家庭时区无效');
-    }
+    const requested = dto.timezone?.trim() ?? '';
+    const timezone = validTimezone(requested) ? requested : 'Asia/Shanghai';
     const loginName = dto.loginName.trim();
     const loginNameNormalized = normalizeLoginName(loginName);
     const householdName = dto.householdName.trim();

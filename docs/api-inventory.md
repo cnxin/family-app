@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 278 个端点（POST 116 / GET 88 / PATCH 42 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 278 个。
+共 279 个端点（POST 116 / GET 88 / PATCH 43 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 279 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -16,6 +16,7 @@
 | dishes | 5 | 5 |
 | finance | 13 | 13 |
 | guests | 21 | 21 |
+| households | 1 | 1 |
 | inventory | 13 | 13 |
 | knowledge | 8 | 8 |
 | media | 32 | 32 |
@@ -191,6 +192,12 @@
 | POST | `/visits` | `GuestsController.createVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
 | PATCH | `/visits/:id` | `GuestsController.updateVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
 | POST | `/visits/:id/invitations` | `GuestsController.createInvitation` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+
+## households（1）
+
+| 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
+| --- | --- | --- | --- | :-: | --- |
+| PATCH | `/households/me` | `HouseholdsController.update` | 登录 | ✓ | `apps/api/src/households/households.module.ts` |
 
 ## inventory（13）
 

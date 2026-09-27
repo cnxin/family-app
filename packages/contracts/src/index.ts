@@ -29,6 +29,7 @@ export * from './system';
 export * from './media';
 export * from './agent';
 export * from './today';
+export * from './households';
 
 import { buildContractIndex } from './registry';
 import { activities } from './activities';
@@ -45,6 +46,7 @@ import { system } from './system';
 import { media } from './media';
 import { agent } from './agent';
 import { today } from './today';
+import { households } from './households';
 import { calendar } from './calendar';
 import { dishes } from './dishes';
 import { inventory } from './inventory';
@@ -84,6 +86,7 @@ export const contracts = {
   media,
   agent,
   today,
+  households,
 };
 
 /** `METHOD /path` → 契约。API 测试模式下的响应校验用它查表。 */

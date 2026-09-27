@@ -9,6 +9,7 @@ import { databaseOptions } from './database/database.options';
 import { ClockModule } from './common/clock';
 import { DishesModule } from './dishes/dishes.module';
 import { GuestsModule } from './guests/guests.module';
+import { HouseholdsModule } from './households/households.module';
 import { FinanceModule } from './finance/finance.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
@@ -40,6 +41,7 @@ import { UploadModule } from './upload/upload.module';
     DishesModule,
     FinanceModule,
     GuestsModule,
+    HouseholdsModule,
     InventoryModule,
     KnowledgeModule,
     MenusModule,

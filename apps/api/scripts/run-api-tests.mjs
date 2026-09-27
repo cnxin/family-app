@@ -127,6 +127,7 @@ const BUSINESS_SCRIPTS = [
   'playback-webhook',
   'system-modules',
   'today-attention',
+  'households',
   'household-isolation',
   'security-consistency',
   'shopping-inventory',
