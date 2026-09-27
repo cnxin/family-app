@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useCreateIntent } from '../lib/create-intent';
 import { useAuth } from '../lib/auth';
+import { useHouseholdToday } from '../lib/use-household-today';
 import {
   shiftDays,
-  todayISO,
   useCreateTask,
   useTaskRange,
   useUpdateOccurrence,
@@ -16,7 +16,7 @@ import { ListSkeleton } from '../components/skeleton';
 
 export function TasksPage() {
   const { session } = useAuth();
-  const today = todayISO();
+  const today = useHouseholdToday();
   const range = useTaskRange(today, shiftDays(today, 13));
   const update = useUpdateOccurrence();
   const create = useCreateTask();

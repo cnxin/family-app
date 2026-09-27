@@ -57,7 +57,7 @@
 | P1 库存 `inventory_batches.receivedOn/productionDate/expiresOn/openedOn`（date ×4） | W/inventory-editor:190 默认本地 todayISO，直接日期字符串；C/inventory dateOnly；A/inventory-batches:67,83 默认入库日、临期状态固定上海；字符串比较日期 | 上海家庭海外用户录入默认日与服务端临期日不同；非上海家庭始终按上海判断 | 日期传输不变；服务端 has-status 与 F5 共用家庭 today；已过期是否也进入「≤3 天」由 F5 规则明确 | 0.5–1 天 |
 | P1 财务 `finance_transactions.occurredOn`（date）；预算 month（YYYY-MM 字符串） | W/finance helper 默认上海；C/finance dateOnly；A/finance:310 UTC 仅验证日期，按字符串月范围查询；默认月份 / 撤销日期显式上海 | 上海家庭当前一致；换家庭时区，月末预算 / 默认记账 / 撤销归月可能不正确 | 月份从家庭 today 推导；月区间保持日期字符串，不把月初转 UTC 时间点；历史记账日不重算 | 0.5–1 天 |
 | P1 提醒 `reminders.occurrenceDate`（date），`remindAt`（timestamptz） | W/reminder-form:154 本地日期+时间转 ISO；C/reminders occurrenceDate=dateOnly，remindAt=isoDateOrDateTime；A/reminders:135 new Date，要求真实未来时刻；定时投递比较 now | occurrenceDate 是来源任务的日期，remindAt 才是时刻；date-only 输入提醒在正时区清晨与下午可有不同未来判断；跨时区手机默认时刻歧义 | occurrenceDate 保留纯日期；remindAt 收紧为带 offset 的真实时刻，表单标明家庭时区；已有绝对触发时刻不整体平移 | 0.5–1 天 |
-| P2 任务 `household_tasks.startsOn/endsOn`、`household_task_instances.dueDate`（date ×3） | W/tasks todayISO 本地默认；C/tasks dateOnly；A/tasks 使用 UTC 日历加减 / 星期生成实例并按日期范围查询 | 纯日期运算本身无误；两个成员的「今天任务」可能查询不同日；跨午夜页面保留旧日期 | 保留日期列 / recurrence 算法，统一默认今天、到期判定与午夜刷新 | 0.5 天 |
+| P2 任务 `household_tasks.startsOn/endsOn`、`household_task_instances.dueDate`（date ×3） | W/tasks todayISO 本地默认（新端任务页 2026-09-28 已改家庭日期）；C/tasks dateOnly；A/tasks 使用 UTC 日历加减 / 星期生成实例并按日期范围查询 | 纯日期运算本身无误；两个成员的「今天任务」可能查询不同日；跨午夜页面保留旧日期 | 保留日期列 / recurrence 算法，统一默认今天、到期判定与午夜刷新 | 0.5 天 |
 | P2 日历 `calendar_events.date`（date），可选 startsAt/endsAt（timestamptz） | 全天事件直接 date；定时事件本地输入转 ISO；C/calendar dateOnly + datetime 联合；A/calendar:120–145 独立解析日期和时刻、验证先后 | 没有统一说明 date 应按哪个时区投影；可能 date 和 startsAt 的家庭日期不一致；来访聚合另有上述 UTC 查询缺陷 | 全天事件永不时刻化；定时事件显式时区，校验所属家庭日期 / 跨日规则；先修查询边界再改展示 | 0.5–1 天 |
 | P2 点菜 / 购物 `menus.date`、`shopping_items.date`（date ×2） | 日期选择直接字符串；C/menus、shopping dateOnly；API 按家庭+date 查询；默认今天和默认餐次来自浏览器 | 数据不串家庭，但海外成员默认点到另一日；演示数据也采用运行机器本地日期 | 统一家庭今天；默认餐次是否按家庭时区一起切换需确认，避免日期按家庭而小时按手机 | 0.5 天 |
 | P2 出行 `travel_plans.startDate/endDate`（date ×2） | W/travel-forms 默认本地 today+7/+8；C/travel dateOnly；A/travel:313 以 UTC 验证、比较起止，不当作真实出发时刻 | 当前是计划日期，不含目的地时区；F5 的「7 天内出发」若用本地今天会分歧 | 保持 date，F5 以家庭 today 判定；此轮不扩展多目的地 / 航班时区产品 | 0.25–0.5 天 |
@@ -183,7 +183,7 @@
 | T0，**F5 前必须** | 家庭时区只读上下文、共享纯日期 / 家庭日界 helper、注入 now、前端家庭午夜失效、规则测试时钟 | F5 today、7天/3天窗口、预算本月、「稍后」有一致输入；新增非上海 / DST / 月界测试 | 1–1.5 天 |
 | T1，**F5 前必须** | 维护完成日模型 / 默认今天 bug，新旧端兼容；访客家庭日界查询 / 点菜日期；F5 读取的资产、库存、财务默认 / 状态统一 | 否则维护卡主动作上午失败，访客卡漏人，库存 / 预算卡与详情矛盾；默认今天上午和上海清晨来访必须回归 | 2–3 天，取决于迁移选择 |
 | T2，F5 前完成所需测试，其余后置 | 上述用例固定时钟 / 浏览器时区；reminders 700/900ms 竞态单独精确修，不用重跑掩盖 | F5 四种日期边界有确定性保障；全套 API + 两端 CI；不以昨天夹具代替默认今天验收 | 0.5–1 天 |
-| T3，可 F5 后独立做 | agent 夜间 / 周报 / 工具切家庭时区；备份 DST 明确化；不被 F5 消费的日期显示、旧端其余默认日与完整测试迁移 | 范围较大、不把 agent 重建夹带进 F5；记录过渡期 agent 仍固定上海的限制 | 2–3 天 |
+| T3，可 F5 后独立做 | agent 夜间 / 周报 / 工具切家庭时区；备份 DST 明确化；不被 F5 消费的日期显示、旧端其余默认日与完整测试迁移。~~新端任务页默认今天~~ 已于 2026-09-28 提前修复（`fix(web): 任务页默认日期改按家庭时区`，上海 00:30 + 浏览器 UTC 的 e2e 覆盖），其余仍后置 | 范围较大、不把 agent 重建夹带进 F5；记录过渡期 agent 仍固定上海的限制 | 2–3 天 |
 
 **需要用户确认**：是否按 T0/T1/T2 先修再 F5；维护增加 performedOn 并保留 performedAt 的兼容路线和历史回填策略；输入真实日程 / 来访默认按家庭时区（而非手机时区）；家庭午夜的「稍后」与 DST 歧义策略（建议不存在时刻顺延、重复时刻只执行一次）。本轮仅建议，不实施。
 
