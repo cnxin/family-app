@@ -60,6 +60,15 @@ export function AssistantPage() {
   const [params, setParams] = useSearchParams();
   const [draft, setDraft] = useState('');
   const [draftTaken, setDraftTaken] = useState(false);
+  const openSettings = params.get('settings') === '1';
+  const [settingsTaken, setSettingsTaken] = useState(false);
+  if (openSettings && !settingsTaken) {
+    setSettingsTaken(true);
+    setSettingsOpen(true);
+    const next = new URLSearchParams(params);
+    next.delete('settings');
+    setParams(next, { replace: true });
+  }
   const incoming = params.get('draft');
   if (incoming && !draftTaken) {
     setDraftTaken(true);

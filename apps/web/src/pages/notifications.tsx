@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { AppNotification, NotificationChannel, NotificationModule } from '@family/contracts';
 import {
   useDeleteNotificationChannel,
@@ -94,7 +94,17 @@ function NotificationRow({ item, onRead }: { item: AppNotification; onRead: () =
 export function NotificationsPage() {
   const { session } = useAuth();
   const manager = session?.member.role !== 'member';
-  const [view, setView] = useState<View>('inbox');
+  const [params, setParams] = useSearchParams();
+  const requested = params.get('view');
+  const [view, setView] = useState<View>(
+    requested === 'channels' || requested === 'deliveries' ? requested : 'inbox',
+  );
+  useEffect(() => {
+    if (!params.has('view')) return;
+    const next = new URLSearchParams(params);
+    next.delete('view');
+    setParams(next, { replace: true });
+  }, [params, setParams]);
   const [scope, setScope] = useState<'unread' | 'all'>('unread');
   const [module, setModule] = useState<NotificationModule | 'all'>('all');
   const [channelForm, setChannelForm] = useState<NotificationChannel | 'new' | null>(null);

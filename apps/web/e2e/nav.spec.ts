@@ -154,7 +154,7 @@ test('普通成员：保留本人设置与小管家，导航/搜索不暴露管�
   await input.press('Enter');
   await expect(page).toHaveURL(/\/me\/assistant$/);
   await page.goto('/settings');
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/\/me\/profile$/);
   const profile = await search(page, isMobile);
   await profile.fill('个人设置');
   await profile.press('Enter');

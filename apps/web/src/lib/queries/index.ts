@@ -1,5 +1,6 @@
 // 数据 hook 按域拆文件；页面仍然从 '../lib/queries' 引用。
 export * from './tasks';
+export * from './households';
 export * from './menus';
 export * from './shopping';
 export * from './inventory';

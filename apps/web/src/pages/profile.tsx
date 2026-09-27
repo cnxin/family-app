@@ -197,10 +197,16 @@ export function ProfilePage() {
               想让提醒发到手机上（ntfy / Telegram 这类），在消息页配置外部渠道。
             </p>
             <SoftLink
-              to="/schedule/notifications"
-              className="mt-2 inline-block text-[13px] text-accent transition-colors duration-150 hover:underline"
+              to="/schedule/notifications?view=channels"
+              className="mt-2 inline-block min-h-11 text-[13px] leading-[44px] text-accent transition-colors duration-150 hover:underline"
             >
-              去消息页设置渠道 →
+              消息接收偏好
+            </SoftLink>
+            <SoftLink
+              to="/me/assistant?settings=1"
+              className="mt-1 block min-h-11 text-[13px] leading-[44px] text-accent transition-colors duration-150 hover:underline"
+            >
+              小管家渠道配对
             </SoftLink>
           </div>
         </Panel>

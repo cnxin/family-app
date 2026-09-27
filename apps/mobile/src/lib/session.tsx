@@ -24,6 +24,7 @@ interface BootstrapInput {
   ownerName: string;
   loginName: string;
   password: string;
+  timezone?: string;
 }
 
 interface RedeemInvitationInput {

@@ -37,7 +37,7 @@ import { Shell } from './components/shell';
 import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
 import HomePage from './pages/home';
-import { NavigationPlaceholder } from './pages/navigation-placeholder';
+import { SettingsPage } from './pages/settings';
 
 /** 旧路径（一层）保留跳转，免得家里人存的书签全废掉；查询串原样带过去（通知里的 ?pollId= 靠它）。 */
 const REDIRECTS: [string, string][] = [
@@ -105,7 +105,7 @@ export function App() {
         <Route element={<Shell />}>
           <Route path="/" element={<TodayPage />} />
           <Route path="/home" element={<HomePage />} />
-          <Route path="/settings" element={<NavigationPlaceholder settings />} />
+          <Route path="/settings" element={<SettingsPage />} />
 
           <Route path="/eat" element={<RedirectKeepingSearch to="/eat/order" />} />
           <Route path="/eat/order" element={<OrderPage />} />

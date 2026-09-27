@@ -10,6 +10,7 @@ interface AuthValue {
   ready: boolean;
   signIn: (body: LoginBody) => Promise<void>;
   signOut: () => void;
+  setHouseholdTimezone: (timezone: string) => void;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -37,6 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(stored?.accessToken ?? null);
     return stored;
   });
+
+  const setHouseholdTimezone = useCallback((timezone: string) => {
+    setSession((current) => {
+      if (!current) return current;
+      const next = { ...current, householdTimezone: timezone };
+      write(next);
+      return next;
+    });
+  }, []);
 
   const signOut = useCallback(() => {
     setSession(null);
@@ -89,12 +99,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 会话是同步从 localStorage 读出来的，首帧就是最终状态；ready 留着只为了接口不变
       ready: true,
       signOut,
+      setHouseholdTimezone,
       signIn: async (body) => {
         const next = await api<AuthSession>('/auth/login', { method: 'POST', auth: false, body });
         apply(next);
       },
     }),
-    [session, signOut, apply],
+    [session, signOut, setHouseholdTimezone, apply],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

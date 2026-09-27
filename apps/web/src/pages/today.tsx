@@ -1,7 +1,7 @@
 import { useAuth } from '../lib/auth';
+import { useHouseholdToday } from '../lib/use-household-today';
 import {
   shiftDays,
-  todayISO,
   useCalendarEntries,
   useMenusOfDate,
   useReminders,
@@ -20,17 +20,20 @@ import { TodayReminders, TodayShopping } from '../components/today-aside';
 import { AttentionSection, nextHouseholdMidnight, useAttentionSnooze } from '../components/attention-card';
 import { TaskAssignee } from '../components/task-assignee';
 
-function greeting() {
-  const hour = new Date().getHours();
+function greeting(timezone: string) {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: timezone }).format(new Date()),
+  );
   if (hour < 11) return '早上好';
   if (hour < 18) return '下午好';
   return '晚上好';
 }
 
-/** 「9月20日 星期六」——首页得先告诉人今天是几号，这是「今天」这两个字的前提。 */
-function dateLine(date: Date) {
-  const day = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' }).format(date);
-  const week = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(date);
+/** 按家庭日期显示，不跟这台设备的日历走。 */
+function dateLine(iso: string) {
+  const date = new Date(`${iso}T12:00:00Z`);
+  const day = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(date);
+  const week = new Intl.DateTimeFormat('zh-CN', { weekday: 'short', timeZone: 'UTC' }).format(date);
   return `${day} ${week}`;
 }
 
@@ -44,7 +47,8 @@ function hhmm(value: string) {
 
 export function TodayPage() {
   const { session } = useAuth();
-  const today = todayISO();
+  const today = useHouseholdToday();
+  const timezone = session?.householdTimezone ?? 'Asia/Shanghai';
 
   const range = useTaskRange(today, shiftDays(today, 2));
   const menus = useMenusOfDate(today);
@@ -56,7 +60,6 @@ export function TodayPage() {
   const memberId = session?.member.id ?? '';
   const { visible: visibleAttention, snooze } = useAttentionSnooze(attention.data?.items ?? [], memberId);
   const attentionToday = attention.data?.today ?? today;
-  const timezone = session?.householdTimezone ?? 'Asia/Shanghai';
 
   const all = range.data ?? [];
   const todays = all.filter((item) => item.dueDate === today);
@@ -85,11 +88,11 @@ export function TodayPage() {
 
   return (
     <Page
-      title={`${greeting()}，${session?.member.name ?? ''}`}
+      title={`${greeting(timezone)}，${session?.member.name ?? ''}`}
       subtitle={
         range.isPending
-          ? `${dateLine(new Date())} · 正在读今天的安排…`
-          : `${dateLine(new Date())} · ${
+          ? `${dateLine(today)} · 正在读今天的安排…`
+          : `${dateLine(today)} · ${
               open.length === 0
                 ? '今天没有待办了'
                 : `还有 ${open.length} 件${unclaimed.length ? `，${unclaimed.length} 件没人认领` : ''}`
