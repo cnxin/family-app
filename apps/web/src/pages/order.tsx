@@ -17,7 +17,7 @@ import {
   useMenuDateCounts,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
-import { Button, Card, Input, Page, Panel } from '../components/ui';
+import { Button, Card, Input, Page, Panel, buttonClass } from '../components/ui';
 
 function DishCard({
   dish,
@@ -166,7 +166,7 @@ export function OrderPage() {
           <span className="text-3xl">🧺</span>
           <p className="text-sm font-medium">菜单还是空的</p>
           <p className="text-[12.5px] text-ink-soft">
-            从右边挑今天想吃的，每道都可以写一句备注
+            从菜品列表里挑今天想吃的，每道都可以写一句备注
           </p>
         </div>
       ) : (
@@ -317,7 +317,18 @@ export function OrderPage() {
               </div>
             ) : visible.length === 0 ? (
               <div className="col-span-full flex flex-col items-start gap-2 py-6">
-                <p className="text-sm text-ink-soft">家里还没有「{word || '这类'}」</p>
+                <p className="text-sm text-ink-soft">
+                  {word
+                    ? `家里还没有「${word}」`
+                    : category
+                      ? `家里还没有「${category}」`
+                      : '家里还没有菜品'}
+                </p>
+                {!word && !category ? (
+                  <Link to="/eat/recipes?create=1" className={buttonClass('primary', 'h-9 px-3 text-[13px]')}>
+                    去加一道
+                  </Link>
+                ) : null}
                 {word && !locked ? (
                   <Button
                     className="h-9 px-3 text-[13px]"
