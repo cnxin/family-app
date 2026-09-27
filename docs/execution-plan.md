@@ -213,7 +213,7 @@ export default function XxxPage() {
 - **用户要做的**：把 `ci.yml` `docker-build` job 里缺的两步补上（`docker build -f Dockerfile.web -t family-app-web:ci .`、以及一条 `docker run --rm family-app-web:ci caddy validate --config /etc/caddy/Caddyfile`）。这个文件受保护，执行 agent 给 diff，用户自己贴。
 
 #### C2 · 家庭试用两周 ［日历任务，不占开发时间］
-- 部署后家里人用两周；每个问题记进 `docs/manual-acceptance.md`（已有格式），修一个记一个。
+- 部署后家里人用两周；每个问题记进 [`docs/c2-feedback.md`](c2-feedback.md)（2026-09-27 起取代 `manual-acceptance.md` 的记法），修一个记一个。部署步骤见 [`docs/deploy-c2.md`](deploy-c2.md)，给家里人的说明见 [`docs/family-guide.md`](family-guide.md)，每周用量用 `apps/api/scripts/usage-report.mjs`。
 - 期间不删任何旧代码。
 
 #### C3 · 删除旧客户端 ［M］
