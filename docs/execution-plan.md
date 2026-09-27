@@ -302,7 +302,7 @@ export default function XxxPage() {
 | C1 镜像与 Caddy 切换 | ☑ | | `Dockerfile.web` 拆成 `base` + `build-web`（Vite，产物进 `/srv`）+ `build-legacy`（Expo，产物进 `/srv-legacy`）三段；旧客户端挂子路径要让 Expo 知道，所以在镜像里把 `app.json` 的 `experiments.baseUrl` 改成 `/legacy`——**仓库里的 app.json 不动**，开发和旧客户端回归还是跑在根路径。`Caddyfile` 的 `handle_path /legacy/*` 必须排在默认 `handle` 前面。`VITE_LEGACY_ORIGIN=/legacy` 让 `legacyUrl` 退化成同源。**本机验收过**：`docker build -f Dockerfile.web .` 成功（镜像 ~90MB）；`caddy validate` 通过；起一个容器 curl 了一遍——`/` 200 给新客户端、`/legacy/` 200 给旧客户端且资源路径是 `/legacy/_expo/...`、两边深链都回退到各自的 index.html、CSP 头还在、`:2015/healthz` 通。**用户要做的**：贴 `docs/ci-pending-C1.diff`（CI 现在完全没构建过这个镜像），以及在 NAS 上 `docker compose -f docker-compose.prod.yml up --build` |
 | C2 家庭试用两周 | ☐ | | 起止日期： |
 | C3 删除旧客户端 | ☐ | | |
-| Phase F 信息架构（F0～F8） | ◐ | 见 `docs/ia-plan.md` 进度表 | 一行汇总：F0 盘点到 F7 家庭设置已完成，F8 收口进行中。导航、深链和后置项以 ia-plan 为准，不再按本节旧五场景改。 |
+| Phase F 信息架构（F0～F8） | ☑ | 见 `docs/ia-plan.md` 进度表 | F0～F8 已完成。导航、深链和后置项以 ia-plan 为准。F8 验收 CI `36326622844` 五项全绿。 |
 | C4 文档改写 | ☐ | | |
 | D1 AI 找菜谱 | ☐ | | 需用户确认范围 |
 | D2 换栈决策门 | ☐ | | 需用户决定 |
