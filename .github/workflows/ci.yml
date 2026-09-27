@@ -209,3 +209,9 @@ jobs:
         run: docker build -f Dockerfile -t family-app-api:dev-ci .
       - name: 生产镜像能加载入口
         run: docker run --rm family-app-api:ci node -e "require('@family/shared'); require('@family/contracts'); console.log('workspace packages ok')"
+      - name: 构建前端镜像（新客户端 + /legacy）
+        run: docker build -f Dockerfile.web -t family-app-web:ci .
+      - name: 前端镜像的 Caddy 配置有效
+        run: docker run --rm -e SITE_ADDRESS=:80 family-app-web:ci caddy validate --config /etc/caddy/Caddyfile
+      - name: 两份静态产物都在
+        run: docker run --rm family-app-web:ci sh -c "test -f /srv/index.html && test -f /srv-legacy/index.html && echo 'web + legacy ok'"
