@@ -11,7 +11,7 @@
 
 ## 0. 三十秒看懂现状
 
-- 仓库 `github.com/cnxin/family-app`（私有），本机 `~/AI/family-app`，工作分支 **`refactor/phase-0-safety-net`**（领先 main 51 个提交，不要合到 main，用户自己决定什么时候合）。
+- 仓库 `github.com/cnxin/family-app`（私有），本机 `~/AI/family-app`。**2026-09-27 起以 `main` 为主干**：Phase 0–F 已由 `02120eb` 合进 main，之后每个任务开 `refactor/c2-*` 这类短分支，流程见 §3.1。`refactor/phase-0-safety-net` 不再接新提交。
 - pnpm monorepo：`apps/api`（NestJS 10 + TypeORM + PG16）、`apps/mobile`（**旧客户端**，Expo 57 + RN Web，本机跑在 :8088）、**`apps/web`（新客户端，Vite 7 + React 19 + TanStack Query 5 + React Router 7.9 + Tailwind 4，dev :5180，`/api` 代理到 :8088）**、`packages/contracts`（275/275 端点 Zod 契约）、`packages/shared`。
 - 新客户端已经搬好 **10 页 / 24 分段**：今天、点菜、厨房、菜谱、购物、库存、日历、任务、提醒、消息。**剩 14 个分段**还挂在「在旧版打开」的桥接页上。
 - 信息架构以 [docs/ia-plan.md](ia-plan.md) 为准（2026-09-20 收敛，进度在该文件末尾的 F0～F8 表）。不要再按本节旧的「五场景 + 底部五个气泡」改导航。`Page/Panel`、`SoftLink`、按下预取、⌘K 这些骨架仍然沿用，改它们要先问用户。
@@ -115,6 +115,14 @@ export default function XxxPage() {
 8. **截图**：390×844 与 1280×800、亮 / 暗，各一张到 `.tmp-shots/`，Read 看一眼有没有空白、溢出、撞色。
 9. **（可选但推荐）Zod 顺路迁移**：把 `apps/api/src/<域>/…module.ts` 里的 class-validator DTO 换成 `@ZodBody/@ZodQuery/@ZodParam`（`src/common/zod.ts`），逐条对照 DTO 装饰器，契约缺的约束补进 `packages/contracts`，黑盒脚本补断言；`build:packages` → `test:api` 全量。**单独提交** `refactor(api): <域>请求校验换成契约 schema`。做不做由执行者按时间定，做了就在进度表里记。
 10. **记录 + 提交 + push + 看 CI**。
+
+### 3.1 分支与合并（2026-09-27 起，所有任务适用）
+
+1. 从最新 `main` 开短分支，命名 `refactor/c2-<任务>`（CI 只对 `main`、`refactor/**` 的 push 和 PR 触发，别的名字不跑 CI）。
+2. 一个任务一个功能提交，push 短分支，等该分支 CI 五项全绿。可再补一个只回填进度的 docs 提交，同样等绿。
+3. 绿了用 merge commit 合回 main（`git merge --no-ff`），不走 PR；push main 后看 main 的 CI。
+4. 每轮开始先 `git status` 和 `git log origin/main..HEAD`，有未 push 的提交先 push。
+5. CI 失败后未改代码重跑变绿，汇报里单列，写根因或列为待查。
 
 ---
 
@@ -234,7 +242,7 @@ export default function XxxPage() {
 1. `ci.yml`：A2 和 C1、C3 会各给一份 diff，用户自己贴进去（文件受保护）。
 2. 生产部署：C1 之后用户自己在 NAS/服务器上 `docker compose -f docker-compose.prod.yml up --build`；执行 agent 不碰生产。
 3. 任何账号/密码/密钥（TMDB、Plex、MoviePilot、通知渠道）都由用户自己填，执行 agent 只留空或用 mock。
-4. 决定什么时候把 `refactor/phase-0-safety-net` 合进 main。
+4. ~~决定什么时候把 `refactor/phase-0-safety-net` 合进 main。~~ 2026-09-27 已合（`02120eb`）。
 
 ---
 
@@ -299,7 +307,9 @@ export default function XxxPage() {
 | B14c 观影：观看记录 | ☑ | | `/eat/media/history`：全部 / 在放 / 放完了三档，每条显示片名、状态、在哪台设备、谁在看、进度条和「去 X 接着看」。数据靠播放 webhook 喂，隔离库里没有，所以回归也走 mock |
 | B14d 观影：连接器设置 | ☑ | | `/eat/media/settings`（只有管理员能改，普通成员看到一句人话）：三档 `Segmented` 记在 `?section=` 里——媒体服务（Plex/Emby/MoviePilot：启用、主媒体库、名称、地址、凭据、保存 / 保存并测试 / 恢复默认，外加回调地址轮换）、搜索数据源（TMDB/豆瓣/Bangumi：启用、地址、凭据类型、TMDB 图片地址、Bangumi User-Agent）、用户映射（把媒体服务器账号对到家庭成员，离线/失效/停用的只剩「取消关联」）。**凭据只写不读**：输入框永远从空开始，留空＝不改，要删得显式勾「清除现有凭据」；回调地址里的密钥只在轮换那一次回传，所以那一行不做任何自动刷新，用 `${window.location.origin}/api` 拼成能直接贴进 Plex/Emby/MoviePilot 的地址。**没用 effect 重置表单**：恢复默认时直接拿响应里那条 setState（remount 会把只显示一次的回调地址冲掉）。回归只改地址不填凭据（测试库里不该出现真凭据）。顺手把 `/eat/media` 上还指着旧版的两个入口（观影设置、排片卡片）换成了站内跳转，`routes.ts` 补了 `/media/settings` 和 `/media` |
 | Zod 顺路迁移（记录做了哪些域） | ☐ | | 已完成：common、polls、points、tasks、agent（部分）；未完成 19 个域见 `grep -rl class-validator apps/api/src` |
-| C1 镜像与 Caddy 切换 | ☑ | | `Dockerfile.web` 拆成 `base` + `build-web`（Vite，产物进 `/srv`）+ `build-legacy`（Expo，产物进 `/srv-legacy`）三段；旧客户端挂子路径要让 Expo 知道，所以在镜像里把 `app.json` 的 `experiments.baseUrl` 改成 `/legacy`——**仓库里的 app.json 不动**，开发和旧客户端回归还是跑在根路径。`Caddyfile` 的 `handle_path /legacy/*` 必须排在默认 `handle` 前面。`VITE_LEGACY_ORIGIN=/legacy` 让 `legacyUrl` 退化成同源。**本机验收过**：`docker build -f Dockerfile.web .` 成功（镜像 ~90MB）；`caddy validate` 通过；起一个容器 curl 了一遍——`/` 200 给新客户端、`/legacy/` 200 给旧客户端且资源路径是 `/legacy/_expo/...`、两边深链都回退到各自的 index.html、CSP 头还在、`:2015/healthz` 通。**用户要做的**：贴 `docs/ci-pending-C1.diff`（CI 现在完全没构建过这个镜像），以及在 NAS 上 `docker compose -f docker-compose.prod.yml up --build` |
+| C1 镜像与 Caddy 切换 | ☑ | | `Dockerfile.web` 拆成 `base` + `build-web`（Vite，产物进 `/srv`）+ `build-legacy`（Expo，产物进 `/srv-legacy`）三段；旧客户端挂子路径要让 Expo 知道，所以在镜像里把 `app.json` 的 `experiments.baseUrl` 改成 `/legacy`——**仓库里的 app.json 不动**，开发和旧客户端回归还是跑在根路径。`Caddyfile` 的 `handle_path /legacy/*` 必须排在默认 `handle` 前面。`VITE_LEGACY_ORIGIN=/legacy` 让 `legacyUrl` 退化成同源。**本机验收过**：`docker build -f Dockerfile.web .` 成功（镜像 ~90MB）；`caddy validate` 通过；起一个容器 curl 了一遍——`/` 200 给新客户端、`/legacy/` 200 给旧客户端且资源路径是 `/legacy/_expo/...`、两边深链都回退到各自的 index.html、CSP 头还在、`:2015/healthz` 通。**用户要做的**：贴 `docs/ci-pending-C1.diff`（CI 现在完全没构建过这个镜像），以及在 NAS 上 `docker compose -f docker-compose.prod.yml up --build`。**2026-09-27 补记**：C1 的 CI 补丁已由 `c01c9b5` 贴入；贴之前本机建镜像才发现 F4.6a 起前端镜像已建不出来，`f52a880` 修复（教训 28） |
+| C2 准备 · 合并 main | ☑ | `f52a880` / `c01c9b5` / `02120eb` | `f52a880` shared 补 ESM，修复生产前端镜像构建（本机 `vite build`、`docker build -f Dockerfile.web`、Caddy 校验均通过；新端全量 235 passed / 5 skipped）。`c01c9b5` 镜像构建 job 覆盖 web 镜像，CI `36329403013` 首跑五项全绿。`02120eb` 合进 main，main 首次 CI `36330300821` 首跑五项全绿，无未改代码重跑。此后按 §3.1 走短分支 |
+| C2 准备 · 部署核对 / 家里人说明 / 反馈与用量 | ☐ | | 见 `docs/deploy-c2.md`、`docs/family-guide.md`、`docs/c2-feedback.md` |
 | C2 家庭试用两周 | ☐ | | 起止日期： |
 | C3 删除旧客户端 | ☐ | | |
 | Phase F 信息架构（F0～F8） | ☑ | 见 `docs/ia-plan.md` 进度表 | F0～F8 已完成。导航、深链和后置项以 ia-plan 为准。F8 验收 CI `36326622844` 五项全绿。 |

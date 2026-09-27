@@ -9,12 +9,12 @@
 
 ## 工作规矩（之后每轮都适用）
 
-- `pnpm` 一律用 `corepack pnpm`。工作分支 `refactor/phase-0-safety-net`，不合并 `main`，不开新的长期分支。
+- `pnpm` 一律用 `corepack pnpm`。分支与合并按 `docs/execution-plan.md` §3.1：2026-09-27 起以 `main` 为主干，每个任务开 `refactor/c2-*` 短分支，CI 绿后 merge commit 合回 main。
 - 一个任务一个功能提交。功能提交 push、CI 绿之后，可以再补一个只回填进度表的 docs 提交。
 - 提交信息中文。`Co-Authored-By` 写执行者自己，不要沿用上一任的署名。
 - CI 失败后若未改代码重跑变绿，必须在汇报里单列，并说明根因或列为待查。
 - `docs/ia-plan.md` §2「不做的事」和 §3 要当真。遇到要拍板的事停下来问，不要顺手做。
-- 每轮开始先 `git status` 和 `git log origin/refactor/phase-0-safety-net..HEAD`。有未 push 的提交先 push。
+- 每轮开始先 `git status` 和 `git log origin/main..HEAD`。有未 push 的提交先 push。
 - 工具拒绝写 `.github/workflows/` 时把 diff 贴给用户，不要绕过。
 
 先读：`docs/ia-plan.md`（§0、§3「已拍板」、F5、文末进度表）、`docs/execution-plan.md` §1–§3、`docs/timezone-audit.md`「已拍板」、`packages/shared/src/date.ts`。F5a 实现在 `apps/api/src/today/` 和 `packages/contracts/src/today.ts`。
