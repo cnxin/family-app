@@ -1,3 +1,4 @@
+import { QRCodeSVG } from 'qrcode.react';
 import { useState } from 'react';
 import type { CreatedHouseholdInvitation, ManagedMember, MemberRole } from '@family/contracts';
 import { useCreateInvitation, useUpdateManagedMember } from '../lib/queries';
@@ -175,14 +176,18 @@ export function InviteForm({ onClose }: { onClose: () => void }) {
     );
   }
 
+  const joinLink = created
+    ? `${window.location.origin}/join?code=${encodeURIComponent(created.invitationToken)}`
+    : '';
+
   async function copy() {
     if (!created) return;
     try {
-      await navigator.clipboard.writeText(created.invitationToken);
+      await navigator.clipboard.writeText(joinLink);
       setCopied(true);
-      pushToast('邀请码已复制');
+      pushToast('邀请链接已复制');
     } catch {
-      setMessage('复制不了，手动选中下面那串字复制吧');
+      setMessage('复制不了，手动选中下面的链接复制吧');
     }
   }
 
@@ -194,7 +199,7 @@ export function InviteForm({ onClose }: { onClose: () => void }) {
         created ? (
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={copy}>
-              {copied ? '已复制' : '复制邀请码'}
+              {copied ? '已复制' : '复制邀请链接'}
             </Button>
             <Button className="flex-1" onClick={onClose}>
               知道了
@@ -213,11 +218,14 @@ export function InviteForm({ onClose }: { onClose: () => void }) {
       {created ? (
         <div className="flex flex-col gap-3">
           <p className="text-[13px] leading-relaxed text-ink-soft">
-            把下面这串字发给 {created.avatarEmoji} <b>{created.memberName}</b>，让 TA 在登录页选「用邀请码加入」。
+            把链接发给 {created.avatarEmoji} <b>{created.memberName}</b>，或者让 TA 用手机扫下面的码，打开后设登录名和密码就进来了。
             <b>只显示这一次</b>，关掉就看不到了（服务端只存哈希）。
           </p>
-          <code className="select-all break-all rounded-lg bg-muted px-3 py-2.5 text-[13px] leading-relaxed">
-            {created.invitationToken}
+          <div className="self-center rounded-xl bg-white p-3" data-join-qr>
+            <QRCodeSVG value={joinLink} size={168} bgColor="#ffffff" fgColor="#111827" />
+          </div>
+          <code className="select-all break-all rounded-lg bg-muted px-3 py-2.5 text-[12px] leading-relaxed" aria-label="邀请链接">
+            {joinLink}
           </code>
           <p className="text-[12px] text-ink-soft">
             {memberRoleLabel(created.role)} · {new Date(created.expiresAt).toLocaleString('zh-CN')} 到期

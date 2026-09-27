@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import { LoginPage } from './pages/login';
+import { JoinPage } from './pages/join';
+import { SetupPage } from './pages/setup';
 import { TodayPage } from './pages/today';
 import { TasksPage } from './pages/tasks';
 import { OrderPage } from './pages/order';
@@ -92,6 +94,16 @@ export function App() {
     return (
       <Routes>
         <Route path="/guest/:token" element={<GuestInvitationPage />} />
+      </Routes>
+    );
+  }
+
+  // 邀请兑换、首次初始化同样在闸门之前：来的人还没有账号。
+  if (pathname === '/join' || pathname === '/setup') {
+    return (
+      <Routes>
+        <Route path="/join" element={<JoinPage />} />
+        <Route path="/setup" element={<SetupPage />} />
       </Routes>
     );
   }

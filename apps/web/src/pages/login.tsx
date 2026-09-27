@@ -1,15 +1,34 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import type { AuthSetupStatus } from '@family/contracts';
 import { useAuth } from '../lib/auth';
-import { ApiError } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { Button, Input } from '../components/ui';
+import { applyTheme, readTheme } from '../lib/theme';
 
 export function LoginPage() {
   const { signIn } = useAuth();
+  // 登录前的页面不在外壳里，自己按这台设备选过的深浅色来。
+  useEffect(() => applyTheme(readTheme()), []);
   const [loginName, setLoginName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
+
+  // 服务器上还没有任何家庭：登录无从谈起，直接去首次初始化。查不到状态就照常显示登录。
+  useEffect(() => {
+    let active = true;
+    api<AuthSetupStatus>('/auth/setup/status', { auth: false })
+      .then((status) => {
+        if (active && !status.initialized) navigate('/setup', { replace: true });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -68,6 +87,9 @@ export function LoginPage() {
         <Button type="submit" disabled={busy || !loginName.trim()} className="mt-5 w-full">
           {busy ? '登录中…' : '登录'}
         </Button>
+        <p className="mt-6 text-center text-[13px] text-ink-soft">
+          收到了邀请？<Link to="/join" className="text-accent">用邀请码加入</Link>
+        </p>
       </form>
     </div>
   );
