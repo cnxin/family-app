@@ -23,7 +23,8 @@ interface AuthValue {
   redeemInvitation: (body: RedeemBody) => Promise<void>;
   /** 首次初始化：建家庭和第一位管理员，成功后直接是登录状态。 */
   bootstrap: (body: BootstrapBody) => Promise<void>;
-  signOut: () => void;
+  /** 退出登录：先让服务端吊销这次会话（刷新令牌随之作废），再清本机。服务端不通也照样清本机。 */
+  signOut: () => Promise<void>;
   setHouseholdTimezone: (timezone: string) => void;
 }
 
@@ -62,11 +63,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const signOut = useCallback(() => {
+  /** 只清本机：令牌失效、续期失败时用；服务端那边已经不认这次会话了。 */
+  const clearSession = useCallback(() => {
     setSession(null);
     write(null);
     setAccessToken(null);
   }, []);
+
+  const signOut = useCallback(async () => {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      /* 断网或会话早已失效：本机照样退出 */
+    }
+    clearSession();
+  }, [clearSession]);
 
   const apply = useCallback((next: AuthSession) => {
     setSession(next);
@@ -76,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setAuthHandlers({
-      unauthorized: signOut,
+      unauthorized: clearSession,
       refresh: async () => {
         const current = read();
         if (!current?.refreshToken) return null;
@@ -89,13 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           apply(next);
           return next.accessToken;
         } catch {
-          signOut();
+          clearSession();
           return null;
         }
       },
     });
     return () => setAuthHandlers({ refresh: null, unauthorized: null });
-  }, [apply, signOut]);
+  }, [apply, clearSession]);
 
   // 旧版缓存的会话不含家庭时区：沿现有续期接口补齐，不丢失登录态。
   useEffect(() => {
