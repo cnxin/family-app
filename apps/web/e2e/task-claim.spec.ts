@@ -28,14 +28,14 @@ test('今天页待认领任务点认领后进入我的，刷新仍在', async ({
 
     await page.goto('/');
     const familyRow = page.locator('[data-task-group="family"] [data-task-row]').filter({ hasText: title });
-    await expect(familyRow.getByRole('button', { name: '认领' })).toBeVisible();
+    await expect(familyRow.getByRole('button', { name: '认领', exact: true })).toBeVisible();
     const claimed = waitForPatch(page);
-    await familyRow.getByRole('button', { name: '认领' }).click();
+    await familyRow.getByRole('button', { name: '认领', exact: true }).click();
     expect((await claimed).ok()).toBeTruthy();
 
     const mineRow = page.locator('[data-task-group="mine"] [data-task-row]').filter({ hasText: title });
     await expect(mineRow.getByText('我的', { exact: true })).toBeVisible();
-    await expect(mineRow.getByRole('button', { name: '认领' })).toHaveCount(0);
+    await expect(mineRow.getByRole('button', { name: '认领', exact: true })).toHaveCount(0);
 
     await page.reload();
     await expect(mineRow.getByText('我的', { exact: true })).toBeVisible();
@@ -71,7 +71,7 @@ test.describe('设备时区与家庭不一致', () => {
 
       await page.goto('/');
       const familyRow = page.locator('[data-task-group="family"] [data-task-row]').filter({ hasText: title });
-      await expect(familyRow.getByRole('button', { name: '认领' })).toBeVisible();
+      await expect(familyRow.getByRole('button', { name: '认领', exact: true })).toBeVisible();
     } finally {
       if (taskId) await api.delete(`/tasks/${taskId}`);
     }

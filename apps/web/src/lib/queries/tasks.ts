@@ -5,6 +5,7 @@ import type {
   HouseholdTask,
   Member,
   TaskOccurrence,
+  UpdateTaskBody,
   UpdateTaskInstanceBody,
 } from '@family/contracts';
 import { api } from '../api';
@@ -75,5 +76,30 @@ export function useCreateTask() {
       void invalidateModules(client);
       return client.invalidateQueries({ queryKey: ['tasks'] });
     },
+  });
+}
+
+/** 改任务定义或停用任务之后：任务列表、日历里的任务条目、留意与家里页状态一起刷新。 */
+function invalidateTaskDefinition(client: ReturnType<typeof useQueryClient>) {
+  void invalidateModules(client);
+  void client.invalidateQueries({ queryKey: ['calendar'] });
+  return client.invalidateQueries({ queryKey: ['tasks'] });
+}
+
+export function useUpdateTask() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateTaskBody }) =>
+      api<HouseholdTask>(`/tasks/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => invalidateTaskDefinition(client),
+  });
+}
+
+/** 服务端的「删除」是停用：之后不再出现，已完成的记录保留。 */
+export function useArchiveTask() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<{ id: string; archived: true }>(`/tasks/${id}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateTaskDefinition(client),
   });
 }

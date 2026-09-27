@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import type { TaskOccurrence } from '@family/contracts';
 import { useAuth } from '../lib/auth';
 import { useHouseholdToday } from '../lib/use-household-today';
 import {
@@ -20,6 +22,7 @@ import { TodayReminders, TodayShopping } from '../components/today-aside';
 import { AttentionSection, nextHouseholdMidnight, useAttentionSnooze } from '../components/attention-card';
 import { QueryFailure, QueryFrame, StaleNotice, queryPhase } from '../components/query-state';
 import { TaskAssignee } from '../components/task-assignee';
+import { TaskDetail } from '../components/task-detail';
 
 function greeting(timezone: string) {
   const hour = Number(
@@ -58,6 +61,7 @@ export function TodayPage() {
   const calendar = useCalendarEntries(today, today);
   const attention = useAttention();
   const update = useUpdateOccurrence();
+  const [detail, setDetail] = useState<TaskOccurrence | null>(null);
   const memberId = session?.member.id ?? '';
   const { visible: visibleAttention, snooze } = useAttentionSnooze(attention.data?.items ?? [], memberId);
   const attentionToday = attention.data?.today ?? today;
@@ -182,14 +186,17 @@ export function TodayPage() {
                             })
                           }
                         />
-                        <span
+                        <button
+                          type="button"
+                          aria-label={`看看${item.task.title}`}
+                          onClick={() => setDetail(item)}
                           className={
-                            'min-w-0 flex-1 truncate text-[15px] ' +
+                            'min-h-11 min-w-0 flex-1 truncate rounded-md text-left text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ' +
                             (item.status === 'done' ? 'text-ink-soft line-through' : '')
                           }
                         >
                           {item.task.title}
-                        </span>
+                        </button>
                         {session ? <TaskAssignee item={item} member={session.member} /> : null}
                       </div>
                     ))}
@@ -297,6 +304,7 @@ export function TodayPage() {
         </aside>
       ) : null}
       </div>
+      {detail ? <TaskDetail item={detail} onClose={() => setDetail(null)} /> : null}
     </Page>
   );
 }
