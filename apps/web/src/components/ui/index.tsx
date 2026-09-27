@@ -201,7 +201,7 @@ export function Dialog({
             type="button"
             aria-label="关闭"
             onClick={onClose}
-            className="-mr-1 grid size-8 place-items-center rounded-lg text-ink-soft transition-colors duration-150 hover:bg-muted hover:text-ink"
+            className="-mr-2.5 -my-1.5 grid size-11 place-items-center rounded-lg text-ink-soft transition-colors duration-150 hover:bg-muted hover:text-ink"
           >
             ✕
           </button>
