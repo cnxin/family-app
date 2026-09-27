@@ -12,8 +12,7 @@ import {
 import { AgendaFlow, MODULE_ICON, MonthBoard, WeekColumns } from '../components/calendar-views';
 import { EventForm } from '../components/event-form';
 import { useCalendarEntries, useDeleteCalendarEvent } from '../lib/queries';
-import { legacyUrl } from '../lib/nav';
-import { toNewRoute } from '../lib/routes';
+import { MISSING_TARGET, toNewRoute } from '../lib/routes';
 import { pushToast } from '../lib/toast';
 import { QueryFailure, QueryFrame } from '../components/query-state';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
@@ -94,7 +93,7 @@ function useOpenEntry() {
     else {
       const route = toNewRoute(entry.targetPath);
       if (route) navigate(route);
-      else window.open(legacyUrl(entry.targetPath), '_blank', 'noopener');
+      else pushToast(MISSING_TARGET);
     }
   };
 }

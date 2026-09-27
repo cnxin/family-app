@@ -114,7 +114,6 @@ const BUSINESS_SCRIPTS = [
   'agent-profiles',
   'agent-memory',
   'agent-tools',
-  'agent-page-context',
   'agent-routines',
   'agent-proposal-groups',
   'travel',
@@ -131,7 +130,7 @@ const BUSINESS_SCRIPTS = [
   'household-isolation',
   'security-consistency',
   'shopping-inventory',
-  'food-batches-smart-menu',
+  'food-batches',
   'assets',
 ];
 

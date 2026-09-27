@@ -9,10 +9,7 @@ export interface NavSegment {
   label: string;
   tier: NavTier;
   glyph: string;
-  /** 新客户端里的路径；没搬过来时为空 */
   path?: string;
-  /** 旧客户端（8088）里的路径，用于「在旧版打开」 */
-  legacy?: string;
   ready?: boolean;
   /** 只有家庭管理员能看到 */
   managerOnly?: boolean;
@@ -191,17 +188,6 @@ export function segmentOf(scene: NavScene, pathname: string) {
   return scene.segments.find(
     (segment) => segment.key === pathname.split('/')[2],
   );
-}
-
-/**
- * 旧客户端还跑在 8088 上。开发时新客户端在 5180，所以按同主机 + 8088 拼；
- * 以后两边都进 Caddy 时把 VITE_LEGACY_ORIGIN 设成空串就退化成同源。
- */
-export function legacyUrl(path: string) {
-  const configured = import.meta.env.VITE_LEGACY_ORIGIN as string | undefined;
-  const origin =
-    configured ?? `${window.location.protocol}//${window.location.hostname}:8088`;
-  return `${origin}${path}`;
 }
 
 export function visibleSegments(scene: NavScene, manager: boolean) {

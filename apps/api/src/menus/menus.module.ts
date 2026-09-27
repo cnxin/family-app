@@ -26,7 +26,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { DataSource, EntityManager, In, IsNull, Not, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
 import { assertCapability, RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
@@ -683,42 +683,6 @@ export class MenusService {
       take: 30,
     });
   }
-
-  listNotifications(user: JwtUser) {
-    return this.events.find({
-      where: {
-        householdId: user.householdId,
-        recipientId: user.memberId,
-        readAt: IsNull(),
-      },
-      order: { createdAt: 'DESC' },
-      take: 20,
-    });
-  }
-
-  async markNotificationRead(id: string, user: JwtUser) {
-    const event = await this.events.findOneBy({
-      id,
-      householdId: user.householdId,
-      recipientId: user.memberId,
-    });
-    if (!event) throw new NotFoundException('提醒不存在');
-    if (!event.readAt) {
-      event.readAt = new Date();
-      await this.events.save(event);
-      await this.notifications.update(
-        {
-          householdId: user.householdId,
-          recipientId: user.memberId,
-          module: 'menu',
-          sourceId: event.id,
-          readAt: IsNull(),
-        },
-        { readAt: event.readAt },
-      );
-    }
-    return event;
-  }
 }
 
 @Controller()
@@ -783,19 +747,6 @@ export class MenusController {
   @Get('menus/:id/events')
   events(@Param('id') id: string, @CurrentUser() user: JwtUser) {
     return this.service.listEvents(id, user.householdId);
-  }
-
-  @Get('menu-notifications')
-  notifications(@CurrentUser() user: JwtUser) {
-    return this.service.listNotifications(user);
-  }
-
-  @Patch('menu-notifications/:id/read')
-  markNotificationRead(
-    @Param('id') id: string,
-    @CurrentUser() user: JwtUser,
-  ) {
-    return this.service.markNotificationRead(id, user);
   }
 }
 

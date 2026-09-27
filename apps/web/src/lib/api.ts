@@ -1,5 +1,5 @@
-// 和 apps/mobile/src/lib/api.ts 同样的语义：{data} / {error:{code,message}} 信封、
-// 401 自动续期一次、续期失败就登出。区别只是这里没有 Expo 那套主机名推断。
+// 统一的请求语义：{data} / {error:{code,message}} 信封、401 自动续期一次、续期失败就登出
+// （沿用已删除的旧 Expo 客户端定下的约定）。
 
 export class ApiError extends Error {
   constructor(

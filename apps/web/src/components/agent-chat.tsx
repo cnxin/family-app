@@ -7,8 +7,8 @@ import type {
   AgentToolPresentation,
 } from '@family/contracts';
 import { useConfirmAgentProposal, useRejectAgentProposal } from '../lib/queries';
-import { legacyUrl } from '../lib/nav';
-import { toNewRoute } from '../lib/routes';
+import { MISSING_TARGET, toNewRoute } from '../lib/routes';
+import { pushToast } from '../lib/toast';
 import { Button } from './ui';
 
 /** 工具名 → 人话。小管家在查什么，得让家里人看得懂。 */
@@ -81,7 +81,7 @@ function useOpenTarget() {
   return (targetPath: string) => {
     const route = toNewRoute(targetPath);
     if (route) navigate(route);
-    else window.open(legacyUrl(targetPath), '_blank', 'noopener');
+    else pushToast(MISSING_TARGET);
   };
 }
 

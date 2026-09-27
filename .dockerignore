@@ -4,8 +4,6 @@ node_modules
 **/node_modules
 dist
 **/dist
-.expo
-**/.expo
 uploads
 **/uploads
 backups
@@ -16,9 +14,6 @@ restore-preview
 restore-preview-managed
 deploy/.env.production
 deploy/secrets
-apps/mobile/e2e/.auth
-apps/mobile/playwright-report
-apps/mobile/test-results
 *.log
 **/*.log
 .env

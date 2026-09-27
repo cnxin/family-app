@@ -1,8 +1,10 @@
 /**
  * 旧客户端的路径 → 新客户端的路径。后端在通知、日历条目、提醒来源里写的 targetPath
  * 还是旧的一层路径（比如 `/polls?pollId=…`），搬完一页就在这里补一行，查询串原样带过去。
- * 没搬的返回 null，调用方自己决定去旧版打开。
+ * 换不出来返回 null：调用方提示一句 MISSING_TARGET，不跳走（旧客户端已在 H1 删除）。
  */
+export const MISSING_TARGET = '没找到这条记录对应的页面';
+
 const MOVED: [string, string][] = [
   ['/order', '/eat/order'],
   ['/kitchen', '/eat/kitchen'],
@@ -37,9 +39,13 @@ const MOVED: [string, string][] = [
   ['/notifications', '/schedule/notifications'],
 ];
 
+/** 已经是新客户端的规范路径（后端逐步改为直接生成新路径），原样放行。 */
+const CANONICAL = /^\/(?:eat|schedule|house|life|me)(?:\/|$)|^\/(?:home|settings)$/;
+
 export function toNewRoute(targetPath: string | null | undefined): string | null {
   if (!targetPath) return null;
   const [pathname, search = ''] = targetPath.split('?');
+  if (CANONICAL.test(pathname)) return targetPath;
   const hit = MOVED.find(([from]) => pathname === from || pathname.startsWith(`${from}/`));
   if (!hit) return null;
   const rest = pathname.slice(hit[0].length);

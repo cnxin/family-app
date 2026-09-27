@@ -29,11 +29,8 @@ import {
   AGENT_PROPOSAL_TOOLS,
   AGENT_READ_TOOLS,
   AGENT_TOOL_AUTHORIZATION_TTL_MS,
-  AgentPageContextCandidate,
-  AgentResolvedPageContext,
   AgentRuntime,
 } from './agent.types';
-import { AgentPageContextService } from './agent-page-context.service';
 import { AgentProposalsService } from './agent-proposals.service';
 import { isUniqueViolation } from '@family/shared';
 
@@ -88,7 +85,6 @@ export class AgentService {
     private readonly fakeRuntime: FakeAgentRuntime,
     private readonly hermesRuntime: HermesAgentRuntime,
     private readonly proposals: AgentProposalsService,
-    private readonly pageContexts: AgentPageContextService,
   ) {}
 
   async status(user: JwtUser) {
@@ -392,7 +388,6 @@ export class AgentService {
     message: string,
     clientRequestId: string,
     user: JwtUser,
-    pageContext?: AgentPageContextCandidate,
   ) {
     const content = message.trim();
     const key = clientRequestId.trim();
@@ -418,11 +413,6 @@ export class AgentService {
       }
       return this.presentRun(existing);
     }
-
-    const resolvedPageContext = await this.pageContexts.resolve(
-      pageContext,
-      user,
-    );
 
     let run: AgentRun;
     try {
@@ -499,7 +489,7 @@ export class AgentService {
       }
       throw error;
     }
-    void this.processRun(run.id, content, resolvedPageContext);
+    void this.processRun(run.id, content);
     return this.presentRun(run);
   }
 
@@ -831,7 +821,6 @@ export class AgentService {
   private async processRun(
     runId: string,
     message: string,
-    pageContext?: AgentResolvedPageContext | null,
   ) {
     const claimed = await this.runs.update(
       { id: runId, status: 'queued' },
@@ -876,7 +865,6 @@ export class AgentService {
           message,
           allowedTools: run.allowedTools,
           history,
-          pageContext,
         });
       } catch (error) {
         const current = await this.runs.findOneBy({ id: run.id });
@@ -889,7 +877,6 @@ export class AgentService {
           message,
           allowedTools: run.allowedTools,
           history,
-          pageContext,
         });
         result.content = `Hermes 暂时不可用，下面由本地家庭摘要回答。\n\n${result.content}`;
       }

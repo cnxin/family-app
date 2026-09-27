@@ -36,7 +36,6 @@ import { ProfilePage } from './pages/profile';
 import { AssistantPage } from './pages/assistant';
 import { AgentMemoriesPage } from './pages/agent-memories';
 import { Shell } from './components/shell';
-import { LegacyBridge } from './components/legacy-bridge';
 import { CommandPalette } from './components/command-palette';
 import HomePage from './pages/home';
 import { SettingsPage } from './pages/settings';
@@ -158,14 +157,7 @@ export function App() {
           <Route path="/me/assistant" element={<AssistantPage />} />
           <Route path="/me/assistant/memories" element={<AgentMemoriesPage />} />
 
-          {/* 没搬过来的分段统一落到旧版入口页 */}
-          <Route path="/eat/:segment" element={<LegacyBridge />} />
-          <Route path="/schedule/:segment" element={<LegacyBridge />} />
-          <Route path="/house/:segment" element={<LegacyBridge />} />
           <Route path="/house/travel/:id" element={<RedirectTravelPlan />} />
-
-          <Route path="/life/:segment" element={<LegacyBridge />} />
-          <Route path="/me/:segment" element={<LegacyBridge />} />
 
           {REDIRECTS.map(([from, to]) => (
             <Route key={from} path={from} element={<RedirectKeepingSearch to={to} />} />

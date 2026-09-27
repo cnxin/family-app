@@ -43,7 +43,6 @@ import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
 import { AgentRetentionService } from './agent-retention.service';
 import { AgentMemoryService } from './agent-memory.service';
-import { AgentPageContextService } from './agent-page-context.service';
 import { AgentRoutineService } from './agent-routine.service';
 import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 
@@ -97,7 +96,6 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
     AgentChannelsService,
     AgentRetentionService,
     AgentMemoryService,
-    AgentPageContextService,
     AgentRoutineService,
     AgentProposalGroupsService,
   ],

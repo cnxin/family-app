@@ -16,7 +16,7 @@
 
 ## 1. 这次升级会变什么
 
-- **前端换成新客户端**：`/` 是新客户端，旧客户端挂在 `/legacy/`，C2 期间两边都能用。
+- **前端是新客户端**：旧的 Expo 客户端已在 H1 删除，家里人的旧书签会被跳到同名的新地址。
 - **两个新迁移**，API 启动时自动执行（`migrationsRun: true`，全部迁移在一个事务里，失败整体回滚，API 不会起来）：
   - `AddHouseholdModuleOverrides1785232400000`：新表 `household_module_overrides`（家里页的开启 / 收起）。
   - `AddMaintenancePerformedOn1785232500000`：维护记录加 `performedOn`（纯日期，NOT NULL），历史记录按各家庭时区从 `performedAt` 回填。
@@ -127,7 +127,6 @@ dc exec -T api node -e "console.log(Intl.DateTimeFormat().resolvedOptions().time
 **③ 入口都通**
 
 - 浏览器打开家里地址 `/`：新客户端登录页，登录后是今天页；手机底部是 今天 / 吃饭 / 日程 / 家里 四个 tab。
-- 打开 `/legacy/`：旧客户端还能用。
 - `curl -fsS <家里地址>/api/health/ready` 返回 `{"data":{"status":"ok"}}`。
 - 管理员打开「家庭设置 → 备份」：备份程序显示在线。家里从没打开过备份页的话，第一次会显示离线（在线状态记在第一次打开时才建的备份策略里），过 15 秒刷新即可。
 

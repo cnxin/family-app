@@ -4,12 +4,12 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 279 个端点（POST 116 / GET 88 / PATCH 43 / DELETE 24 / PUT 8），公开端点 27 个，已定义契约 279 个。
+共 272 个端点（POST 113 / GET 86 / PATCH 42 / DELETE 24 / PUT 7），公开端点 27 个，已定义契约 272 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
 | activities | 1 | 1 |
-| agent | 40 | 40 |
+| agent | 39 | 39 |
 | assets | 18 | 18 |
 | auth | 16 | 16 |
 | calendar | 4 | 4 |
@@ -21,14 +21,13 @@
 | knowledge | 8 | 8 |
 | media | 32 | 32 |
 | memories | 8 | 8 |
-| menus | 9 | 9 |
+| menus | 7 | 7 |
 | notifications | 11 | 11 |
 | points | 12 | 12 |
 | polls | 8 | 8 |
 | recipes | 7 | 7 |
 | reminders | 5 | 5 |
 | shopping | 5 | 5 |
-| smart-menu | 4 | 4 |
 | system | 10 | 10 |
 | tasks | 5 | 5 |
 | today | 1 | 1 |
@@ -41,7 +40,7 @@
 | --- | --- | --- | --- | :-: | --- |
 | GET | `/activities` | `ActivitiesController.list` | 登录 | ✓ | `apps/api/src/activities/activities.module.ts` |
 
-## agent（40）
+## agent（39）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -76,7 +75,6 @@
 | POST | `/agent/runs/:id/cancel` | `AgentController.cancel` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | POST | `/agent/runs/:id/retry` | `AgentController.retry` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | GET | `/agent/settings` | `AgentController.settings` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
-| PUT | `/agent/settings` | `AgentController.updateSettings` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | PATCH | `/agent/settings` | `AgentController.patchSettings` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | GET | `/agent/status` | `AgentController.status` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | POST | `/internal/agent/channels/:channelId/messages` | `AgentChannelInternalController.message` | 公开 | ✓ | `apps/api/src/agent/agent-channel-internal.controller.ts` |
@@ -280,14 +278,12 @@
 | POST | `/memories/:id/restore` | `MemoriesController.restore` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
 | GET | `/memories/:memoryId/photos/:photoId/content` | `MemoriesController.photoContent` | 公开 | ✓ | `apps/api/src/memories/memories.module.ts` |
 
-## menus（9）
+## menus（7）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
 | GET | `/menu-dates` | `MenusController.dateCounts` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
 | PATCH | `/menu-items/:id` | `MenusController.updateItem` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
-| GET | `/menu-notifications` | `MenusController.notifications` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
-| PATCH | `/menu-notifications/:id/read` | `MenusController.markNotificationRead` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
 | GET | `/menus` | `MenusController.get` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
 | PATCH | `/menus/:id/chef` | `MenusController.assignChef` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.module.ts` |
 | POST | `/menus/:id/complete` | `MenusController.complete` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.module.ts` |
@@ -371,15 +367,6 @@
 | DELETE | `/shopping-items/:id` | `ShoppingController.remove` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 | GET | `/shopping-list` | `ShoppingController.list` | 登录 | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 | POST | `/shopping-list/generate` | `ShoppingController.generate` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
-
-## smart-menu（4）
-
-| 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
-| --- | --- | --- | --- | :-: | --- |
-| GET | `/smart-menu-plans` | `SmartMenuController.list` | 登录 | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
-| POST | `/smart-menu-plans` | `SmartMenuController.create` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
-| POST | `/smart-menu-plans/:id/adopt` | `SmartMenuController.adopt` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
-| POST | `/smart-menu-plans/:id/poll` | `SmartMenuController.createPoll` | `place_meal_order` | ✓ | `apps/api/src/smart-menu/smart-menu.module.ts` |
 
 ## system（10）
 

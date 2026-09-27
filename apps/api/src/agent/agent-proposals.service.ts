@@ -587,7 +587,7 @@ export class AgentProposalsService {
         title: `${menu.date} ${MEAL_LABELS[menu.mealType]}`,
         summary: `确认后向菜单加入 ${menu.items.length} 道菜`,
         changes: [{ label: '菜品与做法', value: names.join('、') }],
-        targetPath: `/menu?date=${menu.date}`,
+        targetPath: `/eat/order?date=${menu.date}&meal=${menu.mealType}`,
       };
     }
     if (actionType === 'finance') {

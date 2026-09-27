@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { emptyModuleHousehold } from './modules-fixture';
 import { expectNoHorizontalOverflow, watchPageErrors } from './helpers';
 
-test.skip(process.env.E2E_ISOLATED !== '1', '空家庭夹具仅限隔离库，请用 test:web:next');
+test.skip(process.env.E2E_ISOLATED !== '1', '空家庭夹具仅限隔离库，请用 test:web');
 const active = (page: Page, key: string) => page.locator(`[data-home-grid] [data-home-tile="${key}"]`);
 const available = (page: Page, key: string) => page.locator(`[data-home-available="${key}"]`);
 async function goHome(page: Page, mobile: boolean) {

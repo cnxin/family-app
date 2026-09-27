@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { idParams, removedResponse, uuid } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/dishes/dishes.module.ts（菜品基础资料与旧接口兼容）
+// 对应 apps/api/src/dishes/dishes.module.ts（菜品基础资料；做法、食材、步骤走 recipes.ts 的做法接口）
 
 export const DISH_CATEGORIES = ['荤菜', '素菜', '汤', '主食', '甜品'] as const;
 export const dishCategory = z.enum(DISH_CATEGORIES);
@@ -75,16 +75,6 @@ export const dishSchema = z
   });
 export type Dish = z.infer<typeof dishSchema>;
 
-export const dishIngredientInput = z.object({
-  ingredientId: uuid.optional(),
-  /** 传 name 时按名称 find-or-create 食材 */
-  name: z.string().optional(),
-  category: z.string().optional(),
-  quantity: z.number(),
-  unit: z.string(),
-});
-export type DishIngredientInput = z.infer<typeof dishIngredientInput>;
-
 export const upsertDishBody = z.object({
   name: z.string().optional(),
   category: dishCategory.optional(),
@@ -92,24 +82,7 @@ export const upsertDishBody = z.object({
   estMinutes: z.number().int().optional(),
   note: z.string().optional(),
   photoUrl: z.string().optional(),
-  recipeSteps: z
-    .array(
-      z.object({
-        text: z.string().max(2000),
-        imageUrl: z.string().max(500).optional(),
-      }),
-    )
-    .optional(),
-  referenceLinks: z
-    .array(
-      z.object({
-        title: z.string().max(120).optional(),
-        url: z.string().max(1000),
-      }),
-    )
-    .optional(),
   isActive: z.boolean().optional(),
-  ingredients: z.array(dishIngredientInput).optional(),
 });
 export type UpsertDishBody = z.infer<typeof upsertDishBody>;
 

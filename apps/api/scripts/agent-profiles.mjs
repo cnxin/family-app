@@ -316,7 +316,7 @@ async function runApiPhase() {
     const forbiddenSettings = await request(
       '/agent/settings',
       member.accessToken,
-      'PUT',
+      'PATCH',
       { enabled: true, expectedVersion: settings.data.version },
     );
     assert(

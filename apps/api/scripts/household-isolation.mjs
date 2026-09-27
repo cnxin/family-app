@@ -523,17 +523,11 @@ try {
     `/menus/${ids.menu}/events`,
     defaultToken,
   );
-  const crossNotification = await request(
-    `/menu-notifications/${ids.menuEvent}/read`,
-    defaultToken,
-    'PATCH',
-  );
   assert(
     crossChef.status === 404 &&
       crossComplete.status === 404 &&
-      crossEvents.status === 404 &&
-      crossNotification.status === 404,
-    '不能读取或操作其他家庭的主厨、历史、提醒和菜单锁定',
+      crossEvents.status === 404,
+    '不能读取或操作其他家庭的主厨、历史和菜单锁定',
   );
 
   const foreignCalendar = await request(

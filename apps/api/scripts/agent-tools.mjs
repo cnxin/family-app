@@ -231,8 +231,17 @@ try {
     category: '素菜',
     difficulty: 1,
     estMinutes: 12,
-    ingredients: [{ name: ingredientName, quantity: 1, unit: '份' }],
   });
+  // 菜品接口不再收食材；写进建菜时带出的「家庭默认」做法，服务端同步回菜品食材
+  const dishRecipe = await request(`/recipes/${dish.data.id}`, owner.accessToken);
+  const defaultVariant = dishRecipe.data.recipeVariants.find((variant) => variant.isDefault);
+  const recipeWritten = await request(
+    `/recipe-variants/${defaultVariant.id}`,
+    owner.accessToken,
+    'PATCH',
+    { ingredients: [{ name: ingredientName, quantity: 1, unit: '份' }] },
+  );
+  assert(recipeWritten.status === 200, '默认做法写入食材');
   const menu = await request(
     `/menus?date=${fixtureDate}&mealType=dinner`,
     owner.accessToken,
