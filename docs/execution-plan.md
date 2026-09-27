@@ -14,7 +14,7 @@
 - 仓库 `github.com/cnxin/family-app`（私有），本机 `~/AI/family-app`，工作分支 **`refactor/phase-0-safety-net`**（领先 main 51 个提交，不要合到 main，用户自己决定什么时候合）。
 - pnpm monorepo：`apps/api`（NestJS 10 + TypeORM + PG16）、`apps/mobile`（**旧客户端**，Expo 57 + RN Web，本机跑在 :8088）、**`apps/web`（新客户端，Vite 7 + React 19 + TanStack Query 5 + React Router 7.9 + Tailwind 4，dev :5180，`/api` 代理到 :8088）**、`packages/contracts`（275/275 端点 Zod 契约）、`packages/shared`。
 - 新客户端已经搬好 **10 页 / 24 分段**：今天、点菜、厨房、菜谱、购物、库存、日历、任务、提醒、消息。**剩 14 个分段**还挂在「在旧版打开」的桥接页上。
-- 框架已定型，**不要再动框架**：五场景信息架构（今天/吃饭/日程/家务/我的）、桌面左侧栏 + 手机底部 5 个 tab 气泡菜单、`Page/Panel` 控制台骨架、`SoftLink` 视图过渡、按下预取、⌘K。用户对这些已经点头，改它们要先问用户。
+- 信息架构以 [docs/ia-plan.md](ia-plan.md) 为准（2026-09-20 收敛，进度在该文件末尾的 F0～F8 表）。不要再按本节旧的「五场景 + 底部五个气泡」改导航。`Page/Panel`、`SoftLink`、按下预取、⌘K 这些骨架仍然沿用，改它们要先问用户。
 - CI 四个 job 全绿（静态检查 / API 黑盒 / Playwright 旧客户端 / 镜像构建）。**但 CI 一行都不保护 `apps/web`**——这就是为什么 A 必须先做。
 
 ---
@@ -302,6 +302,7 @@ export default function XxxPage() {
 | C1 镜像与 Caddy 切换 | ☑ | | `Dockerfile.web` 拆成 `base` + `build-web`（Vite，产物进 `/srv`）+ `build-legacy`（Expo，产物进 `/srv-legacy`）三段；旧客户端挂子路径要让 Expo 知道，所以在镜像里把 `app.json` 的 `experiments.baseUrl` 改成 `/legacy`——**仓库里的 app.json 不动**，开发和旧客户端回归还是跑在根路径。`Caddyfile` 的 `handle_path /legacy/*` 必须排在默认 `handle` 前面。`VITE_LEGACY_ORIGIN=/legacy` 让 `legacyUrl` 退化成同源。**本机验收过**：`docker build -f Dockerfile.web .` 成功（镜像 ~90MB）；`caddy validate` 通过；起一个容器 curl 了一遍——`/` 200 给新客户端、`/legacy/` 200 给旧客户端且资源路径是 `/legacy/_expo/...`、两边深链都回退到各自的 index.html、CSP 头还在、`:2015/healthz` 通。**用户要做的**：贴 `docs/ci-pending-C1.diff`（CI 现在完全没构建过这个镜像），以及在 NAS 上 `docker compose -f docker-compose.prod.yml up --build` |
 | C2 家庭试用两周 | ☐ | | 起止日期： |
 | C3 删除旧客户端 | ☐ | | |
+| Phase F 信息架构（F0～F8） | ◐ | 见 `docs/ia-plan.md` 进度表 | 一行汇总：F0 盘点到 F7 家庭设置已完成，F8 收口进行中。导航、深链和后置项以 ia-plan 为准，不再按本节旧五场景改。 |
 | C4 文档改写 | ☐ | | |
 | D1 AI 找菜谱 | ☐ | | 需用户确认范围 |
 | D2 换栈决策门 | ☐ | | 需用户决定 |
