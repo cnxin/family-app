@@ -61,16 +61,16 @@ export function SettingsPage() {
       <Panel grow={false}>
         <button
           type="button"
-          className="flex min-h-11 w-full items-center gap-3 border-b border-border px-3.5 py-3 text-left hover:bg-muted"
+          className="flex min-h-11 w-full flex-col gap-1 border-b border-border px-3.5 py-3 text-left hover:bg-muted"
           onClick={() => setPicking(true)}
         >
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium">家庭时区</span>
-            <span className="mt-0.5 block text-[12px] leading-relaxed text-ink-soft">
-              改变时区不会移动已记录的日期，只影响「今天」的判断。
-            </span>
+          <span className="flex w-full items-center gap-3">
+            <span className="text-sm font-medium">家庭时区</span>
+            <span className="ml-auto shrink-0 text-[13px] text-accent">{timeZoneLabel(timezone)}</span>
           </span>
-          <span className="shrink-0 text-[13px] text-accent">{timeZoneLabel(timezone)}</span>
+          <span className="text-[12px] leading-relaxed text-ink-soft">
+            改变时区不会移动已记录的日期，只影响「今天」的判断。
+          </span>
         </button>
         <Row to="/house/members" title="成员" hint="谁在这个家里，谁能管事" status={members ? `${members.length} 位成员` : null} />
         <Row
