@@ -345,10 +345,16 @@ try {
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
     await runScript('scripts/verify-legacy-pin-migration.mjs');
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+    // 迁移演练一律在有数据的库上跑（教训 29）：先经 API 灌夹具，再停 API 做 up → down → up。
+    api = startApi();
+    await waitForApi(api);
+    await runScript('scripts/migration-fixture.mjs');
+    await stopApi();
     await runScript('scripts/agent-proposal-groups.mjs', '--migration');
     await runScript('scripts/agent-routines.mjs', '--migration');
     await runScript('scripts/agent-profiles.mjs', '--migration');
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/check-module-migration.ts']);
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/check-upgrade-migration.ts']);
     await runProcess(process.execPath, [
       '-r',
       'ts-node/register',
