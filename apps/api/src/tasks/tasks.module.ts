@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  Body,
   Controller,
   Delete,
   ForbiddenException,
@@ -11,21 +10,8 @@ import {
   Param,
   Patch,
   Post,
-  Query,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import {
-  IsBoolean,
-  IsIn,
-  IsInt,
-  IsISO8601,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
 import {
   Between,
   DataSource,
@@ -43,132 +29,24 @@ import {
   HouseholdTaskInstance,
   Member,
   Notification,
-  TaskInstanceStatus,
-  TaskRecurrence,
 } from '../entities';
-
-class TaskRangeDto {
-  @IsISO8601({ strict: true })
-  start: string;
-
-  @IsISO8601({ strict: true })
-  end: string;
-}
-
-export class CreateTaskDto {
-  @IsString()
-  @MaxLength(120)
-  title: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  note?: string | null;
-
-  @IsISO8601({ strict: true })
-  startsOn: string;
-
-  @IsOptional()
-  @IsIn(['once', 'daily', 'weekly', 'monthly'])
-  recurrence?: TaskRecurrence;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(365)
-  repeatInterval?: number;
-
-  @IsOptional()
-  @IsISO8601({ strict: true })
-  endsOn?: string | null;
-
-  @IsOptional()
-  @IsUUID()
-  defaultAssigneeId?: string | null;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(10000)
-  rewardPoints?: number;
-}
-
-class UpdateTaskDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  title?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  note?: string | null;
-
-  @IsOptional()
-  @IsISO8601({ strict: true })
-  startsOn?: string;
-
-  @IsOptional()
-  @IsIn(['once', 'daily', 'weekly', 'monthly'])
-  recurrence?: TaskRecurrence;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(365)
-  repeatInterval?: number;
-
-  @IsOptional()
-  @IsISO8601({ strict: true })
-  endsOn?: string | null;
-
-  @IsOptional()
-  @IsUUID()
-  defaultAssigneeId?: string | null;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(10000)
-  rewardPoints?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  isArchived?: boolean;
-}
-
-class UpdateTaskInstanceDto {
-  @IsOptional()
-  @IsIn(['pending', 'done', 'skipped'])
-  status?: TaskInstanceStatus;
-
-  @IsOptional()
-  @IsUUID()
-  assigneeId?: string | null;
-}
+import { isHouseholdManager, parseDateOnly } from '@family/shared';
+import {
+  createTaskBody,
+  taskRangeQuery,
+  updateTaskBody,
+  updateTaskInstanceBody,
+  type CreateTaskBody,
+  type TaskRangeQuery,
+  type UpdateTaskBody,
+  type UpdateTaskInstanceBody,
+} from '@family/contracts';
+import { ZodBody, ZodQuery } from '../common/zod';
 
 const DAY_MS = 86_400_000;
 
-function parseDateOnly(value: string, fieldName: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new BadRequestException(`${fieldName}必须使用 YYYY-MM-DD 格式`);
-  }
-  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
-  if (
-    !Number.isFinite(timestamp) ||
-    new Date(timestamp).toISOString().slice(0, 10) !== value
-  ) {
-    throw new BadRequestException(`${fieldName}不是有效日期`);
-  }
-  return timestamp;
-}
-
 function dateString(timestamp: number) {
   return new Date(timestamp).toISOString().slice(0, 10);
-}
-
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
 }
 
 export function taskOccursOn(task: HouseholdTask, date: string) {
@@ -211,7 +89,7 @@ function occurrenceDates(task: HouseholdTask, start: string, end: string) {
 }
 
 function normalizeTaskInput(
-  dto: CreateTaskDto | UpdateTaskDto,
+  dto: CreateTaskBody | UpdateTaskBody,
   current?: HouseholdTask,
 ) {
   const title = dto.title ?? current?.title;
@@ -319,7 +197,7 @@ export class TasksService {
     );
   }
 
-  async create(dto: CreateTaskDto, user: JwtUser) {
+  async create(dto: CreateTaskBody, user: JwtUser) {
     const taskId = await this.dataSource.transaction((manager) =>
       this.createWithinTransaction(dto, user, manager),
     );
@@ -327,11 +205,11 @@ export class TasksService {
   }
 
   async createWithinTransaction(
-    dto: CreateTaskDto,
+    dto: CreateTaskBody,
     user: JwtUser,
     manager: EntityManager,
   ) {
-    if ((dto.rewardPoints ?? 0) > 0 && !isAdmin(user)) {
+    if ((dto.rewardPoints ?? 0) > 0 && !isHouseholdManager(user)) {
       throw new ForbiddenException('只有家庭管理员可以设置任务积分');
     }
     const input = normalizeTaskInput(dto);
@@ -366,7 +244,7 @@ export class TasksService {
     return task.id;
   }
 
-  async update(id: string, dto: UpdateTaskDto, user: JwtUser) {
+  async update(id: string, dto: UpdateTaskBody, user: JwtUser) {
     if (!Object.keys(dto).length) {
       throw new BadRequestException('至少需要修改一个字段');
     }
@@ -384,7 +262,7 @@ export class TasksService {
         .getOne();
       if (!task) throw new NotFoundException('家庭任务不存在');
       this.assertTaskManageable(task, user);
-      if (dto.rewardPoints !== undefined && !isAdmin(user)) {
+      if (dto.rewardPoints !== undefined && !isHouseholdManager(user)) {
         throw new ForbiddenException('只有家庭管理员可以修改任务积分');
       }
 
@@ -469,7 +347,7 @@ export class TasksService {
   async updateOccurrence(
     taskId: string,
     dueDate: string,
-    dto: UpdateTaskInstanceDto,
+    dto: UpdateTaskInstanceBody,
     user: JwtUser,
   ) {
     if (!Object.keys(dto).length) {
@@ -504,7 +382,7 @@ export class TasksService {
         dto,
         'assigneeId',
       );
-      const canManage = task.createdById === user.memberId || isAdmin(user);
+      const canManage = task.createdById === user.memberId || isHouseholdManager(user);
       if (
         assignmentProvided &&
         !canManage &&
@@ -617,7 +495,7 @@ export class TasksService {
   ) {
     const assigneeId = instance?.assigneeId ?? task.defaultAssigneeId;
     const assignee = instance ? instance.assignee : task.defaultAssignee;
-    const canManageTask = task.createdById === user.memberId || isAdmin(user);
+    const canManageTask = task.createdById === user.memberId || isHouseholdManager(user);
     return {
       id: instance?.id ?? `task:${task.id}:${dueDate}`,
       taskId: task.id,
@@ -653,7 +531,7 @@ export class TasksService {
   }
 
   private assertTaskManageable(task: HouseholdTask, user: JwtUser) {
-    if (task.createdById !== user.memberId && !isAdmin(user)) {
+    if (task.createdById !== user.memberId && !isHouseholdManager(user)) {
       throw new ForbiddenException('只能管理自己创建的任务');
     }
   }
@@ -683,19 +561,19 @@ export class TasksController {
   constructor(private readonly service: TasksService) {}
 
   @Get('tasks')
-  list(@Query() query: TaskRangeDto, @CurrentUser() user: JwtUser) {
+  list(@ZodQuery(taskRangeQuery) query: TaskRangeQuery, @CurrentUser() user: JwtUser) {
     return this.service.list(query.start, query.end, user);
   }
 
   @Post('tasks')
-  create(@Body() dto: CreateTaskDto, @CurrentUser() user: JwtUser) {
+  create(@ZodBody(createTaskBody) dto: CreateTaskBody, @CurrentUser() user: JwtUser) {
     return this.service.create(dto, user);
   }
 
   @Patch('tasks/:id')
   update(
     @Param('id') id: string,
-    @Body() dto: UpdateTaskDto,
+    @ZodBody(updateTaskBody) dto: UpdateTaskBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.update(id, dto, user);
@@ -710,7 +588,7 @@ export class TasksController {
   updateOccurrence(
     @Param('taskId') taskId: string,
     @Param('dueDate') dueDate: string,
-    @Body() dto: UpdateTaskInstanceDto,
+    @ZodBody(updateTaskInstanceBody) dto: UpdateTaskInstanceBody,
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.updateOccurrence(taskId, dueDate, dto, user);

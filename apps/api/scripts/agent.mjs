@@ -125,39 +125,49 @@ try {
     enabled: true,
     expectedVersion: settings.data.version,
   });
-  const conversation = await request('/agent/conversations', member.accessToken, 'POST', {});
-  const idempotency = randomUUID();
-  const duplicate = await Promise.all([
-    request(`/agent/conversations/${conversation.data.id}/messages`, member.accessToken, 'POST', {
-      message: '今天家里有什么安排？',
-      clientRequestId: idempotency,
-    }),
-    request(`/agent/conversations/${conversation.data.id}/messages`, member.accessToken, 'POST', {
-      message: '今天家里有什么安排？',
-      clientRequestId: idempotency,
-    }),
-  ]);
-  assert(
-    settings.status === 200 &&
-      ['get_tasks', 'get_shopping_list', 'get_meal_plan'].every((tool) =>
-        settings.data.readToolsEnabled.includes(tool),
-      ) &&
-      forbiddenSettings.status === 403 &&
-      conversation.status === 201 &&
-      duplicate.every((entry) => entry.status === 202) &&
-      duplicate[0].data.id === duplicate[1].data.id,
-    '新家庭默认开放日常只读工具，成员可使用小管家但不能改设置，重复发送只创建一次运行',
-  );
-  const completed = await waitForRun(
-    member.accessToken,
-    conversation.data.id,
-    duplicate[0].data.id,
-  );
-  assert(
-    completed.detail.messages.some((message) => message.role === 'assistant') &&
-      completed.detail.messages.some((message) => message.role === 'user'),
-    'Fake 运行时从真实家庭只读工具生成并加密保存问答',
-  );
+  // Repeat the original idempotency + first completed-detail assertion, without
+  // re-login or retrying a response that already says completed.
+  const iterations = Number(process.env.AGENT_CONSISTENCY_ITERATIONS || 1);
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > 30) {
+    throw new Error('AGENT_CONSISTENCY_ITERATIONS must be an integer from 1 to 30');
+  }
+  let conversation;
+  for (let iteration = 1; iteration <= iterations; iteration += 1) {
+    conversation = await request('/agent/conversations', member.accessToken, 'POST', {});
+    const idempotency = randomUUID();
+    const duplicate = await Promise.all([
+      request(`/agent/conversations/${conversation.data.id}/messages`, member.accessToken, 'POST', {
+        message: '今天家里有什么安排？',
+        clientRequestId: idempotency,
+      }),
+      request(`/agent/conversations/${conversation.data.id}/messages`, member.accessToken, 'POST', {
+        message: '今天家里有什么安排？',
+        clientRequestId: idempotency,
+      }),
+    ]);
+    assert(
+      settings.status === 200 &&
+        ['get_tasks', 'get_shopping_list', 'get_meal_plan'].every((tool) =>
+          settings.data.readToolsEnabled.includes(tool),
+        ) &&
+        forbiddenSettings.status === 403 &&
+        conversation.status === 201 &&
+        duplicate.every((entry) => entry.status === 202) &&
+        duplicate[0].data.id === duplicate[1].data.id,
+      '新家庭默认开放日常只读工具，成员可使用小管家但不能改设置，重复发送只创建一次运行',
+    );
+    const completed = await waitForRun(
+      member.accessToken,
+      conversation.data.id,
+      duplicate[0].data.id,
+    );
+    assert(
+      completed.detail.messages.some((message) => message.role === 'assistant') &&
+        completed.detail.messages.some((message) => message.role === 'user'),
+      'Fake 运行时从真实家庭只读工具生成并加密保存问答',
+    );
+    console.log(`  会话详情一致性 ${iteration}/${iterations} 通过`);
+  }
 
   console.log('2. 取消、跨家庭和停用成员');
   const cancelQueued = await request(

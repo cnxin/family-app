@@ -84,6 +84,7 @@ export default function LoginScreen() {
           ownerName,
           loginName,
           password,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
       } else if (mode === 'join') {
         await redeemInvitation({ invitationToken, loginName, password });

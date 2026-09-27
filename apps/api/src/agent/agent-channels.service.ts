@@ -17,6 +17,7 @@ import {
   Member,
 } from '../entities';
 import { AgentService } from './agent.service';
+import { isUniqueViolation } from '@family/shared';
 
 const PLATFORM_PATTERN = /^[a-z0-9][a-z0-9._-]{1,31}$/;
 
@@ -58,15 +59,6 @@ function externalAccountHash(platform: string, account: string) {
 
 function accountHint(account: string) {
   return account.length <= 4 ? account : `…${account.slice(-4)}`;
-}
-
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === '23505'
-  );
 }
 
 interface CreatePairingInput {

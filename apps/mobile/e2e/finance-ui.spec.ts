@@ -254,6 +254,7 @@ async function installFinanceRoutes(page: Page, withAccount: boolean) {
         postings: [
           {
             id: `finance-posting-${sequence}`,
+            householdId: member.householdId,
             transactionId: `finance-transaction-${sequence}`,
             accountId: targetAccount.id,
             account: targetAccount,
@@ -271,7 +272,9 @@ async function installFinanceRoutes(page: Page, withAccount: boolean) {
     const reversal = path.match(/^\/finance\/transactions\/([^/]+)\/reverse$/);
     if (method === 'POST' && reversal) {
       const original = transactions.find((entry) => entry.id === reversal[1])!;
-      const targetAccount = original.postings[0].account;
+      const targetAccount = accounts.find(
+        (entry) => entry.id === original.postings[0].accountId,
+      )!;
       targetAccount.balance -= original.postings[0].delta;
       original.reversed = true;
       original.reversalId = `finance-reversal-${++sequence}`;

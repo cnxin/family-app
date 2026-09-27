@@ -56,6 +56,13 @@ import {
   FamilyMemorySourceModule,
 } from '../entities';
 import { UPLOAD_DIR } from '../upload/upload.module';
+import { rawFingerprint as fingerprint } from '../common/fingerprint';
+import {
+  isHouseholdManager,
+  isUniqueViolation,
+  normalizedRequiredText,
+  normalizedText,
+} from '@family/shared';
 
 const MEMORY_CATEGORIES: FamilyMemoryCategory[] = [
   'daily',
@@ -235,16 +242,6 @@ class UploadMemoryPhotoDto {
   idempotencyKey: string;
 }
 
-function normalizedText(value?: string | null) {
-  return value?.trim() || null;
-}
-
-function normalizedRequiredText(value: string, label: string) {
-  const normalized = value.trim();
-  if (!normalized) throw new BadRequestException(`${label}不能为空`);
-  return normalized;
-}
-
 function normalizedTags(values?: string[]) {
   const tags: string[] = [];
   const seen = new Set<string>();
@@ -267,21 +264,6 @@ function validDate(value: string) {
     throw new BadRequestException('回忆日期不是有效日期');
   }
   return value;
-}
-
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
-}
-
-function fingerprint(value: Record<string, unknown>) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
-}
-
-function uniqueViolation(error: unknown) {
-  return (
-    (error as { driverError?: { code?: string } })?.driverError?.code ??
-    (error as { code?: string })?.code
-  ) === '23505';
 }
 
 function photoExtension(mimeType: string) {
@@ -602,7 +584,7 @@ export class MemoriesService {
       return this.presentPhoto(photo);
     } catch (error) {
       await unlink(path).catch(() => undefined);
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         const duplicate = await this.findIdempotentPhoto(
           idempotencyKey,
           requestFingerprint,
@@ -747,7 +729,7 @@ export class MemoriesService {
   }
 
   private assertCanManage(memory: FamilyMemory, user: JwtUser) {
-    if (!isAdmin(user) && memory.createdById !== user.memberId) {
+    if (!isHouseholdManager(user) && memory.createdById !== user.memberId) {
       throw new ForbiddenException('只能维护自己创建的家庭回忆');
     }
   }
@@ -825,7 +807,7 @@ export class MemoriesService {
     requestFingerprint: string,
     user: JwtUser,
   ) {
-    if (uniqueViolation(error)) {
+    if (isUniqueViolation(error)) {
       const existing = await this.findIdempotent(
         idempotencyKey,
         requestFingerprint,
@@ -888,7 +870,7 @@ export class MemoriesService {
       archivedAt: memory.archivedAt,
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt,
-      canEdit: isAdmin(user) || memory.createdById === user.memberId,
+      canEdit: isHouseholdManager(user) || memory.createdById === user.memberId,
     };
   }
 

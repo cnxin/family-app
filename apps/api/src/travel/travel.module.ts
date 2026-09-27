@@ -31,7 +31,6 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { createHash } from 'node:crypto';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
@@ -48,6 +47,8 @@ import {
   TravelPlanStatus,
   TravelTemplateApplication,
 } from '../entities';
+import { rawFingerprint as fingerprint } from '../common/fingerprint';
+import { isHouseholdManager, normalizedRequiredText, normalizedText } from '@family/shared';
 
 const TRAVEL_CATEGORIES: TravelChecklistCategory[] = [
   'documents',
@@ -309,20 +310,6 @@ class ApplyTravelTemplateDto {
   idempotencyKey: string;
 }
 
-function isAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
-}
-
-function normalizedText(value?: string | null) {
-  return value?.trim() || null;
-}
-
-function normalizedRequiredText(value: string, label: string) {
-  const normalized = value.trim();
-  if (!normalized) throw new BadRequestException(`${label}不能为空`);
-  return normalized;
-}
-
 function parseDateOnly(value: string, label: string) {
   const timestamp = Date.parse(`${value}T00:00:00.000Z`);
   if (
@@ -341,10 +328,6 @@ function assertDateRange(startDate: string, endDate: string) {
   }
   const days = (Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) / 86_400_000;
   if (days > 730) throw new BadRequestException('单个出行计划最长为 731 天');
-}
-
-function fingerprint(value: Record<string, unknown>) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 function normalizedTemplateItems(items: TravelTemplateItemDto[]) {
@@ -1285,13 +1268,13 @@ export class TravelService {
   }
 
   private assertCanManagePlan(plan: TravelPlan, user: JwtUser) {
-    if (!isAdmin(user) && plan.createdById !== user.memberId) {
+    if (!isHouseholdManager(user) && plan.createdById !== user.memberId) {
       throw new ForbiddenException('只能维护自己创建的出行计划');
     }
   }
 
   private assertCanManageTemplate(template: TravelPackingTemplate, user: JwtUser) {
-    if (!isAdmin(user) && template.createdById !== user.memberId) {
+    if (!isHouseholdManager(user) && template.createdById !== user.memberId) {
       throw new ForbiddenException('只能维护自己创建的出行模板');
     }
   }
@@ -1480,7 +1463,7 @@ export class TravelService {
         skipped: items.filter((item) => item.status === 'skipped').length,
       },
       appliedTemplateIds,
-      canManage: isAdmin(user) || plan.createdById === user.memberId,
+      canManage: isHouseholdManager(user) || plan.createdById === user.memberId,
       canEditChecklist: plan.status === 'planned' && !plan.archivedAt,
       createdAt: plan.createdAt,
       updatedAt: plan.updatedAt,
@@ -1512,7 +1495,7 @@ export class TravelService {
         avatarEmoji: template.createdBy.avatarEmoji,
       },
       archivedAt: template.archivedAt,
-      canManage: isAdmin(user) || template.createdById === user.memberId,
+      canManage: isHouseholdManager(user) || template.createdById === user.memberId,
       createdAt: template.createdAt,
       updatedAt: template.updatedAt,
     };

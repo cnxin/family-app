@@ -7,7 +7,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import { assertCapability } from '../auth/capabilities';
@@ -23,13 +22,14 @@ import {
   Menu,
 } from '../entities';
 import { AddItemsDto, MenusService } from '../menus/menus.module';
-import { CreatePollDto, PollsService } from '../polls/polls.module';
+import { PollsService } from '../polls/polls.module';
+import type { CreatePollBody, CreateTaskBody } from '@family/contracts';
 import {
   CreateReminderDto,
   RemindersService,
 } from '../reminders/reminders.module';
 import { ManualItemDto, ShoppingService } from '../shopping/shopping.module';
-import { CreateTaskDto, TasksService } from '../tasks/tasks.module';
+import { TasksService } from '../tasks/tasks.module';
 import {
   CreateFinanceTransactionDto,
   FinanceService,
@@ -38,6 +38,8 @@ import {
   AGENT_PROPOSAL_TOOLS,
   AgentProposalToolName,
 } from './agent.types';
+import { fingerprint as proposalFingerprint } from '../common/fingerprint';
+import { isUniqueViolation } from '@family/shared';
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const optionalText = (max: number) => z.string().trim().max(max).optional();
@@ -201,31 +203,8 @@ const MEAL_LABELS = {
   dinner: '晚餐',
 } as const;
 
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === '23505'
-  );
-}
-
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonical(entry)]),
-    );
-  }
-  return value;
-}
-
 function fingerprint(actionType: AgentActionType, payload: ProposalPayload) {
-  return createHash('sha256')
-    .update(JSON.stringify(canonical({ actionType, payload })))
-    .digest('hex');
+  return proposalFingerprint({ actionType, payload });
 }
 
 function parsePayload(actionType: AgentActionType, value: unknown) {
@@ -665,7 +644,7 @@ export class AgentProposalsService {
       return {
         module: 'task',
         id: await this.tasks.createWithinTransaction(
-          payload as CreateTaskDto,
+          payload as CreateTaskBody,
           user,
           manager,
         ),
@@ -685,7 +664,7 @@ export class AgentProposalsService {
       return {
         module: 'poll',
         id: await this.polls.createWithinTransaction(
-          payload as CreatePollDto,
+          payload as CreatePollBody,
           user,
           manager,
         ),

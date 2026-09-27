@@ -19,6 +19,7 @@ import {
 } from '../entities';
 import { InventoryService } from '../inventory/inventory.module';
 import { ShoppingService } from '../shopping/shopping.module';
+import { isUniqueViolation, todayInShanghai } from '@family/shared';
 
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
 const DAY_MS = 86_400_000;
@@ -56,24 +57,6 @@ export interface EnqueueRoutineNotificationInput {
   targetPath: string;
 }
 
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === '23505'
-  );
-}
-
-function shanghaiDate(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: SHANGHAI_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
-
 function addDateDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00.000Z`);
   value.setUTCDate(value.getUTCDate() + days);
@@ -81,7 +64,7 @@ function addDateDays(date: string, days: number) {
 }
 
 function shanghaiDayBounds(now = new Date()) {
-  const date = shanghaiDate(now);
+  const date = todayInShanghai(now);
   const start = new Date(`${date}T00:00:00+08:00`);
   return { start, end: new Date(start.getTime() + DAY_MS) };
 }
@@ -91,7 +74,7 @@ function weekdayForShanghaiDate(date: string) {
 }
 
 function shanghaiWeekBounds(now = new Date()) {
-  const date = shanghaiDate(now);
+  const date = todayInShanghai(now);
   const weekday = weekdayForShanghaiDate(date);
   const daysSinceMonday = weekday === SUNDAY ? 6 : weekday - 1;
   const startDate = addDateDays(date, -daysSinceMonday);
@@ -101,7 +84,7 @@ function shanghaiWeekBounds(now = new Date()) {
 
 function nextScheduledAt(hour: number, minute: number, now = new Date()) {
   const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  const date = shanghaiDate(now);
+  const date = todayInShanghai(now);
   const todayCandidate = new Date(`${date}T${time}:00+08:00`);
   if (todayCandidate.getTime() > now.getTime()) return todayCandidate;
   return new Date(`${addDateDays(date, 1)}T${time}:00+08:00`);
@@ -113,7 +96,7 @@ function nextWeeklyScheduledAt(
   now = new Date(),
   weekday = SUNDAY,
 ) {
-  const date = shanghaiDate(now);
+  const date = todayInShanghai(now);
   const currentWeekday = weekdayForShanghaiDate(date);
   const daysAhead = (weekday - currentWeekday + 7) % 7;
   const targetDate = addDateDays(date, daysAhead);
@@ -244,7 +227,7 @@ export class AgentRoutineService
           scheduleHour,
           scheduleMinute,
           new Date(),
-          weekdayForShanghaiDate(shanghaiDate(current.nextRunAt)),
+          weekdayForShanghaiDate(todayInShanghai(current.nextRunAt)),
         );
       } else {
         nextRunAt = current.nextRunAt;
@@ -533,7 +516,7 @@ export class AgentRoutineService
       order: { createdAt: 'ASC' },
       take: 100,
     });
-    const date = shanghaiDate(now);
+    const date = todayInShanghai(now);
     const calendarEntries = await this.calendar.list(
       date,
       date,
@@ -569,7 +552,7 @@ export class AgentRoutineService
     householdId: string,
     now: Date,
   ) {
-    const today = shanghaiDate(now);
+    const today = todayInShanghai(now);
     const through = addDateDays(today, 14);
     const { start, end } = shanghaiDayBounds(now);
 
@@ -663,7 +646,7 @@ export class AgentRoutineService
     owner: Member,
     now: Date,
   ) {
-    const endDate = shanghaiDate(now);
+    const endDate = todayInShanghai(now);
     const startDate = addDateDays(endDate, -6);
     const dates = Array.from({ length: 7 }, (_, index) =>
       addDateDays(startDate, index),

@@ -43,6 +43,7 @@ import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { jwtSecret } from '../common/config';
+import { Clock } from '../common/clock';
 import {
   AssetCategory,
   AssetDocument,
@@ -50,6 +51,7 @@ import {
   AssetRenewalIntervalMonths,
   AssetStatus,
   HomeAsset,
+  Household,
   InventoryItem,
   InventoryTransaction,
   MaintenanceConsumable,
@@ -62,6 +64,7 @@ import {
 import { InventoryModule } from '../inventory/inventory.module';
 import { InventoryTransactionsService } from '../inventory/inventory-transactions.service';
 import { PRIVATE_ASSET_UPLOAD_DIR, UPLOAD_DIR } from '../upload/upload.module';
+import { addDays, compare, householdToday, isUniqueViolation } from '@family/shared';
 
 const ASSET_CATEGORIES: AssetCategory[] = [
   'appliance',
@@ -316,6 +319,10 @@ class CompleteMaintenanceDto {
   performedAt?: string;
 
   @IsOptional()
+  @IsString()
+  performedOn?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(9_999_999_999.99)
@@ -397,21 +404,6 @@ function dateOnly(value: string | null | undefined, label: string) {
   return value;
 }
 
-function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function shanghaiDate() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
 function addMonths(value: string, months: number) {
   const source = new Date(`${value}T00:00:00.000Z`);
   const day = source.getUTCDate();
@@ -486,10 +478,6 @@ function legacyAssetFilePath(url: string) {
   return path;
 }
 
-function isUniqueViolation(error: unknown) {
-  return (error as { code?: string })?.code === '23505';
-}
-
 @Injectable()
 export class AssetsService {
   private readonly documentSigningSecret = jwtSecret();
@@ -508,6 +496,7 @@ export class AssetsService {
     @InjectRepository(InventoryTransaction)
     private readonly inventoryTransactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
+    private readonly clock: Clock,
     private readonly inventoryLedger: InventoryTransactionsService,
   ) {}
 
@@ -708,7 +697,8 @@ export class AssetsService {
     dto: RenewSubscriptionDto,
     user: JwtUser,
   ) {
-    const renewedOn = dateOnly(dto.renewedOn ?? shanghaiDate(), '续费完成日期')!;
+    const timezone = (await this.dataSource.getRepository(Household).findOneByOrFail({ id: user.householdId })).timezone;
+    const renewedOn = dateOnly(dto.renewedOn ?? householdToday(timezone, this.clock.now()), '续费完成日期')!;
     await this.dataSource.transaction(async (manager) => {
       const asset = await this.lockAsset(id, user.householdId, manager);
       if (asset.category !== 'subscription' || asset.status !== 'active') {
@@ -1319,17 +1309,19 @@ export class AssetsService {
       if (!plan.isEnabled || plan.asset.status !== 'active') {
         throw new ConflictException('维护计划已停用或资产已停用');
       }
-      const performedAt = dto.performedAt
-        ? new Date(dto.performedAt)
-        : new Date();
+      const now = this.clock.now();
+      const performedAt = dto.performedAt ? new Date(dto.performedAt) : now;
       if (!Number.isFinite(performedAt.getTime())) {
         throw new BadRequestException('维护时间无效');
       }
-      if (performedAt.getTime() > Date.now() + 5 * 60_000) {
-        throw new BadRequestException('维护时间不能晚于当前时间');
+      const timezone = (await manager.getRepository(Household).findOneByOrFail({ id: user.householdId })).timezone;
+      const performedOn = dto.performedOn
+        ? dateOnly(dto.performedOn, '维护日期')!
+        : householdToday(timezone, performedAt);
+      if (compare(performedOn, householdToday(timezone, now)) > 0) {
+        throw new BadRequestException('维护日期不能晚于家庭今天');
       }
-      const performedDate = performedAt.toISOString().slice(0, 10);
-      const nextDueDateAfter = addDays(performedDate, plan.frequencyDays);
+      const nextDueDateAfter = addDays(performedOn, plan.frequencyDays);
       const consumables = await manager.getRepository(MaintenanceConsumable).find({
         where: { householdId: user.householdId, planId: plan.id },
         relations: { inventoryItem: true },
@@ -1440,6 +1432,7 @@ export class AssetsService {
           planId: plan.id,
           performedById: user.memberId,
           performedAt,
+          performedOn,
           cost: dto.cost == null ? null : String(dto.cost),
           note: nullableText(dto.note),
           idempotencyKey,

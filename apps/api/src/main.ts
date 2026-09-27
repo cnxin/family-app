@@ -12,6 +12,12 @@ import {
   validateRuntimeConfiguration,
 } from './common/config';
 import { isCorsOriginAllowed } from './common/cors';
+import {
+  ContractsInterceptor,
+  ContractsRequestInterceptor,
+  contractCheckEnabled,
+  contractRequestCheckMode,
+} from './common/contracts';
 import { AllExceptionsFilter, TransformInterceptor } from './common/http';
 import {
   StructuredLogger,
@@ -38,7 +44,16 @@ async function bootstrap() {
     },
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.useGlobalInterceptors(new TransformInterceptor());
+  // 顺序：响应先经过 ContractsInterceptor（校验原始返回值），再由 TransformInterceptor 包成 {data}
+  // 数组越靠后越贴近处理函数：请求侧校验放最后，处理函数一成功就先判它
+  const requestCheckMode = contractRequestCheckMode();
+  app.useGlobalInterceptors(
+    new TransformInterceptor(),
+    ...(contractCheckEnabled() ? [new ContractsInterceptor(logger)] : []),
+    ...(requestCheckMode === 'off'
+      ? []
+      : [new ContractsRequestInterceptor(logger, requestCheckMode)]),
+  );
   app.useGlobalFilters(new AllExceptionsFilter(logger));
   const assetDocuments = app.get(DataSource).getRepository(AssetDocument);
   app.use(

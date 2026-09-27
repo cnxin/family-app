@@ -37,6 +37,7 @@ import {
 } from '../entities';
 import { MenusModule, MenusService } from '../menus/menus.module';
 import { PollsModule, PollsService } from '../polls/polls.module';
+import { addDays, daysBetween, todayInShanghai } from '@family/shared';
 
 class CreateSmartMenuPlanDto {
   @IsString()
@@ -62,29 +63,6 @@ class AdoptSmartMenuPlanDto {
   idempotencyKey: string;
 }
 
-function today() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function daysBetween(start: string, end: string) {
-  return Math.floor(
-    (new Date(`${end}T00:00:00.000Z`).getTime() -
-      new Date(`${start}T00:00:00.000Z`).getTime()) /
-      86_400_000,
-  );
-}
-
 function assertDate(value: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (
@@ -93,7 +71,7 @@ function assertDate(value: string) {
   ) {
     throw new BadRequestException('菜单提案开始日期无效');
   }
-  const current = today();
+  const current = todayInShanghai();
   if (value < current) throw new BadRequestException('菜单提案不能从过去开始');
   if (value > addDays(current, 60)) {
     throw new BadRequestException('菜单提案最多提前 60 天创建');
@@ -430,7 +408,7 @@ export class SmartMenuService {
           : String(row.lastDate).slice(0, 10),
       ]),
     );
-    const current = today();
+    const current = todayInShanghai();
 
     return dishes
       .flatMap((dish) => {

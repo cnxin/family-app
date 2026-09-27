@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/* shadcn 那套语义令牌：先用中性默认值把骨架立住，性格等真实用过再谈 */
+@theme {
+  /* 家里的配色：底色是带黄橙的暖白（色相 72），不是中性灰，也不是米黄；
+     强调色留深松绿——暖底配松绿是中式家居里的老搭配，配栗棕反而同色系糊在一起。 */
+  --color-bg: oklch(0.977 0.014 72);
+  --color-surface: oklch(0.995 0.007 72);
+  --color-muted: oklch(0.945 0.018 72);
+  --color-border: oklch(0.893 0.020 72);
+  --color-ink: oklch(0.232 0.018 56);
+  --color-ink-soft: oklch(0.545 0.022 58);
+  --color-accent: oklch(0.45 0.078 158);
+  --color-accent-soft: oklch(0.938 0.035 158);
+  --color-warm: oklch(0.57 0.125 52);
+  --color-warm-soft: oklch(0.948 0.038 58);
+  --color-danger: oklch(0.52 0.16 25);
+  --radius-card: 0.85rem;
+}
+
+/* 深色只在手动切换时生效（html[data-theme="dark"]），不跟随系统——
+   跟随系统会让一个「家里的」应用在晚上突然变成黑底控制台。
+   而且这套深色是暖可可色，不是纯黑。 */
+html[data-theme='dark'] {
+  --color-bg: oklch(0.198 0.012 62);
+  --color-surface: oklch(0.243 0.014 62);
+  --color-muted: oklch(0.283 0.014 62);
+  --color-border: oklch(0.343 0.015 62);
+  --color-ink: oklch(0.945 0.012 72);
+  --color-ink-soft: oklch(0.715 0.016 70);
+  --color-accent: oklch(0.775 0.09 158);
+  --color-accent-soft: oklch(0.323 0.045 158);
+  --color-warm: oklch(0.775 0.10 58);
+  --color-warm-soft: oklch(0.315 0.045 58);
+  --color-danger: oklch(0.68 0.15 25);
+}
+
+html { color-scheme: light; }
+html[data-theme='dark'] { color-scheme: dark; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 切页只动主体（view-transition-name: page），顶栏底栏留在原地。
+   这里是「渐隐再渐现」，不是交叉淡入：两页内容差得远的时候，重叠的那段时间里
+   旧页面会透在新页面上，看着像凭空弹出一堆东西——上一版就是这个毛病。
+   所以旧的先走干净（100ms），新的等 70ms 再进来，两边几乎不重叠。 */
+::view-transition-old(page) {
+  animation: 100ms cubic-bezier(0.4, 0, 1, 1) both page-out;
+}
+::view-transition-new(page) {
+  animation: 190ms cubic-bezier(0, 0, 0.2, 1) 70ms both page-in;
+}
+@keyframes page-out {
+  to { opacity: 0; }
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+/* 顶栏和底栏各给一个自己的名字。不给的话它们被算进 root 那一组，而主体那张快照
+   是画在所有内容之上的（包括 position: fixed 的底栏），切页时底栏会被旧页面的
+   残影糊住——手机上点「今天」那一下看到的就是这个。给了名字就各走各的，
+   而且它们前后长得一样，所以直接不做动画，稳稳待着。 */
+.vt-chrome-top {
+  view-transition-name: chrome-top;
+}
+.vt-chrome-bottom {
+  view-transition-name: chrome-bottom;
+}
+::view-transition-old(chrome-top),
+::view-transition-old(chrome-bottom) {
+  animation: none;
+  opacity: 0;
+}
+::view-transition-new(chrome-top),
+::view-transition-new(chrome-bottom) {
+  animation: none;
+  opacity: 1;
+}
+
+/* 系统里关了动效就别动 */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(page),
+  ::view-transition-new(page) {
+    animation: none;
+  }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* 气泡菜单：从被点的标签里长出来，缩回去也走同一条路。
+   临界阻尼曲线（iOS 那条 0.32/0.72/0/1），不回弹——点一下没有甩出去的动量，回弹是假的。
+   模糊半径跟着缩放一起动，让它像一层玻璃落下来而不是一张图淡入。 */
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+}
+@keyframes pop-out {
+  to { opacity: 0; transform: translateY(6px) scale(0.955); }
+}
+/* 模糊单独动在带材质的那层上：外层容器没有 backdrop-filter，动它是空转 */
+@keyframes material-in {
+  from {
+    backdrop-filter: blur(0px) saturate(100%);
+    -webkit-backdrop-filter: blur(0px) saturate(100%);
+    background: color-mix(in oklch, var(--color-surface) 40%, transparent);
+  }
+}
+@keyframes material-out {
+  to {
+    backdrop-filter: blur(3px) saturate(120%);
+    -webkit-backdrop-filter: blur(3px) saturate(120%);
+  }
+}
+@keyframes scrim-in { from { opacity: 0; } }
+@keyframes scrim-out { to { opacity: 0; } }
+
+/* 半透明材质：内容能透出来一点，层级关系才看得出来。
+   上边缘提亮一线，是玻璃接到光的样子。 */
+.pop-material,
+.pop-caret {
+  background: color-mix(in oklch, var(--color-surface) 76%, transparent);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid var(--color-border);
+}
+.pop-material {
+  border-top-color: color-mix(in oklch, white 50%, var(--color-border));
+  box-shadow:
+    0 10px 26px -10px oklch(0.25 0.02 60 / 0.26),
+    0 2px 6px -2px oklch(0.25 0.02 60 / 0.14);
+}
+.pop-caret {
+  border-top: 0;
+  border-left: 0;
+}
+
+/* 列表能滚的时候，上下边缘用渐隐代替硬切口，顺便提示「下面还有」 */
+.pop-scroll {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 12px,
+    black calc(100% - 12px),
+    transparent 100%
+  );
+}
+
+/* 关掉透明度偏好时，玻璃变实心，不然文字压在花背景上读不清 */
+@media (prefers-reduced-transparency: reduce) {
+  .pop-material,
+  .pop-caret {
+    background: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

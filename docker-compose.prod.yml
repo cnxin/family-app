@@ -133,6 +133,7 @@ services:
       dockerfile: Dockerfile.web
       args:
         EXPO_PUBLIC_API_URL: /api
+        VITE_LEGACY_ORIGIN: /legacy
     image: family-app-web:${APP_VERSION:-latest}
     restart: unless-stopped
     read_only: true
@@ -172,7 +173,7 @@ services:
   backup-worker:
     build:
       context: .
-      dockerfile: Dockerfile.backup
+      dockerfile: Dockerfile.backup-worker
     image: family-app-backup-worker:${APP_VERSION:-latest}
     restart: unless-stopped
     environment:

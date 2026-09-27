@@ -47,14 +47,7 @@ import {
   InventoryBatchesService,
 } from './inventory-batches.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
-
-function isUniqueViolation(error: unknown) {
-  const candidate = error as {
-    code?: string;
-    driverError?: { code?: string };
-  };
-  return candidate.code === '23505' || candidate.driverError?.code === '23505';
-}
+import { isUniqueViolation } from '@family/shared';
 
 const INVENTORY_CATEGORIES: InventoryCategory[] = [
   '调料',

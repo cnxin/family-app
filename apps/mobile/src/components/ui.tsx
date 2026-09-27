@@ -28,6 +28,13 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { radius, type as t, useTheme } from '../lib/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+// Web 专用的拖拽区样式：touchAction 不在 RN 的 ViewStyle 类型里，不能放进 StyleSheet.create
+const SHEET_DRAG_AREA_WEB = {
+  cursor: 'grab',
+  touchAction: 'none',
+  userSelect: 'none',
+} as unknown as ViewStyle;
+
 const NATIVE_DIALOG_SHADOW: ViewStyle = {
   shadowColor: '#000000',
   shadowOffset: { width: 0, height: 14 },
@@ -952,7 +959,7 @@ export function AdaptiveDialog({
               ref={dragHandleRef}
               style={[
                 styles.sheetDragArea,
-                Platform.OS === 'web' && styles.sheetDragAreaWeb,
+                Platform.OS === 'web' && SHEET_DRAG_AREA_WEB,
               ]}
               testID="adaptive-dialog-drag-handle"
             >
@@ -1192,11 +1199,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
     width: '100%',
-  },
-  sheetDragAreaWeb: {
-    cursor: 'grab' as never,
-    touchAction: 'none' as never,
-    userSelect: 'none' as never,
   },
   sheetHandle: {
     width: 36,

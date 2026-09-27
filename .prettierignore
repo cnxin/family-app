@@ -1,0 +1,8 @@
+node_modules
+dist
+.expo
+pnpm-lock.yaml
+docs/api-inventory.md
+apps/mobile/test-results
+apps/mobile/playwright-report
+apps/api/src/database/migrations

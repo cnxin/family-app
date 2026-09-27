@@ -6,8 +6,10 @@ import { AssetsModule } from './assets/assets.module';
 import { AuthModule } from './auth/auth.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { databaseOptions } from './database/database.options';
+import { ClockModule } from './common/clock';
 import { DishesModule } from './dishes/dishes.module';
 import { GuestsModule } from './guests/guests.module';
+import { HouseholdsModule } from './households/households.module';
 import { FinanceModule } from './finance/finance.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
@@ -23,12 +25,14 @@ import { ShoppingModule } from './shopping/shopping.module';
 import { SmartMenuModule } from './smart-menu/smart-menu.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
+import { TodayModule } from './today/today.module';
 import { TravelModule } from './travel/travel.module';
 import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot(databaseOptions()),
+    ClockModule,
     ActivitiesModule,
     AgentModule,
     AssetsModule,
@@ -37,6 +41,7 @@ import { UploadModule } from './upload/upload.module';
     DishesModule,
     FinanceModule,
     GuestsModule,
+    HouseholdsModule,
     InventoryModule,
     KnowledgeModule,
     MenusModule,
@@ -51,6 +56,7 @@ import { UploadModule } from './upload/upload.module';
     SmartMenuModule,
     SystemModule,
     TasksModule,
+    TodayModule,
     TravelModule,
     UploadModule,
   ],

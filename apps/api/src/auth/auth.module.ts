@@ -62,6 +62,7 @@ import {
   hashRefreshToken,
   refreshTokenExpiresAt,
 } from './session.tokens';
+import { isUniqueViolation } from '@family/shared';
 
 const AUTH_ACCOUNT_SELECT = {
   id: true,
@@ -287,15 +288,6 @@ function invitationProfile(invitation: HouseholdInvitation) {
   };
 }
 
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'driverError' in error &&
-    (error as { driverError?: { code?: string } }).driverError?.code === '23505'
-  );
-}
-
 function validTimezone(value: string) {
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: value }).format();
@@ -339,10 +331,8 @@ class AuthService {
 
   async bootstrap(dto: BootstrapDto) {
     verifyOneTimeBootstrapSecret(dto.bootstrapSecret);
-    const timezone = dto.timezone?.trim() || 'Asia/Shanghai';
-    if (!validTimezone(timezone)) {
-      throw new BadRequestException('家庭时区无效');
-    }
+    const requested = dto.timezone?.trim() ?? '';
+    const timezone = validTimezone(requested) ? requested : 'Asia/Shanghai';
     const loginName = dto.loginName.trim();
     const loginNameNormalized = normalizeLoginName(loginName);
     const householdName = dto.householdName.trim();
@@ -628,6 +618,7 @@ class AuthService {
       refreshToken,
       account: accountProfile(account),
       member: memberProfile(member),
+      householdTimezone: (await this.households.findOneByOrFail({ id: member.householdId })).timezone,
     };
   }
 }

@@ -40,6 +40,21 @@ try {
   });
   assert(duplicateOptions.status === 400, '拒绝重复候选项');
 
+  // 以下两条守的是请求校验管道本身（polls 已从 class-validator DTO 换成契约 schema）：
+  // 选项下限来自 createPollBody 的 .min(2)，原先是 @ArrayMinSize(2)。
+  const tooFewOptions = await request('/polls', mom.token, 'POST', {
+    title: '候选项不足测试',
+    options: [{ label: '只有一个' }],
+  });
+  assert(tooFewOptions.status === 400, '候选项少于两个被请求校验拒绝');
+
+  const unknownCategory = await request('/polls', mom.token, 'POST', {
+    title: '未知分类测试',
+    category: '不存在的分类',
+    options: [{ label: '甲' }, { label: '乙' }],
+  });
+  assert(unknownCategory.status === 400, '未知投票分类被请求校验拒绝');
+
   const multiplePoll = await request('/polls', mom.token, 'POST', {
     title: '周末家庭活动测试',
     description: '选出这周最想参加的活动',
@@ -96,6 +111,15 @@ try {
     { optionIds },
   );
   assert(tooMany.status === 400, '超过最多选择数会被拒绝');
+
+  // voteBody 的去重约束，原先是 VoteDto 的 @ArrayUnique()
+  const duplicateVote = await request(
+    `/polls/${multiplePoll.data.id}/votes`,
+    dad.token,
+    'POST',
+    { optionIds: [optionIds[0], optionIds[0]] },
+  );
+  assert(duplicateVote.status === 400, '同一选项重复提交被请求校验拒绝');
 
   const dadChangesVote = await request(
     `/polls/${multiplePoll.data.id}/votes`,

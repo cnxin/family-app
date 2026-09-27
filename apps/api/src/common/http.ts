@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Observable, map } from 'rxjs';
+import { DomainError } from '@family/shared';
 import {
   ObservedRequest,
   StructuredLogger,
@@ -33,6 +34,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const req = http.getRequest<ObservedRequest>();
     const res = http.getResponse<Response>();
     const requestId = req.requestContext?.requestId || 'unavailable';
+    // packages/shared 的领域错误：框架无关，和 Nest 内置异常映射到同样的响应结构
+    if (exception instanceof DomainError) {
+      if (req.requestContext) req.requestContext.errorCode = exception.code;
+      res.status(exception.status).json({
+        error: { code: exception.code, message: exception.message },
+        requestId,
+      });
+      return;
+    }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const response = exception.getResponse();

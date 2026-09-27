@@ -1,3 +1,4 @@
+import { addDays, householdToday } from '@family/shared';
 import {
   BadRequestException,
   Body,
@@ -296,11 +297,12 @@ function dateOnly(value: string, field: string) {
 }
 
 function visitMealDates(visit: Visit) {
-  const start = visit.startsAt.toISOString().slice(0, 10);
-  const end = (visit.endsAt ?? visit.startsAt).toISOString().slice(0, 10);
+  const timezone = visit.household.timezone;
+  const start = householdToday(timezone, visit.startsAt);
+  const end = householdToday(timezone, visit.endsAt ?? visit.startsAt);
   const dates: string[] = [];
-  for (let current = new Date(`${start}T00:00:00.000Z`); current <= new Date(`${end}T00:00:00.000Z`); current.setUTCDate(current.getUTCDate() + 1)) {
-    dates.push(current.toISOString().slice(0, 10));
+  for (let current = start; current <= end; current = addDays(current, 1)) {
+    dates.push(current);
   }
   return dates;
 }
