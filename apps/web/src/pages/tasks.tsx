@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import type { TaskOccurrence } from '@family/contracts';
 import { useCreateIntent } from '../lib/create-intent';
 import { useAuth } from '../lib/auth';
 import { useHouseholdToday } from '../lib/use-household-today';
@@ -10,6 +11,7 @@ import {
   useUpdateOccurrence,
 } from '../lib/queries';
 import { TaskAssignee } from '../components/task-assignee';
+import { TaskDetail } from '../components/task-detail';
 import { QueryFrame } from '../components/query-state';
 import { Button, Card, Checkbox, EmptyState, Input, Page, Panel, SectionTitle } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
@@ -21,6 +23,7 @@ export function TasksPage() {
   const update = useUpdateOccurrence();
   const create = useCreateTask();
   const [title, setTitle] = useState('');
+  const [detail, setDetail] = useState<TaskOccurrence | null>(null);
   const armFocus = useRef(false);
   useCreateIntent(() => {
     armFocus.current = true;
@@ -106,13 +109,17 @@ export function TasksPage() {
                       })
                     }
                   />
-                  <span
-                    className={`min-w-0 flex-1 truncate text-[15px] ${
-                      item.status === 'done' ? 'text-ink-soft line-through' : ''
-                    }`}
+                  <button
+                    type="button"
+                    aria-label={`看看${item.task.title}`}
+                    onClick={() => setDetail(item)}
+                    className={
+                      'min-h-11 min-w-0 flex-1 truncate rounded-md text-left text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ' +
+                      (item.status === 'done' ? 'text-ink-soft line-through' : '')
+                    }
                   >
                     {item.task.title}
-                  </span>
+                  </button>
                   {session ? <TaskAssignee item={item} member={session.member} /> : null}
                 </div>
               ))}
@@ -123,6 +130,7 @@ export function TasksPage() {
       )}
         </QueryFrame>
       </Panel>
+      {detail ? <TaskDetail item={detail} onClose={() => setDetail(null)} /> : null}
     </Page>
   );
 }
