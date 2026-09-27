@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
 import { SoftLink } from '../components/soft-link';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, Dialog, EmptyState, Input, Page, Panel, Segmented } from '../components/ui';
 
@@ -156,11 +157,8 @@ export function MediaLibraryPage() {
       }
     >
       <Panel className="p-3">
-        {library.isPending ? (
-          <ListSkeleton rows={4} />
-        ) : library.isError ? (
-          <EmptyState emoji="🎞️" title="媒体库读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : items.length === 0 ? (
+        <QueryFrame query={library} skeleton={<ListSkeleton rows={4} />}>
+          {items.length === 0 ? (
           <EmptyState
             emoji="🎞️"
             title={data?.lastSyncedAt ? '没找到' : '媒体库还没同步过'}
@@ -262,6 +260,7 @@ export function MediaLibraryPage() {
             ) : null}
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       {detail ? (

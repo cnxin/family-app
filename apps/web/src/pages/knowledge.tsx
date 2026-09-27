@@ -6,6 +6,7 @@ import { KNOWLEDGE_CATEGORY_LABELS, useKnowledgeArticles } from '../lib/queries'
 import { useAuth } from '../lib/auth';
 import { KnowledgeDetail } from '../components/knowledge-detail';
 import { KnowledgeEditor } from '../components/knowledge-editor';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Input, Page, Panel, Segmented } from '../components/ui';
 
@@ -121,11 +122,8 @@ export function KnowledgePage() {
       }
     >
       <Panel className="p-3">
-        {list.isPending ? (
-          <ListSkeleton rows={4} />
-        ) : list.isError ? (
-          <EmptyState emoji="📚" title="知识库读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : rows.length === 0 ? (
+        <QueryFrame query={list} skeleton={<ListSkeleton rows={4} />}>
+          {rows.length === 0 ? (
           <EmptyState
             emoji="📚"
             title={
@@ -165,6 +163,7 @@ export function KnowledgePage() {
             ))}
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       {selected ? (

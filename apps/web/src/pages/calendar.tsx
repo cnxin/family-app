@@ -15,6 +15,7 @@ import { useCalendarEntries, useDeleteCalendarEvent } from '../lib/queries';
 import { legacyUrl } from '../lib/nav';
 import { toNewRoute } from '../lib/routes';
 import { pushToast } from '../lib/toast';
+import { QueryFailure, QueryFrame } from '../components/query-state';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
@@ -299,11 +300,8 @@ export function CalendarPage() {
       }
     >
       <Panel>
-        {entries.isPending ? (
-          <div className="p-3">
-            <ListSkeleton rows={6} />
-          </div>
-        ) : view === 'month' ? (
+        <QueryFrame query={entries} skeleton={<div className="p-3"><ListSkeleton rows={6} /></div>}>
+          {view === 'month' ? (
           <MonthBoard
             entries={rows}
             visibleMonth={startOfMonth(anchor)}
@@ -320,11 +318,14 @@ export function CalendarPage() {
         ) : (
           <AgendaFlow entries={rows} onOpen={(entry) => setDayOpen(entry.date)} />
         )}
+        </QueryFrame>
       </Panel>
 
       {dayOpen ? (
         <Dialog title={fullDate(dayOpen)} onClose={() => setDayOpen(null)} maxWidth={520} place="center">
-          {dayRows.length ? (
+          {entries.isError && entries.data === undefined ? (
+            <QueryFailure onRetry={() => void entries.refetch()} />
+          ) : dayRows.length ? (
             <div className="-mx-4 -my-4">
               {dayRows.map((entry) => (
                 <EntryRow

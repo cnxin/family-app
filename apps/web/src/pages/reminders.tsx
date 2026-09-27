@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../lib/auth';
 import { legacyUrl } from '../lib/nav';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from '../components/query-state';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
@@ -224,11 +225,8 @@ export function RemindersPage() {
       }
     >
       <Panel title={`${rows.length} 条`}>
-        {list.isPending ? (
-          <div className="p-3">
-            <ListSkeleton rows={3} />
-          </div>
-        ) : rows.length === 0 ? (
+        <QueryFrame query={list} skeleton={<div className="p-3"><ListSkeleton rows={3} /></div>}>
+          {rows.length === 0 ? (
           <EmptyState
             emoji="🔔"
             title={filter === 'scheduled' ? '没有待提醒的事' : '这一类没有记录'}
@@ -247,6 +245,7 @@ export function RemindersPage() {
             />
           ))
         )}
+        </QueryFrame>
       </Panel>
 
       {formOpen ? (

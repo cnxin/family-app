@@ -10,6 +10,7 @@ import { openPalette } from '../components/command-palette';
 import { HomeTile } from '../components/home-tile';
 import { HomeAvailable } from '../components/home-available';
 import { SoftLink } from '../components/soft-link';
+import { StaleNotice } from '../components/query-state';
 import { Button, Page, Panel } from '../components/ui';
 
 const gridClass = 'grid grid-cols-3 gap-2 p-3 lg:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] lg:gap-3 lg:p-4';
@@ -53,6 +54,7 @@ export default function HomePage() {
             {Array.from({ length: 6 }, (_, i) => <div key={i} className="h-28 rounded-xl bg-muted" aria-hidden="true" />)}
           </div></Panel>
         ) : <>
+          {modules.isError ? <StaleNotice onRetry={() => void modules.refetch()} /> : null}
           {pinned.length ? <div className="lg:hidden"><Panel title="我钉住的 · 只有你看得到" grow={false}><div data-home-pins className={gridClass}>{pinned.map(tile)}</div></Panel></div> : null}
           <Panel title="家里在用的" grow={false}>
             <div data-home-grid className={gridClass}>{active.map(tile)}</div>

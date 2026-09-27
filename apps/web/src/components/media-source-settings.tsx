@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MediaCredentialKind, MediaSourceConfig } from '@family/contracts';
 import { useMediaSourceSettings, useResetMediaSource, useSaveMediaSource } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
 import {
   CredentialField,
@@ -193,26 +194,19 @@ function SourceCard({ config }: { config: MediaSourceConfig }) {
 export function MediaSourceSettingsPanel() {
   const sources = useMediaSourceSettings();
 
-  if (sources.isPending) {
-    return (
-      <Panel className="p-3">
-        <ListSkeleton rows={3} />
-      </Panel>
-    );
-  }
-  if (sources.isError || !sources.data?.length) {
-    return (
-      <Panel className="p-3">
-        <EmptyState emoji="🔎" title="搜索数据源读不出来" hint="刷新一下，还不行就看看 API 服务" />
-      </Panel>
-    );
-  }
-
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {sources.data.map((config) => (
-        <SourceCard key={config.provider} config={config} />
-      ))}
-    </div>
+    <QueryFrame query={sources} skeleton={<Panel className="p-3"><ListSkeleton rows={3} /></Panel>}>
+      {!sources.data?.length ? (
+        <Panel className="p-3">
+          <EmptyState emoji="🔎" title="还没有搜索数据源" hint="启用之后，搜片会去这些地方查片名和海报" />
+        </Panel>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {sources.data.map((config) => (
+            <SourceCard key={config.provider} config={config} />
+          ))}
+        </div>
+      )}
+    </QueryFrame>
   );
 }

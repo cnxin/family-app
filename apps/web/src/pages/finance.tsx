@@ -15,6 +15,7 @@ import { BudgetBar, BudgetsPanel } from '../components/finance-budgets';
 import { CategoriesPanel } from '../components/finance-categories';
 import { LedgerPanel } from '../components/finance-ledger';
 import { TransactionForm } from '../components/finance-transaction-form';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -105,26 +106,27 @@ export function FinancePage() {
       {view === 'ledger' ? (
         <LedgerPanel month={month} canManage={canManage} />
       ) : view === 'budgets' ? (
-        <BudgetsPanel
-          month={month}
-          categories={categories.data ?? []}
-          budgets={summary.data?.budgets ?? []}
-          canManage={canManage}
-        />
+        <QueryFrame queries={[summary, categories]} skeleton={<ListSkeleton rows={4} />}>
+          <BudgetsPanel
+            month={month}
+            categories={categories.data ?? []}
+            budgets={summary.data?.budgets ?? []}
+            canManage={canManage}
+          />
+        </QueryFrame>
       ) : view === 'accounts' ? (
-        <>
-          <AccountsPanel accounts={rows} canManage={canManage} />
-          <aside className="flex shrink-0 flex-col lg:w-[320px]">
-            <CategoriesPanel categories={categories.data ?? []} canManage={canManage} />
-          </aside>
-        </>
+        <QueryFrame queries={[accounts, categories]} skeleton={<ListSkeleton rows={4} />}>
+          <>
+            <AccountsPanel accounts={rows} canManage={canManage} />
+            <aside className="flex shrink-0 flex-col lg:w-[320px]">
+              <CategoriesPanel categories={categories.data ?? []} canManage={canManage} />
+            </aside>
+          </>
+        </QueryFrame>
       ) : (
         <Panel className="p-3">
-          {summary.isPending || accounts.isPending ? (
-            <ListSkeleton rows={4} />
-          ) : summary.isError ? (
-            <EmptyState emoji="🧾" title="账目读不出来" hint="刷新一下，还不行就看看 API 服务" />
-          ) : rows.length === 0 ? (
+          <QueryFrame queries={[summary, accounts]} skeleton={<ListSkeleton rows={4} />}>
+            {rows.length === 0 ? (
             <EmptyState
               emoji="💳"
               title="还没有财务账户"
@@ -223,6 +225,7 @@ export function FinancePage() {
               ) : null}
             </div>
           )}
+          </QueryFrame>
         </Panel>
       )}
 

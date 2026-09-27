@@ -13,6 +13,7 @@ import {
 } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { BackupPolicyPanel } from '../components/backup-policy-form';
+import { QueryFailure, StaleNotice } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { pushToast } from '../lib/toast';
 import { Button, Dialog, EmptyState, Page, Panel } from '../components/ui';
@@ -68,11 +69,11 @@ export function BackupsPage() {
     );
   }
 
-  if (dashboard.isError || !dashboard.data) {
+  if (!dashboard.data) {
     return (
       <Page title="系统备份" subtitle="家里这些数据的保护和恢复">
         <Panel className="p-3">
-          <EmptyState emoji="💾" title="备份状态读不出来" hint="刷新一下，还不行就看看 API 服务" />
+          <QueryFailure onRetry={() => void dashboard.refetch()} />
         </Panel>
       </Page>
     );
@@ -135,6 +136,7 @@ export function BackupsPage() {
         </div>
       }
     >
+      {dashboard.isError ? <StaleNotice onRetry={() => void dashboard.refetch()} /> : null}
       <Panel title={`运行历史 ${runs.length}`}>
         {runs.length === 0 ? (
           <EmptyState emoji="💾" title="还没有跑过备份" hint="点右上角「立即备份」排一次" />

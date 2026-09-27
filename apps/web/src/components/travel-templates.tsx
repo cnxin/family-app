@@ -7,6 +7,7 @@ import {
   useTravelTemplates,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
 import { TemplateForm } from './travel-template-form';
 import { Button, EmptyState, Panel } from './ui';
@@ -26,11 +27,8 @@ export function TemplatesPanel({
 
   return (
     <Panel className="p-3">
-      {list.isPending ? (
-        <ListSkeleton rows={3} />
-      ) : list.isError ? (
-        <EmptyState emoji="🧳" title="模板读不出来" hint="刷新一下，还不行就看看 API 服务" />
-      ) : rows.length === 0 ? (
+      <QueryFrame query={list} skeleton={<ListSkeleton rows={3} />}>
+        {rows.length === 0 ? (
         <EmptyState
           emoji="🧳"
           title="还没有打包模板"
@@ -114,6 +112,7 @@ export function TemplatesPanel({
           })}
         </div>
       )}
+      </QueryFrame>
 
       {creating || editing ? (
         <TemplateForm

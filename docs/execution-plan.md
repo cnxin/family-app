@@ -48,6 +48,10 @@
 5. 教训写进 `docs/refactor-plan.md` 的教训列表（当前编号到 14），和代码同一个提交。
 6. 用户在乎的视觉标准：**桌面端不能留大片空白**（两栏时右栏 320px 固定、左栏 `flex-1`；单列内容用 `Panel` 撑满高度）；手机端底部操作条要避开 tab 栏（`bottom-[calc(56px+env(safe-area-inset-bottom))]`）；暗色模式必须能看；动效遵守 `.claude/skills/apple-design/SKILL.md`（ease-out 进场、退场镜像更短、`prefers-reduced-motion` 全关）。
 
+### 1.4 列表的空态、失败态、加载态
+
+空态只能在**请求成功且结果为空**时出现。请求失败时：有缓存就继续显示缓存，并给一条可关闭的「没刷新出来」；没有缓存就显示失败态和「再试一次」，不要把失败画成「还没有」。加载中显示骨架，不显示空态。新端列表用 `apps/web/src/components/query-state.tsx` 的 `QueryFrame` / `QueryState`，不要每页再手写这套分支。
+
 ---
 
 ## 2. 新客户端骨架速览（改代码前先读这些文件）

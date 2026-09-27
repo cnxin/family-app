@@ -1,6 +1,7 @@
 import type { Menu, MenuItem } from '@family/contracts';
 import { CATEGORY_EMOJI } from '../lib/cart';
 import { MEAL_LABELS } from '../lib/queries';
+import { QueryFailure, StaleNotice } from './query-state';
 import { Skeleton } from './skeleton';
 import { SoftLink } from './soft-link';
 
@@ -90,10 +91,16 @@ export function TodayMeals({
   menus,
   date,
   pending,
+  failed = false,
+  stale = false,
+  onRetry,
 }: {
   menus: Menu[];
   date: string;
   pending: boolean;
+  failed?: boolean;
+  stale?: boolean;
+  onRetry?: () => void;
 }) {
   if (pending) {
     return (
@@ -108,6 +115,7 @@ export function TodayMeals({
       </div>
     );
   }
+  if (failed) return <QueryFailure onRetry={() => onRetry?.()} />;
 
   const byMeal = ORDER.map(
     (meal) =>
@@ -120,10 +128,13 @@ export function TodayMeals({
   ) as Menu[];
 
   return (
+    <div>
+      {stale ? <StaleNotice onRetry={onRetry} /> : null}
     <div className="grid gap-2.5 sm:grid-cols-3">
       {byMeal.map((menu) => (
         <MealCard key={menu.mealType} menu={menu} date={date} />
       ))}
+    </div>
     </div>
   );
 }

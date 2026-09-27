@@ -13,8 +13,9 @@ import { ExpiryCard } from '../components/asset-expiry';
 import { AssetPlansPanel } from '../components/asset-plans';
 import { AssetDocumentsPanel } from '../components/asset-documents';
 import { SoftLink } from '../components/soft-link';
+import { QueryFailure, StaleNotice } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
-import { Button, Dialog, EmptyState, Page, Panel } from '../components/ui';
+import { Button, Dialog, Page, Panel } from '../components/ui';
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
@@ -42,15 +43,14 @@ export function AssetDetailPage() {
     );
   }
 
-  if (asset.isError || !asset.data) {
+  if (!asset.data) {
     return (
       <Page title="资产详情" subtitle="这一项可能已经被移除">
         <Panel className="p-3">
-          <EmptyState
-            emoji="📦"
-            title="打不开这项资产"
-            hint={<SoftLink to="/house/assets" className="text-accent hover:underline">回资产列表 →</SoftLink>}
-          />
+          <QueryFailure onRetry={() => void asset.refetch()} />
+          <SoftLink to="/house/assets" className="inline-flex min-h-11 items-center px-3.5 text-sm text-accent hover:underline">
+            回资产列表 →
+          </SoftLink>
         </Panel>
       </Page>
     );
@@ -102,6 +102,7 @@ export function AssetDetailPage() {
         </div>
       }
     >
+      {asset.isError ? <StaleNotice onRetry={() => void asset.refetch()} /> : null}
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         {showExpiry ? <ExpiryCard asset={data} /> : null}
 

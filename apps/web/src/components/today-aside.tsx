@@ -1,8 +1,12 @@
 import type { HouseholdActivity, HouseholdReminder, ShoppingItem } from '@family/contracts';
 import { activityTimeLabel } from '../lib/queries';
 import { toNewRoute } from '../lib/routes';
+import { QueryFailure, StaleNotice, queryPhase } from './query-state';
+import { Skeleton } from './skeleton';
 import { Panel } from './ui';
 import { SoftLink } from './soft-link';
+
+type Phase = ReturnType<typeof queryPhase>;
 
 function clock(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -23,13 +27,28 @@ function More({ to, children }: { to: string; children: string }) {
 const row = 'flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 last:border-b-0';
 
 /** 今天还没到点的提醒，按时间排。 */
-export function TodayReminders({ items }: { items: HouseholdReminder[] }) {
+export function TodayReminders({
+  items,
+  phase = 'ready',
+  onRetry,
+}: {
+  items: HouseholdReminder[];
+  phase?: Phase;
+  onRetry?: () => void;
+}) {
   return (
     <Panel
       grow={false}
       title={`待提醒${items.length ? ` · ${items.length}` : ''}`}
       right={<More to="/schedule/reminders">全部</More>}
     >
+      {phase === 'pending' ? (
+        <div className="px-3.5 py-3"><Skeleton className="h-4 w-1/2" /></div>
+      ) : phase === 'failed' ? (
+        <QueryFailure onRetry={() => onRetry?.()} />
+      ) : (
+        <>
+      {phase === 'stale' ? <StaleNotice onRetry={onRetry} /> : null}
       {items.length ? (
         items.slice(0, 5).map((one) => (
           <div key={one.id} className={row}>
@@ -44,17 +63,34 @@ export function TodayReminders({ items }: { items: HouseholdReminder[] }) {
       ) : (
         <p className="px-3.5 py-4 text-[13px] text-ink-soft">今天没有要提醒的事</p>
       )}
+        </>
+      )}
     </Panel>
   );
 }
 
-export function TodayShopping({ items }: { items: ShoppingItem[] }) {
+export function TodayShopping({
+  items,
+  phase = 'ready',
+  onRetry,
+}: {
+  items: ShoppingItem[];
+  phase?: Phase;
+  onRetry?: () => void;
+}) {
   return (
     <Panel
       grow={false}
       title={`要买的${items.length ? ` · ${items.length}` : ''}`}
       right={<More to="/house/shopping">购物清单</More>}
     >
+      {phase === 'pending' ? (
+        <div className="px-3.5 py-3"><Skeleton className="h-4 w-1/2" /></div>
+      ) : phase === 'failed' ? (
+        <QueryFailure onRetry={() => onRetry?.()} />
+      ) : (
+        <>
+      {phase === 'stale' ? <StaleNotice onRetry={onRetry} /> : null}
       {items.length ? (
         items.slice(0, 6).map((item) => (
           <div key={item.id} className={row}>
@@ -70,6 +106,8 @@ export function TodayShopping({ items }: { items: ShoppingItem[] }) {
         ))
       ) : (
         <p className="px-3.5 py-4 text-[13px] text-ink-soft">今天没有要买的</p>
+      )}
+        </>
       )}
     </Panel>
   );

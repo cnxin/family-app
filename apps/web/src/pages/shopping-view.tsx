@@ -11,6 +11,7 @@ import {
   useShoppingList,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFailure, StaleNotice } from '../components/query-state';
 import { Button, Card, Checkbox, Dialog, EmptyState, Input, Page, Panel, SectionTitle } from '../components/ui';
 import { StockDialog } from '../components/stock-dialog';
 import { ListSkeleton } from '../components/skeleton';
@@ -287,7 +288,12 @@ export function ShoppingView() {
           <div className="p-3">
             <ListSkeleton rows={4} />
           </div>
-        ) : !items.length ? (
+        ) : list.isError && list.data === undefined ? (
+          <QueryFailure onRetry={() => void list.refetch()} />
+        ) : (
+          <>
+          {list.isError ? <StaleNotice onRetry={() => void list.refetch()} /> : null}
+          {!items.length ? (
           <EmptyState
             emoji="🧾"
             title="清单是空的"
@@ -317,6 +323,8 @@ export function ShoppingView() {
               ))}
             </div>
           ))
+        )}
+          </>
         )}
       </Panel>
 

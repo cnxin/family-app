@@ -6,6 +6,7 @@ import { travelDateRange, travelStatusLabel, useTravelPlans } from '../lib/queri
 import { PlanForm } from '../components/travel-forms';
 import { TemplatesPanel } from '../components/travel-templates';
 import { SoftLink } from '../components/soft-link';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -79,11 +80,8 @@ export function TravelPage() {
         />
       ) : (
       <Panel className="p-3">
-        {list.isPending ? (
-          <ListSkeleton rows={3} />
-        ) : list.isError ? (
-          <EmptyState emoji="✈️" title="行程读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : rows.length === 0 ? (
+        <QueryFrame query={list} skeleton={<ListSkeleton rows={3} />}>
+          {rows.length === 0 ? (
           <EmptyState
             emoji="✈️"
             title={status === 'active' ? '还没有要出门的安排' : '这一类里没有行程'}
@@ -135,6 +133,7 @@ export function TravelPage() {
             })}
           </div>
         )}
+        </QueryFrame>
       </Panel>
       )}
 

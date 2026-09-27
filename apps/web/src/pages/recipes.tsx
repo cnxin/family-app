@@ -6,6 +6,8 @@ import { CATEGORY_EMOJI, useCart } from '../lib/cart';
 import { MEAL_LABELS, useRecipes, useRemoveSkill, useUpsertSkill } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from '../components/query-state';
+import { ListSkeleton } from '../components/skeleton';
 import { Button, Card, Dialog, Input, Page, Panel } from '../components/ui';
 import { RecipeEditor } from '../components/recipe-editor';
 import { DishEditor } from '../components/dish-editor';
@@ -205,13 +207,12 @@ export function RecipesPage() {
       }
     >
       <Panel className="p-3">
-      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
-        {recipes.isPending ? (
-          <p className="px-1 py-6 text-sm text-ink-soft">读取菜谱…</p>
-        ) : visible.length === 0 ? (
+        <QueryFrame query={recipes} skeleton={<ListSkeleton rows={4} />}>
+          {visible.length === 0 ? (
           <p className="px-1 py-6 text-sm text-ink-soft">没有匹配的菜</p>
         ) : (
-          visible.map((dish) => {
+          <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+          {visible.map((dish) => {
             const variants = dish.recipeVariants.filter((one) => !one.isArchived);
             const mySkill = dish.skills.some((skill) => skill.member.id === session?.member.id);
             const editingHere = editor?.dishId === dish.id;
@@ -330,9 +331,10 @@ export function RecipesPage() {
                 ) : null}
               </Card>
             );
-          })
+          })}
+          </div>
         )}
-      </div>
+        </QueryFrame>
       </Panel>
 
       {openDish ? (

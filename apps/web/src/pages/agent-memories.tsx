@@ -4,6 +4,7 @@ import { useAgentMemories, useClearAgentMemories } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
 import { AddMemoryForm, MemoryCard, MemoryDetail } from '../components/agent-memory-ui';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { SoftLink } from '../components/soft-link';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
@@ -64,19 +65,15 @@ export function AgentMemoriesPage() {
       }
     >
       <Panel className="p-3">
-        {memories.isPending ? (
-          <ListSkeleton rows={3} />
-        ) : memories.isError ? (
+        {notConfigured && memories.data === undefined ? (
           <EmptyState
             emoji="🧠"
-            title={notConfigured ? '这台服务器还没配记忆加密' : '记忆读不出来'}
-            hint={
-              notConfigured
-                ? '记忆内容是加密存的，生产环境要设置 AGENT_DATA_KEY 才能用，否则小管家不会记任何东西'
-                : '刷新一下；一直不行就看看 API 日志'
-            }
+            title="这台服务器还没配记忆加密"
+            hint="记忆内容是加密存的，生产环境要设置 AGENT_DATA_KEY 才能用，否则小管家不会记任何东西"
           />
-        ) : rows.length === 0 ? (
+        ) : (
+        <QueryFrame query={memories} skeleton={<ListSkeleton rows={3} />}>
+          {rows.length === 0 ? (
           <EmptyState
             emoji="🧠"
             title={status === 'candidate' ? '没有待确认的记忆' : '这里还什么都没记'}
@@ -92,6 +89,8 @@ export function AgentMemoriesPage() {
               <MemoryCard key={item.id} item={item} onOpen={() => setOpen(item)} />
             ))}
           </div>
+        )}
+        </QueryFrame>
         )}
       </Panel>
 

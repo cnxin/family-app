@@ -10,6 +10,7 @@ import {
 } from '../lib/queries';
 import { AssetForm } from '../components/asset-form';
 import { SoftLink } from '../components/soft-link';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -168,11 +169,8 @@ export function AssetsPage() {
       }
     >
       <Panel className="p-3">
-        {assets.isPending ? (
-          <ListSkeleton rows={4} />
-        ) : assets.isError ? (
-          <EmptyState emoji="📦" title="资产读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : visible.length === 0 ? (
+        <QueryFrame query={assets} skeleton={<ListSkeleton rows={4} />}>
+          {visible.length === 0 ? (
           <EmptyState
             emoji="🏠"
             title={rows.length ? '这个筛选下没有资产' : '还没登记家庭资产'}
@@ -185,10 +183,12 @@ export function AssetsPage() {
             ))}
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       <aside className="flex shrink-0 flex-col lg:w-[300px]">
-        <Panel title={`临近事项 ${upcoming.length}`} grow={false}>
+        <Panel title={`临近事项 ${assets.isError && assets.data === undefined ? '' : upcoming.length}`} grow={false}>
+          <QueryFrame query={assets} skeleton={<ListSkeleton rows={2} />}>
           {upcoming.length === 0 ? (
             <p className="px-3.5 py-6 text-center text-[13px] text-ink-soft">
               30 天内没有要保养的，订阅也都还早。
@@ -218,6 +218,7 @@ export function AssetsPage() {
               );
             })
           )}
+          </QueryFrame>
         </Panel>
       </aside>
 

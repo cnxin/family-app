@@ -18,6 +18,7 @@ import { TodayStats, type TodayStat } from '../components/today-hero';
 import { TodayMeals } from '../components/today-meals';
 import { TodayReminders, TodayShopping } from '../components/today-aside';
 import { AttentionSection, nextHouseholdMidnight, useAttentionSnooze } from '../components/attention-card';
+import { QueryFailure, QueryFrame, StaleNotice, queryPhase } from '../components/query-state';
 import { TaskAssignee } from '../components/task-assignee';
 
 function greeting(timezone: string) {
@@ -92,11 +93,13 @@ export function TodayPage() {
       subtitle={
         range.isPending
           ? `${dateLine(today)} · 正在读今天的安排…`
-          : `${dateLine(today)} · ${
-              open.length === 0
-                ? '今天没有待办了'
-                : `还有 ${open.length} 件${unclaimed.length ? `，${unclaimed.length} 件没人认领` : ''}`
-            }`
+          : range.isError && range.data === undefined
+            ? `${dateLine(today)} · 今天的任务没加载出来`
+            : `${dateLine(today)} · ${
+                open.length === 0
+                  ? '今天没有待办了'
+                  : `还有 ${open.length} 件${unclaimed.length ? `，${unclaimed.length} 件没人认领` : ''}`
+              }`
       }
       actions={
         <SoftLink
@@ -124,7 +127,14 @@ export function TodayPage() {
               去厨房
             </SoftLink>
           </div>
-          <TodayMeals menus={menus.data ?? []} date={today} pending={menus.isPending} />
+          <TodayMeals
+            menus={menus.data ?? []}
+            date={today}
+            pending={menus.isPending}
+            failed={menus.isError && menus.data === undefined}
+            stale={menus.isError && menus.data !== undefined}
+            onRetry={() => void menus.refetch()}
+          />
         </section>
 
         <Panel
@@ -135,15 +145,17 @@ export function TodayPage() {
             </SoftLink>
           }
         >
-          {range.isPending ? (
-            <div className="px-3.5 py-3">
-              <Skeleton className="h-4 w-2/5" />
-              <Skeleton className="mt-3 h-4 w-3/5" />
-              <Skeleton className="mt-3 h-4 w-1/3" />
-            </div>
-          ) : range.isError ? (
-            <p className="px-3.5 py-6 text-sm text-danger">读不到任务，检查一下后端是否在跑</p>
-          ) : todays.length === 0 ? (
+          <QueryFrame
+            query={range}
+            skeleton={
+              <div className="px-3.5 py-3">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="mt-3 h-4 w-3/5" />
+                <Skeleton className="mt-3 h-4 w-1/3" />
+              </div>
+            }
+          >
+            {todays.length === 0 ? (
             <EmptyState emoji="✅" title="今天没有安排任务" hint="轻松一天" />
           ) : (
             <>
@@ -184,7 +196,8 @@ export function TodayPage() {
                   </div>
                 ))}
             </>
-          )}
+            )}
+          </QueryFrame>
 
           {/* 接下来两天压在今天下面，灰一点——是提醒不是任务 */}
           {later.length ? (
@@ -216,7 +229,12 @@ export function TodayPage() {
             <div className="px-3.5 py-3">
               <Skeleton className="h-4 w-1/2" />
             </div>
-          ) : events.length === 0 ? (
+          ) : calendar.isError && calendar.data === undefined ? (
+            <QueryFailure onRetry={() => void calendar.refetch()} />
+          ) : (
+            <>
+            {calendar.isError ? <StaleNotice onRetry={() => void calendar.refetch()} /> : null}
+            {events.length === 0 ? (
             <p className="px-3.5 py-4 text-[13px] text-ink-soft">日历上没有别的安排了</p>
           ) : (
             events.map((entry) => {
@@ -247,18 +265,35 @@ export function TodayPage() {
               );
             })
           )}
+            </>
+          )}
         </Panel>
 
-        <TodayReminders items={todayReminders} />
-        <TodayShopping items={toBuy} />
+        <TodayReminders
+          items={todayReminders}
+          phase={queryPhase(reminders)}
+          onRetry={() => void reminders.refetch()}
+        />
+        <TodayShopping items={toBuy} phase={queryPhase(shopping)} onRetry={() => void shopping.refetch()} />
       </div>
-      {visibleAttention.length ? (
+      {queryPhase(attention) === 'pending' ? (
         <aside data-today-attention className="min-w-0">
-          <AttentionSection
-            items={visibleAttention}
-            today={attentionToday}
-            onSnooze={(key) => snooze(key, nextHouseholdMidnight(attentionToday, timezone))}
-          />
+          <Skeleton className="h-24 w-full" />
+        </aside>
+      ) : queryPhase(attention) === 'failed' ? (
+        <aside data-today-attention className="min-w-0">
+          <QueryFailure onRetry={() => void attention.refetch()} />
+        </aside>
+      ) : visibleAttention.length || queryPhase(attention) === 'stale' ? (
+        <aside data-today-attention className="min-w-0">
+          {queryPhase(attention) === 'stale' ? <StaleNotice onRetry={() => void attention.refetch()} /> : null}
+          {visibleAttention.length ? (
+            <AttentionSection
+              items={visibleAttention}
+              today={attentionToday}
+              onSnooze={(key) => snooze(key, nextHouseholdMidnight(attentionToday, timezone))}
+            />
+          ) : null}
         </aside>
       ) : null}
       </div>

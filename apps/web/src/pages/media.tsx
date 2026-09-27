@@ -8,6 +8,7 @@ import {
 } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { SoftLink } from '../components/soft-link';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { EmptyState, Page, Panel } from '../components/ui';
 
@@ -49,11 +50,14 @@ export function MediaPage() {
       subtitle={`今晚看什么 · 片单里一共 ${rows.length} 部`}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        {entries.isPending ? (
-          <Panel className="p-3">
-            <ListSkeleton rows={3} />
-          </Panel>
-        ) : (
+        <QueryFrame
+          query={entries}
+          skeleton={
+            <Panel className="p-3">
+              <ListSkeleton rows={3} />
+            </Panel>
+          }
+        >
           <>
             <div className="grid gap-2.5 sm:grid-cols-3">
               <Tile label="想看" value={rows.filter((one) => one.status === 'watchlist').length} />
@@ -95,7 +99,7 @@ export function MediaPage() {
               )}
             </Panel>
           </>
-        )}
+        </QueryFrame>
       </div>
 
       <aside className="flex shrink-0 flex-col gap-4 lg:w-[300px]">
@@ -149,7 +153,11 @@ export function MediaPage() {
         </Panel>
 
         <Panel title="媒体服务" grow={false}>
-          {(connectors.data ?? []).map((connector, index) => (
+          <QueryFrame query={connectors} skeleton={<ListSkeleton rows={2} />}>
+          {(connectors.data ?? []).length === 0 ? (
+            <p className="px-3.5 py-6 text-center text-[13px] text-ink-soft">还没有媒体服务。</p>
+          ) : (
+          (connectors.data ?? []).map((connector, index) => (
             <div
               key={connector.key}
               className={
@@ -175,10 +183,9 @@ export function MediaPage() {
                 {MEDIA_CONNECTOR_STATE_LABELS[connector.state] ?? connector.state}
               </span>
             </div>
-          ))}
-          {connectors.data?.length ? null : (
-            <p className="px-3.5 py-6 text-center text-[13px] text-ink-soft">还没有媒体服务。</p>
+          ))
           )}
+          </QueryFrame>
         </Panel>
       </aside>
     </Page>

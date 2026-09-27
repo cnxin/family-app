@@ -9,6 +9,8 @@ import {
   useSetKnowledgeArchived,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from './query-state';
+import { ListSkeleton } from './skeleton';
 import { Button, Dialog } from './ui';
 
 function stamp(value: string) {
@@ -124,10 +126,9 @@ export function KnowledgeDetail({
     >
       {showHistory ? (
         <div className="flex flex-col gap-2">
-          {revisions.isPending ? (
-            <p className="text-[13px] text-ink-soft">正在读历史…</p>
-          ) : revisions.isError ? (
-            <p className="text-[13px] text-danger">版本历史没读出来，关掉重开试试。</p>
+          <QueryFrame query={revisions} skeleton={<ListSkeleton rows={2} />}>
+            {(revisions.data ?? []).length === 0 ? (
+            <p className="text-[13px] text-ink-soft">还没有更早的版本。</p>
           ) : (
             (revisions.data ?? []).map((revision) => (
               <div
@@ -168,6 +169,7 @@ export function KnowledgeDetail({
               </div>
             ))
           )}
+          </QueryFrame>
         </div>
       ) : (
         <div className="flex flex-col gap-3">

@@ -15,6 +15,7 @@ import { MODULE_ICON, MODULE_LABEL } from '../lib/notification-meta';
 import { pushToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
 import { ChannelCard, ChannelEditor, DeliveryList } from '../components/channel-settings';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -214,11 +215,8 @@ export function NotificationsPage() {
     >
       {view === 'inbox' ? (
         <Panel title={`${rows.length} 条`}>
-          {list.isPending ? (
-            <div className="p-3">
-              <ListSkeleton rows={5} />
-            </div>
-          ) : rows.length === 0 ? (
+          <QueryFrame query={list} skeleton={<div className="p-3"><ListSkeleton rows={5} /></div>}>
+            {rows.length === 0 ? (
             <EmptyState
               emoji="📭"
               title={scope === 'unread' ? '没有未读消息' : '还没有消息'}
@@ -229,12 +227,12 @@ export function NotificationsPage() {
               <NotificationRow key={item.id} item={item} onRead={() => markRead.mutate(item.id)} />
             ))
           )}
+          </QueryFrame>
         </Panel>
       ) : view === 'channels' ? (
         <Panel className="p-3">
-          {channels.isPending ? (
-            <ListSkeleton rows={2} />
-          ) : channelRows.length === 0 ? (
+          <QueryFrame query={channels} skeleton={<ListSkeleton rows={2} />}>
+            {channelRows.length === 0 ? (
             <EmptyState
               emoji="📡"
               title="还没有外部渠道"
@@ -257,14 +255,13 @@ export function NotificationsPage() {
               ))}
             </div>
           )}
+          </QueryFrame>
         </Panel>
       ) : (
         <Panel className="p-3">
-          {deliveries.isPending ? (
-            <ListSkeleton rows={4} />
-          ) : (
+          <QueryFrame query={deliveries} skeleton={<ListSkeleton rows={4} />}>
             <DeliveryList deliveries={deliveries.data ?? []} />
-          )}
+          </QueryFrame>
         </Panel>
       )}
 

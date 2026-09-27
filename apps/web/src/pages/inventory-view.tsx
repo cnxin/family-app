@@ -11,6 +11,7 @@ import {
   useUpsertInventoryItem,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from '../components/query-state';
 import { Button, Card, Dialog, EmptyState, Page, Panel, SectionTitle } from '../components/ui';
 import { BatchDialog, CATEGORY_EMOJI, InventoryEditor } from '../components/inventory-editor';
 import { InventoryLog } from '../components/inventory-log';
@@ -36,7 +37,8 @@ function batchStatusLabel(batch: InventoryBatch) {
 const NO_ITEMS: InventoryItem[] = [];
 
 export function InventoryView() {
-  const { data: items, isPending } = useInventory();
+  const inventory = useInventory();
+  const { data: items } = inventory;
   const { data: batches } = useInventoryBatches('all', 7);
   const { data: shopping } = useShoppingList(todayISO());
   const upsert = useUpsertInventoryItem();
@@ -159,13 +161,8 @@ export function InventoryView() {
       }
     >
       <Panel title={`${list.length} 种`}>
-      {isPending ? (
-        <div className="p-3">
-          <ListSkeleton rows={5} />
-        </div>
-      ) : null}
-
-      {!isPending && !list.length ? (
+      <QueryFrame query={inventory} skeleton={<div className="p-3"><ListSkeleton rows={5} /></div>}>
+      {!list.length ? (
         <EmptyState emoji="📦" title="还没有库存记录" hint="先记下大米、调料和饮料，不够时会提醒补货" />
       ) : null}
 
@@ -272,6 +269,7 @@ export function InventoryView() {
           </div>
         </div>
       ))}
+      </QueryFrame>
       </Panel>
 
       {/* 宽屏时把「会过期」和「动过什么」放右边一列，窄屏自动落回下面 */}

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { GuestMealMenu, GuestMealRequestForm } from '../components/guest-meals';
 import { GuestMoviePolls, GuestWifiCard } from '../components/guest-invitation-parts';
+import { StaleNotice } from '../components/query-state';
 import { Button, Card } from '../components/ui';
 import { useGuestInvitation, useRespondGuestInvitation } from '../lib/queries';
 import { applyTheme, readTheme } from '../lib/theme';
@@ -45,7 +46,7 @@ export function GuestInvitationPage() {
     );
   }
 
-  if (invitation.isError || !invitation.data) {
+  if (!invitation.data) {
     return (
       <Frame>
         <div className="mt-24 text-center">
@@ -54,6 +55,9 @@ export function GuestInvitationPage() {
           <p className="mt-2 text-sm text-ink-soft">
             它可能已经过期、被撤销，或者这次来访取消了。找邀请你的人再要一个链接吧。
           </p>
+          <button type="button" className="mt-4 min-h-11 px-3 text-sm text-accent" onClick={() => void invitation.refetch()}>
+            再试一次
+          </button>
         </div>
       </Frame>
     );
@@ -64,6 +68,7 @@ export function GuestInvitationPage() {
 
   return (
     <Frame>
+      {invitation.isError ? <StaleNotice onRetry={() => void invitation.refetch()} /> : null}
       <header className="text-center">
         <span className="inline-grid size-14 place-items-center rounded-card bg-accent-soft text-2xl">
           🏠

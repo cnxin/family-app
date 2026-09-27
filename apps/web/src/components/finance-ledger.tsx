@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FinanceTransaction, FinanceTransactionType } from '@family/contracts';
 import { useFinanceTransactions, useReverseFinanceTransaction, yuan } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
 import { Button, Dialog, EmptyState, Panel, Segmented } from './ui';
 
@@ -51,13 +52,8 @@ export function LedgerPanel({ month, canManage }: { month: string; canManage: bo
         />
       }
     >
-      {list.isPending ? (
-        <div className="p-3">
-          <ListSkeleton rows={4} />
-        </div>
-      ) : list.isError ? (
-        <EmptyState emoji="🧾" title="流水读不出来" hint="刷新一下，还不行就看看 API 服务" />
-      ) : rows.length === 0 ? (
+      <QueryFrame query={list} skeleton={<div className="p-3"><ListSkeleton rows={4} /></div>}>
+        {rows.length === 0 ? (
         <EmptyState emoji="🧾" title="这个月还没有流水" hint="右上角「记一笔」开始记" />
       ) : (
         rows.map((entry, index) => {
@@ -109,6 +105,7 @@ export function LedgerPanel({ month, canManage }: { month: string; canManage: bo
           );
         })
       )}
+      </QueryFrame>
 
       {reversing ? (
         <Dialog

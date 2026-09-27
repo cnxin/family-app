@@ -9,6 +9,7 @@ import {
 import { toNewRoute } from '../lib/routes';
 import { legacyUrl } from '../lib/nav';
 import { SoftLink } from '../components/soft-link';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -93,11 +94,8 @@ export function ActivityPage() {
       }
     >
       <Panel className="p-3">
-        {list.isPending ? (
-          <ListSkeleton rows={5} />
-        ) : list.isError ? (
-          <EmptyState emoji="🕘" title="动态读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : groups.length === 0 ? (
+        <QueryFrame query={list} skeleton={<ListSkeleton rows={5} />}>
+          {groups.length === 0 ? (
           <EmptyState emoji="🕘" title="还没有动态" hint="家里人做点什么，这儿就会有记录" />
         ) : (
           <div className="flex flex-col gap-3">
@@ -118,6 +116,7 @@ export function ActivityPage() {
             ))}
           </div>
         )}
+        </QueryFrame>
       </Panel>
     </Page>
   );

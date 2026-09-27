@@ -23,6 +23,8 @@ import {
 import { ProposalGroupCard } from '../components/agent-memory-ui';
 import { AssistantSettings } from '../components/agent-settings-ui';
 import { SoftLink } from '../components/soft-link';
+import { QueryFailure, QueryFrame, StaleNotice } from '../components/query-state';
+import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Input, Page, Panel } from '../components/ui';
 
 const SUGGESTIONS = [
@@ -161,8 +163,13 @@ export function AssistantPage() {
           输入框就没法钉在底部了。这里自己排：消息流 flex-1 滚动，输入框贴着下沿。 */}
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-border bg-surface">
         <div ref={streamRef} className="min-h-0 flex-1 overflow-y-auto px-3.5 py-4 lg:min-h-[320px]">
+          {conversationId && conversation.isError && conversation.data ? (
+            <StaleNotice onRetry={() => void conversation.refetch()} />
+          ) : null}
           {conversation.isPending && conversationId ? (
-            <p className="py-6 text-center text-[13px] text-ink-soft">读取对话…</p>
+            <ListSkeleton rows={3} />
+          ) : conversationId && conversation.isError && conversation.data === undefined ? (
+            <QueryFailure onRetry={() => void conversation.refetch()} />
           ) : messages.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
               <span className="text-3xl">✨</span>
@@ -297,9 +304,8 @@ export function AssistantPage() {
 
       <aside className="flex shrink-0 flex-col lg:w-[280px]">
         <Panel title="最近的对话">
-          {conversations.isPending ? (
-            <p className="px-3.5 py-6 text-center text-[13px] text-ink-soft">读取中…</p>
-          ) : rows.length === 0 ? (
+          <QueryFrame query={conversations} skeleton={<ListSkeleton rows={3} />}>
+            {rows.length === 0 ? (
             <EmptyState emoji="💬" title="还没有对话" hint="直接在左边问一句就开始了" />
           ) : (
             rows.map((one, index) => (
@@ -335,6 +341,7 @@ export function AssistantPage() {
               </div>
             ))
           )}
+          </QueryFrame>
         </Panel>
       </aside>
 

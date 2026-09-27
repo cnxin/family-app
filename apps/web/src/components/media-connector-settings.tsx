@@ -9,6 +9,7 @@ import {
   useTestConnector,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
 import {
   CredentialField,
@@ -275,26 +276,19 @@ function ConnectorCard({ config }: { config: MediaConnectorSettings }) {
 export function MediaConnectorSettingsPanel() {
   const connectors = useMediaConnectorSettings();
 
-  if (connectors.isPending) {
-    return (
-      <Panel className="p-3">
-        <ListSkeleton rows={3} />
-      </Panel>
-    );
-  }
-  if (connectors.isError || !connectors.data?.length) {
-    return (
-      <Panel className="p-3">
-        <EmptyState emoji="🔌" title="媒体服务读不出来" hint="刷新一下，还不行就看看 API 服务" />
-      </Panel>
-    );
-  }
-
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {connectors.data.map((config) => (
-        <ConnectorCard key={config.kind} config={config} />
-      ))}
-    </div>
+    <QueryFrame query={connectors} skeleton={<Panel className="p-3"><ListSkeleton rows={3} /></Panel>}>
+      {!connectors.data?.length ? (
+        <Panel className="p-3">
+          <EmptyState emoji="🔌" title="还没有媒体服务" hint="连上 Plex、Emby 或 MoviePilot 之后会出现在这儿" />
+        </Panel>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {connectors.data.map((config) => (
+            <ConnectorCard key={config.kind} config={config} />
+          ))}
+        </div>
+      )}
+    </QueryFrame>
   );
 }

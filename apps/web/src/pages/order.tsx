@@ -17,6 +17,8 @@ import {
   useMenuDateCounts,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from '../components/query-state';
+import { ListSkeleton } from '../components/skeleton';
 import { Button, Card, Input, Page, Panel, buttonClass } from '../components/ui';
 
 function DishCard({
@@ -305,17 +307,8 @@ export function OrderPage() {
             ))}
           </div>
 
-          <div data-order-dishes className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-            {dishes.isPending ? (
-              <p className="col-span-full py-6 text-sm text-ink-soft">读取菜品…</p>
-            ) : dishes.isError ? (
-              <div className="col-span-full flex flex-col items-start gap-2 py-6">
-                <p className="text-sm text-ink-soft">菜品列表没加载出来</p>
-                <Button className="h-9 px-3 text-[13px]" onClick={() => void dishes.refetch()}>
-                  再试一次
-                </Button>
-              </div>
-            ) : visible.length === 0 ? (
+          <QueryFrame query={dishes} skeleton={<ListSkeleton rows={4} />}>
+            {visible.length === 0 ? (
               <div className="col-span-full flex flex-col items-start gap-2 py-6">
                 <p className="text-sm text-ink-soft">
                   {word
@@ -340,7 +333,8 @@ export function OrderPage() {
                 ) : null}
               </div>
             ) : (
-              visible.map((dish) => (
+              <div data-order-dishes className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              {visible.map((dish) => (
                 <DishCard
                   key={dish.id}
                   dish={dish}
@@ -348,9 +342,10 @@ export function OrderPage() {
                   inCart={cart.has(dish.id)}
                   onToggle={() => (cart.has(dish.id) ? cart.remove(dish.id) : cart.add(dish))}
                 />
-              ))
+              ))}
+              </div>
             )}
-          </div>
+          </QueryFrame>
         </div>
 
       </Panel>

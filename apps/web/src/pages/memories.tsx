@@ -11,6 +11,7 @@ import {
 } from '../lib/queries';
 import { MemoryDetail } from '../components/memory-detail';
 import { MemoryEditor } from '../components/memory-editor';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Input, Page, Panel, Segmented } from '../components/ui';
 
@@ -118,11 +119,8 @@ export function MemoriesPage() {
       }
     >
       <Panel className="p-3">
-        {list.isPending ? (
-          <ListSkeleton rows={3} />
-        ) : list.isError ? (
-          <EmptyState emoji="📷" title="回忆读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : rows.length === 0 ? (
+        <QueryFrame query={list} skeleton={<ListSkeleton rows={3} />}>
+          {rows.length === 0 ? (
           <EmptyState
             emoji="📷"
             title={q ? '没搜到' : status === 'archived' ? '没有归档的回忆' : '还没有记下什么'}
@@ -174,6 +172,7 @@ export function MemoriesPage() {
             })}
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       {current ? (

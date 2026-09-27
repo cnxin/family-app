@@ -6,6 +6,7 @@ import { useArchivePoll, usePolls, useSetPollStatus } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { PollCard } from '../components/poll-card';
 import { PollForm } from '../components/poll-form';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -67,11 +68,8 @@ export function PollsPage() {
       }
     >
       <Panel className="p-3">
-        {polls.isPending ? (
-          <ListSkeleton rows={4} />
-        ) : polls.isError ? (
-          <EmptyState emoji="🗳️" title="投票读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : visible.length === 0 ? (
+        <QueryFrame query={polls} skeleton={<ListSkeleton rows={4} />}>
+          {visible.length === 0 ? (
           <EmptyState
             emoji="🗳️"
             title={filter === 'open' ? '现在没有进行中的投票' : '没有这样的投票'}
@@ -97,6 +95,7 @@ export function PollsPage() {
             ))}
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       {form ? (

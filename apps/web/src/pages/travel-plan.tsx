@@ -13,6 +13,7 @@ import {
 import { ApplyTemplateDialog } from '../components/travel-apply-template';
 import { ItemForm, PlanForm } from '../components/travel-forms';
 import { SoftLink } from '../components/soft-link';
+import { QueryFailure, StaleNotice } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { pushToast } from '../lib/toast';
 import { Button, Checkbox, Dialog, EmptyState, Page, Panel } from '../components/ui';
@@ -70,19 +71,14 @@ export function TravelPlanPage() {
     );
   }
 
-  if (query.isError || !query.data) {
+  if (!query.data) {
     return (
       <Page title="出行" subtitle="这个行程可能已经没了">
         <Panel className="p-3">
-          <EmptyState
-            emoji="✈️"
-            title="打不开这个行程"
-            hint={
-              <SoftLink to="/life/travel" className="text-accent hover:underline">
-                回出行列表 →
-              </SoftLink>
-            }
-          />
+          <QueryFailure onRetry={() => void query.refetch()} />
+          <SoftLink to="/life/travel" className="inline-flex min-h-11 items-center px-3.5 text-sm text-accent hover:underline">
+            回出行列表 →
+          </SoftLink>
         </Panel>
       </Page>
     );
@@ -171,6 +167,7 @@ export function TravelPlanPage() {
         </div>
       }
     >
+      {query.isError ? <StaleNotice onRetry={() => void query.refetch()} /> : null}
       <Panel
         title={`出行清单 ${plan.counts.completed}/${plan.counts.total}`}
         right={

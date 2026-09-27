@@ -14,6 +14,8 @@ import {
 } from '../lib/queries';
 import { useMealDeepLink } from '../lib/meal-deep-link';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from '../components/query-state';
+import { ListSkeleton } from '../components/skeleton';
 import { useAuth } from '../lib/auth';
 import {
   Button,
@@ -23,7 +25,6 @@ import {
   Page,
   Panel,
 } from '../components/ui';
-import { ListSkeleton } from '../components/skeleton';
 import type { ItemAction } from '../components/kitchen-item';
 import { actionsFor, StatusChip, ItemDetail, EventLine } from '../components/kitchen-item';
 
@@ -242,13 +243,13 @@ function MealSection({
         </Button>
         {showLog ? (
           <Card className="mt-1 divide-y divide-border">
-            {events.isPending ? (
-              <p className="px-4 py-3 text-[13px] text-ink-soft">读取中…</p>
-            ) : (events.data ?? []).length === 0 ? (
-              <p className="px-4 py-3 text-[13px] text-ink-soft">暂无记录</p>
-            ) : (
-              (events.data ?? []).map((event) => <EventLine key={event.id} event={event} />)
-            )}
+            <QueryFrame query={events} skeleton={<ListSkeleton rows={2} />}>
+              {(events.data ?? []).length === 0 ? (
+                <p className="px-4 py-3 text-[13px] text-ink-soft">暂无记录</p>
+              ) : (
+                (events.data ?? []).map((event) => <EventLine key={event.id} event={event} />)
+              )}
+            </QueryFrame>
           </Card>
         ) : null}
       </div>
@@ -325,9 +326,8 @@ export function KitchenPage() {
       }
     >
       <Panel className="p-3">
-      {menus.isPending ? (
-        <ListSkeleton rows={4} />
-      ) : !anyItems ? (
+      <QueryFrame query={menus} skeleton={<ListSkeleton rows={4} />}>
+      {!anyItems ? (
         <EmptyState emoji="🍳" title="这天还没有安排" hint="等家人去「点菜」页下单吧" />
       ) : (
         // 宽屏一餐一行会把右边空出来，排两列
@@ -344,6 +344,7 @@ export function KitchenPage() {
         ))}
         </div>
       )}
+      </QueryFrame>
       </Panel>
 
       {rejecting ? (

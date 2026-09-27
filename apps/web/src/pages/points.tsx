@@ -21,8 +21,9 @@ import {
   RedemptionList,
   RewardGrid,
 } from '../components/points-lists';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
-import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
+import { Button, Dialog, Page, Panel, Segmented } from '../components/ui';
 
 type Mode = 'rewards' | 'redemptions' | 'ledger';
 type RedemptionFilter = 'all' | RewardRedemptionStatus;
@@ -106,14 +107,7 @@ export function PointsPage() {
     }
   }
 
-  const loading =
-    (mode === 'rewards' && rewards.isPending) ||
-    (mode === 'redemptions' && redemptions.isPending) ||
-    (mode === 'ledger' && ledger.isPending);
-  const failed =
-    (mode === 'rewards' && rewards.isError) ||
-    (mode === 'redemptions' && redemptions.isError) ||
-    (mode === 'ledger' && ledger.isError);
+  const activeQuery = mode === 'rewards' ? rewards : mode === 'redemptions' ? redemptions : ledger;
 
   return (
     <Page
@@ -138,7 +132,11 @@ export function PointsPage() {
       }
       toolbar={
         <div className="flex flex-col gap-3">
-          <BalanceBand accounts={accountRows} meId={meId} loading={accounts.isPending} />
+          <BalanceBand
+            accounts={accountRows}
+            meId={meId}
+            loading={accounts.isPending || (accounts.isError && accounts.data === undefined)}
+          />
           <Segmented
             value={mode}
             onChange={setMode}
@@ -155,11 +153,8 @@ export function PointsPage() {
       }
     >
       <Panel className="p-3">
-        {loading ? (
-          <ListSkeleton rows={4} />
-        ) : failed ? (
-          <EmptyState emoji="📉" title="积分数据读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : mode === 'rewards' ? (
+        <QueryFrame query={activeQuery} skeleton={<ListSkeleton rows={4} />}>
+          {mode === 'rewards' ? (
           <RewardGrid
             rewards={rewardRows}
             balance={balance}
@@ -196,6 +191,7 @@ export function PointsPage() {
             onReverse={(entry) => setAsk({ kind: 'reverse-ledger', entry })}
           />
         )}
+        </QueryFrame>
       </Panel>
 
       {rewardForm ? (

@@ -3,6 +3,7 @@ import type { ViewingSession, ViewingSessionStatus } from '@family/contracts';
 import { mediaAsset, useViewingSessions } from '../lib/queries';
 import { useAuth } from '../lib/auth';
 import { SoftLink } from '../components/soft-link';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -99,11 +100,8 @@ export function MediaHistoryPage() {
       }
     >
       <Panel className="p-3">
-        {history.isPending ? (
-          <ListSkeleton rows={4} />
-        ) : history.isError ? (
-          <EmptyState emoji="⏱️" title="记录读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : visible.length === 0 ? (
+        <QueryFrame query={history} skeleton={<ListSkeleton rows={4} />}>
+          {visible.length === 0 ? (
           <EmptyState
             emoji="⏱️"
             title={rows.length ? '这一档里没有记录' : '还没有播放记录'}
@@ -169,6 +167,7 @@ export function MediaHistoryPage() {
             })}
           </div>
         )}
+        </QueryFrame>
       </Panel>
     </Page>
   );

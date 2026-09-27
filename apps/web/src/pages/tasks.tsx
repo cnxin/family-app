@@ -10,6 +10,7 @@ import {
   useUpdateOccurrence,
 } from '../lib/queries';
 import { TaskAssignee } from '../components/task-assignee';
+import { QueryFrame } from '../components/query-state';
 import { Button, Card, Checkbox, EmptyState, Input, Page, Panel, SectionTitle } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
 
@@ -74,11 +75,8 @@ export function TasksPage() {
       }
     >
       <Panel title={`${range.data?.length ?? 0} 项`}>
-      {range.isPending ? (
-        <div className="p-3">
-          <ListSkeleton rows={5} />
-        </div>
-      ) : byDate.size === 0 ? (
+        <QueryFrame query={range} skeleton={<div className="p-3"><ListSkeleton rows={5} /></div>}>
+        {byDate.size === 0 ? (
         <EmptyState emoji="📋" title="这两周还没有任务" hint="在上面的输入框加一件" />
       ) : (
         // 宽屏一列会把右边空出来，日期分组排两列
@@ -123,6 +121,7 @@ export function TasksPage() {
         ))}
         </div>
       )}
+        </QueryFrame>
       </Panel>
     </Page>
   );

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { TravelPackingTemplate, TravelPlan } from '@family/contracts';
 import { travelKey, useApplyTravelTemplate, useTravelTemplates } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from './query-state';
+import { ListSkeleton } from './skeleton';
 import { Button, Dialog } from './ui';
 
 /**
@@ -62,9 +64,9 @@ export function ApplyTemplateDialog({ plan, onClose }: { plan: TravelPlan; onClo
         <p className="text-[13px] text-ink-soft">
           会往「{plan.title}」的清单里加 {picked.items.length} 项。同一个模板只能用一次，不会重复加。
         </p>
-      ) : templates.isPending ? (
-        <p className="text-[13px] text-ink-soft">正在读模板…</p>
-      ) : usable.length === 0 ? (
+      ) : (
+        <QueryFrame query={templates} skeleton={<ListSkeleton rows={3} />}>
+        {usable.length === 0 ? (
         <p className="text-[13px] text-ink-soft">还没有可用的打包模板，先去「打包模板」建一个。</p>
       ) : (
         <div className="flex flex-col gap-1.5">
@@ -90,6 +92,8 @@ export function ApplyTemplateDialog({ plan, onClose }: { plan: TravelPlan; onClo
             );
           })}
         </div>
+      )}
+        </QueryFrame>
       )}
     </Dialog>
   );

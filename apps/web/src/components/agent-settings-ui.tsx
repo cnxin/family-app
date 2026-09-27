@@ -11,6 +11,8 @@ import {
   useUpdateAgentSettings,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFrame } from './query-state';
+import { ListSkeleton } from './skeleton';
 import { Button, Checkbox, Dialog, Input, Segmented } from './ui';
 
 function shortTime(value: string) {
@@ -165,6 +167,7 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
             </p>
           ) : null}
 
+          <QueryFrame query={channels} skeleton={<ListSkeleton rows={2} />}>
           {activeChannels.length ? (
             <div className="mt-2.5 overflow-hidden rounded-lg border border-border">
               {activeChannels.map((one, index) => (
@@ -203,6 +206,7 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
           ) : (
             <p className="mt-2.5 text-[13px] text-ink-soft">还没有绑定的外部渠道。</p>
           )}
+          </QueryFrame>
 
           {manager && pendingPairings.length ? (
             <div className="mt-2.5">

@@ -16,6 +16,7 @@ import { pushToast } from '../lib/toast';
 import { GuestForm, VisitForm, WifiForm } from '../components/guest-forms';
 import { InvitationForm } from '../components/guest-invitation-form';
 import { VisitCard } from '../components/visit-card';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -79,11 +80,11 @@ export function GuestsPage() {
       }
     >
       <Panel className="p-3">
-        {(view === 'visits' && visits.isPending) ||
-        (view === 'guests' && guests.isPending) ||
-        (view === 'wifi' && wifi.isPending) ? (
-          <ListSkeleton rows={3} />
-        ) : view === 'visits' ? (
+        <QueryFrame
+          query={view === 'visits' ? visits : view === 'guests' ? guests : wifi}
+          skeleton={<ListSkeleton rows={3} />}
+        >
+          {view === 'visits' ? (
           visitRows.length === 0 ? (
             <EmptyState emoji="🏡" title="还没有来访安排" hint="先在「访客名册」里记下人，再回来安排时间" />
           ) : (
@@ -204,10 +205,12 @@ export function GuestsPage() {
             ))}
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       <aside className="flex shrink-0 flex-col lg:w-[320px]">
         <Panel title={pendingMeals.length ? `待处理的点菜 ${pendingMeals.length}` : '访客点的菜'}>
+          <QueryFrame query={visits} skeleton={<ListSkeleton rows={2} />}>
           {pendingMeals.length === 0 ? (
             <p className="px-3.5 py-6 text-center text-[13px] text-ink-soft">
               访客从邀请页点的菜会出现在这儿，等你接受或婉拒。
@@ -257,6 +260,7 @@ export function GuestsPage() {
               </div>
             ))
           )}
+          </QueryFrame>
         </Panel>
       </aside>
 

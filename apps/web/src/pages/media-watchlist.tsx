@@ -23,6 +23,7 @@ import { MediaPollDialog } from '../components/media-poll-dialog';
 import { MetadataLinkDialog, SubscriptionDialog } from '../components/media-request-dialogs';
 import { MediaWatchlistCard } from '../components/media-watchlist-card';
 import { SoftLink } from '../components/soft-link';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, Dialog, EmptyState, Input, Page, Panel } from '../components/ui';
 
@@ -200,11 +201,8 @@ export function MediaWatchlistPage() {
       }
     >
       <Panel className="p-3">
-        {list.isPending ? (
-          <ListSkeleton rows={4} />
-        ) : list.isError ? (
-          <EmptyState emoji="🎬" title="片单读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : rows.length === 0 ? (
+        <QueryFrame query={list} skeleton={<ListSkeleton rows={4} />}>
+          {rows.length === 0 ? (
           <EmptyState
             emoji="🎬"
             title={search || filter !== 'all' ? '没有符合条件的' : '片单还是空的'}
@@ -249,6 +247,7 @@ export function MediaWatchlistPage() {
             ))}
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       {composing || editing ? (

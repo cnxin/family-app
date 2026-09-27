@@ -8,6 +8,7 @@ import {
   useUnmapPlaybackUser,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { QueryFailure, StaleNotice } from './query-state';
 import { ListSkeleton } from './skeleton';
 import { ResultLine } from './media-settings-parts';
 import { Button, EmptyState, Panel, selectClass } from './ui';
@@ -66,16 +67,36 @@ export function MediaPlaybackUsersPanel() {
       </Panel>
     );
   }
-  if (directories.isError || !directories.data?.length) {
+  if ((directories.isError && directories.data === undefined) || (members.isError && members.data === undefined)) {
     return (
       <Panel className="p-3">
-        <EmptyState emoji="👥" title="媒体用户读不出来" hint="先把 Plex / Emby 连上再回来" />
+        <QueryFailure
+          onRetry={() => {
+            void directories.refetch();
+            void members.refetch();
+          }}
+        />
+      </Panel>
+    );
+  }
+  if (!directories.data?.length) {
+    return (
+      <Panel className="p-3">
+        <EmptyState emoji="👥" title="还没有可以映射的账号" hint="先把 Plex / Emby 连上再回来" />
       </Panel>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {directories.isError || members.isError ? (
+        <StaleNotice
+          onRetry={() => {
+            if (directories.isError) void directories.refetch();
+            if (members.isError) void members.refetch();
+          }}
+        />
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         {result ? <ResultLine message={result.message} ok={result.ok} /> : <span />}
         <Button

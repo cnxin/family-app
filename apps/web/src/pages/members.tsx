@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../lib/auth';
 import { pushToast } from '../lib/toast';
 import { InviteForm, MemberEditor, memberRoleLabel } from '../components/member-editor';
+import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
@@ -93,11 +94,8 @@ export function MembersPage() {
       }
     >
       <Panel className="p-3">
-        {members.isPending ? (
-          <ListSkeleton rows={3} />
-        ) : members.isError ? (
-          <EmptyState emoji="👤" title="成员读不出来" hint="刷新一下，还不行就看看 API 服务" />
-        ) : visible.length === 0 ? (
+        <QueryFrame query={members} skeleton={<ListSkeleton rows={3} />}>
+          {visible.length === 0 ? (
           <EmptyState emoji="👤" title="没有这样的成员" hint="点右上角邀请一位家人进来" />
         ) : (
           <div className="flex flex-col gap-3">
@@ -179,10 +177,12 @@ export function MembersPage() {
             </dl>
           </div>
         )}
+        </QueryFrame>
       </Panel>
 
       <aside className="flex shrink-0 flex-col lg:w-[320px]">
         <Panel title="待接受的邀请" grow={false}>
+          <QueryFrame query={invitations} skeleton={<ListSkeleton rows={2} />}>
           {pendingInvites.length === 0 ? (
             <p className="px-3.5 py-6 text-center text-[13px] text-ink-soft">
               没有待接受的邀请。邀请码只在生成时显示一次。
@@ -211,6 +211,7 @@ export function MembersPage() {
               </div>
             ))
           )}
+          </QueryFrame>
         </Panel>
       </aside>
 
