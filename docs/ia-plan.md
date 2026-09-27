@@ -476,3 +476,43 @@ F5b 盘点之后的决定。半成品里没写明的分支以这里为准。
 | F8 收口 | ☐ | | |
 
 状态：☐ 未开始 · ◐ 进行中 · ☑ 完成 · ✗ 放弃（写原因）
+
+## 4. 后置项
+
+Phase F 收口时从各处备注收拢。下面只记还没做的；盘点之后已经接上的深链（点菜 / 厨房的 `date`+`meal`、财务 `kind`、小管家 `draft` 与 `settings=1`、消息 `view` 分段、投票 `create` / `pollId`、片单 `mediaId`）不重复列入。
+
+### F0 盘点表里仍未消费的深链
+
+来源：上文「盘点表（F0 填）」对应行。当时标成未读，后续任务也没有接上。
+
+| 页面 | 还没读的参数 |
+| --- | --- |
+| 菜谱 `/eat/recipes` | `?dish=`。⌘K 菜品结果会带上，页面不定位 |
+| 日历 `/schedule/calendar` | `date`、`eventId`。`view=month/week/agenda` 已经会读 |
+| 任务 `/schedule/tasks` | `taskId`、`date`。`create=1` 已在 F6 接上 |
+| 购物 `/house/shopping` | `date`。`create=1` 已在 F6 接上 |
+| 资产列表 `/house/assets` | 查询参数 `assetId`、`planId`。详情路径 `/:id` 已经有 |
+| 访客 `/house/guests` | `?visitId=`。公开邀请 `/guest/:token` 已支持 |
+| 出行 `/life/travel` | `?view=templates`。`planId` 会跳详情 |
+| 观影概览 `/life/media` | 不读 `mediaId`。片单页会打开编辑并清参 |
+| 回忆、知识库 | `memoryId`、`articleId` 只在当前查询结果里命中才开详情；已归档等未命中时不自动切筛选 |
+| 提醒来源 | 菜单 / 任务 / 日历走新版，其余来源仍 `legacyUrl` 打开旧版 |
+| 消息 | 旧目标名 `?view=settings`、`?view=deliveries` 没有别名。F7 接的是现用分段名（如 `channels`） |
+
+### timezone-audit 与 F4.6 的后置项
+
+来源：`docs/timezone-audit.md`「已拍板」第 3、6 条和备份调度一行；`docs/ia-plan.md` F4.6 验收备注；审计 T3。
+
+- 行程里的时刻按目的地当地时间，不套家庭时区。本轮不动。
+- 小管家夜间汇总、周报，以及工具上下文里的「今天」，仍按上海。审计 T3：agent 夜间 / 周报 / 工具切家庭时区，单独做，不夹进 F5。
+- 库存 `presentAllocation()` 的流水展示仍用旧的 `todayInShanghai()`。F4.6 的 d 只改了保质期和入库默认日。
+- 备份调度已经用 `households.timezone` 算下一次本地计划。夏令时里不存在或重复的那一小时没有专项验收，审计标为可后置。
+- Clock 本轮只注入了资产维护 / 订阅续费、库存列表与入库、财务默认月份和撤销记账日。访客和日历改了家庭日界函数，业务时间点仍直接读。邀请、提醒的生产逻辑、访客状态时间点、附件签名 TTL、agent / worker 定时这些 `new Date()` / `Date.now()` 留着。
+- 不被 F5 消费的其余日期显示，以及旧端其余默认日和完整测试迁移，归 T3，不在 Phase F。
+
+### 其他备注
+
+- **F3 `manage_integrations`**：模块开关的 PATCH 沿用这个 capability。它本来管的是家庭连接和配置，用来隐藏导航语义略偏，只影响显示。不为此新增 capability。来源：F3 节 2026-09-21 确认，进度表 F3 行。
+- **F5 访客邀请写入**：公开邀请页提交点菜只失效访客自己的查询客户端，到不了家里人已经打开的今天页。家里人靠 attention 1 分钟过期和窗口重新聚焦看见。要立刻看见，走将来的 `/events`，不在公开页上假装刷新了家里的屏幕。来源：F5 失效表「公开邀请页提交点菜请求」，以及 `docs/refactor-plan.md` 教训 25。
+- **今天页顶部统计卡**：F0 记过四项（今日待办、待买、当天待提醒、未读）。F5 去掉了未读，未读改由导航角标承接。剩下「今天要做 / 要买的 / 待提醒」三张卡去留，等 C2 试用后再定。本轮不删。
+- **小管家工具按模块裁剪**：不按模块开关裁掉 28 个工具。等 agent 重建时做。来源：上文 §2「不做的事」。
