@@ -360,6 +360,14 @@
     Phase F 把 24 个域从五场景气泡收成今天和家里：常驻只留天天会打开的，低频放在家里页的 shelf，
     来找人用 F5 的留意，找功能用 ⌘K。结构以 [docs/ia-plan.md](ia-plan.md) 为准。
 
+28. **开发服务器绿不等于生产构建能过，CI 要建真正上线的那个镜像。** F4.6a 起新端从
+    `@family/shared` 取纯日期函数，而 shared 只出 CommonJS；Vite 开发服务器靠预打包
+    能取到具名导出，`vite build` 的 rollup 却从 `__exportStar` 链上一个也拿不到，生产前端镜像
+    从那时起就建不出来。CI 的新端回归跑的是开发服务器，镜像构建只建 API，所以一直是绿的。
+    C2 准备时贴 `ci-pending-C1.diff` 之前本机先建一遍才发现。修法照 contracts：shared 加
+    `tsconfig.esm.json` 与 `module` 字段。以后新增被前端运行时 import 的工作区包，同样要出 ESM；
+    镜像构建 job 必须覆盖 NAS 实际部署的每一个 Dockerfile。
+
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 

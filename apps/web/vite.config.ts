@@ -10,7 +10,7 @@ const stripPrefix = process.env.FAMILY_API_STRIP_PREFIX === '1';
 
 export default defineConfig({
   plugins: [react(), tailwind()],
-  // workspace shared 输出 CommonJS；开发服务器需预打包成浏览器可加载的 ESM。
+  // shared 同时出 CJS（API 用）和 ESM（dist/esm，生产构建经 module 字段取用）；开发服务器照旧预打包。
   optimizeDeps: { include: ["@family/shared"] },
   server: {
     port: 5180,
