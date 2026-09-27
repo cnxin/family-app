@@ -56,6 +56,7 @@ export function ProfilePage() {
 
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   // 「经常掌勺」是会话里的值，改完让 auth 里的 session 也跟上（刷新即可，这里先乐观显示）
   const [cooking, setCooking] = useState(member?.prefersCooking ?? false);
@@ -224,8 +225,15 @@ export function ProfilePage() {
               <Button variant="outline" className="flex-1" onClick={() => setLogoutOpen(false)}>
                 再想想
               </Button>
-              <Button className="flex-1" onClick={signOut}>
-                退出登录
+              <Button
+                className="flex-1"
+                disabled={signingOut}
+                onClick={() => {
+                  setSigningOut(true);
+                  void signOut();
+                }}
+              >
+                {signingOut ? '正在退出…' : '退出登录'}
               </Button>
             </div>
           }
