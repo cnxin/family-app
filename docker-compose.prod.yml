@@ -187,6 +187,7 @@ services:
       RESTORE_WORK_ROOT: /restore-work
       BACKUP_WORKER_POLL_SECONDS: ${BACKUP_WORKER_POLL_SECONDS:-15}
       APP_GIT_COMMIT: ${APP_VERSION:-latest}
+      TZ: ${TZ:-Asia/Shanghai}
     secrets:
       - db_password
     volumes:
