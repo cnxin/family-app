@@ -1,6 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AuthSession, LoginBody } from '@family/contracts';
+
+export interface RedeemBody { invitationToken: string; loginName: string; password: string }
+export interface BootstrapBody {
+  bootstrapSecret: string;
+  householdName: string;
+  ownerName: string;
+  loginName: string;
+  password: string;
+  timezone?: string;
+}
 import { api, setAccessToken, setAuthHandlers } from './api';
 
 const STORAGE_KEY = 'family-app.session';
@@ -9,6 +19,10 @@ interface AuthValue {
   session: AuthSession | null;
   ready: boolean;
   signIn: (body: LoginBody) => Promise<void>;
+  /** 用邀请码建账号，成功后直接是登录状态。 */
+  redeemInvitation: (body: RedeemBody) => Promise<void>;
+  /** 首次初始化：建家庭和第一位管理员，成功后直接是登录状态。 */
+  bootstrap: (body: BootstrapBody) => Promise<void>;
   signOut: () => void;
   setHouseholdTimezone: (timezone: string) => void;
 }
@@ -103,6 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn: async (body) => {
         const next = await api<AuthSession>('/auth/login', { method: 'POST', auth: false, body });
         apply(next);
+      },
+      redeemInvitation: async (body) => {
+        apply(await api<AuthSession>('/auth/invitations/redeem', { method: 'POST', auth: false, body }));
+      },
+      bootstrap: async (body) => {
+        apply(await api<AuthSession>('/auth/setup/bootstrap', { method: 'POST', auth: false, body }));
       },
     }),
     [session, signOut, setHouseholdTimezone, apply],
