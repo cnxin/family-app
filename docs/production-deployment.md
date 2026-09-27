@@ -144,14 +144,10 @@ curl https://family.example.com/api/health/ready
 
 备份包含 PostgreSQL 自定义格式导出、上传附件压缩包、迁移与 Git 版本清单及 SHA-256 校验和，默认写入 `backups-production/`。数据库、JWT 和初始化密钥文件故意不进入业务备份，必须另存一份加密保护的副本。至少保留一个不在当前主机上的备份，并定期在空数据库中演练恢复。
 
-更新前先备份，再构建并启动固定版本：
+更新用 `./scripts/upgrade-prod.sh`：给当前镜像打回滚标签 → 备份 → `git pull --ff-only` → 构建 → 带超时启动（API 启动时执行迁移）→ 健康检查，任一步失败即停。需要 Docker Compose ≥ 2.20。第一次升级、回滚的三种情形和升级后确认见 [deploy-c2.md](deploy-c2.md)。
 
 ```bash
-./scripts/backup-prod.sh
-docker compose --env-file deploy/.env.production \
-  -f docker-compose.prod.yml build
-docker compose --env-file deploy/.env.production \
-  -f docker-compose.prod.yml up -d
+./scripts/upgrade-prod.sh
 ```
 
 不要使用 `docker compose down -v`；该命令会删除生产数据库、附件和 Caddy 证书卷。恢复时先创建独立空数据库并用 `pg_restore --list` 和校验和检查备份，禁止直接覆盖仍在运行的生产库。

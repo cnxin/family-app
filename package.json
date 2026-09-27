@@ -8,7 +8,7 @@
     "api:inventory:check": "node scripts/api-inventory.mjs --check",
     "backup:dev": "sh scripts/backup-dev.sh",
     "backup:prod": "sh scripts/backup-prod.sh",
-    "backup:worker:check": "sh -n scripts/backup-worker.sh && sh -n scripts/backup-worker-entrypoint.sh && sh -n scripts/restore-prod.sh",
+    "backup:worker:check": "sh -n scripts/backup-worker.sh && sh -n scripts/backup-worker-entrypoint.sh && sh -n scripts/restore-prod.sh && sh -n scripts/upgrade-prod.sh",
     "build:packages": "node scripts/build-packages.mjs",
     "demo": "corepack pnpm --filter api demo",
     "lint": "corepack pnpm --filter api lint && corepack pnpm --filter mobile lint && corepack pnpm --filter web lint",
