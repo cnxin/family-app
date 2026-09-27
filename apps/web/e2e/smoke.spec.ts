@@ -77,11 +77,11 @@ test('首页：卡片里没有元素撑破自己的边框', async ({ page }) => 
   expect(bad, '有元素画到了卡片外面').toEqual([]);
 });
 
-// 分段已经全部搬完，桥接页只剩「认不出来的分段」这一个分支了
-test('认不出来的分段给一句人话，不是白屏', async ({ page }) => {
+// 旧客户端的桥接页已删：认不出来的路径落到兜底，回今天页，不是白屏
+test('认不出来的分段回到今天页，不是白屏', async ({ page }) => {
   await page.goto('/house/nope');
-  await expect(page.getByRole('heading', { name: '没有这一页' })).toBeVisible();
-  await expect(page.locator('main').getByRole('link', { name: '回今天' })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('main')).toBeVisible();
 });
 
 test('旧的一层路径会跳到新位置', async ({ page }) => {

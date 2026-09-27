@@ -7,7 +7,7 @@
 ## 结构
 
 - `apps/api` — NestJS 10 + TypeORM + PostgreSQL 16。每个模块目前是单文件 `xxx.module.ts`（DTO + Service + Controller），实体集中在 `src/entities/index.ts`，schema 由 `src/database/migrations` 管理（不用 synchronize）
-- `apps/mobile` — Expo SDK 57 + expo-router + React Query；`lib/queries.ts` 是全部数据 hook，`lib/types.ts` 只做 `@family/contracts` 的 re-export（不要在里面新增手写类型）
+- `apps/web` — Vite + React 19 + TanStack Query + React Router + Tailwind 4；数据 hook 在 `src/lib/queries/`，类型一律从 `@family/contracts` 取。旧 Expo 客户端 `apps/mobile` 已在 H1（2026-09-28）删除
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
 - `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数。**依赖 `node:` 的公共函数不要放这里**（shared 要保持纯 TS，客户端将来可能直接吃它），放 `apps/api/src/common/`，比如 `fingerprint.ts`（幂等指纹，注意有规范化/非规范化两种算法，改算法会让落库指纹作废）
 - `packages/contracts` — 每个端点的 Zod 请求/响应契约 + `contractIndex`；API 在 `NODE_ENV=test` 下用 `ContractsInterceptor` 校验响应、`ContractsRequestInterceptor` 校验请求（只判 API 已经接受了的请求；`CONTRACT_REQUEST_CHECK=report` 可只记日志不拦截，用来一次性收集全部不一致）。**24 个域 275 个端点已全部覆盖（275/275）**，客户端 `lib/types.ts` 不再手写任何类型，只从这里 re-export。新增端点必须同时加契约，否则 `docs/api-inventory.md` 的"契约"列会出现空缺
@@ -16,7 +16,7 @@
 
 ## 约定
 
-- pnpm 用 `corepack pnpm` 调用（不在 PATH）。**不要用 `npx pnpm`**：它会拉最新版 pnpm，和 `packageManager` 钉的 10.34.5 对不上，`expo lint` 内部再 spawn 一次 pnpm 时直接 `ERR_PNPM_BAD_PM_VERSION`，mobile lint 会假红
+- pnpm 用 `corepack pnpm` 调用（不在 PATH）。**不要用 `npx pnpm`**：它会拉最新版 pnpm，和 `packageManager` 钉的 10.34.5 对不上，脚本里再 spawn 一次 pnpm 时会直接 `ERR_PNPM_BAD_PM_VERSION`
 - API 统一响应 `{data}` / `{error:{code,message}}`；请求日志不得包含请求体、姓名、IP、令牌
 - **UI 开发遵循 `.claude/skills/` 的 emilkowalski 技能包**：`apple-design`、`emil-design-eng`；enter 动画 ease-out、确认操作配 haptics、暗色模式必须支持
 - Git 提交信息用中文
@@ -32,21 +32,21 @@
 - 任何业务规则必须能在不起数据库的情况下被单测覆盖（放 `packages/core`，不放 React 组件）
 - 改 `packages/contracts` 或端点契约时，必须同步更新对应的 `apps/api/scripts/*.mjs` 黑盒脚本；给一个域补契约的标准动作是：写 schema → `defineEndpoint` 注册 → 跑 `test:api -- --only <域>` 看 `CONTRACT_VIOLATION` → 客户端 `types.ts` 改为 re-export
 - 新文件不超过 400 行（API 侧 ESLint `max-lines` 会告警）
-- 旧 Expo 端与 Hermes 在新实现跑通对应 Playwright / `agent*.mjs` 之前不删
+- 旧 Expo 端已在 H1 删除；Hermes 在自研 agent loop 跑通 `agent*.mjs` 之前不删
 
 ## 常用命令
 
 ```bash
-npx pnpm install                        # 安装工作区依赖
-npx pnpm api                            # API dev (localhost:3100，依赖本机 PostgreSQL 5433)
-npx pnpm seed                           # 灌种子数据
-API_URL=http://localhost:8088/api npx pnpm demo   # 再造一套演示数据（走 HTTP，幂等）
-npx pnpm mobile                         # Expo dev server
-npx pnpm typecheck                      # API + 客户端类型检查
-npx pnpm lint                           # API + 客户端 lint
-npx pnpm api:inventory                  # 重新生成 docs/api-inventory.md
-npx pnpm --filter api test:api          # 全套 API 黑盒测试（需要本机 PostgreSQL）
-npx pnpm --filter api test:api -- --only tasks,points   # 只跑指定脚本（--list 查看可用名）
-npx pnpm test:web                       # Playwright 双视口回归
+corepack pnpm install                        # 安装工作区依赖
+corepack pnpm api                            # API dev (localhost:3100，依赖本机 PostgreSQL 5433)
+corepack pnpm seed                           # 灌种子数据
+API_URL=http://localhost:8088/api corepack pnpm demo   # 再造一套演示数据（走 HTTP，幂等）
+corepack pnpm --filter web dev          # Web 客户端（:5180，/api 默认代理到 8088）
+corepack pnpm typecheck                      # API + 客户端类型检查
+corepack pnpm lint                           # API + 客户端 lint
+corepack pnpm api:inventory                  # 重新生成 docs/api-inventory.md
+corepack pnpm --filter api test:api          # 全套 API 黑盒测试（需要本机 PostgreSQL）
+corepack pnpm --filter api test:api -- --only tasks,points   # 只跑指定脚本（--list 查看可用名）
+corepack pnpm test:web                       # Playwright 双视口回归
 docker compose -f docker-compose.dev.yml up --build     # 本地 PostgreSQL + API
 ```

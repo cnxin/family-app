@@ -298,8 +298,8 @@ export const updateMaintenancePlanBody = createMaintenancePlanBody
   .extend({ isEnabled: z.boolean().optional() });
 
 export const completeMaintenanceBody = z.object({
-  performedAt: isoDateOrDateTime.optional(),
-  performedOn: dateOnly.optional(),
+  /** 完成日（家庭日期）。完成时刻由服务端记录，不再接受客户端传 performedAt。 */
+  performedOn: dateOnly,
   cost: money.nullish(),
   note: z.string().max(1000).nullish(),
   consumeInventory: z.boolean().optional(),

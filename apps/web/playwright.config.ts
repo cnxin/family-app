@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// 新客户端的浏览器回归。默认打本机 dev server（5180，/api 代理到 8088 那套）；
-// CI 和 `corepack pnpm test:web:next` 走 apps/api/scripts/run-web-tests.mjs --client web，
+// Web 客户端的浏览器回归。默认打本机 dev server（5180，/api 代理到 8088 那套）；
+// CI 和 `corepack pnpm test:web` 走 apps/api/scripts/run-web-tests.mjs，
 // 由它起隔离库 + 隔离 API，并把 FAMILY_WEB_URL / FAMILY_API_ORIGIN 指过来。
 const baseURL = process.env.FAMILY_WEB_URL ?? 'http://localhost:5180';
 const webPort = new URL(baseURL).port || '5180';

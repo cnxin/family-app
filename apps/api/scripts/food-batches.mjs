@@ -76,39 +76,37 @@ try {
   );
 
   console.log('1. 创建独立菜品和可追踪库存');
-  const mainDish = await request('/dishes', token, 'POST', {
-    name: `批次测试炖菜-${suffix}`,
-    category: '素菜',
-    difficulty: 1,
-    estMinutes: 20,
-    ingredients: [
-      {
-        name: `批次测试蔬菜-${suffix}`,
-        category: '蔬菜',
-        quantity: 5,
-        unit: '份',
-      },
-    ],
-    recipeSteps: [{ text: '按家庭口味完成' }],
-  });
-  const secondDish = await request('/dishes', token, 'POST', {
-    name: `批次测试汤-${suffix}`,
-    category: '汤',
-    difficulty: 2,
-    estMinutes: 15,
-    ingredients: [
-      {
-        name: `批次测试豆腐-${suffix}`,
-        category: '其他',
-        quantity: 1,
-        unit: '份',
-      },
-    ],
-    recipeSteps: [{ text: '煮至入味' }],
-  });
+  // 菜品接口只收基础资料；食材和步骤写进建菜时带出的「家庭默认」做法，服务端同步回菜品食材
+  async function createDishWithRecipe(fields, recipe) {
+    const created = await request('/dishes', token, 'POST', fields);
+    if (created.status !== 201) return { created, recipeStatus: 0 };
+    const detail = await request(`/recipes/${created.body.data.id}`, token);
+    const variant = detail.body.data.recipeVariants.find((one) => one.isDefault);
+    const written = await request(`/recipe-variants/${variant.id}`, token, 'PATCH', recipe);
+    return { created, recipeStatus: written.status };
+  }
+  const main = await createDishWithRecipe(
+    { name: `批次测试炖菜-${suffix}`, category: '素菜', difficulty: 1, estMinutes: 20 },
+    {
+      ingredients: [{ name: `批次测试蔬菜-${suffix}`, category: '蔬菜', quantity: 5, unit: '份' }],
+      steps: [{ text: '按家庭口味完成' }],
+    },
+  );
+  const second = await createDishWithRecipe(
+    { name: `批次测试汤-${suffix}`, category: '汤', difficulty: 2, estMinutes: 15 },
+    {
+      ingredients: [{ name: `批次测试豆腐-${suffix}`, category: '其他', quantity: 1, unit: '份' }],
+      steps: [{ text: '煮至入味' }],
+    },
+  );
+  const mainDish = main.created;
+  const secondDish = second.created;
   assert(
-    mainDish.status === 201 && secondDish.status === 201,
-    '可以创建用于批次和智能菜单的独立菜品',
+    mainDish.status === 201 &&
+      secondDish.status === 201 &&
+      main.recipeStatus === 200 &&
+      second.recipeStatus === 200,
+    '可以创建用于批次的独立菜品并写入默认做法',
   );
   const recipes = await request('/recipes', token);
   const mainRecipe = recipes.body.data.find(
@@ -413,114 +411,7 @@ try {
   }
   assert(updateRejected && deleteRejected, '数据库拒绝修改或删除不可变批次流水');
 
-  console.log('5. 智能菜单生成、家庭投票和明确采纳');
-  const planStartsOn = addDays(currentDate, 30);
-  const planKey = randomUUID();
-  const planRequests = await Promise.all([
-    request('/smart-menu-plans', token, 'POST', {
-      startsOn: planStartsOn,
-      idempotencyKey: planKey,
-    }),
-    request('/smart-menu-plans', token, 'POST', {
-      startsOn: planStartsOn,
-      idempotencyKey: planKey,
-    }),
-  ]);
-  const plan = planRequests[0].body.data;
-  const mainCandidate = plan.candidates.find(
-    (candidate) => candidate.dishId === mainDish.body.data.id,
-  );
-  const keyConflict = await request('/smart-menu-plans', token, 'POST', {
-    startsOn: addDays(planStartsOn, 7),
-    idempotencyKey: planKey,
-  });
-  assert(
-    planRequests.every((response) => response.status === 201) &&
-      new Set(planRequests.map((response) => response.body.data.id)).size === 1 &&
-      mainCandidate?.reasons.some((reason) => reason.includes('临期食材')) &&
-      mainCandidate.expiringIngredients.some(
-        (ingredient) => ingredient.ingredientId === mainIngredient.ingredientId,
-      ) &&
-      keyConflict.status === 409,
-    '智能菜单幂等生成并保存可解释评分与临期食材快照',
-  );
-
-  const pollRequests = await Promise.all([
-    request(`/smart-menu-plans/${plan.id}/poll`, token, 'POST', {}),
-    request(`/smart-menu-plans/${plan.id}/poll`, token, 'POST', {}),
-  ]);
-  const votingPlan = pollRequests[0].body.data;
-  assert(
-    pollRequests.every((response) => response.status === 201) &&
-      new Set(pollRequests.map((response) => response.body.data.pollId)).size === 1 &&
-      votingPlan.status === 'voting',
-    '菜单候选只能转成一个家庭投票',
-  );
-
-  const earlyAdopt = await request(
-    `/smart-menu-plans/${plan.id}/adopt`,
-    token,
-    'POST',
-    { idempotencyKey: randomUUID() },
-  );
-  const selectedCandidate = votingPlan.candidates.find(
-    (candidate) => candidate.dishId === mainDish.body.data.id,
-  );
-  const vote = await request(
-    `/polls/${votingPlan.pollId}/votes`,
-    token,
-    'POST',
-    { optionIds: [selectedCandidate.pollOptionId] },
-  );
-  assert(
-    earlyAdopt.status === 409 && vote.status === 201,
-    '投票结束前拒绝采纳，家庭成员可以明确选择候选菜',
-  );
-
-  const targetMenu = await request(
-    `/menus?date=${planStartsOn}&mealType=dinner`,
-    token,
-  );
-  await request(`/menus/${targetMenu.body.data.id}/items`, token, 'POST', {
-    items: [{ dishId: mainDish.body.data.id }],
-  });
-  await request(`/polls/${votingPlan.pollId}/close`, token, 'POST');
-
-  const adopts = await Promise.all([
-    request(`/smart-menu-plans/${plan.id}/adopt`, token, 'POST', {
-      idempotencyKey: randomUUID(),
-    }),
-    request(`/smart-menu-plans/${plan.id}/adopt`, token, 'POST', {
-      idempotencyKey: randomUUID(),
-    }),
-  ]);
-  const adopted = adopts[0].body.data;
-  const adoptedMenuItems = await db.query(
-    `SELECT COUNT(*)::int AS count
-     FROM menu_items item
-     JOIN menus menu ON menu.id = item."menuId"
-     WHERE menu."householdId" = $1 AND menu.date = $2
-       AND menu."mealType" = 'dinner' AND item."dishId" = $3
-       AND item.status <> 'rejected'`,
-    [householdId, planStartsOn, mainDish.body.data.id],
-  );
-  const repeatedAdopt = await request(
-    `/smart-menu-plans/${plan.id}/adopt`,
-    token,
-    'POST',
-    { idempotencyKey: randomUUID() },
-  );
-  assert(
-    adopts.every((response) => response.status === 201) &&
-      adopted.status === 'adopted' &&
-      adopted.adoptedCount === 1 &&
-      adoptedMenuItems.rows[0].count === 1 &&
-      repeatedAdopt.status === 201 &&
-      repeatedAdopt.body.data.adoptedCount === 1,
-    '投票关闭后明确采纳写入菜单，并发与重复采纳不会重复点菜',
-  );
-
-  console.log('\n食品批次与智能菜单测试全部通过');
+  console.log('\n食品批次测试全部通过');
 } finally {
   await db.query('DELETE FROM inventory_items WHERE id = $1', [ids.otherInventory]);
   await db.query('DELETE FROM households WHERE id = $1', [ids.otherHousehold]);

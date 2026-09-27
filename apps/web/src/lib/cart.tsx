@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Dish, MealType } from '@family/contracts';
 import { defaultMealType, todayISO } from './queries';
 
-/** 购物车语义照搬旧客户端 apps/mobile/src/lib/cart.tsx：
+/** 购物车语义照搬旧客户端（H1 已删除）的菜篮：
  *  选菜只进购物车，备注在点菜当下就写，最后一次性「提交菜单」。
  *  换日期或换餐次时车不清空——挑到一半改主意去晚餐，不该白挑。 */
 export interface CartEntry {

@@ -8,18 +8,13 @@ import { join, resolve } from 'node:path';
 import pg from 'pg';
 
 const { Client } = pg;
-// --client web 跑新客户端（apps/web，Vite）；默认仍是旧客户端（apps/mobile，Expo）。
-// 旧客户端下线后这个开关就没意义了，届时把 mobile 分支删掉。
+// 起隔离库 + 隔离 API，再跑 apps/web 的 Playwright；额外参数原样交给 Playwright（如文件名过滤）。
 const rawArgs = process.argv.slice(2);
-const clientFlag = rawArgs.indexOf('--client');
-const CLIENT = clientFlag === -1 ? 'mobile' : rawArgs[clientFlag + 1];
-if (CLIENT !== 'mobile' && CLIENT !== 'web') {
-  throw new Error(`--client 只能是 mobile 或 web，收到：${CLIENT}`);
+if (rawArgs.includes('--client')) {
+  throw new Error('旧客户端已在 H1 删除，只剩 apps/web，不再需要 --client');
 }
 const API_PORT = Number(process.env.E2E_API_PORT || 3198);
-const WEB_PORT = Number(
-  process.env.E2E_WEB_PORT || (CLIENT === 'web' ? 5181 : 8083),
-);
+const WEB_PORT = Number(process.env.E2E_WEB_PORT || 5181);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const WEB_URL = `http://localhost:${WEB_PORT}`;
 const TEST_DATABASE = `family_app_web_test_${randomUUID().replaceAll('-', '')}`;
@@ -30,11 +25,7 @@ const TEST_UPLOAD_DIR = join(
 const TEST_PASSWORD = `web-${randomUUID()}`;
 const apiRoot = process.cwd();
 const repoRoot = resolve(apiRoot, '../..');
-const rawPlaywrightArgs =
-  clientFlag === -1 ? rawArgs : [...rawArgs.slice(0, clientFlag), ...rawArgs.slice(clientFlag + 2)];
-const playwrightArgs = rawPlaywrightArgs[0] === '--'
-  ? rawPlaywrightArgs.slice(1)
-  : rawPlaywrightArgs;
+const playwrightArgs = rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs;
 
 if (!/^family_app_web_test_[a-f0-9]+$/.test(TEST_DATABASE)) {
   throw new Error('拒绝使用不安全的浏览器测试数据库名称');
@@ -50,7 +41,6 @@ const testEnvironment = {
   DB_PASSWORD_FILE: '',
   E2E_ACCOUNT_PASSWORD: TEST_PASSWORD,
   E2E_LOGIN_NAME: '爸爸',
-  EXPO_PUBLIC_API_URL: API_URL,
   FAMILY_API_URL: API_URL,
   FAMILY_WEB_URL: WEB_URL,
   INTEGRATION_SECRET_KEY: '',
@@ -82,7 +72,7 @@ const testEnvironment = {
 const browserEnvironment = {
   ...testEnvironment,
   NODE_ENV: 'development',
-  // 新客户端的 Vite dev server 直连隔离 API，要自己剥 /api 前缀；
+  // Vite dev server 直连隔离 API，要自己剥 /api 前缀；
   // E2E_ISOLATED 让 Playwright 不去复用「恰好在这个端口上」的别的 dev server
   FAMILY_API_ORIGIN: API_URL,
   FAMILY_API_STRIP_PREFIX: '1',
@@ -182,16 +172,14 @@ try {
   );
   api = startApi();
   await waitForApi();
-  if (CLIENT === 'web') {
-    // 新客户端的冒烟要有东西可渲染：走 HTTP 造一套演示数据（幂等，见 demo-data.mjs）
-    await runProcess(process.execPath, ['scripts/demo-data.mjs'], apiRoot, {
-      ...testEnvironment,
-      API_URL,
-      DEMO_PASSWORD: TEST_PASSWORD,
-    });
-  }
+  // 冒烟要有东西可渲染：走 HTTP 造一套演示数据（幂等，见 demo-data.mjs）
+  await runProcess(process.execPath, ['scripts/demo-data.mjs'], apiRoot, {
+    ...testEnvironment,
+    API_URL,
+    DEMO_PASSWORD: TEST_PASSWORD,
+  });
 
-  const browserCommand = ['pnpm', '--filter', CLIENT, 'test:web'];
+  const browserCommand = ['pnpm', '--filter', 'web', 'test:web'];
   if (playwrightArgs.length) browserCommand.push(...playwrightArgs);
   await runProcess('corepack', browserCommand, repoRoot, browserEnvironment);
 } finally {

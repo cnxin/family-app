@@ -455,48 +455,32 @@ try {
       ),
     '菜单历史记录操作人、状态、原因和时间',
   );
-  const notifications = await request('/menu-notifications', memberToken);
-  const notification = notifications.body.data.find(
-    (event) => event.menuItemId === secondItem.id,
-  );
   const genericNotifications = await request('/notifications', memberToken);
   const genericNotification = genericNotifications.body.data.find(
     (item) =>
       item.module === 'menu' &&
       item.type === 'menu_item_rejected' &&
-      item.sourceId === notification?.id,
+      item.body?.includes('临时调整菜单'),
   );
-  assert(
-    notification && genericNotification,
-    '点菜人同时通过兼容接口和通用通知收到划掉提醒',
-  );
+  assert(genericNotification, '点菜人通过站内通知收到划掉提醒（含原因）');
   const crossRead = await request(
-    `/menu-notifications/${notification.id}/read`,
+    `/notifications/${genericNotification.id}/read`,
     chefToken,
     'PATCH',
   );
   const markedRead = await request(
-    `/menu-notifications/${notification.id}/read`,
+    `/notifications/${genericNotification.id}/read`,
     memberToken,
     'PATCH',
   );
-  const notificationsAfterRead = await request(
-    '/menu-notifications',
-    memberToken,
-  );
   const genericAfterRead = await request('/notifications', memberToken);
   assert(
-    notifications.status === 200 &&
-      notification.reason === '临时调整菜单' &&
-      crossRead.status === 404 &&
+    crossRead.status === 404 &&
       markedRead.status === 200 &&
-      !notificationsAfterRead.body.data.some(
-        (event) => event.id === notification.id,
-      ) &&
       !genericAfterRead.body.data.some(
-        (item) => item.id === genericNotification.id,
+        (item) => item.id === genericNotification.id && !item.readAt,
       ),
-    '划掉提醒只对点菜人可见且兼容与通用已读状态同步',
+    '划掉提醒只对点菜人可见，本人标记已读后不再是未读',
   );
 
   const restoredForGenericRead = await request(
@@ -534,20 +518,13 @@ try {
         'PATCH',
       )
     : { status: 0 };
-  const legacyAfterGenericRead = await request(
-    '/menu-notifications',
-    memberToken,
-  );
   assert(
     restoredForGenericRead.status === 200 &&
       claimedForGenericRead.status === 200 &&
       secondRejectedItem.status === 200 &&
       secondGenericNotification &&
-      genericMarkedRead.status === 200 &&
-      !legacyAfterGenericRead.body.data.some(
-        (event) => event.id === secondGenericNotification.sourceId,
-      ),
-    '通用通知标记已读后兼容提醒同步为已读',
+      genericMarkedRead.status === 200,
+    '第二次划掉仍发站内通知，且可标记已读',
   );
 
   const restored = await request(
@@ -695,8 +672,11 @@ try {
 
   const dishBefore = dishes.find((dish) => dish.ingredients.length >= 1);
   const ingredientsBefore = comparableIngredients(dishBefore);
-  const failedDishUpdate = await request(
-    `/dishes/${dishBefore.id}`,
+  // 菜品接口不再收食材；原子回滚改在默认做法上验：带一个不存在的食材，整次修改都不生效
+  const recipeBefore = (await request(`/recipes/${dishBefore.id}`, memberToken)).body.data;
+  const defaultVariant = recipeBefore.recipeVariants.find((variant) => variant.isDefault);
+  const failedRecipeUpdate = await request(
+    `/recipe-variants/${defaultVariant.id}`,
     chefToken,
     'PATCH',
     {
@@ -711,15 +691,18 @@ try {
       ],
     },
   );
+  const variantAfter = (await request(`/recipes/${dishBefore.id}`, memberToken)).body.data
+    .recipeVariants.find((variant) => variant.id === defaultVariant.id);
   const dishAfter = (
     await request('/dishes', memberToken)
   ).body.data.find((dish) => dish.id === dishBefore.id);
-  assert(failedDishUpdate.status === 404, '无效食材会让菜谱更新失败');
+  assert(failedRecipeUpdate.status === 404, '无效食材会让做法更新失败');
   assert(
-    dishAfter.note === dishBefore.note &&
+    variantAfter.note === defaultVariant.note &&
+      dishAfter.note === dishBefore.note &&
       JSON.stringify(comparableIngredients(dishAfter)) ===
         JSON.stringify(ingredientsBefore),
-    '菜谱更新失败后正文和食材完整回滚',
+    '做法更新失败后备注和食材完整回滚',
   );
 
   const householdId = member.householdId;

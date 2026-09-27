@@ -278,7 +278,7 @@ async function runApiPhase() {
         (tool) => !settingsResponse.data.proposalToolsEnabled.includes(tool),
       )
     ) {
-      const updated = await request('/agent/settings', owner.accessToken, 'PUT', {
+      const updated = await request('/agent/settings', owner.accessToken, 'PATCH', {
         enabled: true,
         proposalToolsEnabled: requiredProposalTools,
         expectedVersion: settingsResponse.data.version,

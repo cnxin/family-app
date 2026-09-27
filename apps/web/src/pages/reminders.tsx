@@ -15,8 +15,8 @@ import {
   useReminders,
 } from '../lib/queries';
 import { useAuth } from '../lib/auth';
-import { legacyUrl } from '../lib/nav';
 import { pushToast } from '../lib/toast';
+import { MISSING_TARGET, toNewRoute } from '../lib/routes';
 import { QueryFrame } from '../components/query-state';
 import { Button, Dialog, EmptyState, Page, Panel, Segmented } from '../components/ui';
 import { ListSkeleton } from '../components/skeleton';
@@ -57,13 +57,17 @@ function ReminderRow({
   const source = reminder.source;
   const manageable = reminder.status === 'scheduled' && reminder.canManage;
 
-  // 已搬的域走新客户端，其余用契约给的 targetPath 回旧版——和日历那边同一套规矩
+  // 菜单、任务、日历直接去对应页；其余来源用契约给的 targetPath 经 toNewRoute 换成新路径
   const open = () => {
     if (!source) return;
     if (source.module === 'menu') navigate(`/eat/kitchen?date=${source.date ?? ''}`);
     else if (source.module === 'task') navigate('/schedule/tasks');
     else if (source.module === 'calendar') navigate('/schedule/calendar');
-    else window.open(legacyUrl(source.targetPath), '_blank', 'noopener');
+    else {
+      const route = toNewRoute(source.targetPath);
+      if (route) navigate(route);
+      else pushToast(MISSING_TARGET);
+    }
   };
 
   return (

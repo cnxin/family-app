@@ -33,7 +33,6 @@
 - **家庭出行**：安排非敏感行程与成员分工，使用分类打包清单和可复用模板，支持完成、跳过、重开、归档、日历和提醒。
 - **备份运维**：配置家庭备份计划、保留和容量阈值，由独立 worker 执行完整备份与隔离恢复演练。
 - **Web 移动端模拟**：在桌面浏览器中以移动端布局完成全部常用流程，无需键盘快捷键。
-- **原生基础**：Expo 项目仍可通过 Expo Go 在手机上运行。
 
 ## 下一阶段
 
@@ -45,8 +44,7 @@
 
 | 端 | 技术 |
 | --- | --- |
-| 客户端 | Expo SDK 57、React Native、Expo Router、React Query、Lucide |
-| Web | Expo Web / React Native Web，响应式移动与桌面布局 |
+| Web 客户端 | Vite、React 19、TanStack Query、React Router、Tailwind 4，响应式手机与桌面布局 |
 | API | NestJS 10、TypeORM、短时 JWT 与可撤销会话 |
 | 数据库 | PostgreSQL 16 |
 | 本地环境 | Docker Compose + pnpm monorepo |
@@ -62,14 +60,13 @@ npx pnpm install
 # 启动 PostgreSQL、种子任务和 API
 docker compose -f docker-compose.dev.yml up --build
 
-# 另开终端启动 Expo Web
-cd apps/mobile
-npx expo start --web --port 8082
+# 另开终端启动 Web 客户端（apps/web，Vite）；直连本机 3100 的 API 要自己剥 /api 前缀
+FAMILY_API_ORIGIN=http://localhost:3100 FAMILY_API_STRIP_PREFIX=1 corepack pnpm --filter web dev
 ```
 
 浏览器访问：
 
-- Web：<http://localhost:8082>
+- Web：<http://localhost:5180>
 - API：<http://localhost:3100>
 - API 存活检查：<http://localhost:3100/health/live>
 - API 就绪检查：<http://localhost:3100/health/ready>
@@ -99,7 +96,7 @@ API 安全相关配置：
 | `CORS_ORIGINS` | 开发环境自动允许本机和私有局域网 | 逗号分隔的 Web 客户端来源白名单 |
 | `TRUST_PROXY_HOPS` | `0` | 可信反向代理层数；生产 Caddy 部署为 `1` |
 
-原生 Expo 请求没有浏览器 `Origin`，不受 CORS 白名单影响。生产环境不配置 `CORS_ORIGINS` 时不会授权任何浏览器来源。
+生产环境不配置 `CORS_ORIGINS` 时不会授权任何浏览器来源（生产由 Caddy 同源反代，通常不需要跨域）。
 
 服务端只保存刷新令牌和成员邀请码的 SHA-256 哈希；退出、家庭角色变化或账号密码变化会立即撤销对应旧会话。启动续期和并发 `401` 共享单飞续期，并会跳过已被新令牌取代的过期响应。iOS/Android 使用 `SecureStore` 保存会话，当前 Web 演示使用 `localStorage`，因此 Web 端仍受同源脚本和 XSS 边界约束。正式外网部署必须使用 HTTPS、严格内容安全策略，并评估改为同站 `HttpOnly` Cookie 或可信反向代理会话。
 
@@ -129,16 +126,6 @@ docker compose -f docker-compose.dev.yml down
 
 家庭长期运行使用固定 API/Web 镜像、Docker secrets、Caddy 自动 HTTPS 和不暴露数据库端口的独立 Compose。配置与更新步骤见 [家庭长期运行部署](docs/production-deployment.md)。生产编排不会自动执行演示种子数据。
 
-## Expo Go
-
-API 运行后，在仓库根目录执行：
-
-```bash
-npx pnpm --filter mobile start
-```
-
-手机安装 Expo Go，并与开发电脑连接同一 Wi-Fi。客户端会优先使用 `EXPO_PUBLIC_API_URL`，否则从 Expo 的 `hostUri` 推导 API 地址。
-
 ## 验证
 
 ```bash
@@ -151,9 +138,6 @@ corepack pnpm lint
 # 端点清单是否与 Controller 一致（清单本身由 `corepack pnpm api:inventory` 生成，
 # 其中"契约"列依赖已构建的 packages/contracts：corepack pnpm build:packages）
 corepack pnpm api:inventory:check
-
-# Expo 依赖版本检查
-(cd apps/mobile && ./node_modules/.bin/expo install --check)
 
 # Compose 配置检查（仓库根目录）
 docker compose -f docker-compose.dev.yml config --quiet
@@ -185,7 +169,7 @@ corepack pnpm --filter api test:api -- --list
 corepack pnpm test:web
 ```
 
-Playwright 回归使用随机命名的临时 PostgreSQL 数据库和随机测试密码，不读取或修改当前开发账号。它直接使用本机安装的 Google Chrome，不会额外下载浏览器；失败时的截图、录像和 trace 保存在 `apps/mobile/test-results/`，该目录不会提交到 Git。测试进程无论成功或失败都会终止隔离 API 并删除临时数据库。
+Playwright 回归使用随机命名的临时 PostgreSQL 数据库和随机测试密码，不读取或修改当前开发账号。它直接使用本机安装的 Google Chrome，不会额外下载浏览器；失败时的截图、录像和 trace 保存在 `apps/web/test-results/`，该目录不会提交到 Git。测试进程无论成功或失败都会终止隔离 API 并删除临时数据库。
 
 以上检查在 `.github/workflows/ci.yml` 中对每个 PR 自动执行：静态检查 → API 黑盒测试（临时 PostgreSQL）→ Playwright 回归 → Docker 镜像构建。
 
@@ -197,7 +181,7 @@ API 在 `NODE_ENV=test`（或 `CONTRACT_CHECK=1`）下会按 `packages/contracts
 | --- | --- |
 | `Dockerfile` | API 开发镜像（`docker-compose.dev.yml` 使用） |
 | `Dockerfile.prod` | API 生产镜像 |
-| `Dockerfile.web` | Expo Web 静态站点镜像 |
+| `Dockerfile.web` | Web 客户端静态站点 + Caddy 镜像 |
 | `Dockerfile.backup-worker` | 备份 worker 镜像（`scripts/backup-worker.sh`） |
 | `docker-compose.yml` | 只起 PostgreSQL，配合本机 `npx pnpm api` |
 | `docker-compose.dev.yml` | 本地演示：PostgreSQL + 种子 + API + 备份 worker |
@@ -230,13 +214,13 @@ apps/
 │   ├── src/tasks/         # 家庭任务、周期实例和权限
 │   ├── src/upload/        # 通用图片与私有附件存储目录
 │   └── src/entities/      # 当前 TypeORM 实体
-└── mobile/
-    ├── e2e/               # Playwright 登录与双视口 Web 回归
+└── web/
+    ├── e2e/               # Playwright 双视口回归（隔离库，corepack pnpm test:web）
     ├── playwright.config.ts
     └── src/
-        ├── app/           # Expo Router 页面
-        ├── components/    # 应用外壳、日历、库存和通用 UI
-        └── lib/           # API、查询、会话、菜篮、日期和主题
+        ├── pages/         # 各页面（路由见 App.tsx）
+        ├── components/    # 外壳、导航、通用 UI 与各域组件
+        └── lib/           # API、查询、会话、导航分层、路由换算与主题
 
 docs/
 ├── family-platform-plan.md       # 家庭管理平台总体方案

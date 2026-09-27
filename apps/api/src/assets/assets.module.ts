@@ -314,13 +314,9 @@ class UpdateMaintenancePlanDto {
 }
 
 class CompleteMaintenanceDto {
-  @IsOptional()
+  /** 用户认定的完成日（家庭日期）；完成时刻 performedAt 由服务端记当前时间。 */
   @IsString()
-  performedAt?: string;
-
-  @IsOptional()
-  @IsString()
-  performedOn?: string;
+  performedOn: string;
 
   @IsOptional()
   @IsNumber()
@@ -1310,14 +1306,9 @@ export class AssetsService {
         throw new ConflictException('维护计划已停用或资产已停用');
       }
       const now = this.clock.now();
-      const performedAt = dto.performedAt ? new Date(dto.performedAt) : now;
-      if (!Number.isFinite(performedAt.getTime())) {
-        throw new BadRequestException('维护时间无效');
-      }
+      const performedAt = now;
       const timezone = (await manager.getRepository(Household).findOneByOrFail({ id: user.householdId })).timezone;
-      const performedOn = dto.performedOn
-        ? dateOnly(dto.performedOn, '维护日期')!
-        : householdToday(timezone, performedAt);
+      const performedOn = dateOnly(dto.performedOn, '维护日期')!;
       if (compare(performedOn, householdToday(timezone, now)) > 0) {
         throw new BadRequestException('维护日期不能晚于家庭今天');
       }

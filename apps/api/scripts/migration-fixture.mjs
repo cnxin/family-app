@@ -11,12 +11,13 @@ import { randomUUID } from 'node:crypto';
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
 const PASSWORD = process.env.SEED_ACCOUNT_PASSWORD || 'family1234';
 
-async function request(path, token, method = 'GET', body) {
+async function request(path, token, method = 'GET', body, extraHeaders = {}) {
   const response = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...extraHeaders,
     },
     body: body == null ? undefined : JSON.stringify(body),
   });
@@ -62,12 +63,19 @@ const plan = await request(`/assets/${asset.id}/maintenance-plans`, token, 'POST
   frequencyDays: 90,
   nextDueDate: '2026-01-20',
 });
-await request(`/maintenance-plans/${plan.id}/complete`, token, 'POST', {
-  performedAt: '2026-01-15T16:30:00.000Z',
-  note: '迁移演练',
-  consumeInventory: false,
-  idempotencyKey: `migration-fixture-${randomUUID()}`,
-});
+// 完成时刻由服务端取当前时间：测试环境用 x-test-clock 把「现在」冻在上海 00:30。
+await request(
+  `/maintenance-plans/${plan.id}/complete`,
+  token,
+  'POST',
+  {
+    performedOn: '2026-01-16',
+    note: '迁移演练',
+    consumeInventory: false,
+    idempotencyKey: `migration-fixture-${randomUUID()}`,
+  },
+  { 'x-test-clock': '2026-01-15T16:30:00.000Z' },
+);
 
 const details = await request(`/assets/${asset.id}`, token);
 assert(details.maintenanceRecords.some((record) => record.performedOn === '2026-01-16'), '夹具维护记录按家庭日期落库');

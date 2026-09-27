@@ -18,7 +18,6 @@ export * from './notifications';
 export * from './activities';
 export * from './auth';
 export * from './finance';
-export * from './smart-menu';
 export * from './upload';
 export * from './guests';
 export * from './travel';
@@ -35,7 +34,6 @@ import { buildContractIndex } from './registry';
 import { activities } from './activities';
 import { auth } from './auth';
 import { finance } from './finance';
-import { smartMenu } from './smart-menu';
 import { upload } from './upload';
 import { guests } from './guests';
 import { travel } from './travel';
@@ -75,7 +73,6 @@ export const contracts = {
   activities,
   auth,
   finance,
-  smartMenu,
   upload,
   guests,
   travel,

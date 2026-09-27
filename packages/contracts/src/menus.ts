@@ -77,7 +77,7 @@ export type DishRecipeSnapshot = z.infer<typeof dishRecipeSnapshotSchema>;
 /**
  * 菜单项里嵌套的菜品。`/menus` 系列用 `findOne({ relations: { items: true } })` 加载，
  * 显式 relations 会让 eager 递归在 `items.dish` 这一层停住，`dish.ingredients` 不带出；
- * 而 `/menus/:id/events`、`/menu-notifications` 不指定 relations，eager 全开，会带出。
+ * 而 `/menus/:id/events` 不指定 relations，eager 全开，会带出。
  * 所以这里把 ingredients 设为可选——真正需要食材的场景应看 `recipeSnapshot`。
  */
 export const menuDishSchema = dishSchema.extend({
@@ -243,18 +243,5 @@ export const menus = {
     summary: '本餐最近 30 条操作历史',
     params: idParams,
     response: z.array(menuEventSchema),
-  }),
-  notifications: defineEndpoint({
-    method: 'GET',
-    path: '/menu-notifications',
-    summary: '发给我的未读点菜提醒（旧接口，站内通知已统一到 /notifications）',
-    response: z.array(menuEventSchema),
-  }),
-  markNotificationRead: defineEndpoint({
-    method: 'PATCH',
-    path: '/menu-notifications/:id/read',
-    summary: '标记点菜提醒已读（同步站内通知）',
-    params: idParams,
-    response: menuEventSchema,
   }),
 };

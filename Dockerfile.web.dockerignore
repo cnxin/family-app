@@ -6,17 +6,12 @@ node_modules
 **/node_modules
 dist
 **/dist
-.expo
-**/.expo
 uploads
 **/uploads
 backups
 backups-production
 restore-preview
 apps/api
-apps/mobile/e2e/.auth
-apps/mobile/playwright-report
-apps/mobile/test-results
 deploy/.env.production
 deploy/secrets
 *.log

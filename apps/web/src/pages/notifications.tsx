@@ -9,8 +9,7 @@ import {
   useNotificationDeliveries,
   useNotifications,
 } from '../lib/queries';
-import { legacyUrl } from '../lib/nav';
-import { toNewRoute } from '../lib/routes';
+import { MISSING_TARGET, toNewRoute } from '../lib/routes';
 import { MODULE_ICON, MODULE_LABEL } from '../lib/notification-meta';
 import { pushToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
@@ -45,7 +44,7 @@ function NotificationRow({ item, onRead }: { item: AppNotification; onRead: () =
     if (unread) onRead();
     const route = toNewRoute(item.targetPath);
     if (route) navigate(route);
-    else window.open(legacyUrl(item.targetPath), '_blank', 'noopener');
+    else pushToast(MISSING_TARGET);
   };
 
   return (

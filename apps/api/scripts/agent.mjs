@@ -121,7 +121,7 @@ try {
 
   console.log('1. 设置权限、对话和重复发送幂等');
   const settings = await request('/agent/settings', owner.accessToken);
-  const forbiddenSettings = await request('/agent/settings', member.accessToken, 'PUT', {
+  const forbiddenSettings = await request('/agent/settings', member.accessToken, 'PATCH', {
     enabled: true,
     expectedVersion: settings.data.version,
   });
@@ -427,7 +427,7 @@ try {
   );
 
   const currentSettings = await request('/agent/settings', owner.accessToken);
-  const hermesSettings = await request('/agent/settings', owner.accessToken, 'PUT', {
+  const hermesSettings = await request('/agent/settings', owner.accessToken, 'PATCH', {
     runtimeKind: 'hermes',
     expectedVersion: currentSettings.data.version,
   });
@@ -448,7 +448,7 @@ try {
     fallbackConversation.data.id,
     fallbackRun.data.id,
   );
-  const restoredSettings = await request('/agent/settings', owner.accessToken, 'PUT', {
+  const restoredSettings = await request('/agent/settings', owner.accessToken, 'PATCH', {
     runtimeKind: 'fake',
     expectedVersion: hermesSettings.data.version,
   });
@@ -778,7 +778,7 @@ try {
   const disabledProposalTools = await request(
     '/agent/settings',
     owner.accessToken,
-    'PUT',
+    'PATCH',
     {
       proposalToolsEnabled: proposalSettings.data.proposalToolsEnabled.filter(
         (tool) => tool !== 'propose_task',
@@ -796,7 +796,7 @@ try {
     `/agent/conversations/${proposalConversation.data.id}`,
     member.accessToken,
   );
-  await request('/agent/settings', owner.accessToken, 'PUT', {
+  await request('/agent/settings', owner.accessToken, 'PATCH', {
     proposalToolsEnabled: proposalTools,
     expectedVersion: disabledProposalTools.data.version,
   });

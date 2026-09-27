@@ -529,14 +529,14 @@ try {
   const key = `assets-regression-${randomUUID()}`;
   const completions = await Promise.all([
     request(`/maintenance-plans/${plan.data.id}/complete`, token, 'POST', {
-      performedAt: performedAt.toISOString(),
+      performedOn: performedDate,
       cost: 88.5,
       note: '已更换滤芯',
       consumeInventory: true,
       idempotencyKey: key,
     }),
     request(`/maintenance-plans/${plan.data.id}/complete`, token, 'POST', {
-      performedAt: performedAt.toISOString(),
+      performedOn: performedDate,
       cost: 88.5,
       note: '已更换滤芯',
       consumeInventory: true,
@@ -553,6 +553,14 @@ try {
       completions.every((response) => response.data.transactions.length === 1) &&
       Number(completions[0].data.transactions[0].quantityAfter) === 0,
     '并发完成维护只追加一条记录、整组扣库一次并推进周期',
+  );
+  const legacyOnlyPerformedAt = await request(`/maintenance-plans/${plan.data.id}/complete`, token, 'POST', {
+    performedAt: performedAt.toISOString(),
+    idempotencyKey: `assets-legacy-${randomUUID()}`,
+  });
+  assert(
+    legacyOnlyPerformedAt.status === 400,
+    '旧客户端只传 performedAt 的完成维护请求已不再接受，必须带 performedOn',
   );
   const batchAfterMaintenance = await request(
     `/inventory-batches?inventoryItemId=${filterInventory.data.id}`,
@@ -609,7 +617,7 @@ try {
     `/maintenance-plans/${secondPlan.data.id}/complete`,
     token,
     'POST',
-    { performedAt: performedAt.toISOString(), idempotencyKey: key },
+    { performedOn: performedDate, idempotencyKey: key },
   );
   assert(reusedKey.status === 409, '同一家庭的幂等键不能用于不同维护计划');
 
@@ -656,7 +664,7 @@ try {
     token,
     'POST',
     {
-      performedAt: performedAt.toISOString(),
+      performedOn: performedDate,
       consumeInventory: false,
       idempotencyKey: `maintenance-skip-${randomUUID()}`,
     },
@@ -711,7 +719,7 @@ try {
     `/maintenance-plans/${secondPlan.data.id}/complete`,
     token,
     'POST',
-    { idempotencyKey: `disabled-${randomUUID()}` },
+    { performedOn: performedDate, idempotencyKey: `disabled-${randomUUID()}` },
   );
   const retired = await request(`/assets/${asset.data.id}`, token, 'PATCH', {
     status: 'retired',

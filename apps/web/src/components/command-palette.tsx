@@ -3,7 +3,7 @@ import { useSoftNavigate } from './soft-link';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Dish } from '@family/contracts';
 import { ACTIONS } from '../lib/actions';
-import { coreSegments, shelfSegments, settingsSegments, legacyUrl } from '../lib/nav';
+import { coreSegments, shelfSegments, settingsSegments } from '../lib/nav';
 import { useAuth } from '../lib/auth';
 import { prefetchSearchSources } from '../lib/prefetch';
 import { useAgentStatus } from '../lib/queries';
@@ -90,9 +90,7 @@ export function CommandPalette() {
       label: segment.label,
       hint: segment.tier === 'settings' ? '设置' : '页面',
       kind: 'page',
-      go: () => segment.ready && segment.path
-        ? navigate(segment.path)
-        : window.open(legacyUrl(segment.legacy ?? '/'), '_blank', 'noopener'),
+      go: () => navigate(segment.path ?? '/'),
     }));
     const dishEntries: Entry[] = dishes.slice(0, 200).map((dish) => ({
       id: `dish-${dish.id}`,

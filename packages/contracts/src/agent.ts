@@ -148,11 +148,6 @@ export const AGENT_CHANNEL_PAIRING_STATUSES = ['pending', 'used', 'expired', 're
 export const agentChannelPairingStatus = z.enum(AGENT_CHANNEL_PAIRING_STATUSES);
 export type AgentChannelPairingStatus = z.infer<typeof agentChannelPairingStatus>;
 
-export const AGENT_PAGE_ENTITY_TYPES = ['dish', 'asset', 'knowledge', 'travel', 'poll'] as const;
-export const agentPageEntityType = z.enum(AGENT_PAGE_ENTITY_TYPES);
-export type AgentPageEntityType = z.infer<typeof agentPageEntityType>;
-/** 客户端发起会话消息时可带的页面上下文。 */
-export type AgentPageContext = z.infer<typeof agentPageContextInput>;
 
 export const AGENT_READ_TOOLS = [
   'get_today_summary',
@@ -544,16 +539,6 @@ export const agentChannelRunSchema = agentRunSchema.extend({
 
 // ---- 请求 -------------------------------------------------------------------
 
-export const agentPageContextInput = z.object({
-  route: z.string().max(120),
-  // API 对未知 entityType（recipe / task / menu / media…）是**静默忽略**而不是 400，
-  // 好让老客户端发新页面类型时不至于整条消息失败。`.catch(undefined)` 把这个行为写进
-  // 契约本身：类型上客户端仍只该发这五种，运行时收到别的就当没传。
-  entityType: agentPageEntityType.optional().catch(undefined),
-  entityId: uuid.optional(),
-  selectedDate: z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/).optional(),
-});
-
 export const updateAgentSettingsBody = z.object({
   enabled: z.boolean().optional(),
   runtimeKind: agentRuntimeKind.optional(),
@@ -614,7 +599,6 @@ export const createAgentConversationBody = z.object({
 export const sendAgentMessageBody = z.object({
   message: z.string().min(1).max(2000),
   clientRequestId,
-  pageContext: agentPageContextInput.optional(),
 });
 export const retryAgentRunBody = z.object({ clientRequestId });
 
@@ -667,17 +651,10 @@ export const agent = {
     summary: '家庭级智能体设置',
     response: agentSettingsSchema,
   }),
-  updateSettings: defineEndpoint({
-    method: 'PUT',
-    path: '/agent/settings',
-    summary: '修改设置（乐观锁；管理员）',
-    body: updateAgentSettingsBody,
-    response: agentSettingsSchema,
-  }),
   patchSettings: defineEndpoint({
     method: 'PATCH',
     path: '/agent/settings',
-    summary: '同 PUT，走同一个处理函数',
+    summary: '修改设置（乐观锁；管理员）',
     body: updateAgentSettingsBody,
     response: agentSettingsSchema,
   }),

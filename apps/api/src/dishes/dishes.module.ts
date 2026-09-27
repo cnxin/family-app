@@ -12,19 +12,14 @@ import {
   Post,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
-import { Type } from 'class-transformer';
 import {
-  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   Max,
-  MaxLength,
   Min,
-  ValidateNested,
 } from 'class-validator';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
@@ -32,56 +27,9 @@ import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import {
   Dish,
   DishCategory,
-  DishIngredient,
   DishRecipeVariant,
-  DishRecipeVariantIngredient,
-  DishRecipeVariantLink,
-  DishRecipeVariantStep,
   Ingredient,
 } from '../entities';
-
-class DishIngredientDto {
-  @IsOptional()
-  @IsString()
-  ingredientId?: string;
-
-  // 传 name 时按名称 find-or-create 食材
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @IsOptional()
-  @IsString()
-  category?: string;
-
-  @IsNumber()
-  quantity: number;
-
-  @IsString()
-  unit: string;
-}
-
-class RecipeStepDto {
-  @IsString()
-  @MaxLength(2000)
-  text: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  imageUrl?: string;
-}
-
-class ReferenceLinkDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  title?: string;
-
-  @IsString()
-  @MaxLength(1000)
-  url: string;
-}
 
 class UpsertDishDto {
   @IsOptional()
@@ -111,26 +59,8 @@ class UpsertDishDto {
   photoUrl?: string;
 
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => RecipeStepDto)
-  recipeSteps?: RecipeStepDto[];
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ReferenceLinkDto)
-  referenceLinks?: ReferenceLinkDto[];
-
-  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DishIngredientDto)
-  ingredients?: DishIngredientDto[];
 }
 
 @Injectable()
@@ -153,55 +83,6 @@ export class DishesService {
       where: { householdId },
       order: { category: 'ASC', name: 'ASC' },
     });
-  }
-
-  private async resolveIngredient(
-    dto: DishIngredientDto,
-    householdId: string,
-    manager: EntityManager,
-  ): Promise<Ingredient> {
-    const ingredients = manager.getRepository(Ingredient);
-    if (dto.ingredientId) {
-      const found = await ingredients.findOneBy({
-        id: dto.ingredientId,
-        householdId,
-      });
-      if (!found) throw new NotFoundException(`食材不存在: ${dto.ingredientId}`);
-      return found;
-    }
-    if (!dto.name) throw new NotFoundException('食材需要 ingredientId 或 name');
-    const name = dto.name.trim();
-    const existing = await ingredients.findOneBy({ householdId, name });
-    if (existing) return existing;
-    return ingredients.save(
-      ingredients.create({
-        householdId,
-        name,
-        category: (dto.category as Ingredient['category']) || '其他',
-        defaultUnit: dto.unit,
-      }),
-    );
-  }
-
-  private async buildIngredients(
-    dish: Dish,
-    items: DishIngredientDto[],
-    householdId: string,
-    manager: EntityManager,
-  ) {
-    const dishIngredients = manager.getRepository(DishIngredient);
-    await dishIngredients.delete({ dishId: dish.id });
-    for (const item of items) {
-      const ingredient = await this.resolveIngredient(item, householdId, manager);
-      await dishIngredients.save(
-        dishIngredients.create({
-          dishId: dish.id,
-          ingredientId: ingredient.id,
-          quantity: String(item.quantity),
-          unit: item.unit,
-        }),
-      );
-    }
   }
 
   private async syncDefaultRecipe(
@@ -234,81 +115,21 @@ export class DishesService {
     if (dto.estMinutes !== undefined || isNew) {
       variant.estMinutes = dish.estMinutes;
     }
-    variant = await variants.save(variant);
-
-    if (dto.recipeSteps !== undefined || isNew) {
-      const steps = manager.getRepository(DishRecipeVariantStep);
-      await steps.delete({ variantId: variant.id });
-      await steps.save(
-        (dish.recipeSteps ?? [])
-          .map((step, index) => ({ step, index }))
-          .filter(({ step }) => step.text.trim())
-          .map(({ step, index }) =>
-            steps.create({
-              variantId: variant.id,
-              position: index + 1,
-              text: step.text.trim(),
-              imageUrl: step.imageUrl?.trim() || null,
-            }),
-          ),
-      );
-    }
-
-    if (dto.referenceLinks !== undefined || isNew) {
-      const links = manager.getRepository(DishRecipeVariantLink);
-      await links.delete({ variantId: variant.id });
-      await links.save(
-        (dish.referenceLinks ?? [])
-          .map((link, index) => ({ link, index }))
-          .filter(({ link }) => link.url.trim())
-          .map(({ link, index }) =>
-            links.create({
-              variantId: variant.id,
-              position: index + 1,
-              title: link.title?.trim() || null,
-              url: link.url.trim(),
-            }),
-          ),
-      );
-    }
-
-    if (dto.ingredients !== undefined || isNew) {
-      const recipeIngredients = manager.getRepository(
-        DishRecipeVariantIngredient,
-      );
-      const legacyIngredients = await manager
-        .getRepository(DishIngredient)
-        .findBy({ dishId: dish.id });
-      await recipeIngredients.delete({ variantId: variant.id });
-      await recipeIngredients.save(
-        legacyIngredients.map((item) =>
-          recipeIngredients.create({
-            variantId: variant!.id,
-            ingredientId: item.ingredientId,
-            quantity: item.quantity,
-            unit: item.unit,
-          }),
-        ),
-      );
-    }
+    await variants.save(variant);
   }
 
   async create(dto: UpsertDishDto, householdId: string, userId: string) {
     if (!dto.name) throw new NotFoundException('菜名必填');
     return this.dataSource.transaction(async (manager) => {
       const dishes = manager.getRepository(Dish);
-      const { ingredients, ...fields } = dto;
       const dish = await dishes.save(
         dishes.create({
-          ...fields,
+          ...dto,
           householdId,
           name: dto.name!,
           createdBy: userId,
         }),
       );
-      if (ingredients?.length) {
-        await this.buildIngredients(dish, ingredients, householdId, manager);
-      }
       await this.syncDefaultRecipe(dish, dto, householdId, manager);
       const saved = await dishes.findOneBy({ id: dish.id, householdId });
       if (!saved) throw new NotFoundException('菜品不存在');
@@ -332,12 +153,8 @@ export class DishesService {
         .setLock('pessimistic_write')
         .getOne();
       if (!dish) throw new NotFoundException('菜品不存在');
-      const { ingredients, ...fields } = dto;
-      Object.assign(dish, fields);
+      Object.assign(dish, dto);
       await dishes.save(dish);
-      if (ingredients) {
-        await this.buildIngredients(dish, ingredients, householdId, manager);
-      }
       await this.syncDefaultRecipe(dish, dto, householdId, manager);
       const saved = await dishes.findOneBy({ id, householdId });
       if (!saved) throw new NotFoundException('菜品不存在');
@@ -380,13 +197,7 @@ export class DishesController {
     @Body() dto: UpsertDishDto,
     @CurrentUser() user: JwtUser,
   ) {
-    const changesDefaultRecipe = [
-      'note',
-      'estMinutes',
-      'recipeSteps',
-      'referenceLinks',
-      'ingredients',
-    ].some((field) => Object.prototype.hasOwnProperty.call(dto, field));
+    const changesDefaultRecipe = ['note', 'estMinutes'].some((field) => Object.prototype.hasOwnProperty.call(dto, field));
     if (
       changesDefaultRecipe &&
       user.role !== 'owner' &&

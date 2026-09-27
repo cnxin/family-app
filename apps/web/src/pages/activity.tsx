@@ -7,7 +7,6 @@ import {
   useActivities,
 } from '../lib/queries';
 import { toNewRoute } from '../lib/routes';
-import { legacyUrl } from '../lib/nav';
 import { SoftLink } from '../components/soft-link';
 import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
@@ -31,10 +30,8 @@ function groupByDay(rows: HouseholdActivity[]) {
 }
 
 function Row({ activity }: { activity: HouseholdActivity }) {
-  // 后端写的 targetPath 还是旧的一层路径；搬过来的分段用 toNewRoute 转，
-  // 没搬的就给一个旧版链接，别留个点不动的行
+  // 后端写的 targetPath 还是旧的一层路径，用 toNewRoute 换成新路径；换不出来就只显示、不给链接
   const target = toNewRoute(activity.targetPath);
-  const legacy = !target && activity.targetPath ? legacyUrl(activity.targetPath) : null;
 
   const body = (
     <>
@@ -60,13 +57,6 @@ function Row({ activity }: { activity: HouseholdActivity }) {
       <SoftLink to={target} className={`${className} hover:bg-muted`}>
         {body}
       </SoftLink>
-    );
-  }
-  if (legacy) {
-    return (
-      <a href={legacy} target="_blank" rel="noopener noreferrer" className={`${className} hover:bg-muted`}>
-        {body}
-      </a>
     );
   }
   return <div className={className}>{body}</div>;
