@@ -368,6 +368,15 @@
     `tsconfig.esm.json` 与 `module` 字段。以后新增被前端运行时 import 的工作区包，同样要出 ESM；
     镜像构建 job 必须覆盖 NAS 实际部署的每一个 Dockerfile。
 
+29. **迁移演练必须在有数据的库上跑。** F4.6b 的 `performedOn` 迁移在隔离库上 up → down → up 通过，
+    CI 也全绿，但那张表是空的。C2 准备时用旧 main 起一套生产栈、造一条维护记录再升级，
+    回填 UPDATE 当场被 `TR_maintenance_records_immutable`（记录不可修改）拦下，API 起不来；
+    NAS 上只要有一条维护记录就会一样。修法：迁移在同一事务里临时关触发器、回填、立即恢复。
+    演练改为先经 API 灌夹具（`migration-fixture.mjs`：菜单、来访、资产与计划、维护记录），
+    所有迁移演练都在这之后跑；另加 `check-upgrade-migration.ts`，从 NAS 当前的生产基线回退再升级，
+    核对行数和按家庭时区回填的日期，并断言夹具表非空——空库演练不算数。触发器、CHECK、NOT NULL
+    这类约束只有表里有行才会撞上。
+
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
 
