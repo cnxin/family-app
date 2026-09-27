@@ -119,11 +119,8 @@ export function AssetDetailPage() {
                 >
                   <p className="text-[13px] font-medium">{plan?.title ?? '维护完成'}</p>
                   <p className="mt-0.5 text-[12px] text-ink-soft">
-                    {new Intl.DateTimeFormat('zh-CN', {
-                      year: 'numeric',
-                      month: 'numeric',
-                      day: 'numeric',
-                    }).format(new Date(record.performedAt))}
+                    {/* performedOn 是用户选的完成日；performedAt 是服务端记下的时刻，补记往日时会是今天 */}
+                    {assetDateLabel(record.performedOn)}
                     {' · '}
                     {record.performedBy.name}
                     {record.cost ? ` · ¥${Number(record.cost)}` : ''}
