@@ -88,3 +88,44 @@ test('片库（mock）：海报能出来，加片单之后按钮变成已在片�
   await card.getByRole('button', { name: '把e2e 测试片加进片单' }).click();
   await expect(card.getByRole('link', { name: '已在片单' })).toBeVisible();
 });
+
+test('片库（mock）：管理员点「同步」会调同步接口，并报出扫到几部、对上几部', async ({ page }) => {
+  let syncBody: unknown = null;
+  await page.route('**/api/media/library/sync', async (route) => {
+    syncBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      json: {
+        data: {
+          results: [
+            {
+              connectorKey: 'plex',
+              name: '客厅 Plex',
+              provider: 'plex',
+              itemCount: 12,
+              matchedCount: 3,
+              syncedAt: new Date().toISOString(),
+            },
+            {
+              connectorKey: 'emby',
+              name: '书房 Emby',
+              provider: 'emby',
+              itemCount: 5,
+              matchedCount: 1,
+              syncedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  await page.goto('/life/media/library');
+  await expect(page.getByRole('heading', { name: '我的媒体库', level: 1 })).toBeVisible();
+  const synced = page.waitForRequest('**/api/media/library/sync');
+  await page.getByRole('button', { name: '同步', exact: true }).click();
+  expect((await synced).method()).toBe('POST');
+  expect(syncBody).toEqual({});
+  await expect(page.getByRole('alert').filter({ hasText: '同步好了 17 部，其中 4 部对上了片单' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
+});
