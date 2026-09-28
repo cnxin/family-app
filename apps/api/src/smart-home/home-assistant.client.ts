@@ -1,5 +1,5 @@
 import type { SmartHomeEntityState } from '@family/contracts';
-import { homeAssistantTimeoutMs } from './home-assistant.config';
+import { homeAssistantCommandTimeoutMs, homeAssistantTimeoutMs } from './home-assistant.config';
 
 /** 一次调用要用的地址和长期访问令牌（已解密）。 */
 export interface HomeAssistantTarget {
@@ -24,14 +24,23 @@ export class HomeAssistantError extends Error {
   }
 }
 
-async function request(target: HomeAssistantTarget, path: string) {
+async function request(
+  target: HomeAssistantTarget,
+  path: string,
+  { method = 'GET', body, timeoutMs = homeAssistantTimeoutMs() }: { method?: string; body?: unknown; timeoutMs?: number } = {},
+) {
   const controller = new AbortController();
-  const timeoutMs = homeAssistantTimeoutMs();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
     response = await fetch(new URL(path, `${target.baseUrl}/`), {
-      headers: { Authorization: `Bearer ${target.token}`, Accept: 'application/json' },
+      method,
+      headers: {
+        Authorization: `Bearer ${target.token}`,
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
       // 令牌不跟着跳转走到别的主机
       redirect: 'error',
       signal: controller.signal,
@@ -77,6 +86,24 @@ export async function fetchHomeAssistantStates(target: HomeAssistantTarget): Pro
       typeof (entry as HomeAssistantRawState).entity_id === 'string' &&
       typeof (entry as HomeAssistantRawState).state === 'string',
   );
+}
+
+/**
+ * 调 HA 的 service（POST /api/services/<domain>/<service>）。HA 等 service 执行完才回，返回这次变了的实体。
+ * 超时不代表没执行：云端设备可能已经收到了，调用方要按「不确定」处理。
+ */
+export async function callHomeAssistantService(
+  target: HomeAssistantTarget,
+  domain: string,
+  service: string,
+  data: Record<string, unknown>,
+) {
+  const body = await request(target, `api/services/${domain}/${service}`, {
+    method: 'POST',
+    body: data,
+    timeoutMs: homeAssistantCommandTimeoutMs(),
+  });
+  return { changed: Array.isArray(body) ? body.length : 0 };
 }
 
 function numberOrNull(value: unknown) {

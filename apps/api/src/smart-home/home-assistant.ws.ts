@@ -123,3 +123,73 @@ export async function fetchHomeAssistantRegistries(target: HomeAssistantTarget):
     areas: asList<HomeAssistantArea>(areas).filter((area) => typeof area.area_id === 'string'),
   };
 }
+
+export interface HomeAssistantSubscription {
+  close(): void;
+}
+
+/**
+ * 常驻订阅 state_changed（E2）。连上并订阅成功调 onOpen；每条变化调 onStateChanged(entity_id)；
+ * 断了（含鉴权失败、超时、心跳没回）调一次 onClose(原因)，之后这个对象作废，重连由调用方决定。
+ * 每 30 秒 ping 一次，70 秒没收到任何消息当作断了。
+ */
+export function subscribeHomeAssistantStates(
+  target: HomeAssistantTarget,
+  handlers: { onOpen(): void; onStateChanged(entityId: string): void; onClose(reason: string): void },
+): HomeAssistantSubscription {
+  let closed = false;
+  let socket: WebSocket | null = null;
+  let lastMessageAt = Date.now();
+  let pingId = 100;
+  const openTimer = setTimeout(() => end(`连接超时（${Math.round(homeAssistantTimeoutMs() / 1000)} 秒没有回应）`), homeAssistantTimeoutMs());
+  const heartbeat = setInterval(() => {
+    if (Date.now() - lastMessageAt > 70_000) return end('心跳没回');
+    socket?.send(JSON.stringify({ id: (pingId += 1), type: 'ping' }));
+  }, 30_000);
+
+  function end(reason: string, notify = true) {
+    if (closed) return;
+    closed = true;
+    clearTimeout(openTimer);
+    clearInterval(heartbeat);
+    try {
+      socket?.close();
+    } catch {
+      /* 已经断了 */
+    }
+    if (notify) handlers.onClose(reason);
+  }
+
+  try {
+    socket = new WebSocket(homeAssistantWebSocketUrl(target.baseUrl));
+  } catch {
+    queueMicrotask(() => end('网络不通，Home Assistant 可能没开'));
+    return { close: () => end('主动关闭', false) };
+  }
+  socket.addEventListener('error', () => end('网络不通，Home Assistant 可能没开'));
+  socket.addEventListener('close', () => end('Home Assistant 断开了连接'));
+  socket.addEventListener('message', (event) => {
+    lastMessageAt = Date.now();
+    let message: { type?: string; id?: number; success?: boolean; event?: { data?: { entity_id?: unknown } } };
+    try {
+      message = JSON.parse(String(event.data)) as typeof message;
+    } catch {
+      return;
+    }
+    if (message.type === 'auth_required') {
+      socket?.send(JSON.stringify({ type: 'auth', access_token: target.token }));
+    } else if (message.type === 'auth_invalid') {
+      end('令牌无效或权限不足');
+    } else if (message.type === 'auth_ok') {
+      socket?.send(JSON.stringify({ id: 1, type: 'subscribe_events', event_type: 'state_changed' }));
+    } else if (message.type === 'result' && message.id === 1) {
+      if (!message.success) return end('Home Assistant 拒绝了订阅');
+      clearTimeout(openTimer);
+      handlers.onOpen();
+    } else if (message.type === 'event' && message.id === 1) {
+      const entityId = message.event?.data?.entity_id;
+      if (typeof entityId === 'string') handlers.onStateChanged(entityId);
+    }
+  });
+  return { close: () => end('主动关闭', false) };
+}

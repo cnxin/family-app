@@ -1,13 +1,17 @@
 // 假的 Home Assistant：黑盒与 e2e 用（隔离库里不可能有真的 HA）。
 // REST：/api/、/api/config、/api/states。WebSocket（/api/websocket，不引依赖、手写最小帧）：
 // auth → config/device_registry/list、config/entity_registry/list、config/area_registry/list。
-// E2 再补 /api/services/*、call_service 和 subscribe_events。
+// E2：POST /api/services/<domain>/<service>（按动作改状态并推事件）、WebSocket subscribe_events / ping。
 //
 //   const ha = await startFakeHomeAssistant({ token });
 //   ha.url              // http://127.0.0.1:<port>
 //   ha.mode = 'hang'    // 'ok' 正常；'hang' 收到请求不回（验超时）
 //   ha.websocket = false // 拒绝 WebSocket（验目录退回平铺）
 //   ha.states = [...]   // 换一批状态
+//   ha.setState(id, state, attrs) // 改一个实体并向订阅者推 state_changed（模拟有人在 HA / App 里操作）
+//   ha.serviceMode = 'fail' | 'hang' // 服务调用失败（500）/ 不回
+//   ha.serviceCalls     // 收到的服务调用 [{ domain, service, data }]
+//   ha.dropWebSockets() / ha.subscriberCount()
 //   await ha.stop()     // 关掉端口（验「连不上」）；ha.start() 在同一端口重新起来
 //
 // 也能单独跑：node scripts/fake-ha.mjs [port] [token]
@@ -124,9 +128,20 @@ export async function startFakeHomeAssistant({
     entityRegistry,
     areas,
     requests: [],
+    serviceMode: 'ok',
+    serviceCalls: [],
+    setState,
+    /** 掐断现有的 WebSocket（模拟网络抖动 / HA 重启），HTTP 照常 */
+    dropWebSockets() {
+      for (const socket of sockets) socket.destroy();
+      sockets.clear();
+      clients.clear();
+    },
+    subscriberCount: () => clients.size,
     start,
     stop,
   };
+  const clients = new Set();
   let server = null;
   let boundPort = port;
   const sockets = new Set();
@@ -144,7 +159,55 @@ export async function startFakeHomeAssistant({
       return send(200, { version, location_name: '测试的家', time_zone: 'Asia/Shanghai' });
     }
     if (request.method === 'GET' && request.url === '/api/states') return send(200, ha.states);
+    const service = /^\/api\/services\/([a-z_]+)\/([a-z_]+)$/.exec(request.url ?? '');
+    if (request.method === 'POST' && service) {
+      let raw = '';
+      request.on('data', (chunk) => (raw += chunk));
+      request.on('end', () => {
+        const data = raw ? JSON.parse(raw) : {};
+        ha.serviceCalls.push({ domain: service[1], service: service[2], data });
+        if (ha.serviceMode === 'hang') return;
+        if (ha.serviceMode === 'fail') return send(500, { message: 'Service call failed' });
+        const next = applyService(service[1], service[2], data.entity_id);
+        send(200, next ? [next] : []);
+      });
+      return;
+    }
     return send(404, { message: 'Not found' });
+  }
+
+  /** 服务调用对状态的影响，和真 HA 里这些实体的行为大致一致。 */
+  function applyService(domain, service, entityId) {
+    const current = ha.states.find((entry) => entry.entity_id === entityId);
+    if (!current) return null;
+    const transitions = {
+      'vacuum.start': ['cleaning'],
+      'vacuum.pause': ['paused'],
+      'vacuum.return_to_base': ['returning'],
+      'vacuum.stop': ['idle'],
+      'cover.open_cover': ['open', { current_position: 100 }],
+      'cover.close_cover': ['closed', { current_position: 0 }],
+      'cover.stop_cover': [current.state],
+      'switch.turn_on': ['on'],
+      'switch.turn_off': ['off'],
+      'scene.turn_on': [new Date().toISOString()],
+    };
+    const [state, attributes] = transitions[`${domain}.${service}`] ?? [current.state];
+    return setState(entityId, state, attributes);
+  }
+
+  function setState(entityId, state, attributes = {}) {
+    const index = ha.states.findIndex((entry) => entry.entity_id === entityId);
+    if (index < 0) return null;
+    const old = ha.states[index];
+    const next = { ...old, state, attributes: { ...old.attributes, ...attributes }, last_changed: new Date().toISOString() };
+    ha.states = ha.states.map((entry, position) => (position === index ? next : entry));
+    for (const client of clients) {
+      for (const id of client.subscriptions) {
+        client.send({ id, type: 'event', event: { event_type: 'state_changed', data: { entity_id: entityId, old_state: old, new_state: next } } });
+      }
+    }
+    return next;
   }
 
   function upgrade(request, socket) {
@@ -162,9 +225,18 @@ export async function startFakeHomeAssistant({
       `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
     );
     sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
-    socket.on('error', () => sockets.delete(socket));
-    const send = (message) => socket.write(frame(JSON.stringify(message)));
+    const send = (message) => {
+      if (!socket.destroyed) socket.write(frame(JSON.stringify(message)));
+    };
+    const client = { send, subscriptions: new Set() };
+    socket.on('close', () => {
+      sockets.delete(socket);
+      clients.delete(client);
+    });
+    socket.on('error', () => {
+      sockets.delete(socket);
+      clients.delete(client);
+    });
     let authed = false;
     let pending = Buffer.alloc(0);
     send({ type: 'auth_required', ha_version: version });
@@ -202,6 +274,16 @@ export async function startFakeHomeAssistant({
           'config/entity_registry/list': ha.entityRegistry,
           'config/area_registry/list': ha.areas,
         };
+        if (message.type === 'ping') {
+          send({ id: message.id, type: 'pong' });
+          continue;
+        }
+        if (message.type === 'subscribe_events') {
+          client.subscriptions.add(message.id);
+          clients.add(client);
+          send({ id: message.id, type: 'result', success: true, result: null });
+          continue;
+        }
         if (message.type in results) {
           send({ id: message.id, type: 'result', success: true, result: results[message.type] });
         } else {

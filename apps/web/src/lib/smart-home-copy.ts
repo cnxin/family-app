@@ -1,4 +1,4 @@
-import type { SmartHomeDomain, SmartHomeEntityState } from '@family/contracts';
+import type { SmartHomeAction, SmartHomeDomain, SmartHomeEntityState } from '@family/contracts';
 
 /** 一台设备在页面上的一句话状态。tone 决定颜色：on 高亮、warn 提醒、off 平常、muted 连不上。 */
 export interface StateLine {
@@ -181,4 +181,36 @@ export function arrangeDirectory<D extends { name: string; entities: DirectoryEn
       };
     })
     .filter((group) => group.shown.length + group.more.length > 0);
+}
+
+export interface SmartHomeButton {
+  action: SmartHomeAction;
+  label: string;
+}
+
+/**
+ * 当前状态下摆哪几个按钮。只摆此刻说得通的（在充电座上就不摆「回充」），
+ * 真正能不能控由服务端每次校验。
+ */
+export function smartHomeButtons(domain: SmartHomeDomain, state: SmartHomeEntityState | null): SmartHomeButton[] {
+  const value = state?.state;
+  switch (domain) {
+    case 'vacuum':
+      if (value === 'cleaning') return [{ action: 'pause', label: '暂停' }, { action: 'return_to_base', label: '回充' }];
+      if (value === 'paused') return [{ action: 'start', label: '继续清扫' }, { action: 'return_to_base', label: '回充' }];
+      if (value === 'returning') return [{ action: 'pause', label: '暂停' }];
+      return [{ action: 'start', label: '开始清扫' }];
+    case 'cover':
+      return [
+        { action: 'open', label: '打开' },
+        { action: 'stop', label: '停' },
+        { action: 'close', label: '关上' },
+      ];
+    case 'switch':
+      return value === 'on' ? [{ action: 'turn_off', label: '关掉' }] : [{ action: 'turn_on', label: '打开' }];
+    case 'scene':
+      return [{ action: 'activate', label: '执行' }];
+    default:
+      return [];
+  }
 }

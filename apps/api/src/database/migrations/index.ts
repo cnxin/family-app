@@ -1,6 +1,7 @@
 import { AddHouseholdModuleOverrides1785232400000 } from './1785232400000-add-household-module-overrides';
 import { AddMaintenancePerformedOn1785232500000 } from './1785232500000-add-maintenance-performed-on';
 import { AddSmartHomeDevices1785232600000 } from './1785232600000-add-smart-home-devices';
+import { AddSmartHomeCommands1785232700000 } from './1785232700000-add-smart-home-commands';
 import { InitialSchema1785226400000 } from './1785226400000-initial-schema';
 import { AddHouseholdScope1785226500000 } from './1785226500000-add-household-scope';
 import { HardenAuthAndOrders1785226600000 } from './1785226600000-harden-auth-and-orders';
@@ -126,4 +127,5 @@ export const ALL_MIGRATIONS = [
   AddHouseholdModuleOverrides1785232400000,
   AddMaintenancePerformedOn1785232500000,
   AddSmartHomeDevices1785232600000,
+  AddSmartHomeCommands1785232700000,
 ];

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDateTime, memberRole, nullableDateTime } from './common';
+import { isoDateTime, memberRole, nullableDateTime, uuid } from './common';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/smart-home/（H3 E1：连接器 + 实体目录 + 白名单 + 只读状态）。
@@ -140,15 +140,67 @@ export const upsertSmartHomeDeviceBody = z
     displayName: z.string().trim().min(1, '起个中文名').max(40, '名字不超过 40 字'),
     area: z.string().trim().max(20, '分组不超过 20 字').nullable().optional(),
     sortOrder: z.number().int().min(0).max(9999).optional(),
+    /** E2：允许在小管家里控制（只有 SMART_HOME_ACTIONS 里的 domain 能开） */
+    controllable: z.boolean().optional(),
+    /** E2：谁能控。admin = 家庭管理员；member = 全家 */
+    minRole: z.enum(['admin', 'member']).optional(),
   })
   .strict();
 export type UpsertSmartHomeDeviceBody = z.infer<typeof upsertSmartHomeDeviceBody>;
 
-/** 状态快照：白名单设备 + 各自当前状态（连不上 HA 时 state 为 null）。 */
+// ---- E2：控制 -----------------------------------------------------------------------------------
+
+/**
+ * 能控的 domain 和动作。门锁、安防根本不进白名单；车库门 / 大门这类 cover（device_class garage、gate、door）
+ * 只读，服务端按 HA 的 device_class 拒绝。
+ */
+export const SMART_HOME_ACTIONS = {
+  vacuum: ['start', 'pause', 'return_to_base'],
+  cover: ['open', 'stop', 'close'],
+  switch: ['turn_on', 'turn_off'],
+  scene: ['activate'],
+} as const;
+export type SmartHomeControllableDomain = keyof typeof SMART_HOME_ACTIONS;
+export const SMART_HOME_CONTROLLABLE_DOMAINS = Object.keys(SMART_HOME_ACTIONS) as SmartHomeControllableDomain[];
+export const SMART_HOME_READONLY_COVER_CLASSES = ['garage', 'gate', 'door'] as const;
+export const smartHomeAction = z.enum([
+  'start', 'pause', 'return_to_base', 'open', 'stop', 'close', 'turn_on', 'turn_off', 'activate',
+]);
+export type SmartHomeAction = z.infer<typeof smartHomeAction>;
+
+export function smartHomeActionsFor(domain: string): readonly SmartHomeAction[] {
+  return (SMART_HOME_ACTIONS as Record<string, readonly SmartHomeAction[]>)[domain] ?? [];
+}
+
+/** 一次控制。requestId 是幂等键：同一次点击重发（网络抖动、连点）只执行一次，返回第一次的结果。 */
+export const smartHomeCommandBody = z.object({ action: smartHomeAction, requestId: uuid }).strict();
+export type SmartHomeCommandBody = z.infer<typeof smartHomeCommandBody>;
+
+export const smartHomeCommandStatus = z.enum(['pending', 'succeeded', 'failed']);
+
+/** 控制审计：谁、什么时候、按了什么、HA 回了什么（home-assistant-plan §6.3）。 */
+export const smartHomeCommandSchema = z.object({
+  id: uuid,
+  entityId: smartHomeEntityId,
+  action: smartHomeAction,
+  status: smartHomeCommandStatus,
+  message: z.string().nullable(),
+  memberName: z.string(),
+  createdAt: isoDateTime,
+  finishedAt: nullableDateTime,
+  /** 这次是按 requestId 取回的上一次结果，没有再发给 HA */
+  replayed: z.boolean(),
+});
+export type SmartHomeCommand = z.infer<typeof smartHomeCommandSchema>;
+
+/** 状态快照：白名单设备 + 各自当前状态（连不上 HA 时 state 为 null）+ 当前这个人能不能控。 */
 export const smartHomeStatesSchema = z.object({
   connection: smartHomeConnectionSchema,
   devices: z.array(
-    smartHomeDeviceSchema.extend({ state: smartHomeEntityStateSchema.nullable() }),
+    smartHomeDeviceSchema.extend({
+      state: smartHomeEntityStateSchema.nullable(),
+      canControl: z.boolean(),
+    }),
   ),
 });
 export type SmartHomeStates = z.infer<typeof smartHomeStatesSchema>;
@@ -206,6 +258,20 @@ export const smartHome = {
     summary: '移出白名单',
     params: smartHomeEntityParams,
     response: z.object({ entityId: smartHomeEntityId }),
+  }),
+  command: defineEndpoint({
+    method: 'POST',
+    path: '/smart-home/devices/:entityId/command',
+    summary: '控制一台白名单设备（幂等键 + 审计 + 逐次校验权限）；HA 失败回 502，审计照记',
+    params: smartHomeEntityParams,
+    body: smartHomeCommandBody,
+    response: smartHomeCommandSchema,
+  }),
+  commands: defineEndpoint({
+    method: 'GET',
+    path: '/smart-home/commands',
+    summary: '最近 50 次控制（管理员）',
+    response: z.array(smartHomeCommandSchema),
   }),
   states: defineEndpoint({
     method: 'GET',

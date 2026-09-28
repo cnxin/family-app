@@ -2,6 +2,7 @@ import { useAuth } from '../lib/auth';
 import { useSmartHomeConnectorSettings } from '../lib/queries';
 import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
+import { SmartHomeCommandsPanel } from '../components/smart-home-commands';
 import { SmartHomeConnectorCard } from '../components/smart-home-connector';
 import { SmartHomeDirectoryPanel } from '../components/smart-home-directory';
 import { SmartHomeWhitelistPanel } from '../components/smart-home-devices';
@@ -31,6 +32,7 @@ export function SmartHomeSettingsPage() {
             <div className="flex min-h-0 flex-col gap-4 lg:w-[420px] lg:shrink-0">
               <SmartHomeConnectorCard settings={settings.data} />
               <SmartHomeWhitelistPanel />
+              <SmartHomeCommandsPanel />
             </div>
             <div className="flex min-h-[420px] min-w-0 flex-1 flex-col">
               <SmartHomeDirectoryPanel configured={settings.data.configured} />

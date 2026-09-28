@@ -47,6 +47,7 @@ export const DOMAIN_QUERY_KEYS: Record<DomainKey, readonly string[]> = {
   modules: [],
   'smart-home': [
     'smart-home-states', 'smart-home-devices', 'smart-home-directory', 'smart-home-connector-settings',
+    'smart-home-commands',
   ],
 };
 

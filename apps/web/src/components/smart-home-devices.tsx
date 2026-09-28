@@ -1,18 +1,26 @@
 import { useState } from 'react';
-import type { SmartHomeDevice } from '@family/contracts';
+import { smartHomeActionsFor, type SmartHomeDevice } from '@family/contracts';
 import { useRemoveSmartHomeDevice, useSmartHomeDevices, useUpsertSmartHomeDevice } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
-import { Button, EmptyState, Input, Panel } from './ui';
+import { ToggleRow } from './media-settings-parts';
+import { Button, EmptyState, Input, Panel, selectClass } from './ui';
 
-/** 白名单里的一台：就地改中文名和分组，或者移出。 */
+/** 白名单里的一台：就地改中文名、分组，能控的设备还能开放控制、定谁能控；或者移出。 */
 function WhitelistRow({ device }: { device: SmartHomeDevice }) {
   const upsert = useUpsertSmartHomeDevice();
   const remove = useRemoveSmartHomeDevice();
   const [name, setName] = useState(device.displayName);
   const [area, setArea] = useState(device.area ?? '');
-  const dirty = name.trim() !== device.displayName || (area.trim() || null) !== device.area;
+  const [controllable, setControllable] = useState(device.controllable);
+  const [minRole, setMinRole] = useState<'admin' | 'member'>(device.minRole === 'member' ? 'member' : 'admin');
+  const actionable = smartHomeActionsFor(device.domain).length > 0;
+  const dirty =
+    name.trim() !== device.displayName ||
+    (area.trim() || null) !== device.area ||
+    controllable !== device.controllable ||
+    minRole !== (device.minRole === 'member' ? 'member' : 'admin');
   const busy = upsert.isPending || remove.isPending;
 
   return (
@@ -37,6 +45,28 @@ function WhitelistRow({ device }: { device: SmartHomeDevice }) {
           onChange={(event) => setArea(event.target.value)}
         />
       </div>
+      {actionable ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-[2]">
+            <ToggleRow
+              label={`允许在小管家里控制${device.displayName}`}
+              checked={controllable}
+              disabled={busy}
+              onChange={() => setControllable((value) => !value)}
+            />
+          </div>
+          <select
+            aria-label={`${device.displayName} 谁能控`}
+            className={`${selectClass} min-h-11 min-w-0 flex-1`}
+            disabled={busy || !controllable}
+            value={minRole}
+            onChange={(event) => setMinRole(event.target.value === 'member' ? 'member' : 'admin')}
+          >
+            <option value="admin">只有管理员</option>
+            <option value="member">全家都能控</option>
+          </select>
+        </div>
+      ) : null}
       <div className="flex gap-2">
         {dirty ? (
           <Button
@@ -44,7 +74,14 @@ function WhitelistRow({ device }: { device: SmartHomeDevice }) {
             disabled={busy || !name.trim()}
             onClick={() =>
               upsert.mutate(
-                { entityId: device.entityId, body: { displayName: name.trim(), area: area.trim() || null } },
+                {
+                  entityId: device.entityId,
+                  body: {
+                    displayName: name.trim(),
+                    area: area.trim() || null,
+                    ...(actionable ? { controllable, minRole } : {}),
+                  },
+                },
                 { onSuccess: () => pushToast(`已保存「${name.trim()}」`) },
               )
             }

@@ -59,3 +59,9 @@ export function homeAssistantTimeoutMs() {
   const configured = Number(process.env.HOME_ASSISTANT_TIMEOUT_MS);
   return Number.isFinite(configured) && configured >= 100 ? configured : 3000;
 }
+
+/** 控制命令的超时。HA 要等 service 执行完才回，云端设备（石头、米家）常要好几秒，比读状态宽一些。 */
+export function homeAssistantCommandTimeoutMs() {
+  const configured = Number(process.env.HOME_ASSISTANT_COMMAND_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured >= 100 ? configured : 8000;
+}
