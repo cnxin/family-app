@@ -60,6 +60,7 @@ const testEnvironment = {
   SMART_HOME_RECONNECT_MIN_MS: '200',
   SMART_HOME_RECONNECT_MAX_MS: '1000',
   SMART_HOME_RECONCILE_MS: '1000',
+  SMART_HOME_LINKS_POLL_MS: '300',
   SMOKE_DATE: '2199-12-28',
   UPLOAD_DIR: TEST_UPLOAD_DIR,
 };
@@ -69,13 +70,18 @@ function wait(milliseconds) {
 }
 
 async function waitForApi(processHandle) {
+  const startedAt = Date.now();
   for (let attempt = 0; attempt < 80; attempt += 1) {
     if (processHandle.exitCode != null) {
       throw new Error(`API 提前退出，状态码 ${processHandle.exitCode}`);
     }
     try {
       const response = await fetch(`${API_URL}/health/ready`);
-      if (response.ok) return;
+      if (response.ok) {
+        // 启动耗时进日志：ts-node 随代码变多会变慢，超时前能先看出趋势
+        console.log(`  ✓ API 就绪用时 ${Date.now() - startedAt}ms`);
+        return;
+      }
     } catch {
       // API is still starting.
     }
@@ -139,6 +145,7 @@ const BUSINESS_SCRIPTS = [
   'smart-home',
   'smart-home-control',
   'smart-home-webhook',
+  'smart-home-links',
   'today-attention',
   'events',
   'households',

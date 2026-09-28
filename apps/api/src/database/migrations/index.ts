@@ -3,6 +3,7 @@ import { AddMaintenancePerformedOn1785232500000 } from './1785232500000-add-main
 import { AddSmartHomeDevices1785232600000 } from './1785232600000-add-smart-home-devices';
 import { AddSmartHomeCommands1785232700000 } from './1785232700000-add-smart-home-commands';
 import { AddSmartHomeWebhooks1785232800000 } from './1785232800000-add-smart-home-webhooks';
+import { AddSmartHomeLinks1785232900000 } from './1785232900000-add-smart-home-links';
 import { InitialSchema1785226400000 } from './1785226400000-initial-schema';
 import { AddHouseholdScope1785226500000 } from './1785226500000-add-household-scope';
 import { HardenAuthAndOrders1785226600000 } from './1785226600000-harden-auth-and-orders';
@@ -130,4 +131,5 @@ export const ALL_MIGRATIONS = [
   AddSmartHomeDevices1785232600000,
   AddSmartHomeCommands1785232700000,
   AddSmartHomeWebhooks1785232800000,
+  AddSmartHomeLinks1785232900000,
 ];

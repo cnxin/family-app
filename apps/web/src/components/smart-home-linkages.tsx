@@ -10,6 +10,7 @@ import {
 import { homeAssistantAutomations, homeAssistantRestCommand } from '../lib/smart-home-ha-config';
 import { pushToast } from '../lib/toast';
 import { Field, ResultLine, ToggleRow } from './media-settings-parts';
+import { SmartHomeLinksPanel } from './smart-home-links';
 import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
 import { Button, EmptyState, Input, Panel, selectClass } from './ui';
@@ -298,6 +299,7 @@ export function SmartHomeLinkagesSection() {
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-4">
             <RulesCard key={JSON.stringify(settings.data.rules)} settings={settings.data} />
+            <SmartHomeLinksPanel />
           </div>
         </>
       ) : null}

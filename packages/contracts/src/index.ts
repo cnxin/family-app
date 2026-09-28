@@ -48,7 +48,7 @@ import { agent } from './agent';
 import { today } from './today';
 import { households } from './households';
 import { events } from './events';
-import { smartHome, smartHomeWebhook } from './smart-home';
+import { smartHome, smartHomeLinks, smartHomeWebhook } from './smart-home';
 import { calendar } from './calendar';
 import { dishes } from './dishes';
 import { inventory } from './inventory';
@@ -91,6 +91,7 @@ export const contracts = {
   events,
   smartHome,
   smartHomeWebhook,
+  smartHomeLinks,
 };
 
 /** `METHOD /path` → 契约。API 测试模式下的响应校验用它查表。 */

@@ -7904,8 +7904,102 @@ export class SmartHomeEventRecord {
   receivedAt: Date;
 }
 
+/** H3 E4：小管家 → HA 的联动规则（家务打勾 / 日程开始前 → 控制一台白名单设备）。 */
+@Entity('smart_home_links')
+@Index('IDX_smart_home_links_household', ['householdId'])
+@Check('CHK_smart_home_links_trigger', `"trigger" IN ('task_done', 'calendar_before')`)
+@Check('CHK_smart_home_links_offset', `"offsetMinutes" >= 0 AND "offsetMinutes" <= 720`)
+export class SmartHomeLink {
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_links' })
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_smart_home_links_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 40 })
+  name: string;
+
+  @Column({ type: 'varchar', length: 24 })
+  trigger: 'task_done' | 'calendar_before';
+
+  @Column({ type: 'varchar', length: 40 })
+  keyword: string;
+
+  @Column({ type: 'int', default: 0 })
+  offsetMinutes: number;
+
+  @Column({ type: 'varchar', length: 255 })
+  targetEntityId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  action: string;
+
+  @Column({ default: true })
+  enabled: boolean;
+
+  // NO ACTION：同 smart_home_commands，整个家庭删除时一起级联
+  @ManyToOne(() => Member, { onDelete: 'NO ACTION' })
+  @JoinColumn({ name: 'createdById', foreignKeyConstraintName: 'FK_smart_home_links_created_by' })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+/** H3 E4：联动的每一次运行。(linkId, occurrenceKey) 唯一：同一次发生只跑一次（幂等）。 */
+@Entity('smart_home_link_runs')
+@Unique('UQ_smart_home_link_runs_link_occurrence', ['linkId', 'occurrenceKey'])
+@Index('IDX_smart_home_link_runs_household_created', ['householdId', 'createdAt'])
+@Check('CHK_smart_home_link_runs_status', `"status" IN ('pending', 'succeeded', 'failed')`)
+export class SmartHomeLinkRun {
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_link_runs' })
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_smart_home_link_runs_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @ManyToOne(() => SmartHomeLink, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'linkId', foreignKeyConstraintName: 'FK_smart_home_link_runs_link' })
+  link: SmartHomeLink;
+
+  @Column('uuid')
+  linkId: string;
+
+  /** task:<taskId>:<日期> 或 calendar:<eventId>:<开始时间> */
+  @Column({ type: 'varchar', length: 200 })
+  occurrenceKey: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: 'pending' | 'succeeded' | 'failed';
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  message: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  finishedAt: Date | null;
+}
+
 export const ALL_ENTITIES = [
   HouseholdModuleOverride,
+  SmartHomeLink,
+  SmartHomeLinkRun,
   SmartHomeWebhookSettings,
   SmartHomeEventRecord,
   SmartHomeCommandRecord,

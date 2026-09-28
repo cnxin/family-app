@@ -1,26 +1,8 @@
-import type { SmartHomeAction } from '@family/contracts';
 import { useSmartHomeCommands, useSmartHomeDevices } from '../lib/queries';
+import { SMART_HOME_ACTION_LABELS } from '../lib/smart-home-copy';
 import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
 import { EmptyState, Panel } from './ui';
-
-const ACTION_LABEL: Record<SmartHomeAction, string> = {
-  start: '开始清扫',
-  pause: '暂停',
-  return_to_base: '回充',
-  open: '打开',
-  stop: '停',
-  close: '关上',
-  turn_on: '打开',
-  turn_off: '关掉',
-  activate: '执行',
-  mode_cool: '制冷',
-  mode_heat: '制热',
-  mode_fan_only: '送风',
-  mode_auto: '自动',
-  temperature_up: '调高 1°',
-  temperature_down: '调低 1°',
-};
 
 const STATUS: Record<'pending' | 'succeeded' | 'failed', [string, string]> = {
   pending: ['执行中', 'text-ink-soft'],
@@ -52,7 +34,7 @@ export function SmartHomeCommandsPanel() {
                 <li key={entry.id} className="flex items-start gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm">
-                      {entry.memberName} · {names.get(entry.entityId) ?? entry.entityId} · {ACTION_LABEL[entry.action]}
+                      {entry.memberName} · {names.get(entry.entityId) ?? entry.entityId} · {SMART_HOME_ACTION_LABELS[entry.action]}
                     </span>
                     {entry.status === 'failed' && entry.message ? (
                       <span className="block truncate text-[12px] text-danger">{entry.message}</span>
