@@ -171,14 +171,20 @@ export function InventoryEditor({
   );
 }
 
-/** 登记 / 修改一个批次。批次是保质期提醒和先进先出扣库的依据。 */
+/**
+ * 登记 / 修改一个批次。批次是保质期提醒和先进先出扣库的依据。
+ * 登记是从「现有、还没分批的库存」里划出一批，不增加库存；可登记量 = 余量 − 在用批次，
+ * 和服务端同一口径，为 0 时先去入库。
+ */
 export function BatchDialog({
   batch,
   inventory,
+  batches,
   onClose,
 }: {
   batch: InventoryBatch | null;
   inventory: InventoryItem[];
+  batches: InventoryBatch[];
   onClose: () => void;
 }) {
   const create = useCreateInventoryBatch();
@@ -193,7 +199,14 @@ export function BatchDialog({
   const [openedOn, setOpenedOn] = useState(batch?.openedOn ?? '');
 
   const pending = create.isPending || update.isPending;
-  const valid = Boolean(inventoryItemId) && Number(quantity) > 0 && Boolean(receivedOn);
+  const item = inventory.find((option) => option.id === inventoryItemId);
+  const tracked = batches
+    .filter((one) => one.inventoryItemId === inventoryItemId)
+    .reduce((sum, one) => sum + Number(one.quantity), 0);
+  const untracked = Math.max(0, Math.round((Number(item?.quantity ?? 0) - tracked) * 1000) / 1000);
+  const noStock = !batch && untracked <= 0;
+  const valid =
+    Boolean(inventoryItemId) && Number(quantity) > 0 && Boolean(receivedOn) && !noStock;
   const dates = {
     receivedOn,
     productionDate: productionDate || null,
@@ -216,9 +229,14 @@ export function BatchDialog({
       title={batch ? `修改「${batch.inventoryItem.name}」批次` : '登记食品批次'}
       onClose={onClose}
       footer={
-        <Button className="w-full" disabled={!valid || pending} onClick={submit}>
-          {pending ? '保存中…' : batch ? '保存修改' : '登记并入库'}
-        </Button>
+        <div className="flex flex-col gap-2">
+          {noStock ? (
+            <p role="alert" className="text-[13px] text-danger">先入库再登记批次</p>
+          ) : null}
+          <Button className="w-full" disabled={!valid || pending} onClick={submit}>
+            {pending ? '保存中…' : batch ? '保存修改' : '从现有库存登记一批'}
+          </Button>
+        </div>
       }
     >
       <div className="flex flex-col gap-3">
@@ -238,7 +256,10 @@ export function BatchDialog({
                 ))}
               </select>
             </Field>
-            <Field label="这一批的数量" hint="登记后会同时增加库存余量">
+            <Field
+              label="这一批的数量"
+              hint={`从现有库存里划出，不另加库存；还没分批的有 ${untracked} ${item?.unit ?? ''}`}
+            >
               <Input
                 inputMode="decimal"
                 value={quantity}

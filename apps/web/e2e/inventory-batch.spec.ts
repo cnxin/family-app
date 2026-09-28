@@ -23,13 +23,14 @@ test('库存：登记一个 3 天后到期的食品批次，出现在「批次�
     await page.getByRole('button', { name: '登记批次', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '登记食品批次' });
     await dialog.getByLabel('选择库存项').selectOption(item.id);
+    await expect(dialog).toContainText('还没分批的有 2 盒');
     await dialog.getByLabel('这一批的数量').fill('2');
     await dialog.getByLabel('到期日期（选填）').fill(expiresOn);
     const created = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/inventory-batches'),
     );
-    await dialog.getByRole('button', { name: '登记并入库' }).click();
+    await dialog.getByRole('button', { name: '从现有库存登记一批' }).click();
     const response = await created;
     expect(response.status(), await response.text()).toBe(201);
     const batch = ((await response.json()) as { data: { inventoryItemId: string; expiresOn: string; status: string } })
@@ -50,4 +51,26 @@ test('库存：登记一个 3 天后到期的食品批次，出现在「批次�
   }
   const left = await api.get<{ inventoryItemId: string; quantity: string }[]>('/inventory-batches?status=all&days=7');
   expect(left.filter((one) => one.inventoryItemId === item.id && Number(one.quantity) > 0)).toEqual([]);
+});
+
+test('库存为 0 时不能登记批次：按钮禁用，提示先入库', async ({ page, request }) => {
+  const api = apiClient(request);
+  const item = await api.post<{ id: string }>('/inventory-items', {
+    name: stamp('空库存'),
+    category: '其他',
+    quantity: 0,
+    unit: '盒',
+    lowStockThreshold: 0,
+    restockQuantity: 1,
+  });
+  try {
+    await page.goto('/house/inventory');
+    await page.getByRole('button', { name: '登记批次', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '登记食品批次' });
+    await dialog.getByLabel('选择库存项').selectOption(item.id);
+    await expect(dialog.getByRole('alert')).toHaveText('先入库再登记批次');
+    await expect(dialog.getByRole('button', { name: '从现有库存登记一批' })).toBeDisabled();
+  } finally {
+    await api.delete(`/inventory-items/${item.id}`);
+  }
 });
