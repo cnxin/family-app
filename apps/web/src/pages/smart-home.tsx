@@ -27,6 +27,9 @@ function DeviceRow({ device, timeZone }: { device: SmartHomeDeviceWithState; tim
         <span className="shrink-0 text-right">
           <span className={`block text-sm ${TONE[line.tone]}`}>{line.text}</span>
           {line.detail ? <span className="block text-[12px] text-ink-soft">{line.detail}</span> : null}
+          {device.state?.assumed && device.state.state !== 'unavailable' ? (
+            <span data-smart-home-assumed className="block text-[11px] text-warm">按上次操作显示</span>
+          ) : null}
         </span>
       </div>
       {device.canControl ? (

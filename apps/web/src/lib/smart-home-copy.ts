@@ -98,12 +98,17 @@ export function smartHomeStateLine(
       return state.state === 'on' ? { text: on, detail: null, tone: 'on' } : { text: off, detail: null, tone: 'off' };
     }
     case 'climate':
-    case 'water_heater':
+    case 'water_heater': {
+      const parts = [
+        state.state !== 'off' && state.targetTemperature != null ? `设定 ${formatNumber(String(state.targetTemperature))}°` : null,
+        state.currentTemperature != null ? `室内 ${formatNumber(String(state.currentTemperature))}°` : null,
+      ].filter(Boolean);
       return {
         text: CLIMATE[state.state] ?? state.state,
-        detail: null,
+        detail: parts.length ? parts.join(' · ') : null,
         tone: state.state === 'off' ? 'off' : 'on',
       };
+    }
     case 'scene':
     case 'script':
       return { text: '场景', detail: null, tone: 'off' };
@@ -183,6 +188,13 @@ export function arrangeDirectory<D extends { name: string; entities: DirectoryEn
     .filter((group) => group.shown.length + group.more.length > 0);
 }
 
+const CLIMATE_MODE_BUTTONS: { action: SmartHomeAction; label: string; mode: string }[] = [
+  { action: 'mode_cool', label: '制冷', mode: 'cool' },
+  { action: 'mode_heat', label: '制热', mode: 'heat' },
+  { action: 'mode_fan_only', label: '送风', mode: 'fan_only' },
+  { action: 'mode_auto', label: '自动', mode: 'auto' },
+];
+
 export interface SmartHomeButton {
   action: SmartHomeAction;
   label: string;
@@ -210,6 +222,19 @@ export function smartHomeButtons(domain: SmartHomeDomain, state: SmartHomeEntity
       return value === 'on' ? [{ action: 'turn_off', label: '关掉' }] : [{ action: 'turn_on', label: '打开' }];
     case 'scene':
       return [{ action: 'activate', label: '执行' }];
+    case 'climate': {
+      if (!value || value === 'off') return [{ action: 'turn_on', label: '打开' }];
+      // 只摆 HA 说这台有的模式，当前模式不摆
+      const modes = CLIMATE_MODE_BUTTONS.filter(
+        (button) => button.mode !== value && (!state?.hvacModes || state.hvacModes.includes(button.mode)),
+      );
+      return [
+        { action: 'turn_off', label: '关掉' },
+        ...modes.map(({ action, label }) => ({ action, label })),
+        { action: 'temperature_down', label: '调低 1°' },
+        { action: 'temperature_up', label: '调高 1°' },
+      ];
+    }
     default:
       return [];
   }

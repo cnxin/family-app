@@ -14,6 +14,12 @@ const ACTION_LABEL: Record<SmartHomeAction, string> = {
   turn_on: '打开',
   turn_off: '关掉',
   activate: '执行',
+  mode_cool: '制冷',
+  mode_heat: '制热',
+  mode_fan_only: '送风',
+  mode_auto: '自动',
+  temperature_up: '调高 1°',
+  temperature_down: '调低 1°',
 };
 
 const STATUS: Record<'pending' | 'succeeded' | 'failed', [string, string]> = {

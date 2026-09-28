@@ -125,6 +125,14 @@ export function presentHomeAssistantState(raw: HomeAssistantRawState): SmartHome
     position: numberOrNull(attributes.current_position),
     battery: numberOrNull(attributes.battery_level),
     lastChanged: changed && !Number.isNaN(changed.getTime()) ? changed.toISOString() : null,
+    targetTemperature: numberOrNull(attributes.temperature),
+    currentTemperature: numberOrNull(attributes.current_temperature),
+    hvacModes: Array.isArray(attributes.hvac_modes)
+      ? attributes.hvac_modes.filter((mode): mode is string => typeof mode === 'string').slice(0, 12)
+      : null,
+    minTemperature: numberOrNull(attributes.min_temp),
+    maxTemperature: numberOrNull(attributes.max_temp),
+    assumed: raw.entity_id.startsWith('climate.') || attributes.assumed_state === true,
   };
 }
 

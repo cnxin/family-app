@@ -170,6 +170,42 @@ try {
   ha.setState('cover.living_room_curtain', 'closed', { device_class: 'curtain' });
   assert(garage.status === 403 && garageControl.status === 400, 'device_class 是 garage 的 cover：控制 403，开放控制 400');
 
+  console.log('5b. 空调（试探性纳入：红外空调伴侣，状态按上次操作显示）');
+  const ac = await put('climate.bedroom_ac', { displayName: '空调插座', area: '卧室', controllable: true, minRole: 'member' });
+  const acState = async () =>
+    (await request('/smart-home/states', member)).body.data.devices.find((d) => d.entityId === 'climate.bedroom_ac');
+  const before = await acState();
+  assert(
+    ac.status === 200 && before.canControl && before.state.assumed === true && before.state.targetTemperature === 26 &&
+      JSON.stringify(before.state.hvacModes) === JSON.stringify(['off', 'cool', 'heat', 'fan_only', 'auto']),
+    '空调能开放控制；状态标明「不一定是真的」（assumed），带设定温度和可选模式',
+  );
+  const acCalls = () => ha.serviceCalls.filter((call) => call.domain === 'climate');
+  const acOn = await command(member, 'climate.bedroom_ac', 'turn_on');
+  const acHeat = await command(member, 'climate.bedroom_ac', 'mode_heat');
+  const acUp = await command(member, 'climate.bedroom_ac', 'temperature_up');
+  const upRow = await db.query(`SELECT service FROM smart_home_commands WHERE id = $1`, [acUp.body.data.id]);
+  assert(
+    acOn.status === 201 && acHeat.status === 201 && acUp.status === 201 &&
+      acCalls().map((call) => call.service).join(',') === 'turn_on,set_hvac_mode,set_temperature' &&
+      acCalls()[1].data.hvac_mode === 'heat' && acCalls()[2].data.temperature === 27 &&
+      upRow.rows[0].service === 'climate.set_temperature(27)',
+    '开 → climate.turn_on；制热 → set_hvac_mode(heat)；调高 1° → set_temperature(27)，审计记下参数',
+  );
+  ha.setState('climate.bedroom_ac', 'heat', { temperature: 30 });
+  await wait(2_100);
+  const atMax = await command(member, 'climate.bedroom_ac', 'temperature_up');
+  const unknownMode = await request('/smart-home/devices/climate.bedroom_ac/command', member, 'POST', {
+    action: 'mode_dry',
+    requestId: randomUUID(),
+  });
+  assert(
+    atMax.status === 409 && atMax.body.error.message.includes('最高') && acCalls().length === 3 && unknownMode.status === 400,
+    '已经 30° 再调高：409 说清楚、不打 HA；没开放的模式（除湿）400',
+  );
+  const acOff = await command(member, 'climate.bedroom_ac', 'turn_off');
+  assert(acOff.status === 201 && (await acState()).state.state === 'off', '关 → climate.turn_off');
+
   console.log('6. 审计列表');
   const recent = await request('/smart-home/commands', owner);
   const memberRecent = await request('/smart-home/commands', member);
@@ -217,7 +253,7 @@ try {
   assert(back !== null, `接回推送后变化 ${back ? back.at - at : '-'}ms 到`);
 
   console.log('9. 白名单清空后停止订阅');
-  for (const entityId of ['vacuum.roborock_s8', 'cover.living_room_curtain', 'scene.movie_night', 'sensor.kitchen_purifier_tds', 'switch.living_room_curtain_child_lock']) {
+  for (const entityId of ['vacuum.roborock_s8', 'cover.living_room_curtain', 'scene.movie_night', 'sensor.kitchen_purifier_tds', 'switch.living_room_curtain_child_lock', 'climate.bedroom_ac']) {
     await request(`/smart-home/devices/${entityId}`, owner, 'DELETE');
   }
   assert(await until(() => ha.subscriberCount() === 0, 3_000), '白名单空了，服务端不再连着 HA');

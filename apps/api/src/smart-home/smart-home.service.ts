@@ -76,6 +76,22 @@ export function stripDeviceName(fullName: string, deviceName: string | null) {
   return rest.replace(/^[\s\-_·:：]+/, '') || fullName;
 }
 
+/** HA 上已经没有这个实体（被删了、改了 ID）时的状态。 */
+const UNAVAILABLE_STATE = {
+  state: 'unavailable',
+  unit: null,
+  deviceClass: null,
+  position: null,
+  battery: null,
+  lastChanged: null,
+  targetTemperature: null,
+  currentTemperature: null,
+  hvacModes: null,
+  minTemperature: null,
+  maxTemperature: null,
+  assumed: false,
+};
+
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'zh-CN');
 const isSensor = (domain: string) => domain === 'sensor' || domain === 'binary_sensor';
 
@@ -232,7 +248,7 @@ export class SmartHomeService {
         const state = byId
           ? raw
             ? presentHomeAssistantState(raw)
-            : { state: 'unavailable', unit: null, deviceClass: null, position: null, battery: null, lastChanged: null }
+            : { ...UNAVAILABLE_STATE }
           : null;
         return { ...device, state, canControl: canControlDevice(device, role) };
       }),
