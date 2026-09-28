@@ -126,3 +126,59 @@ export function groupByArea<T extends { area: string | null }>(devices: T[]) {
     .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'zh-CN')))
     .map(([area, items]) => ({ area: area || '其他', items }));
 }
+
+/** 目录顶部按类型筛的几个 chip。 */
+export type SmartHomeKind = 'vacuum' | 'cover' | 'switch' | 'climate' | 'sensor' | 'other';
+export const SMART_HOME_KINDS: { value: SmartHomeKind; label: string }[] = [
+  { value: 'vacuum', label: '扫地机' },
+  { value: 'cover', label: '窗帘' },
+  { value: 'switch', label: '开关' },
+  { value: 'climate', label: '空调' },
+  { value: 'sensor', label: '传感器' },
+  { value: 'other', label: '其他' },
+];
+
+export function smartHomeKind(domain: SmartHomeDomain): SmartHomeKind {
+  if (domain === 'vacuum' || domain === 'cover' || domain === 'climate') return domain;
+  if (domain === 'switch' || domain === 'light' || domain === 'input_boolean' || domain === 'fan') return 'switch';
+  if (domain === 'sensor' || domain === 'binary_sensor') return 'sensor';
+  return 'other';
+}
+
+interface DirectoryEntryLike {
+  entityId: string;
+  domain: SmartHomeDomain;
+  name: string;
+  fullName: string;
+  primary: boolean;
+}
+
+/**
+ * 目录怎么摆：
+ * - 没搜东西（或搜到的是设备名）：每台设备只摆主实体，其余折进「更多」；
+ * - 搜到的是实体（名字 / friendly_name / entity_id）：命中的实体直接摆出来，诊断类也不折；
+ * - chip 只按类型筛，折叠规则不变；一台设备筛完什么都不剩就不显示。
+ */
+export function arrangeDirectory<D extends { name: string; entities: DirectoryEntryLike[] }>(
+  devices: D[],
+  { query, kind }: { query: string; kind: SmartHomeKind | 'all' },
+) {
+  type E = D['entities'][number];
+  const keyword = query.trim().toLowerCase();
+  return devices
+    .map((device) => {
+      const candidates: E[] = device.entities.filter((entry) => kind === 'all' || smartHomeKind(entry.domain) === kind);
+      if (keyword && !device.name.toLowerCase().includes(keyword)) {
+        const hits = candidates.filter((entry) =>
+          [entry.name, entry.fullName, entry.entityId].some((text) => text.toLowerCase().includes(keyword)),
+        );
+        return { device, shown: hits, more: [] as E[] };
+      }
+      return {
+        device,
+        shown: candidates.filter((entry) => entry.primary),
+        more: candidates.filter((entry) => !entry.primary),
+      };
+    })
+    .filter((group) => group.shown.length + group.more.length > 0);
+}

@@ -122,22 +122,69 @@ try {
   assert(wrong.body.data.available === false && wrong.body.data.message === '令牌无效或权限不足', '令牌不对时说清楚');
   await request('/smart-home/connector-settings', owner, 'PUT', { credential: TOKEN });
 
-  console.log('3. 实体目录');
+  console.log('3. 实体目录（按设备分组）');
   const directory = await request('/smart-home/entity-directory', owner);
-  const ids = directory.body.data.entities.map((entity) => entity.entityId);
+  const groups = directory.body.data.devices;
+  const ids = groups.flatMap((device) => device.entities.map((entity) => entity.entityId));
+  const byDevice = Object.fromEntries(groups.map((device) => [device.name, device]));
   assert(
     directory.status === 200 &&
       directory.body.data.connection.available &&
-      ids.includes('vacuum.roborock_s8') &&
-      ids.includes('cover.living_room_curtain') &&
-      ids.includes('sensor.water_purifier_filter_life'),
-    `目录列出扫地机、窗帘、洗烘、净水器（${ids.length} 个）`,
+      directory.body.data.grouped === true &&
+      ['Roborock S8', '客厅窗帘', '厨下净水', '没有归属设备的'].every((name) => name in byDevice),
+    `经 WebSocket 读三张注册表，按设备分组：${groups.map((device) => device.name).join(' / ')}`,
+  );
+  assert(
+    byDevice['客厅窗帘'].area === '客厅' && byDevice['厨下净水'].area === '厨房' && byDevice['客厅窗帘'].manufacturer === 'Xiaomi',
+    '设备带 HA 里的区域名（设备改过名的用改后的名字）',
+  );
+  assert(
+    groups[groups.length - 1].id === null && groups[0].area === '厨房' && groups[1].area === '客厅',
+    '按区域名排（厨房、客厅），没有归属设备的放最后',
+  );
+  const purifier = byDevice['厨下净水'].entities;
+  const primaryOf = (device) => device.entities.filter((entity) => entity.primary).map((entity) => entity.entityId);
+  assert(
+    JSON.stringify(primaryOf(byDevice['Roborock S8']).sort()) ===
+      JSON.stringify(['sensor.roborock_s8_cleaning_area', 'vacuum.roborock_s8']) &&
+      JSON.stringify(primaryOf(byDevice['客厅窗帘'])) === JSON.stringify(['cover.living_room_curtain']) &&
+      primaryOf(byDevice['厨下净水']).length === 3 &&
+      purifier.filter((entity) => !entity.primary).every((entity) => entity.category === 'diagnostic'),
+    '主实体：本体 + 非诊断 / 配置的传感器；diagnostic、config（含配置类的开关）一律不算主实体',
+  );
+  assert(
+    purifier[0].primary &&
+      !purifier[purifier.length - 1].primary &&
+      byDevice['Roborock S8'].entities[0].entityId === 'vacuum.roborock_s8',
+    '设备内主实体排在前面，本体排在它的传感器前面',
+  );
+  const expiring = purifier.find((entity) => entity.entityId === 'binary_sensor.kitchen_purifier_ro_expiring');
+  const vacuumEntry = byDevice['Roborock S8'].entities.find((entity) => entity.entityId === 'vacuum.roborock_s8');
+  assert(
+    expiring.name === 'RO到期预警' && expiring.fullName === '厨下净水 RO到期预警' && vacuumEntry.name === 'Roborock S8',
+    '实体名去掉设备名前缀（「厨下净水 RO到期预警」→「RO到期预警」），本体实体保留设备名',
   );
   assert(
     !ids.some((id) => /^(lock|alarm_control_panel|person|sun)\./.test(id)),
     '门锁、安防、人员位置、不支持的 domain 都不列',
   );
   assert(!directory.text.includes('latitude'), '不透传整份 attributes（位置之类）');
+  assert(
+    ha.requests.some((one) => one.method === 'WS' && one.path === '/api/websocket'),
+    '注册表走 HA 的 WebSocket（/api/websocket，同一个长期令牌鉴权）',
+  );
+
+  ha.websocket = false;
+  const flat = await request('/smart-home/entity-directory', owner);
+  ha.websocket = true;
+  assert(
+    flat.status === 200 &&
+      flat.body.data.grouped === false &&
+      flat.body.data.groupingMessage.startsWith('没读到设备信息') &&
+      flat.body.data.devices.length === 1 &&
+      flat.body.data.devices[0].entities.length === ids.length,
+    'WebSocket 读不到时退回一组平铺，并说明原因',
+  );
 
   console.log('4. 白名单');
   const blocked = await Promise.all([
@@ -155,14 +202,14 @@ try {
   for (const [entityId, displayName, area] of [
     ['vacuum.roborock_s8', '扫地机', '客厅'],
     ['cover.living_room_curtain', '客厅窗帘', '客厅'],
-    ['sensor.washer_remaining_time', '洗衣机', '阳台'],
-    ['sensor.water_purifier_filter_life', '净水器滤芯', '厨房'],
+    ['sensor.kitchen_purifier_tds', '出水TDS', '厨房'],
+    ['sensor.kitchen_purifier_ro_filter_life', 'RO滤芯寿命', '厨房'],
   ]) {
     added.push(await request(`/smart-home/devices/${entityId}`, owner, 'PUT', { displayName, area }));
   }
   assert(
     added.every((one) => one.status === 200) && added[1].body.data.displayName === '客厅窗帘' && added[1].body.data.controllable === false,
-    '挑出扫地机、窗帘、洗衣机、净水器并起中文名（第一期都不可控）',
+    '挑出扫地机、窗帘、净水器的两个传感器并起中文名（第一期都不可控）',
   );
   assert((await smartHomeHasData(owner)) === true, '配好连接且白名单非空：家里页出现智能家居');
   const renamed = await request('/smart-home/devices/cover.living_room_curtain', owner, 'PUT', {
@@ -183,15 +230,15 @@ try {
       byId['vacuum.roborock_s8'].state.state === 'docked' &&
       byId['vacuum.roborock_s8'].state.battery === 100 &&
       byId['cover.living_room_curtain'].state.position === 80 &&
-      byId['sensor.washer_remaining_time'].state.unit === 'min',
+      byId['sensor.kitchen_purifier_tds'].state.unit === 'ppm',
     '成员看得到白名单设备的真实状态（状态、电量、开合、单位）',
   );
-  assert(!states.text.includes('lock.front_door') && !states.text.includes('binary_sensor.dryer_running'), '状态只含白名单');
-  ha.states = ha.states.filter((entry) => entry.entity_id !== 'sensor.washer_remaining_time');
+  assert(!states.text.includes('lock.front_door') && !states.text.includes('sensor.roborock_s8_filter_left'), '状态只含白名单');
+  ha.states = ha.states.filter((entry) => entry.entity_id !== 'sensor.kitchen_purifier_tds');
   await new Promise((resolve) => setTimeout(resolve, 2_100)); // 状态缓存 2 秒
   const gone = await request('/smart-home/states', owner);
   assert(
-    gone.body.data.devices.find((device) => device.entityId === 'sensor.washer_remaining_time').state.state === 'unavailable',
+    gone.body.data.devices.find((device) => device.entityId === 'sensor.kitchen_purifier_tds').state.state === 'unavailable',
     'HA 上已经没了的实体显示 unavailable',
   );
 

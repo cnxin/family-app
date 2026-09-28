@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SmartHomeEntityState } from '@family/contracts';
-import { groupByArea, smartHomeStateLine } from './smart-home-copy';
+import { arrangeDirectory, groupByArea, smartHomeKind, smartHomeStateLine } from './smart-home-copy';
 
 function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartHomeEntityState {
   return { state: value, unit: null, deviceClass: null, position: null, battery: null, lastChanged: null, ...extra };
@@ -59,5 +59,63 @@ describe('groupByArea', () => {
     ]);
     expect(groups.map((group) => group.area)).toEqual(['客厅', '阳台', '其他']);
     expect(groups[0].items.map((item) => item.id)).toEqual([3, 4]);
+  });
+});
+
+describe('arrangeDirectory', () => {
+  const entry = (entityId: string, name: string, primary: boolean) => ({
+    entityId,
+    domain: entityId.split('.')[0] as never,
+    name,
+    fullName: `厨下净水 ${name}`,
+    primary,
+  });
+  const devices = [
+    {
+      name: '厨下净水',
+      entities: [
+        entry('sensor.ro_life', 'RO滤芯寿命', true),
+        entry('binary_sensor.ro_expiring', 'RO到期预警', true),
+        entry('sensor.wifi', 'WiFi信号', false),
+        entry('sensor.firmware', '固件版本', false),
+      ],
+    },
+    { name: 'Roborock S8', entities: [entry('vacuum.s8', 'Roborock S8', true), entry('select.mop', '拖地强度', false)] },
+  ];
+
+  it('默认每台设备只摆主实体，其余折进「更多」', () => {
+    const [purifier, vacuum] = arrangeDirectory(devices, { query: '', kind: 'all' });
+    expect(purifier.shown.map((one) => one.name)).toEqual(['RO滤芯寿命', 'RO到期预警']);
+    expect(purifier.more.map((one) => one.name)).toEqual(['WiFi信号', '固件版本']);
+    expect(vacuum.more).toHaveLength(1);
+  });
+
+  it('搜到实体就直接摆出来（诊断类也是），搜不到的设备不显示', () => {
+    const result = arrangeDirectory(devices, { query: '固件', kind: 'all' });
+    expect(result).toHaveLength(1);
+    expect(result[0].shown.map((one) => one.entityId)).toEqual(['sensor.firmware']);
+    expect(result[0].more).toEqual([]);
+    expect(arrangeDirectory(devices, { query: 'select.mop', kind: 'all' })[0].shown[0].name).toBe('拖地强度');
+  });
+
+  it('搜设备名：整台设备照常折叠', () => {
+    const [purifier] = arrangeDirectory(devices, { query: '厨下', kind: 'all' });
+    expect(purifier.shown).toHaveLength(2);
+    expect(purifier.more).toHaveLength(2);
+  });
+
+  it('chip 按类型筛，筛空的设备不显示', () => {
+    const vacuums = arrangeDirectory(devices, { query: '', kind: 'vacuum' });
+    expect(vacuums.map((group) => group.device.name)).toEqual(['Roborock S8']);
+    expect(vacuums[0].more).toEqual([]);
+    const sensors = arrangeDirectory(devices, { query: '', kind: 'sensor' });
+    expect(sensors.map((group) => group.device.name)).toEqual(['厨下净水']);
+    expect(arrangeDirectory(devices, { query: '', kind: 'other' })[0].more[0].entityId).toBe('select.mop');
+  });
+
+  it('类型归类', () => {
+    expect(smartHomeKind('light')).toBe('switch');
+    expect(smartHomeKind('binary_sensor')).toBe('sensor');
+    expect(smartHomeKind('scene')).toBe('other');
   });
 });
