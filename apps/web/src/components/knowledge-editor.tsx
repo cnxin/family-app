@@ -38,8 +38,25 @@ export function KnowledgeEditor({
   const [tagText, setTagText] = useState((editing?.tags ?? []).join('，'));
   const [isPinned, setIsPinned] = useState(editing?.isPinned ?? false);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   // 一次挂载一个幂等键：保存超时后再点一次不会变成两篇
   const [idempotencyKey] = useState(() => knowledgeKey(editing ? `knowledge:update:${editing.id}` : 'knowledge:create'));
+
+  // 写了一半的正文关掉就没了：改过任何一项就先问一句，没改直接关
+  const dirty =
+    title !== (editing?.title ?? '') ||
+    category !== (editing?.category ?? 'procedure') ||
+    summary !== (editing?.summary ?? '') ||
+    content !== (editing?.content ?? '') ||
+    referenceUrl !== (editing?.referenceUrl ?? '') ||
+    tagText !== (editing?.tags ?? []).join('，') ||
+    isPinned !== (editing?.isPinned ?? false);
+
+  function requestClose() {
+    if (save.isPending) return;
+    if (dirty) setConfirmDiscard(true);
+    else onClose();
+  }
 
   function submit() {
     if (!title.trim()) return setMessage('先写个标题');
@@ -76,105 +93,127 @@ export function KnowledgeEditor({
   }
 
   return (
-    <Dialog
-      title={editing ? `编辑「${editing.title}」` : '写一篇'}
-      maxWidth={640}
-      onClose={onClose}
-      footer={
-        <div className="flex flex-col gap-2">
-          {message ? <p className="text-[13px] text-danger">{message}</p> : null}
-          <Button className="w-full" disabled={save.isPending} onClick={submit}>
-            {save.isPending ? '保存中…' : editing ? '保存修改' : '创建文章'}
-          </Button>
-        </div>
-      }
-    >
-      <div className="flex flex-col gap-3">
-        <label className="block">
-          <span className={label}>标题</span>
-          <Input
-            autoFocus
-            value={title}
-            maxLength={120}
-            aria-label="标题"
-            placeholder="比如：洗衣机怎么用"
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
-
-        <div>
-          <span className={label}>分类</span>
-          <div className="flex flex-wrap gap-1.5">
-            {(Object.keys(KNOWLEDGE_CATEGORY_LABELS) as KnowledgeArticleCategory[]).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={category === value}
-                className={chip(category === value)}
-                onClick={() => setCategory(value)}
-              >
-                {KNOWLEDGE_CATEGORY_LABELS[value]}
-              </button>
-            ))}
+    <>
+      <Dialog
+        title={editing ? `编辑「${editing.title}」` : '写一篇'}
+        maxWidth={640}
+        onClose={requestClose}
+        footer={
+          <div className="flex flex-col gap-2">
+            {message ? <p className="text-[13px] text-danger">{message}</p> : null}
+            <Button className="w-full" disabled={save.isPending} onClick={submit}>
+              {save.isPending ? '保存中…' : editing ? '保存修改' : '创建文章'}
+            </Button>
           </div>
-        </div>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <label className="block">
+            <span className={label}>标题</span>
+            <Input
+              autoFocus
+              value={title}
+              maxLength={120}
+              aria-label="标题"
+              placeholder="比如：洗衣机怎么用"
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </label>
 
-        <label className="block">
-          <span className={label}>一句话摘要（选填）</span>
-          <textarea
-            value={summary}
-            rows={2}
-            maxLength={500}
-            aria-label="摘要"
-            placeholder="列表上会先看到这一句"
-            className={textarea}
-            onChange={(event) => setSummary(event.target.value)}
-          />
-        </label>
-
-        <label className="block">
-          <span className={label}>正文</span>
-          <textarea
-            value={content}
-            rows={8}
-            maxLength={20000}
-            aria-label="正文"
-            placeholder="步骤、注意事项、放在哪儿……"
-            className={textarea}
-            onChange={(event) => setContent(event.target.value)}
-          />
-        </label>
-
-        <label className="block">
-          <span className={label}>参考链接（选填）</span>
-          <Input
-            inputMode="url"
-            value={referenceUrl}
-            maxLength={2000}
-            aria-label="参考链接"
-            placeholder="https://"
-            onChange={(event) => setReferenceUrl(event.target.value)}
-          />
-        </label>
-
-        <label className="block">
-          <span className={label}>标签（选填）</span>
-          <Input
-            value={tagText}
-            maxLength={200}
-            aria-label="标签"
-            placeholder="用逗号分隔，最多 8 个"
-            onChange={(event) => setTagText(event.target.value)}
-          />
-        </label>
-
-        {canPin ? (
-          <div className="flex items-center gap-2">
-            <Checkbox checked={isPinned} onChange={() => setIsPinned(!isPinned)} label="置顶这篇" />
-            <span className="text-[13px]">置顶这篇（归档时会自动取消）</span>
+          <div>
+            <span className={label}>分类</span>
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.keys(KNOWLEDGE_CATEGORY_LABELS) as KnowledgeArticleCategory[]).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={category === value}
+                  className={chip(category === value)}
+                  onClick={() => setCategory(value)}
+                >
+                  {KNOWLEDGE_CATEGORY_LABELS[value]}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : null}
-      </div>
-    </Dialog>
+
+          <label className="block">
+            <span className={label}>一句话摘要（选填）</span>
+            <textarea
+              value={summary}
+              rows={2}
+              maxLength={500}
+              aria-label="摘要"
+              placeholder="列表上会先看到这一句"
+              className={textarea}
+              onChange={(event) => setSummary(event.target.value)}
+            />
+          </label>
+
+          <label className="block">
+            <span className={label}>正文</span>
+            <textarea
+              value={content}
+              rows={8}
+              maxLength={20000}
+              aria-label="正文"
+              placeholder="步骤、注意事项、放在哪儿……"
+              className={textarea}
+              onChange={(event) => setContent(event.target.value)}
+            />
+          </label>
+
+          <label className="block">
+            <span className={label}>参考链接（选填）</span>
+            <Input
+              inputMode="url"
+              value={referenceUrl}
+              maxLength={2000}
+              aria-label="参考链接"
+              placeholder="https://"
+              onChange={(event) => setReferenceUrl(event.target.value)}
+            />
+          </label>
+
+          <label className="block">
+            <span className={label}>标签（选填）</span>
+            <Input
+              value={tagText}
+              maxLength={200}
+              aria-label="标签"
+              placeholder="用逗号分隔，最多 8 个"
+              onChange={(event) => setTagText(event.target.value)}
+            />
+          </label>
+
+          {canPin ? (
+            <div className="flex items-center gap-2">
+              <Checkbox checked={isPinned} onChange={() => setIsPinned(!isPinned)} label="置顶这篇" />
+              <span className="text-[13px]">置顶这篇（归档时会自动取消）</span>
+            </div>
+          ) : null}
+        </div>
+      </Dialog>
+      {confirmDiscard ? (
+        <Dialog
+          title="放弃未保存的修改？"
+          maxWidth={380}
+          place="center"
+          onClose={() => setConfirmDiscard(false)}
+          footer={
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setConfirmDiscard(false)}>
+                继续编辑
+              </Button>
+              <Button className="flex-1 bg-danger" onClick={onClose}>
+                放弃修改
+              </Button>
+            </div>
+          }
+        >
+          <p className="text-[13px] leading-relaxed text-ink-soft">写到一半的内容还没保存，关掉就没了。</p>
+        </Dialog>
+      ) : null}
+    </>
   );
 }
