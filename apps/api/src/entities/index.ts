@@ -7839,8 +7839,75 @@ export class SmartHomeCommandRecord {
   finishedAt: Date | null;
 }
 
+/** H3 E3：HA → 小管家 webhook 的密钥（加密存、只写不读）与三条联动的开关。每个家庭一行。 */
+@Entity('smart_home_webhook_settings')
+export class SmartHomeWebhookSettings {
+  @PrimaryColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_webhook_settings' })
+  householdId: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_smart_home_webhook_settings_household' })
+  household: Household;
+
+  @Column({ type: 'text', nullable: true, select: false })
+  secretEncrypted: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  secretHint: string | null;
+
+  /** 轮换前的密钥，宽限期内仍然认 */
+  @Column({ type: 'text', nullable: true, select: false })
+  previousSecretEncrypted: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  previousValidUntil: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  rotatedAt: Date | null;
+
+  @Column({ type: 'jsonb', default: {} })
+  rules: Record<string, unknown>;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+/** H3 E3：HA 打进来的事件流水。(householdId, eventId) 唯一用来去重；保留一天，排查用。 */
+@Entity('smart_home_events')
+@Unique('UQ_smart_home_events_household_event', ['householdId', 'eventId'])
+@Index('IDX_smart_home_events_household_received', ['householdId', 'receivedAt'])
+@Check('CHK_smart_home_events_status', `"status" IN ('processed', 'ignored', 'failed')`)
+export class SmartHomeEventRecord {
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_events' })
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_smart_home_events_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 128 })
+  eventId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  event: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'processed' })
+  status: 'processed' | 'ignored' | 'failed';
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  result: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  receivedAt: Date;
+}
+
 export const ALL_ENTITIES = [
   HouseholdModuleOverride,
+  SmartHomeWebhookSettings,
+  SmartHomeEventRecord,
   SmartHomeCommandRecord,
   SmartHomeDevice,
   Account,

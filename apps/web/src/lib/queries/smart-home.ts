@@ -6,7 +6,11 @@ import type {
   SmartHomeConnectorSettings,
   SmartHomeDevice,
   SmartHomeDirectory,
+  SmartHomeRules,
   SmartHomeStates,
+  SmartHomeWebhookEventRecord,
+  SmartHomeWebhookSecret,
+  SmartHomeWebhookSettings,
   UpdateSmartHomeConnectorBody,
   UpsertSmartHomeDeviceBody,
 } from '@family/contracts';
@@ -120,4 +124,49 @@ export function useSmartHomeCommands(enabled: boolean) {
     queryFn: () => api<SmartHomeCommand[]>('/smart-home/commands'),
     enabled,
   });
+}
+
+// ---- E3：HA → 小管家 ----------------------------------------------------------------------------
+
+export const smartHomeWebhookKeys = {
+  settings: ['smart-home-webhook'] as const,
+  events: ['smart-home-webhook-events'] as const,
+};
+
+export function useSmartHomeWebhookSettings() {
+  return useQuery({
+    queryKey: smartHomeWebhookKeys.settings,
+    queryFn: () => api<SmartHomeWebhookSettings>('/smart-home/webhook-settings'),
+  });
+}
+
+export function useSmartHomeWebhookEvents() {
+  return useQuery({
+    queryKey: smartHomeWebhookKeys.events,
+    queryFn: () => api<SmartHomeWebhookEventRecord[]>('/smart-home/webhook-settings/events'),
+  });
+}
+
+function useWebhookMutation<TInput, TResult>(run: (input: TInput) => Promise<TResult>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: smartHomeWebhookKeys.settings });
+      void client.invalidateQueries({ queryKey: smartHomeWebhookKeys.events });
+    },
+  });
+}
+
+/** 生成 / 轮换密钥：明文只在返回里出现这一次，拿去生成 HA 配置。 */
+export function useRotateSmartHomeWebhook() {
+  return useWebhookMutation<void, SmartHomeWebhookSecret>(() =>
+    api<SmartHomeWebhookSecret>('/smart-home/webhook-settings/secret', { method: 'POST' }),
+  );
+}
+
+export function useUpdateSmartHomeRules() {
+  return useWebhookMutation((rules: SmartHomeRules) =>
+    api<SmartHomeWebhookSettings>('/smart-home/webhook-settings/rules', { method: 'PUT', body: rules }),
+  );
 }

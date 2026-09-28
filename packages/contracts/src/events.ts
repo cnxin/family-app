@@ -125,6 +125,7 @@ export const EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/travel-templates', domains: ['travel'] },
 
   { prefix: '/smart-home', domains: ['smart-home'] },
+  { prefix: '/smart-home/webhook', domains: ['smart-home'], emit: 'explicit' },
 
   { prefix: '/system/backups', domains: ['backups'] },
   { prefix: '/system/modules', domains: ['modules'] },

@@ -1,8 +1,14 @@
-import { Controller, Delete, Get, Module, Post, Put } from '@nestjs/common';
+import { Controller, Delete, Get, Headers, HttpCode, Module, Post, Put, Req, type RawBodyRequest } from '@nestjs/common';
+import type { Request } from 'express';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  smartHomeRulesSchema,
+  smartHomeWebhookBody,
+  type SmartHomeRules,
+  type SmartHomeWebhookBody,
   smartHomeCommandBody,
   smartHomeEntityId,
+  smartHomeHouseholdParams,
   updateSmartHomeConnectorBody,
   upsertSmartHomeDeviceBody,
   type SmartHomeCommandBody,
@@ -10,9 +16,20 @@ import {
   type UpsertSmartHomeDeviceBody,
 } from '@family/contracts';
 import { RequireCapabilities } from '../auth/capabilities';
-import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { ZodBody, ZodParam } from '../common/zod';
-import { Integration, SmartHomeCommandRecord, SmartHomeDevice } from '../entities';
+import {
+  Integration,
+  SmartHomeCommandRecord,
+  SmartHomeDevice,
+  SmartHomeEventRecord,
+  SmartHomeWebhookSettings,
+} from '../entities';
+import { RemindersModule } from '../reminders/reminders.module';
+import { ShoppingModule } from '../shopping/shopping.module';
+import { TasksModule } from '../tasks/tasks.module';
+import { SmartHomeLinkagesService } from './smart-home-linkages.service';
+import { SmartHomeWebhookService } from './smart-home-webhook.service';
 import { SmartHomeCommandsService } from './smart-home-commands.service';
 import { SmartHomeLiveService } from './smart-home-live.service';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
@@ -117,9 +134,73 @@ export class SmartHomeController {
   }
 }
 
+/**
+ * E3：HA → 小管家。webhook 是公开端点（签名 + 时间戳，见 SmartHomeWebhookService）；
+ * 密钥与联动设置只有管理员。
+ */
+@Controller('smart-home')
+export class SmartHomeWebhookController {
+  constructor(private readonly webhook: SmartHomeWebhookService) {}
+
+  @Public()
+  @Post('webhook/:householdId')
+  @HttpCode(200)
+  receive(
+    @ZodParam('householdId', smartHomeHouseholdParams.shape.householdId) householdId: string,
+    @Req() request: RawBodyRequest<Request>,
+    @Headers('x-family-timestamp') timestamp: string | undefined,
+    @Headers('x-family-signature') signature: string | undefined,
+    @ZodBody(smartHomeWebhookBody) body: SmartHomeWebhookBody,
+  ) {
+    return this.webhook.receive(householdId, request.rawBody, { timestamp, signature }, body);
+  }
+
+  @Get('webhook-settings')
+  @RequireCapabilities('manage_integrations')
+  settings(@CurrentUser() user: JwtUser) {
+    return this.webhook.view(user.householdId);
+  }
+
+  @Post('webhook-settings/secret')
+  @RequireCapabilities('manage_integrations')
+  rotate(@CurrentUser() user: JwtUser) {
+    return this.webhook.rotate(user);
+  }
+
+  @Put('webhook-settings/rules')
+  @RequireCapabilities('manage_integrations')
+  updateRules(@ZodBody(smartHomeRulesSchema) rules: SmartHomeRules, @CurrentUser() user: JwtUser) {
+    return this.webhook.updateRules(rules, user);
+  }
+
+  @Get('webhook-settings/events')
+  @RequireCapabilities('manage_integrations')
+  events(@CurrentUser() user: JwtUser) {
+    return this.webhook.recentEvents(user.householdId);
+  }
+}
+
 @Module({
-  imports: [TypeOrmModule.forFeature([Integration, SmartHomeDevice, SmartHomeCommandRecord])],
-  controllers: [SmartHomeController],
-  providers: [SmartHomeSettingsService, SmartHomeService, SmartHomeCommandsService, SmartHomeLiveService],
+  imports: [
+    TypeOrmModule.forFeature([
+      Integration,
+      SmartHomeDevice,
+      SmartHomeCommandRecord,
+      SmartHomeWebhookSettings,
+      SmartHomeEventRecord,
+    ]),
+    TasksModule,
+    ShoppingModule,
+    RemindersModule,
+  ],
+  controllers: [SmartHomeController, SmartHomeWebhookController],
+  providers: [
+    SmartHomeSettingsService,
+    SmartHomeService,
+    SmartHomeCommandsService,
+    SmartHomeLiveService,
+    SmartHomeWebhookService,
+    SmartHomeLinkagesService,
+  ],
 })
 export class SmartHomeModule {}
