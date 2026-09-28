@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   BadRequestException,
   Body,
@@ -1064,6 +1065,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly invitations: InvitationService,
     private readonly memberManagement: MemberManagementService,
+    private readonly events: EventBus,
   ) {}
 
   @Public()
@@ -1109,8 +1111,15 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Header('Cache-Control', 'no-store')
   @Post('auth/invitations/redeem')
-  redeemInvitation(@Body() dto: RedeemInvitationDto) {
-    return this.invitations.redeem(dto);
+  async redeemInvitation(@Body() dto: RedeemInvitationDto) {
+    const session = await this.invitations.redeem(dto);
+    // 公开端点，拦截器不知道是哪家：新成员进家后让在线的家里人刷新成员列表
+    this.events.publish({
+      householdId: session.member.householdId,
+      domains: ['members'],
+      actor: session.member.id,
+    });
+    return session;
   }
 
   @HttpCode(200)

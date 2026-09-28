@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { changedDomains, openEventStream } from './events-client.mjs';
 
 const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
@@ -711,6 +712,35 @@ try {
 
   const oldSession = await request('/dishes', oldToken);
   assert(oldSession.status === 401, '缺少会话 ID 的旧令牌会失效');
+
+  // H2a：事件通道按家庭隔离——本家庭的写入只推给本家庭的连接
+  const localStream = await openEventStream(BASE, defaultToken);
+  const foreignStream = await openEventStream(BASE, foreignToken);
+  await Promise.all([
+    localStream.waitFor((frame) => frame.event === 'hello', 2_000),
+    foreignStream.waitFor((frame) => frame.event === 'hello', 2_000),
+  ]);
+  const localSince = localStream.frames.length;
+  const foreignSince = foreignStream.frames.length;
+  const isolatedItem = await request('/shopping-items', defaultToken, 'POST', {
+    date: TEST_DATE,
+    customName: '隔离事件测试',
+    totalQty: 1,
+    unit: '份',
+  });
+  const [localGot, foreignGot] = await Promise.all([
+    localStream.waitFor((frame) => changedDomains(frame).includes('shopping'), 1_000, localSince),
+    foreignStream.waitFor((frame) => frame.event === 'changed', 1_000, foreignSince),
+  ]);
+  localStream.close();
+  foreignStream.close();
+  if (isolatedItem.body?.data?.id) {
+    await request(`/shopping-items/${isolatedItem.body.data.id}`, defaultToken, 'DELETE');
+  }
+  assert(
+    localStream.status === 200 && foreignStream.status === 200 && localGot !== null && foreignGot === null,
+    '事件通道只推本家庭：本家庭收到 shopping，其他家庭的连接收不到任何 changed',
+  );
 
   console.log('\n家庭数据隔离测试全部通过');
 } finally {

@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -165,6 +166,7 @@ export class RemindersService
     private readonly polls: Repository<Poll>,
     private readonly calendar: CalendarService,
     private readonly dataSource: DataSource,
+    private readonly events: EventBus,
   ) {}
 
   onApplicationBootstrap() {
@@ -646,6 +648,8 @@ export class RemindersService
   private async dispatchDue() {
     if (this.dispatching) return;
     this.dispatching = true;
+    // 到点的提醒会生成站内通知：事务提交后给涉及的家庭推 reminders + notifications
+    const touched = new Set<string>();
     try {
       await this.dataSource.transaction(async (manager) => {
         const reminders = manager.getRepository(Reminder);
@@ -663,6 +667,7 @@ export class RemindersService
           .getMany();
 
         for (const reminder of due) {
+          touched.add(reminder.householdId);
           const source = await this.resolveSource(manager, reminder, true);
           if (!source) {
             reminder.status = 'cancelled';
@@ -707,6 +712,9 @@ export class RemindersService
           await reminders.save(reminder);
         }
       });
+      for (const householdId of touched) {
+        this.events.publish({ householdId, domains: ['reminders', 'notifications'] });
+      }
     } catch (error) {
       console.error(
         JSON.stringify({

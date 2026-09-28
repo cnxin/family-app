@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 272 个端点（POST 113 / GET 86 / PATCH 42 / DELETE 24 / PUT 7），公开端点 27 个，已定义契约 272 个。
+共 273 个端点（POST 113 / GET 87 / PATCH 42 / DELETE 24 / PUT 7），公开端点 27 个，已定义契约 273 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -14,6 +14,7 @@
 | auth | 16 | 16 |
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
+| events | 1 | 1 |
 | finance | 13 | 13 |
 | guests | 21 | 21 |
 | households | 1 | 1 |
@@ -146,6 +147,12 @@
 | PATCH | `/dishes/:id` | `DishesController.update` | `manage_recipes` | ✓ | `apps/api/src/dishes/dishes.module.ts` |
 | DELETE | `/dishes/:id` | `DishesController.remove` | `manage_recipes` | ✓ | `apps/api/src/dishes/dishes.module.ts` |
 | GET | `/ingredients` | `DishesController.listIngredients` | 登录 | ✓ | `apps/api/src/dishes/dishes.module.ts` |
+
+## events（1）
+
+| 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
+| --- | --- | --- | --- | :-: | --- |
+| GET | `/events` | `EventsController.stream` | 登录 | ✓ | `apps/api/src/events/events.controller.ts` |
 
 ## finance（13）
 

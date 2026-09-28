@@ -8,6 +8,7 @@ import { CalendarModule } from './calendar/calendar.module';
 import { databaseOptions } from './database/database.options';
 import { ClockModule } from './common/clock';
 import { DishesModule } from './dishes/dishes.module';
+import { EventsModule } from './events/events.module';
 import { GuestsModule } from './guests/guests.module';
 import { HouseholdsModule } from './households/households.module';
 import { FinanceModule } from './finance/finance.module';
@@ -30,6 +31,7 @@ import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
+    EventsModule,
     TypeOrmModule.forRoot(databaseOptions()),
     ClockModule,
     ActivitiesModule,

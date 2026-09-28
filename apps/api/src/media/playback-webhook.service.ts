@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   BadGatewayException,
   BadRequestException,
@@ -351,6 +352,7 @@ export class PlaybackWebhookService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly connectors: MediaConnectorsService,
+    private readonly events: EventBus,
   ) {}
 
   isProvider(value: string): value is MediaLibraryProviderKind {
@@ -413,7 +415,23 @@ export class PlaybackWebhookService {
     };
   }
 
+  /** webhook 是公开端点，拦截器不知道是哪家；处理成功后按 integration 所属家庭发 media 事件。 */
   async receive(
+    provider: MediaLibraryProviderKind,
+    integrationId: string,
+    secret: string,
+    request: Request,
+    body: unknown,
+  ) {
+    const result = await this.receiveUnpublished(provider, integrationId, secret, request, body);
+    const integration = await this.dataSource
+      .getRepository(Integration)
+      .findOne({ where: { id: integrationId }, select: { id: true, householdId: true } });
+    if (integration?.householdId) this.events.publish({ householdId: integration.householdId, domains: ['media'] });
+    return result;
+  }
+
+  private async receiveUnpublished(
     provider: MediaLibraryProviderKind,
     integrationId: string,
     secret: string,

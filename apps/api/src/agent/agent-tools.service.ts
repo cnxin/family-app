@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   BadRequestException,
   ForbiddenException,
@@ -436,6 +437,7 @@ export class AgentToolsService {
     @InjectRepository(AgentRun) private readonly runs: Repository<AgentRun>,
     @InjectRepository(AgentToolEvent)
     private readonly events: Repository<AgentToolEvent>,
+    private readonly eventBus: EventBus,
     @InjectRepository(Member) private readonly members: Repository<Member>,
     @InjectRepository(AgentMemberProfile)
     private readonly memberProfiles: Repository<AgentMemberProfile>,
@@ -496,9 +498,13 @@ export class AgentToolsService {
         throw new BadRequestException('工具返回内容超过大小限制');
       }
       await this.saveEvent(run, toolName, input, 'completed', output, startedAt);
+      // 工具调用是运行进度：推 assistant 让对话页刷新（原来客户端按 700ms 轮询）
+      this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
       return output;
     } catch (error) {
       await this.saveEvent(run, toolName, input, 'failed', null, startedAt);
+      // 工具调用是运行进度：推 assistant 让对话页刷新（原来客户端按 700ms 轮询）
+      this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
       throw error;
     }
   }

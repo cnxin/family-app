@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   BadRequestException,
   ForbiddenException,
@@ -121,7 +122,10 @@ function normalizeMoviePilotEventType(value: string | null) {
 
 @Injectable()
 export class MoviePilotWebhookService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly events: EventBus,
+  ) {}
 
   async rotate(sourceIp: string | undefined, user: JwtUser) {
     const secret = randomBytes(32).toString('base64url');
@@ -172,7 +176,22 @@ export class MoviePilotWebhookService {
     };
   }
 
+  /** webhook 是公开端点，拦截器不知道是哪家；处理成功后按 integration 所属家庭发 media 事件。 */
   async receive(
+    integrationId: string,
+    secret: string,
+    request: Request,
+    body: unknown,
+  ) {
+    const result = await this.receiveUnpublished(integrationId, secret, request, body);
+    const integration = await this.dataSource
+      .getRepository(Integration)
+      .findOne({ where: { id: integrationId }, select: { id: true, householdId: true } });
+    if (integration?.householdId) this.events.publish({ householdId: integration.householdId, domains: ['media'] });
+    return result;
+  }
+
+  private async receiveUnpublished(
     integrationId: string,
     secret: string,
     request: Request,

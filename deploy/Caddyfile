@@ -1,5 +1,15 @@
 {$SITE_ADDRESS} {
-	encode zstd gzip
+	# 事件流（SSE）不压缩：encode 要先攒够字节才决定压不压，会把 hello / 心跳 / changed 卡住
+	@compressible not path /api/events
+	encode @compressible zstd gzip
+
+	# /api/events 是长连接事件流：代理不缓冲，每条立刻发出去（H2）
+	handle /api/events {
+		uri strip_prefix /api
+		reverse_proxy api:3100 {
+			flush_interval -1
+		}
+	}
 
 	handle_path /api/* {
 		reverse_proxy api:3100
