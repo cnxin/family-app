@@ -41,7 +41,7 @@ export function SmartHomeSettingsPage() {
       subtitle={
         section === 'devices'
           ? '连上 Home Assistant，挑几样家里人常看的设备，起个中文名'
-          : '家电完成了某件事，小管家接着把通知、家务、购物清单安排好'
+          : '家电完成了事，小管家接着安排通知、家务、购物清单；家务和日程也能反过来让设备动一下'
       }
       toolbar={
         <Segmented<Section>

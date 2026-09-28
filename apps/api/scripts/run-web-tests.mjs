@@ -71,6 +71,8 @@ const testEnvironment = {
   HOME_ASSISTANT_BASE_URL: '',
   HOME_ASSISTANT_TOKEN: '',
   HOME_ASSISTANT_TOKEN_FILE: '',
+  // E4 的日程联动轮询；e2e 只验家务打勾，1 秒够用
+  SMART_HOME_LINKS_POLL_MS: '1000',
 };
 const browserEnvironment = {
   ...testEnvironment,

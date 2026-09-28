@@ -1,7 +1,12 @@
-import { Controller, Delete, Get, Headers, HttpCode, Module, Post, Put, Req, type RawBodyRequest } from '@nestjs/common';
+import { Controller, Delete, Get, Headers, HttpCode, Module, Patch, Post, Put, Req, type RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  createSmartHomeLinkBody,
+  updateSmartHomeLinkBody,
+  uuid,
+  type CreateSmartHomeLinkBody,
+  type UpdateSmartHomeLinkBody,
   smartHomeRulesSchema,
   smartHomeWebhookBody,
   type SmartHomeRules,
@@ -23,8 +28,11 @@ import {
   SmartHomeCommandRecord,
   SmartHomeDevice,
   SmartHomeEventRecord,
+  SmartHomeLink,
+  SmartHomeLinkRun,
   SmartHomeWebhookSettings,
 } from '../entities';
+import { SmartHomeLinksService } from './smart-home-links.service';
 import { RemindersModule } from '../reminders/reminders.module';
 import { ShoppingModule } from '../shopping/shopping.module';
 import { TasksModule } from '../tasks/tasks.module';
@@ -180,6 +188,40 @@ export class SmartHomeWebhookController {
   }
 }
 
+/** E4：小管家 → HA 的联动规则（管理员）。执行在 SmartHomeLinksService 里（家务打勾 / 日程开始前）。 */
+@Controller('smart-home/links')
+export class SmartHomeLinksController {
+  constructor(private readonly links: SmartHomeLinksService) {}
+
+  @Get()
+  @RequireCapabilities('manage_integrations')
+  list(@CurrentUser() user: JwtUser) {
+    return this.links.list(user.householdId);
+  }
+
+  @Post()
+  @RequireCapabilities('manage_integrations')
+  create(@ZodBody(createSmartHomeLinkBody) body: CreateSmartHomeLinkBody, @CurrentUser() user: JwtUser) {
+    return this.links.create(body, user);
+  }
+
+  @Patch(':id')
+  @RequireCapabilities('manage_integrations')
+  update(
+    @ZodParam('id', uuid) id: string,
+    @ZodBody(updateSmartHomeLinkBody) body: UpdateSmartHomeLinkBody,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.links.update(id, body, user);
+  }
+
+  @Delete(':id')
+  @RequireCapabilities('manage_integrations')
+  remove(@ZodParam('id', uuid) id: string, @CurrentUser() user: JwtUser) {
+    return this.links.remove(id, user);
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -188,12 +230,14 @@ export class SmartHomeWebhookController {
       SmartHomeCommandRecord,
       SmartHomeWebhookSettings,
       SmartHomeEventRecord,
+      SmartHomeLink,
+      SmartHomeLinkRun,
     ]),
     TasksModule,
     ShoppingModule,
     RemindersModule,
   ],
-  controllers: [SmartHomeController, SmartHomeWebhookController],
+  controllers: [SmartHomeController, SmartHomeWebhookController, SmartHomeLinksController],
   providers: [
     SmartHomeSettingsService,
     SmartHomeService,
@@ -201,6 +245,7 @@ export class SmartHomeWebhookController {
     SmartHomeLiveService,
     SmartHomeWebhookService,
     SmartHomeLinkagesService,
+    SmartHomeLinksService,
   ],
 })
 export class SmartHomeModule {}

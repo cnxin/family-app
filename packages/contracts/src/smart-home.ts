@@ -428,3 +428,85 @@ export const smartHomeWebhook = {
     response: z.array(smartHomeWebhookEventRecordSchema),
   }),
 };
+
+// ---- E4：小管家 → HA（联动规则） ----------------------------------------------------------------
+
+/**
+ * 一条联动 = 触发 + 目标。触发按标题关键词匹配（周期家务、反复出现的日程都能一直生效）：
+ * - task_done：标题含关键词的家务被打勾完成时；
+ * - calendar_before：标题含关键词、有开始时间的日程，开始前 offsetMinutes 分钟。
+ * 目标是白名单里开放了控制的设备 + 动作，走 E2 同一条控制链路（权限、审计、超时）。
+ * 同一次发生（那一天的那件家务 / 那一场日程）只跑一次；失败不影响家务和日程本身，只在家庭动态里记一句。
+ */
+export const SMART_HOME_LINK_TRIGGERS = ['task_done', 'calendar_before'] as const;
+export const smartHomeLinkTrigger = z.enum(SMART_HOME_LINK_TRIGGERS);
+export type SmartHomeLinkTrigger = z.infer<typeof smartHomeLinkTrigger>;
+export const SMART_HOME_LINK_MAX_OFFSET_MINUTES = 720;
+
+export const smartHomeLinkRunSchema = z.object({
+  status: z.enum(['pending', 'succeeded', 'failed']),
+  message: z.string().nullable(),
+  at: isoDateTime,
+});
+
+export const smartHomeLinkSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  trigger: smartHomeLinkTrigger,
+  keyword: z.string(),
+  offsetMinutes: z.number().int(),
+  targetEntityId: smartHomeEntityId,
+  action: smartHomeAction,
+  enabled: z.boolean(),
+  lastRun: smartHomeLinkRunSchema.nullable(),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+});
+export type SmartHomeLink = z.infer<typeof smartHomeLinkSchema>;
+
+const linkFields = {
+  name: z.string().trim().min(1, '起个名字').max(40, '名字不超过 40 字'),
+  trigger: smartHomeLinkTrigger,
+  keyword: z.string().trim().min(1, '填一个标题里会出现的词').max(40, '关键词不超过 40 字'),
+  offsetMinutes: z.number().int().min(0).max(SMART_HOME_LINK_MAX_OFFSET_MINUTES),
+  targetEntityId: smartHomeEntityId,
+  action: smartHomeAction,
+  enabled: z.boolean(),
+};
+export const createSmartHomeLinkBody = z
+  .object({ ...linkFields, offsetMinutes: linkFields.offsetMinutes.optional(), enabled: linkFields.enabled.optional() })
+  .strict();
+export type CreateSmartHomeLinkBody = z.infer<typeof createSmartHomeLinkBody>;
+export const updateSmartHomeLinkBody = z.object(linkFields).partial().strict();
+export type UpdateSmartHomeLinkBody = z.infer<typeof updateSmartHomeLinkBody>;
+
+export const smartHomeLinks = {
+  list: defineEndpoint({
+    method: 'GET',
+    path: '/smart-home/links',
+    summary: '小管家 → HA 的联动规则（管理员）',
+    response: z.array(smartHomeLinkSchema),
+  }),
+  create: defineEndpoint({
+    method: 'POST',
+    path: '/smart-home/links',
+    summary: '新建联动（目标必须在白名单里且开放了控制）',
+    body: createSmartHomeLinkBody,
+    response: smartHomeLinkSchema,
+  }),
+  update: defineEndpoint({
+    method: 'PATCH',
+    path: '/smart-home/links/:id',
+    summary: '改联动 / 开关',
+    params: z.object({ id: uuid }),
+    body: updateSmartHomeLinkBody,
+    response: smartHomeLinkSchema,
+  }),
+  remove: defineEndpoint({
+    method: 'DELETE',
+    path: '/smart-home/links/:id',
+    summary: '删联动',
+    params: z.object({ id: uuid }),
+    response: z.object({ id: uuid }),
+  }),
+};

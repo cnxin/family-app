@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  CreateSmartHomeLinkBody,
+  SmartHomeLink,
+  UpdateSmartHomeLinkBody,
   SmartHomeAction,
   SmartHomeCommand,
   SmartHomeConnection,
@@ -169,4 +172,36 @@ export function useUpdateSmartHomeRules() {
   return useWebhookMutation((rules: SmartHomeRules) =>
     api<SmartHomeWebhookSettings>('/smart-home/webhook-settings/rules', { method: 'PUT', body: rules }),
   );
+}
+
+// ---- E4：小管家 → HA 的联动规则 --------------------------------------------------------------------
+
+export const smartHomeLinksKey = ['smart-home-links'] as const;
+
+export function useSmartHomeLinks() {
+  return useQuery({ queryKey: smartHomeLinksKey, queryFn: () => api<SmartHomeLink[]>('/smart-home/links') });
+}
+
+function useLinkMutation<TInput, TResult>(run: (input: TInput) => Promise<TResult>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => void client.invalidateQueries({ queryKey: smartHomeLinksKey }),
+  });
+}
+
+export function useCreateSmartHomeLink() {
+  return useLinkMutation((body: CreateSmartHomeLinkBody) =>
+    api<SmartHomeLink>('/smart-home/links', { method: 'POST', body }),
+  );
+}
+
+export function useUpdateSmartHomeLink() {
+  return useLinkMutation(({ id, body }: { id: string; body: UpdateSmartHomeLinkBody }) =>
+    api<SmartHomeLink>(`/smart-home/links/${id}`, { method: 'PATCH', body }),
+  );
+}
+
+export function useDeleteSmartHomeLink() {
+  return useLinkMutation((id: string) => api<{ id: string }>(`/smart-home/links/${id}`, { method: 'DELETE' }));
 }

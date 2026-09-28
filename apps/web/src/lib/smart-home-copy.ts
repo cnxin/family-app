@@ -239,3 +239,22 @@ export function smartHomeButtons(domain: SmartHomeDomain, state: SmartHomeEntity
       return [];
   }
 }
+
+/** 动作的中文名（审计列表、联动规则里用）。 */
+export const SMART_HOME_ACTION_LABELS: Record<SmartHomeAction, string> = {
+  start: '开始清扫',
+  pause: '暂停',
+  return_to_base: '回充',
+  open: '打开',
+  stop: '停',
+  close: '关上',
+  turn_on: '打开',
+  turn_off: '关掉',
+  activate: '执行',
+  mode_cool: '制冷',
+  mode_heat: '制热',
+  mode_fan_only: '送风',
+  mode_auto: '自动',
+  temperature_up: '调高 1°',
+  temperature_down: '调低 1°',
+};

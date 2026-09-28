@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 289 个端点（POST 117 / GET 94 / PATCH 42 / DELETE 26 / PUT 10），公开端点 28 个，已定义契约 289 个。
+共 293 个端点（POST 118 / GET 95 / PATCH 43 / DELETE 27 / PUT 10），公开端点 28 个，已定义契约 293 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -29,7 +29,7 @@
 | recipes | 7 | 7 |
 | reminders | 5 | 5 |
 | shopping | 5 | 5 |
-| smart-home | 16 | 16 |
+| smart-home | 20 | 20 |
 | system | 10 | 10 |
 | tasks | 5 | 5 |
 | today | 1 | 1 |
@@ -376,7 +376,7 @@
 | GET | `/shopping-list` | `ShoppingController.list` | 登录 | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 | POST | `/shopping-list/generate` | `ShoppingController.generate` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 
-## smart-home（16）
+## smart-home（20）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -390,6 +390,10 @@
 | DELETE | `/smart-home/devices/:entityId` | `SmartHomeController.removeDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | POST | `/smart-home/devices/:entityId/command` | `SmartHomeController.command` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/entity-directory` | `SmartHomeController.entityDirectory` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| GET | `/smart-home/links` | `SmartHomeLinksController.list` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| POST | `/smart-home/links` | `SmartHomeLinksController.create` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| PATCH | `/smart-home/links/:id` | `SmartHomeLinksController.update` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| DELETE | `/smart-home/links/:id` | `SmartHomeLinksController.remove` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/states` | `SmartHomeController.states` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/webhook-settings` | `SmartHomeWebhookController.settings` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/webhook-settings/events` | `SmartHomeWebhookController.events` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |

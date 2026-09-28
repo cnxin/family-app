@@ -6,6 +6,7 @@ import { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
 import { Member, Notification, ShoppingItem } from '../entities';
 import { RemindersService } from '../reminders/reminders.module';
+import { smartHomeActor } from './smart-home-actor';
 import { ShoppingService } from '../shopping/shopping.module';
 import { TasksService } from '../tasks/tasks.module';
 
@@ -175,14 +176,8 @@ export class SmartHomeLinkagesService {
     return members.map((member) => member.id);
   }
 
-  /** 以最早的在用家庭主人的名义执行（webhook 没有登录用户），显示名标明是联动做的。 */
-  private async actor(householdId: string): Promise<JwtUser | null> {
-    const owner = await this.dataSource.getRepository(Member).findOne({
-      where: { householdId, role: 'owner', disabledAt: IsNull() },
-      order: { createdAt: 'ASC' },
-    });
-    if (!owner) return null;
-    return { sub: '', accountId: '', memberId: owner.id, householdId, sid: '', name: '智能家居联动', role: 'owner' };
+  private actor(householdId: string) {
+    return smartHomeActor(this.dataSource, householdId);
   }
 
   private async today(householdId: string) {

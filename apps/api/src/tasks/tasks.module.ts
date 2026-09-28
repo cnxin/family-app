@@ -24,6 +24,7 @@ import {
 } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { PointsModule, PointsService } from '../points/points.module';
+import { TaskEvents } from './task-events';
 import {
   HouseholdTask,
   HouseholdTaskInstance,
@@ -130,6 +131,7 @@ export class TasksService {
     private readonly instances: Repository<HouseholdTaskInstance>,
     private readonly dataSource: DataSource,
     private readonly pointsService: PointsService,
+    private readonly taskEvents: TaskEvents,
   ) {}
 
   async list(start: string, end: string, user: JwtUser) {
@@ -355,6 +357,7 @@ export class TasksService {
     }
     parseDateOnly(dueDate, '任务日期');
     let savedId = '';
+    let completedTitle: string | null = null;
     await this.dataSource.transaction(async (manager) => {
       const tasks = manager.getRepository(HouseholdTask);
       const instances = manager.getRepository(HouseholdTaskInstance);
@@ -424,6 +427,7 @@ export class TasksService {
       savedId = instance.id;
 
       if (dto.status === 'done' && previousStatus !== 'done') {
+        completedTitle = task.title;
         await this.pointsService.awardTaskCompletion(
           manager,
           task,
@@ -477,6 +481,17 @@ export class TasksService {
         );
       }
     });
+
+    // 事务已提交：通知订阅方（智能家居联动等），不等它们
+    if (completedTitle !== null) {
+      this.taskEvents.emitCompleted({
+        householdId: user.householdId,
+        taskId,
+        dueDate,
+        title: completedTitle,
+        actor: user,
+      });
+    }
 
     const instance = await this.instances.findOneBy({
       id: savedId,
@@ -606,7 +621,7 @@ export class TasksController {
     ]),
   ],
   controllers: [TasksController],
-  providers: [TasksService],
-  exports: [TasksService],
+  providers: [TasksService, TaskEvents],
+  exports: [TasksService, TaskEvents],
 })
 export class TasksModule {}
