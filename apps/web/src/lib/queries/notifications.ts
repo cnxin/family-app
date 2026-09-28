@@ -13,7 +13,7 @@ export function useNotifications(includeRead = false) {
     queryKey: ['notifications', includeRead],
     queryFn: () =>
       api<AppNotification[]>(`/notifications${includeRead ? '?includeRead=true' : ''}`),
-    refetchInterval: 30_000,
+    // 不再轮询：/events 任何 changed 都会刷新它（很多写入顺带给别人发通知，见 lib/events.ts）
   });
 }
 

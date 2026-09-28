@@ -2,7 +2,10 @@ import { SHELF_MODULE_KEYS } from '@family/contracts';
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { authFiles, expectNoHorizontalOverflow, watchPageErrors } from './helpers';
+import { authFiles, expectNoHorizontalOverflow, watchPageErrors, withoutLiveEvents } from './helpers';
+
+// 不测实时更新：掐掉 /events，免得 networkidle 等不到、并行写入干扰计数（见 helpers）
+test.beforeEach(async ({ page }) => withoutLiveEvents(page));
 
 // F2 结构 / 预取回归保持全功能可见；F4 状态变化在 modules.spec.ts 用真实空家庭验收。
 test.beforeEach(async ({ page }) => {
@@ -25,7 +28,8 @@ function watchRequests(page: Page) {
   const paths: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.pathname.startsWith('/api/')) paths.push(url.pathname + url.search);
+    // /api/events 是外壳级的实时连接，不算页面自己的数据请求
+    if (url.pathname.startsWith('/api/') && url.pathname !== '/api/events') paths.push(url.pathname + url.search);
   });
   return paths;
 }

@@ -1,3 +1,4 @@
+import { LiveEvents } from './live-events';
 import { PinsProvider } from '../lib/pins';
 import { useModules } from '../lib/queries/modules';
 import { useUnreadCount } from '../lib/queries/notifications';
@@ -122,6 +123,7 @@ function ShellLayout() {
         </main>
       </div>
       <BottomTabs manager={manager} />
+      <LiveEvents />
     </div>
   );
 }

@@ -10,7 +10,8 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY packages ./packages
 COPY scripts/build-packages.mjs ./scripts/build-packages.mjs
 
-RUN pnpm install --frozen-lockfile --filter api...
+# 带上 ./packages/*：根 postinstall 会构建 packages 下每个包，只装 api 依赖时 api-client 等缺 typescript
+RUN pnpm install --frozen-lockfile --filter api... --filter "./packages/*"
 
 COPY apps/api ./apps/api
 

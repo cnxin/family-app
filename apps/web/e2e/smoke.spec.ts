@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalOverflow, watchPageErrors } from './helpers';
+import { expectNoHorizontalOverflow, watchPageErrors, withoutLiveEvents } from './helpers';
+
+// 不测实时更新：掐掉 /events，免得 networkidle 等不到、并行写入干扰计数（见 helpers）
+test.beforeEach(async ({ page }) => withoutLiveEvents(page));
 
 /**
  * 已搬到新客户端的页面。每搬一页在这里加一行——这是全套回归里最便宜、也最先发现

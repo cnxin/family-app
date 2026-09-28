@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { apiClient, freshMemberSession, seedSession, type FreshSession } from './helpers';
+import { apiClient, freshMemberSession, seedSession, type FreshSession, withoutLiveEvents } from './helpers';
+
+// 不测实时更新：掐掉 /events，免得 networkidle 等不到、并行写入干扰计数（见 helpers）
+test.beforeEach(async ({ page }) => withoutLiveEvents(page));
 
 // 续期会轮换刷新令牌，不能拿 setup 存下的共享会话来试：邀请 + 兑换现开一个成员和会话。
 test.use({ storageState: { cookies: [], origins: [] } });

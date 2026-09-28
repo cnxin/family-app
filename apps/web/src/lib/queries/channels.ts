@@ -76,7 +76,7 @@ export function useNotificationDeliveries(enabled: boolean) {
     queryKey: ['notification-deliveries'],
     queryFn: () => api<NotificationDelivery[]>('/notification-deliveries?status=all'),
     enabled,
-    refetchInterval: enabled ? 30_000 : false,
+    // 不再轮询：投递定稿后服务端推 notifications 域
   });
 }
 

@@ -844,6 +844,8 @@ export class AgentService {
     if (!claimed.affected) return;
     const run = await this.runs.findOneBy({ id: runId });
     if (!run) return;
+    // 排队 → 运行中：对话页的状态跟着变
+    this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
     try {
       const retryAncestorIds = await this.retryAncestorIds(run);
       const stored = await this.messages.find({

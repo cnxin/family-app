@@ -8,7 +8,8 @@ COPY apps/api/package.json ./apps/api/package.json
 # （和 Dockerfile.prod / Dockerfile.web 保持一致，漏掉这两行 install 阶段就会 MODULE_NOT_FOUND）
 COPY packages ./packages
 COPY scripts/build-packages.mjs ./scripts/build-packages.mjs
-RUN pnpm install --frozen-lockfile --filter api...
+# 带上 ./packages/*：根 postinstall 会构建 packages 下每个包，只装 api 依赖时 api-client 等缺 typescript
+RUN pnpm install --frozen-lockfile --filter api... --filter "./packages/*"
 COPY apps/api ./apps/api
 RUN pnpm --filter api build
 

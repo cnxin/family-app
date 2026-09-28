@@ -30,20 +30,14 @@ export function useAgentConversations() {
 }
 
 /**
- * 会话详情。后端是排队 + worker 跑，没有 SSE，所以有运行在队列里 / 跑着的时候按 700ms 轮询，
- * 跑完就停——这和旧客户端一致。
+ * 会话详情。后端排队 + worker 跑；每次工具调用和运行结束都推 assistant 域，对话页据此刷新，
+ * 不再按 700ms 轮询。
  */
 export function useAgentConversation(id: string | null) {
   return useQuery({
     queryKey: ['agent-conversation', id],
     queryFn: () => api<AgentConversationDetail>(`/agent/conversations/${id}`),
     enabled: Boolean(id),
-    refetchInterval: (query) => {
-      const detail = query.state.data as AgentConversationDetail | undefined;
-      return detail?.runs.some((run) => run.status === 'queued' || run.status === 'running')
-        ? 700
-        : false;
-    },
   });
 }
 

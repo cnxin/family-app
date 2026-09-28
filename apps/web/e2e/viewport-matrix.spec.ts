@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectNoHorizontalOverflow, watchPageErrors } from './helpers';
+import { expectNoHorizontalOverflow, watchPageErrors, withoutLiveEvents } from './helpers';
+
+// 不测实时更新：掐掉 /events，免得 networkidle 等不到、并行写入干扰计数（见 helpers）
+test.beforeEach(async ({ page }) => withoutLiveEvents(page));
 
 /**
  * 视口矩阵：窄屏手机、常见手机、横屏手机、竖放平板。尺寸都是显式 setViewportSize 设的，
