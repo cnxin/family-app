@@ -6,6 +6,8 @@ import {
   SMART_HOME_DOMAINS,
   type SmartHomeConnection,
   isPrimarySmartHomeEntity,
+  smartHomeActionsFor,
+  SMART_HOME_READONLY_COVER_CLASSES,
   type SmartHomeDevice as SmartHomeDeviceView,
   type SmartHomeDirectory,
   type SmartHomeDirectoryDevice,
@@ -17,7 +19,7 @@ import {
 import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
-import { SmartHomeDevice } from '../entities';
+import { SmartHomeDevice, type MemberRole } from '../entities';
 import {
   HomeAssistantError,
   fetchHomeAssistantStates,
@@ -36,6 +38,19 @@ const PAGE_PATH = '/house/smart-home';
 type Snapshot =
   | { ok: true; states: HomeAssistantRawState[]; checkedAt: Date }
   | { ok: false; configured: boolean; message: string; checkedAt: Date };
+
+/** 这个人能不能控这台：设备开放了控制、这类有动作，且角色够（minRole = member 时全家都行）。 */
+export function canControlDevice(device: SmartHomeDeviceView, role: MemberRole) {
+  return (
+    device.controllable &&
+    smartHomeActionsFor(device.domain).length > 0 &&
+    (device.minRole === 'member' || role === 'owner' || role === 'admin')
+  );
+}
+
+export function isReadonlyCover(domain: string, deviceClass: string | null) {
+  return domain === 'cover' && (SMART_HOME_READONLY_COVER_CLASSES as readonly string[]).includes(deviceClass ?? '');
+}
 
 function domainOf(entityId: string) {
   return entityId.slice(0, entityId.indexOf('.'));
@@ -194,7 +209,7 @@ export class SmartHomeService {
     };
   }
 
-  async states(householdId: string): Promise<SmartHomeStates> {
+  async states(householdId: string, role: MemberRole): Promise<SmartHomeStates> {
     const [snapshot, devices] = await Promise.all([this.snapshot(householdId), this.list(householdId)]);
     const byId = snapshot.ok ? new Map(snapshot.states.map((raw) => [raw.entity_id, raw])) : null;
     return {
@@ -207,9 +222,17 @@ export class SmartHomeService {
             ? presentHomeAssistantState(raw)
             : { state: 'unavailable', unit: null, deviceClass: null, position: null, battery: null, lastChanged: null }
           : null;
-        return { ...device, state };
+        return { ...device, state, canControl: canControlDevice(device, role) };
       }),
     };
+  }
+
+  /** 最新的 HA 状态（走 2 秒缓存）；连不上时 null。控制前查 device_class 用。 */
+  async currentState(householdId: string, entityId: string) {
+    const snapshot = await this.snapshot(householdId);
+    if (!snapshot.ok) return null;
+    const raw = snapshot.states.find((entry) => entry.entity_id === entityId);
+    return raw ? presentHomeAssistantState(raw) : null;
   }
 
   async upsert(entityId: string, input: UpsertSmartHomeDeviceBody, user: JwtUser) {
@@ -219,6 +242,15 @@ export class SmartHomeService {
     }
     if (!isSupported(domain)) {
       throw new BadRequestException('这类实体第一期还不支持');
+    }
+    if (input.controllable) {
+      if (!smartHomeActionsFor(domain).length) {
+        throw new BadRequestException('这类设备只能看，不能在小管家里控制');
+      }
+      const state = await this.currentState(user.householdId, entityId);
+      if (isReadonlyCover(domain, state?.deviceClass ?? null)) {
+        throw new BadRequestException('车库门、大门这类只读，不能在小管家里控制');
+      }
     }
     const saved = await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(SmartHomeDevice);
@@ -234,6 +266,8 @@ export class SmartHomeService {
       row.displayName = input.displayName;
       if (input.area !== undefined) row.area = input.area?.trim() || null;
       if (input.sortOrder !== undefined) row.sortOrder = input.sortOrder;
+      if (input.minRole !== undefined) row.minRole = input.minRole;
+      if (input.controllable !== undefined) row.controllable = input.controllable;
       const result = await repository.save(row);
       await recordActivity(manager, user, {
         module: 'system',

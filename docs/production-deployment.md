@@ -45,6 +45,8 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - `HOME_ASSISTANT_BASE_URL` 默认 `http://host.docker.internal:8123`（HA 跑在同一台宿主机上；编排给 API 加了 `host.docker.internal:host-gateway`，Linux/NAS 上也能解析）。
 - `HOME_ASSISTANT_TOKEN_FILE` 默认 `/run/integration-secrets/home_assistant_token.txt`，即 `deploy/secrets/home_assistant_token.txt`，放 HA 的长期访问令牌，权限 `600`、属主规则同媒体连接器。**文件不存在时只是「没配」**，API 照常启动；写入后不用重启，下次请求就会读到。
 - 同样是服务器默认值；家庭管理员可在「家庭设置 → 智能家居」填自己的地址和令牌（加密存库、不回显）。所有对 HA 的调用 3 秒超时，HA 挂了只影响智能家居那一页。
+- 控制（E2）：`HOME_ASSISTANT_COMMAND_TIMEOUT_MS` 默认 8000——HA 要等 service 执行完才回，石头、米家这类云端设备常要好几秒；超时只算这一次失败并记进审计。
+- 状态推送（E2）：API 对每个「连好 HA 且白名单非空」的家庭常驻一条 HA WebSocket（订阅 `state_changed`），变化经 `/events` 推给页面；断了退回每 `SMART_HOME_POLL_MS`（默认 30000）拉一次 `/api/states`，同时按 `SMART_HOME_RECONNECT_MIN_MS`～`SMART_HOME_RECONNECT_MAX_MS`（5 秒～60 秒）退避重连。反代不用额外配置：这条连接是 API 容器主动连 HA。
 
 可选影视元数据：
 

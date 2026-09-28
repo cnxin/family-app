@@ -4,10 +4,12 @@ import { useSmartHomeStates } from '../lib/queries';
 import { groupByArea, smartHomeStateLine, type StateLine } from '../lib/smart-home-copy';
 import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
+import { SmartHomeControls } from '../components/smart-home-controls';
 import { SoftLink } from '../components/soft-link';
 import { Button, EmptyState, Page, Panel } from '../components/ui';
 
-// H3 E1：只读。家里人在天天打开的页面上看一眼常用设备；要控、要看全部实体，去 HA App（方案 §0）。
+// H3：家里人在天天打开的页面上看一眼、按一下常用设备；要看全部实体、做复杂设置，去 HA App（方案 §0）。
+// 能不能按由服务端按设备的 minRole 算好（canControl），每次按还会再校验一次。
 
 const TONE: Record<StateLine['tone'], string> = {
   on: 'text-accent',
@@ -19,15 +21,19 @@ const TONE: Record<StateLine['tone'], string> = {
 function DeviceRow({ device, timeZone }: { device: SmartHomeDeviceWithState; timeZone: string }) {
   const line = smartHomeStateLine(device.domain, device.state, timeZone);
   return (
-    <li
-      data-smart-home-device={device.entityId}
-      className="flex min-h-12 items-center gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0"
-    >
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">{device.displayName}</span>
-      <span className="shrink-0 text-right">
-        <span className={`block text-sm ${TONE[line.tone]}`}>{line.text}</span>
-        {line.detail ? <span className="block text-[12px] text-ink-soft">{line.detail}</span> : null}
-      </span>
+    <li data-smart-home-device={device.entityId} className="border-b border-border px-3.5 py-2.5 last:border-b-0">
+      <div className="flex min-h-7 items-center gap-3">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{device.displayName}</span>
+        <span className="shrink-0 text-right">
+          <span className={`block text-sm ${TONE[line.tone]}`}>{line.text}</span>
+          {line.detail ? <span className="block text-[12px] text-ink-soft">{line.detail}</span> : null}
+        </span>
+      </div>
+      {device.canControl ? (
+        <div className="mt-2 flex justify-end">
+          <SmartHomeControls device={device} />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -71,12 +77,13 @@ export function SmartHomePage() {
   const timeZone = session?.householdTimezone ?? 'Asia/Shanghai';
   const states = useSmartHomeStates();
   const data = states.data;
-  const groups = data ? groupByArea(data.devices) : [];
+  const scenes = data?.devices.filter((device) => device.domain === 'scene') ?? [];
+  const groups = data ? groupByArea(data.devices.filter((device) => device.domain !== 'scene')) : [];
 
   return (
     <Page
       title="智能家居"
-      subtitle="家里常用的几样设备现在怎么样"
+      subtitle="家里常用的几样设备：看一眼，按一下"
       actions={
         <Button
           variant="outline"
@@ -126,6 +133,22 @@ export function SmartHomePage() {
       </div>
       {data ? (
         <aside className="flex shrink-0 flex-col gap-4 lg:w-[300px]">
+          {scenes.length ? (
+            <Panel title="场景" grow={false}>
+              <ul>
+                {scenes.map((scene) => (
+                  <li
+                    key={scene.entityId}
+                    data-smart-home-device={scene.entityId}
+                    className="flex min-h-12 items-center gap-3 border-b border-border px-3.5 py-2 last:border-b-0"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">{scene.displayName}</span>
+                    <SmartHomeControls device={scene} />
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : null}
           <ConnectionPanel connection={data.connection} manager={manager} />
         </aside>
       ) : null}

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  SmartHomeAction,
+  SmartHomeCommand,
   SmartHomeConnection,
   SmartHomeConnectorSettings,
   SmartHomeDevice,
@@ -11,14 +13,15 @@ import type {
 import { api } from '../api';
 import { invalidateModules } from './modules';
 
-// 智能家居（H3 E1）：只读。状态由服务端去 HA 取（3 秒超时），这里不轮询；
-// E2 起 HA 的状态变化经 /events 的 smart-home 域推过来。
+// 智能家居（H3）：状态由服务端去 HA 取（3 秒超时），这里不轮询；
+// HA 的状态变化由服务端订阅后经 /events 的 smart-home 域推过来（E2）。
 
 export const smartHomeKeys = {
   states: ['smart-home-states'] as const,
   devices: ['smart-home-devices'] as const,
   directory: ['smart-home-directory'] as const,
   settings: ['smart-home-connector-settings'] as const,
+  commands: ['smart-home-commands'] as const,
 };
 
 export function useSmartHomeStates() {
@@ -92,4 +95,29 @@ export function useRemoveSmartHomeDevice() {
   return useSmartHomeMutation((entityId: string) =>
     api<{ entityId: string }>(`/smart-home/devices/${encodeURIComponent(entityId)}`, { method: 'DELETE' }),
   );
+}
+
+/** E2 控制。requestId 是这一次点击的幂等键：网络重发不会让 HA 执行两次。失败的提示由全局 mutation 错误处理弹。 */
+export function useSmartHomeCommand() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entityId, action }: { entityId: string; action: SmartHomeAction }) =>
+      api<SmartHomeCommand>(`/smart-home/devices/${encodeURIComponent(entityId)}/command`, {
+        method: 'POST',
+        body: { action, requestId: crypto.randomUUID() },
+      }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: smartHomeKeys.states });
+      void client.invalidateQueries({ queryKey: smartHomeKeys.commands });
+    },
+  });
+}
+
+/** 最近 50 次控制（管理员）。 */
+export function useSmartHomeCommands(enabled: boolean) {
+  return useQuery({
+    queryKey: smartHomeKeys.commands,
+    queryFn: () => api<SmartHomeCommand[]>('/smart-home/commands'),
+    enabled,
+  });
 }

@@ -7788,8 +7788,60 @@ export class SmartHomeDevice {
   updatedAt: Date;
 }
 
+/** H3 E2：智能家居控制审计。(householdId, requestId) 唯一，即幂等键。 */
+@Entity('smart_home_commands')
+@Unique('UQ_smart_home_commands_household_request', ['householdId', 'requestId'])
+@Index('IDX_smart_home_commands_household_created', ['householdId', 'createdAt'])
+@Check('CHK_smart_home_commands_status', `"status" IN ('pending', 'succeeded', 'failed')`)
+export class SmartHomeCommandRecord {
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_commands' })
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_smart_home_commands_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  // NO ACTION：整个家庭删除时成员和审计在同一条语句里级联删掉；单删成员（实际只停用不删）会被挡住
+  @ManyToOne(() => Member, { onDelete: 'NO ACTION' })
+  @JoinColumn({ name: 'memberId', foreignKeyConstraintName: 'FK_smart_home_commands_member' })
+  member: Member;
+
+  @Column('uuid')
+  memberId: string;
+
+  @Column('uuid')
+  requestId: string;
+
+  @Column({ type: 'varchar', length: 255 })
+  entityId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  action: string;
+
+  /** 发给 HA 的 service，比如 vacuum.start */
+  @Column({ type: 'varchar', length: 80 })
+  service: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'pending' })
+  status: 'pending' | 'succeeded' | 'failed';
+
+  /** HA 回了什么：成功时是变化的实体数，失败时是原因 */
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  message: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  finishedAt: Date | null;
+}
+
 export const ALL_ENTITIES = [
   HouseholdModuleOverride,
+  SmartHomeCommandRecord,
   SmartHomeDevice,
   Account,
   Household,
