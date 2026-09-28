@@ -51,6 +51,10 @@ const testEnvironment = {
   DOUBAN_API_TOKEN: '',
   BANGUMI_API_BASE_URL: 'http://127.0.0.1:1',
   BANGUMI_ACCESS_TOKEN: '',
+  // 服务器默认预留了地址、令牌文件还不存在：和演示栈刚装好 HA 时一样（smart-home.mjs 验这一点）
+  HOME_ASSISTANT_BASE_URL: 'http://127.0.0.1:1',
+  HOME_ASSISTANT_TOKEN: '',
+  HOME_ASSISTANT_TOKEN_FILE: join(tmpdir(), `family-app-ha-token-missing-${randomUUID()}.txt`),
   SMOKE_DATE: '2199-12-28',
   UPLOAD_DIR: TEST_UPLOAD_DIR,
 };
@@ -127,6 +131,7 @@ const BUSINESS_SCRIPTS = [
   'media-library',
   'playback-webhook',
   'system-modules',
+  'smart-home',
   'today-attention',
   'events',
   'households',

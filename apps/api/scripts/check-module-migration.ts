@@ -15,6 +15,11 @@ async function main() {
     );
     const targetIndex = applied.findIndex((row) => row.name === name);
     assert(targetIndex >= 0, '模块目标迁移必须已经应用');
+    const snapshot = async () =>
+      db.query(`SELECT tablename, indexname, indexdef FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename <> 'household_module_overrides' ORDER BY tablename, indexname`);
+    // 回退前的全貌：最后重新 up 会把目标之后的迁移一起恢复，要和它比，而不是和回退后的比
+    const original = await snapshot();
     // 自动回退后续迁移（包括新加的迁移），只验证模块表本身的 up/down/up。
     for (const migration of applied.slice(0, targetIndex)) {
       const current: { name: string }[] = await db.query(
@@ -27,9 +32,6 @@ async function main() {
       'SELECT name FROM app_migrations ORDER BY id DESC LIMIT 1',
     );
     assert.equal(latest[0]?.name, name, '回退只到模块迁移为止');
-    const snapshot = async () =>
-      db.query(`SELECT tablename, indexname, indexdef FROM pg_indexes
-      WHERE schemaname = 'public' AND tablename <> 'household_module_overrides' ORDER BY tablename, indexname`);
     const before = await snapshot();
     assert.equal(
       (
@@ -56,8 +58,8 @@ async function main() {
       rerun.map((migration) => migration.name),
       applied.slice(0, targetIndex + 1).reverse().map((migration) => migration.name),
     );
-    assert.deepEqual(await snapshot(), before);
-    console.log('  ✓ 模块迁移再次 up：仅目标迁移恢复，现有表与索引不变');
+    assert.deepEqual(await snapshot(), original);
+    console.log('  ✓ 模块迁移再次 up：目标及其后的迁移恢复，表与索引和回退前一致');
   } finally {
     await db.destroy();
   }

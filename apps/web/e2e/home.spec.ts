@@ -34,12 +34,12 @@ function watchRequests(page: Page) {
   return paths;
 }
 
-test('家里冷启动：14 个 shelf、无状态伪零，也不逐图块拉列表', async ({ page }) => {
+test('家里冷启动：15 个 shelf、无状态伪零，也不逐图块拉列表', async ({ page }) => {
   const paths = watchRequests(page);
   await page.goto('/home');
   await expect(page.locator('main h1')).toHaveText('家里');
   await expect(page.getByRole('heading', { name: '家里在用的' })).toBeVisible();
-  await expect(page.locator('[data-home-grid] a')).toHaveCount(14);
+  await expect(page.locator('[data-home-grid] a')).toHaveCount(15);
   await expect(page.locator('[data-home-status]').first()).toBeVisible();
   for (const text of await page.locator('[data-home-status]').allTextContents()) {
     expect(text.trim()).not.toMatch(/已载入|^\d+$/);
@@ -107,7 +107,7 @@ for (const ordinary of [false, true]) {
     await page.waitForLoadState('networkidle');
     expect(paths).toEqual(['/api/today/attention']);
     const main = page.locator('main');
-    await expect(main.locator('[data-home-grid] a')).toHaveCount(ordinary ? 13 : 14);
+    await expect(main.locator('[data-home-grid] a')).toHaveCount(ordinary ? 14 : 15);
     await expect(main.getByRole('link', { name: '财务', exact: true })).toHaveCount(ordinary ? 0 : 1);
     if (ordinary) {
       await expect(main.getByRole('link', { name: '家庭设置', exact: true })).toHaveCount(0);

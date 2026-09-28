@@ -145,6 +145,7 @@ export type PollStatus = 'open' | 'closed';
 export type MediaType = 'movie' | 'series';
 export type MediaMetadataSource = 'tmdb' | 'douban' | 'bangumi';
 export type MediaCredentialKind = 'token' | 'api_key';
+/** 媒体连接器的三种；integrations 表里另有 'home_assistant'（H3，见 smart-home/）。 */
 export type IntegrationKind = 'plex' | 'emby' | 'moviepilot';
 export type IntegrationEventStatus = 'processed' | 'ignored' | 'failed';
 export type ViewingSessionStatus =
@@ -2635,7 +2636,7 @@ export class Integration {
   householdId: string;
 
   @Column({ type: 'varchar', length: 48 })
-  kind: IntegrationKind;
+  kind: IntegrationKind | 'home_assistant';
 
   @Column({ type: 'varchar', length: 120 })
   name: string;
@@ -7740,8 +7741,56 @@ export class HouseholdModuleOverride {
   member: Member;
 }
 
+/** H3 E1：Home Assistant 实体白名单。小管家只认这里登记过的实体。 */
+@Entity('smart_home_devices')
+@Unique('UQ_smart_home_devices_household_entity', ['householdId', 'entityId'])
+@Check('CHK_smart_home_devices_domain', `"domain" NOT IN ('lock', 'alarm_control_panel') AND "entityId" LIKE "domain" || '.%'`)
+@Check('CHK_smart_home_devices_min_role', `"minRole" IN ('owner', 'admin', 'member')`)
+export class SmartHomeDevice {
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_devices' })
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_smart_home_devices_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 255 })
+  entityId: string;
+
+  @Column({ type: 'varchar', length: 32 })
+  domain: string;
+
+  @Column({ type: 'varchar', length: 40 })
+  displayName: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  area: string | null;
+
+  @Column({ type: 'int', default: 0 })
+  sortOrder: number;
+
+  @Column({ default: false })
+  controllable: boolean;
+
+  @Column({ type: 'varchar', length: 16, default: 'admin' })
+  minRole: MemberRole;
+
+  @Column({ default: false })
+  pinnedToToday: boolean;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 export const ALL_ENTITIES = [
   HouseholdModuleOverride,
+  SmartHomeDevice,
   Account,
   Household,
   Member,

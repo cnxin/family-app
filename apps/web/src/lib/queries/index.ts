@@ -29,3 +29,4 @@ export * from './media';
 export * from './media-settings';
 export * from './media-watchlist';
 export * from './attention';
+export * from './smart-home';

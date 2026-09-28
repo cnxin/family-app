@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import type { AgentSettings, BackupDashboard, MediaConnectorSettings, Member, NotificationChannel } from '@family/contracts';
+import type {
+  AgentSettings,
+  BackupDashboard,
+  MediaConnectorSettings,
+  Member,
+  NotificationChannel,
+  SmartHomeConnectorSettings,
+} from '@family/contracts';
 import { useAuth } from '../lib/auth';
 import { modulesKey } from '../lib/queries/modules';
 import { shelfSegments } from '../lib/nav';
@@ -43,6 +50,7 @@ export function SettingsPage() {
   const connectors = useCached<MediaConnectorSettings[]>(['media-connector-settings']);
   const channels = useCached<NotificationChannel[]>(['notification-channels']);
   const agent = useCached<AgentSettings>(['agent-settings']);
+  const smartHome = useCached<SmartHomeConnectorSettings>(['smart-home-connector-settings']);
   const modules = useCached<{ modules: { key: string; override: 'on' | 'off' | null; hasData: boolean }[] }>(modulesKey);
 
   if (role === 'member') return <Navigate to="/me/profile" replace />;
@@ -84,6 +92,12 @@ export function SettingsPage() {
           }
         />
         <Row to="/life/media/settings" title="观影连接" hint="Plex、Emby 这些片库怎么接进来" status={connectors ? `${connectors.length} 个连接` : null} />
+        <Row
+          to="/house/smart-home/settings"
+          title="智能家居"
+          hint="连上 Home Assistant，挑几样家里人常看的设备"
+          status={smartHome ? (smartHome.configured ? '已连接' : '未连接') : null}
+        />
         <Row to="/schedule/notifications?view=channels" title="外部通知渠道" hint="提醒发到手机上的哪一条渠道" status={channels ? `${channels.length} 个渠道` : null} />
         <Row to="/me/assistant?settings=1" title="小管家设置" hint="谁来回答，以及外部账号怎么配对" status={agent ? (agent.enabled ? '已启用' : '未启用') : null} />
         <Row to="/home" title="功能开关" hint="家里页底部那些还没摆出来的功能" status={available == null ? null : `${available} 项可以开启`} />

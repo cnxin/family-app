@@ -6,7 +6,8 @@ import { SoftLink } from './soft-link';
 const descriptions: Record<ShelfModuleKey, string> = {
   recipes: '收好家人爱吃的菜和做法', reminders: '重要的事，到时提醒', polls: '一起商量，投票做决定',
   inventory: '记住家里有什么、放在哪里', assets: '收好家电档案和维护安排', finance: '一起记账，照看家庭收支',
-  points: '用积分记录付出，兑换小奖励', guests: '安排来访，照顾客人的偏好', media: '收好想看的片，一起挑一部',
+  points: '用积分记录付出，兑换小奖励', guests: '安排来访，照顾客人的偏好', 'smart-home': '扫地机、窗帘、洗衣机这些常用设备，在这儿看一眼',
+  media: '收好想看的片，一起挑一部',
   travel: '安排出行，出发前对一遍清单', memories: '留下值得记住的家庭时刻', knowledge: '家里的说明与经验，随时找得到',
   activity: '看看家里最近发生了什么', assistant: '用一句话请小管家帮忙',
 };

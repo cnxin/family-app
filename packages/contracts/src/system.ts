@@ -18,7 +18,7 @@ import { defineEndpoint } from './registry';
 // shelf 模块 key 的唯一来源；core / settings 不参与 hasData。
 export const SHELF_MODULE_KEYS = [
   'recipes', 'reminders', 'polls', 'inventory', 'assets', 'finance', 'points',
-  'guests', 'media', 'travel', 'memories', 'knowledge', 'activity', 'assistant',
+  'guests', 'smart-home', 'media', 'travel', 'memories', 'knowledge', 'activity', 'assistant',
 ] as const;
 export const shelfModuleKey = z.enum(SHELF_MODULE_KEYS);
 export type ShelfModuleKey = z.infer<typeof shelfModuleKey>;
