@@ -34,6 +34,8 @@ async function bootstrap() {
   mkdirSync(UPLOAD_DIR, { recursive: true });
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger,
+    // 留一份原始请求体：HA webhook 的签名按原始字节算（smart-home/smart-home-webhook.service.ts）
+    rawBody: true,
   });
   const proxyHops = trustProxyHops();
   if (proxyHops > 0) app.set('trust proxy', proxyHops);

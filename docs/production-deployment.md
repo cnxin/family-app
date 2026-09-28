@@ -48,6 +48,8 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 控制（E2）：`HOME_ASSISTANT_COMMAND_TIMEOUT_MS` 默认 8000——HA 要等 service 执行完才回，石头、米家这类云端设备常要好几秒；超时只算这一次失败并记进审计。
 - 状态推送（E2）：API 对每个「连好 HA 且白名单非空」的家庭常驻一条 HA WebSocket（订阅 `state_changed`），变化经 `/events` 推给页面；断了退回每 `SMART_HOME_POLL_MS`（默认 30000）拉一次 `/api/states`，同时按 `SMART_HOME_RECONNECT_MIN_MS`～`SMART_HOME_RECONNECT_MAX_MS`（5 秒～60 秒）退避重连。反代不用额外配置：这条连接是 API 容器主动连 HA。
 
+- HA → 小管家（E3）：HA 的自动化用 `rest_command` 打 `POST /api/smart-home/webhook/<householdId>`，请求头带时间戳与签名（`sha256(密钥 + sha256(密钥 + 时间戳 + "." + 原始请求体))`，HA 模板没有 HMAC，只能这样算）。密钥在「家庭设置 → 智能家居 → 联动」生成，旧密钥轮换后宽限 24 小时；那一页会生成可直接粘贴的 `configuration.yaml` 与自动化 YAML。**HA 必须能访问到小管家的地址**（同机的 Docker 里用宿主机局域网 IP 或 `host.docker.internal:8088`），该端点公开但只认签名。
+
 可选影视元数据：
 
 - TMDB 推荐配置 `TMDB_API_TOKEN_FILE`，也兼容 `TMDB_API_KEY_FILE`；Bangumi 匿名搜索默认可用，长期部署应填写能识别当前实例的 `BANGUMI_USER_AGENT`。

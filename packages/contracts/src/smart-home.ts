@@ -301,3 +301,130 @@ export const smartHome = {
     response: smartHomeStatesSchema,
   }),
 };
+
+// ---- E3：HA → 小管家（webhook + 首批联动） --------------------------------------------------------
+
+/**
+ * HA 的自动化打到 POST /smart-home/webhook/:householdId。请求头带时间戳和签名：
+ *   X-Family-Timestamp: 秒级 Unix 时间（与服务端相差 5 分钟以内）
+ *   X-Family-Signature: sha256(密钥 + sha256(密钥 + 时间戳 + "." + 原始请求体))，十六进制
+ * 不是 HMAC：HA 的模板只有 sha256 这类普通哈希、没有 HMAC，也做不了字节异或，这是 HA 侧能算出来的
+ * 带密钥签名里最稳的写法（两层包住密钥，防长度扩展）。设置页生成的 YAML 就按这个算。
+ */
+export const SMART_HOME_WEBHOOK_TOLERANCE_SECONDS = 300;
+/** 轮换后旧密钥还能用多久（HA 那边改配置要时间）。 */
+export const SMART_HOME_WEBHOOK_GRACE_HOURS = 24;
+/** 同一个事件 id 在这段时间内重发只算一次。 */
+export const SMART_HOME_WEBHOOK_DEDUP_MINUTES = 10;
+
+export const SMART_HOME_WEBHOOK_EVENTS = ['ping', 'laundry_done', 'vacuum_done', 'filter_low'] as const;
+export const smartHomeWebhookEvent = z.enum(SMART_HOME_WEBHOOK_EVENTS);
+export type SmartHomeWebhookEvent = z.infer<typeof smartHomeWebhookEvent>;
+
+export const smartHomeWebhookBody = z.object({
+  /** HA 触发这次变化的 context id；重发时不变，用来去重 */
+  eventId: z.string().trim().min(1).max(128),
+  event: smartHomeWebhookEvent,
+  entityId: z.string().max(255).optional(),
+  /** laundry_done：哪台机器完成了 */
+  appliance: z.enum(['washer', 'dryer']).optional(),
+  /** filter_low：当前剩余（百分比） */
+  value: z.number().optional(),
+});
+export type SmartHomeWebhookBody = z.infer<typeof smartHomeWebhookBody>;
+
+export const smartHomeWebhookResultSchema = z.object({
+  accepted: z.boolean(),
+  duplicate: z.boolean(),
+  /** 联动做了什么（给 HA 日志看）；关着的联动为 null */
+  result: z.string().nullable(),
+});
+
+/** 三条联动：服务端写死，设置页只能开关、选触发实体。不做通用规则引擎。 */
+export const smartHomeRulesSchema = z.object({
+  laundry: z.object({
+    enabled: z.boolean(),
+    /** 洗衣机 / 烘干机「完成」看哪个实体（生成 HA 自动化用） */
+    washerEntityId: smartHomeEntityId.nullable(),
+    dryerEntityId: smartHomeEntityId.nullable(),
+    /** 实体是文字状态时，变成哪个值算完成（比如「完成」）；二元传感器 on→off、数值降到 0 以下不用填 */
+    doneValue: z.string().trim().max(40).nullable(),
+  }),
+  vacuum: z.object({ enabled: z.boolean(), entityId: smartHomeEntityId.nullable() }),
+  filter: z.object({
+    enabled: z.boolean(),
+    entityId: smartHomeEntityId.nullable(),
+    /** 剩余低于多少（%）算低 */
+    threshold: z.number().int().min(1).max(99),
+  }),
+});
+export type SmartHomeRules = z.infer<typeof smartHomeRulesSchema>;
+export const DEFAULT_SMART_HOME_RULES: SmartHomeRules = {
+  laundry: { enabled: true, washerEntityId: null, dryerEntityId: null, doneValue: null },
+  vacuum: { enabled: true, entityId: null },
+  filter: { enabled: true, entityId: null, threshold: 10 },
+};
+
+export const smartHomeWebhookSettingsSchema = z.object({
+  configured: z.boolean(),
+  secretHint: z.string().nullable(),
+  rotatedAt: nullableDateTime,
+  /** 旧密钥还能用到什么时候；没有旧密钥为 null */
+  previousValidUntil: nullableDateTime,
+  /** 相对 API 根的路径（前面拼上 HA 能访问到的小管家地址 + /api） */
+  path: z.string(),
+  rules: smartHomeRulesSchema,
+});
+export type SmartHomeWebhookSettings = z.infer<typeof smartHomeWebhookSettingsSchema>;
+
+/** 轮换密钥的结果：明文只在这一次给出（生成 HA 配置用），之后只剩提示。 */
+export const smartHomeWebhookSecretSchema = smartHomeWebhookSettingsSchema.extend({ secret: z.string() });
+export type SmartHomeWebhookSecret = z.infer<typeof smartHomeWebhookSecretSchema>;
+
+export const smartHomeWebhookEventRecordSchema = z.object({
+  id: uuid,
+  eventId: z.string(),
+  event: z.string(),
+  status: z.enum(['processed', 'ignored', 'failed']),
+  result: z.string().nullable(),
+  receivedAt: isoDateTime,
+});
+export type SmartHomeWebhookEventRecord = z.infer<typeof smartHomeWebhookEventRecordSchema>;
+
+export const smartHomeHouseholdParams = z.object({ householdId: uuid });
+
+export const smartHomeWebhook = {
+  receive: defineEndpoint({
+    method: 'POST',
+    path: '/smart-home/webhook/:householdId',
+    summary: 'HA → 小管家（公开；签名 + 时间戳；按事件 id 去重 10 分钟）',
+    params: smartHomeHouseholdParams,
+    body: smartHomeWebhookBody,
+    response: smartHomeWebhookResultSchema,
+  }),
+  settings: defineEndpoint({
+    method: 'GET',
+    path: '/smart-home/webhook-settings',
+    summary: 'webhook 与联动设置（管理员；密钥只回提示）',
+    response: smartHomeWebhookSettingsSchema,
+  }),
+  rotateSecret: defineEndpoint({
+    method: 'POST',
+    path: '/smart-home/webhook-settings/secret',
+    summary: '生成 / 轮换 webhook 密钥（明文只此一次；旧密钥宽限 24 小时）',
+    response: smartHomeWebhookSecretSchema,
+  }),
+  updateRules: defineEndpoint({
+    method: 'PUT',
+    path: '/smart-home/webhook-settings/rules',
+    summary: '联动开关与触发实体',
+    body: smartHomeRulesSchema,
+    response: smartHomeWebhookSettingsSchema,
+  }),
+  events: defineEndpoint({
+    method: 'GET',
+    path: '/smart-home/webhook-settings/events',
+    summary: '最近收到的 HA 事件（管理员，排查用）',
+    response: z.array(smartHomeWebhookEventRecordSchema),
+  }),
+};
