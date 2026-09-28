@@ -39,6 +39,8 @@ jobs:
         run: corepack pnpm lint
       - name: 端点清单与代码一致
         run: node scripts/api-inventory.mjs --check
+      - name: 写端点都登记了事件域（/events）
+        run: node scripts/check-event-routes.mjs
       - name: 备份脚本语法
         run: corepack pnpm backup:worker:check
       - name: Compose 配置

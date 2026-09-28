@@ -129,6 +129,7 @@ dc exec -T api node -e "console.log(Intl.DateTimeFormat().resolvedOptions().time
 - 浏览器打开家里地址 `/`：新客户端登录页，登录后是今天页；手机底部是 今天 / 吃饭 / 日程 / 家里 四个 tab。
 - `curl -fsS <家里地址>/api/health/ready` 返回 `{"data":{"status":"ok"}}`。
 - 管理员打开「家庭设置 → 备份」：备份程序显示在线。家里从没打开过备份页的话，第一次会显示离线（在线状态记在第一次打开时才建的备份策略里），过 15 秒刷新即可。
+- 实时更新（H2 起）：事件流不能被 Caddy 缓冲。用任一成员的访问令牌（浏览器开发者工具里 `family-app.session` 的 `accessToken`）执行 `curl -sN -H "Authorization: Bearer <令牌>" <家里地址>/api/events`，1 秒内应看到 `event: hello`，之后约每 20 秒一条 `event: heartbeat`；在另一台设备勾一样购物，这里立刻出现 `event: changed`。Caddyfile 已对 `/api/events` 设 `flush_interval -1` 并排除压缩。
 
 ## 演练记录
 

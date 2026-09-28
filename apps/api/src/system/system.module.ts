@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import { SystemModulesController } from './system-modules.controller';
 import { SystemModulesService } from './system-modules.service';
 import {
@@ -127,7 +128,10 @@ class SystemBackupService
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
   private timer: NodeJS.Timeout | null = null;
+  private watchTimer: NodeJS.Timeout | null = null;
   private processing = false;
+  /** 每个家庭上一次看到的「运行记录最新更新时间 / 备份程序是否在线」，变了才推事件。 */
+  private readonly lastSeen = new Map<string, string>();
 
   constructor(
     @InjectRepository(BackupPolicy)
@@ -135,6 +139,7 @@ class SystemBackupService
     @InjectRepository(BackupRun)
     private readonly runs: Repository<BackupRun>,
     private readonly dataSource: DataSource,
+    private readonly events: EventBus,
   ) {}
 
   onApplicationBootstrap() {
@@ -145,11 +150,43 @@ class SystemBackupService
     void this.processOperations();
     this.timer = setInterval(() => void this.processOperations(), interval);
     this.timer.unref();
+    // 备份 worker 是 shell 脚本，直接改库，API 感知不到；这里看一眼有没有变化，变了推 backups
+    const watch = Number(process.env.BACKUP_EVENTS_WATCH_MS || 5_000);
+    this.watchTimer = setInterval(
+      () => void this.publishBackupChanges(),
+      Number.isFinite(watch) ? Math.max(100, Math.min(watch, 60_000)) : 5_000,
+    );
+    this.watchTimer.unref();
   }
 
   onApplicationShutdown() {
     if (this.timer) clearInterval(this.timer);
+    if (this.watchTimer) clearInterval(this.watchTimer);
     this.timer = null;
+    this.watchTimer = null;
+  }
+
+  private async publishBackupChanges() {
+    try {
+      const rows: { householdId: string; runsAt: Date | null; seenAt: Date | null }[] =
+        await this.dataSource.query(`
+          SELECT p."householdId" AS "householdId",
+                 (SELECT MAX(r."updatedAt") FROM backup_runs r WHERE r."householdId" = p."householdId") AS "runsAt",
+                 p."workerLastSeenAt" AS "seenAt"
+            FROM backup_policies p`);
+      const now = Date.now();
+      for (const row of rows) {
+        const online = Boolean(row.seenAt && now - new Date(row.seenAt).getTime() < 90_000);
+        const signature = `${row.runsAt ? new Date(row.runsAt).toISOString() : '-'}|${online}`;
+        const previous = this.lastSeen.get(row.householdId);
+        this.lastSeen.set(row.householdId, signature);
+        if (previous !== undefined && previous !== signature) {
+          this.events.publish({ householdId: row.householdId, domains: ['backups'] });
+        }
+      }
+    } catch {
+      /* 观察失败不影响备份本身；下一轮再看 */
+    }
   }
 
   async dashboard(user: JwtUser) {

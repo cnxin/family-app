@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   BadRequestException,
   ConflictException,
@@ -68,6 +69,7 @@ function sanitizeAssistantName(value: string) {
 @Injectable()
 export class AgentService {
   constructor(
+    private readonly eventBus: EventBus,
     @InjectRepository(AgentSetting)
     private readonly settings: Repository<AgentSetting>,
     @InjectRepository(AgentConversation)
@@ -818,7 +820,20 @@ export class AgentService {
     return this.presentRun(run, false);
   }
 
-  private async processRun(
+  /**
+   * 运行结束（完成、失败或取消）后推 assistant：对话页据此刷新，不再按 700ms 轮询。
+   * 渠道消息、重试这些入口没有经过登录写请求的拦截器，统一在这里发。
+   */
+  private async processRun(runId: string, message: string) {
+    try {
+      await this.processRunUnpublished(runId, message);
+    } finally {
+      const run = await this.runs.findOne({ where: { id: runId }, select: { id: true, householdId: true } });
+      if (run) this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
+    }
+  }
+
+  private async processRunUnpublished(
     runId: string,
     message: string,
   ) {

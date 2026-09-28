@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   Injectable,
   Logger,
@@ -117,6 +118,7 @@ export class MoviePilotReconciliationService
   constructor(
     private readonly dataSource: DataSource,
     private readonly connectors: MediaConnectorsService,
+    private readonly events: EventBus,
   ) {}
 
   onApplicationBootstrap() {
@@ -160,7 +162,11 @@ export class MoviePilotReconciliationService
         checked += 1;
         try {
           const external = await this.externalState(request);
-          if (await this.applyState(request, external)) changed += 1;
+          if (await this.applyState(request, external)) {
+            changed += 1;
+            // 后台对账改了订阅状态并发了站内通知：事务提交后推给这一家
+            this.events.publish({ householdId: request.householdId, domains: ['media', 'notifications'] });
+          }
         } catch (error) {
           failed += 1;
           this.logger.warn(

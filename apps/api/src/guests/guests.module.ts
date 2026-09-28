@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import { addDays, householdToday } from '@family/shared';
 import {
   BadRequestException,
@@ -400,6 +401,7 @@ function profileVisit(visit: Visit, invitations: GuestInvitation[], mealRequests
 @Injectable()
 export class GuestsService {
   constructor(
+    private readonly events: EventBus,
     @InjectRepository(Guest) private readonly guests: Repository<Guest>,
     @InjectRepository(Visit) private readonly visits: Repository<Visit>,
     @InjectRepository(VisitGuest)
@@ -798,8 +800,10 @@ export class GuestsService {
   }
 
   async respond(token: string, dto: GuestResponseDto) {
-    return this.dataSource.transaction(async (manager) => {
+    let householdId: string | null = null;
+    const result = await this.dataSource.transaction(async (manager) => {
       const invitation = await this.activeInvitation(token, manager);
+      householdId = invitation.visit.householdId;
       const participant = await manager.getRepository(VisitGuest).findOneBy({
         visitId: invitation.visitId,
         guestId: invitation.guestId,
@@ -829,6 +833,9 @@ export class GuestsService {
       );
       return this.publicProfile(invitation, participant);
     });
+    // 访客公开页没有登录用户，拦截器不知道是哪家；事务提交后在这里发（见 contracts EVENT_ROUTES）
+    if (householdId) this.events.publish({ householdId, domains: ['guests'] });
+    return result;
   }
 
   async publicMoviePolls(token: string) {
@@ -901,8 +908,10 @@ export class GuestsService {
   }
 
   async claimMealOption(token: string, menuItemId: string) {
-    return this.dataSource.transaction(async (manager) => {
+    let householdId: string | null = null;
+    const result = await this.dataSource.transaction(async (manager) => {
       const invitation = await this.activeInvitation(token, manager);
+      householdId = invitation.visit.householdId;
       this.assertMealRequestsAllowed(invitation);
       const item = await manager.getRepository(MenuItem)
         .createQueryBuilder('item')
@@ -947,11 +956,16 @@ export class GuestsService {
       }));
       return profileGuestMealRequest(saved);
     });
+    // 访客公开页没有登录用户，拦截器不知道是哪家；事务提交后在这里发（见 contracts EVENT_ROUTES）
+    if (householdId) this.events.publish({ householdId, domains: ['guests'] });
+    return result;
   }
 
   async submitMealRequest(token: string, dto: GuestMealRequestDto) {
-    return this.dataSource.transaction(async (manager) => {
+    let householdId: string | null = null;
+    const result = await this.dataSource.transaction(async (manager) => {
       const invitation = await this.activeInvitation(token, manager);
+      householdId = invitation.visit.householdId;
       this.assertMealRequestsAllowed(invitation);
       const mealDate = dateOnly(dto.mealDate, '点菜日期');
       if (!visitMealDates(invitation.visit).includes(mealDate)) {
@@ -1007,6 +1021,9 @@ export class GuestsService {
       }
       return profileGuestMealRequest(saved);
     });
+    // 访客公开页没有登录用户，拦截器不知道是哪家；事务提交后在这里发（见 contracts EVENT_ROUTES）
+    if (householdId) this.events.publish({ householdId, domains: ['guests'] });
+    return result;
   }
 
   async reviewMealRequest(id: string, dto: ReviewGuestMealRequestDto, user: JwtUser) {
@@ -1033,8 +1050,10 @@ export class GuestsService {
   }
 
   async voteMoviePoll(token: string, pollId: string, dto: GuestPollVoteDto) {
-    return this.dataSource.transaction(async (manager) => {
+    let householdId: string | null = null;
+    const result = await this.dataSource.transaction(async (manager) => {
       const invitation = await this.activeInvitation(token, manager);
+      householdId = invitation.visit.householdId;
       this.assertMovieVotingAllowed(invitation);
       const poll = await manager
         .getRepository(Poll)
@@ -1083,6 +1102,9 @@ export class GuestsService {
       if (!refreshed) throw new NotFoundException('观影投票不存在');
       return this.publicMoviePollProfile(refreshed, optionIds);
     });
+    // 访客公开页没有登录用户，拦截器不知道是哪家；事务提交后在这里发（见 contracts EVENT_ROUTES）
+    if (householdId) this.events.publish({ householdId, domains: ['guests', 'media', 'polls'] });
+    return result;
   }
 
   private async activeInvitation(token: string, manager?: DataSource['manager']) {

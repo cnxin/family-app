@@ -1,3 +1,4 @@
+import { EventBus } from '../events/event-bus';
 import {
   BadGatewayException,
   BadRequestException,
@@ -132,6 +133,7 @@ export class ExternalNotificationsService
     @InjectRepository(NotificationDeliveryAttempt)
     private readonly attempts: Repository<NotificationDeliveryAttempt>,
     private readonly dataSource: DataSource,
+    private readonly events: EventBus,
   ) {}
 
   onApplicationBootstrap() {
@@ -790,6 +792,8 @@ export class ExternalNotificationsService
             )
           : this.configurationFailure('通知渠道已删除');
         await this.finalizeDelivery(delivery, result);
+        // 投递记录页原来 30 秒轮询：每条投递定稿后推 notifications
+        this.events.publish({ householdId: delivery.householdId, domains: ['notifications'] });
       }
     } catch (error) {
       const errorCode =
