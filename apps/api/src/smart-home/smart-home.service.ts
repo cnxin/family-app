@@ -5,8 +5,11 @@ import {
   SMART_HOME_BLOCKED_DOMAINS,
   SMART_HOME_DOMAINS,
   type SmartHomeConnection,
+  isPrimarySmartHomeEntity,
   type SmartHomeDevice as SmartHomeDeviceView,
   type SmartHomeDirectory,
+  type SmartHomeDirectoryDevice,
+  type SmartHomeDirectoryEntry,
   type SmartHomeDomain,
   type SmartHomeStates,
   type UpsertSmartHomeDeviceBody,
@@ -23,6 +26,7 @@ import {
   presentHomeAssistantState,
   type HomeAssistantRawState,
 } from './home-assistant.client';
+import { fetchHomeAssistantRegistries, type HomeAssistantRegistries } from './home-assistant.ws';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
 
 /** 同一家庭几个人同时打开页面时合并成一次 HA 请求；连不上也缓存这么久，免得连点刷新一直等超时。 */
@@ -43,6 +47,78 @@ function isSupported(domain: string): domain is SmartHomeDomain {
 
 function failureMessage(error: unknown) {
   return error instanceof HomeAssistantError ? error.message : '网络不通，Home Assistant 可能没开';
+}
+
+/**
+ * 实体名去掉设备名前缀：HA 给「有实体名」的实体拼 friendly_name 是「设备名 实体名」，
+ * 设备卡里已经有设备名了，只显示后半截。要求中间有分隔（空格、横线等），免得「客厅」吃掉「客厅窗帘」。
+ */
+export function stripDeviceName(fullName: string, deviceName: string | null) {
+  if (!deviceName || fullName === deviceName || !fullName.startsWith(deviceName)) return fullName;
+  const rest = fullName.slice(deviceName.length);
+  if (!/^[\s\-_·:：]/.test(rest)) return fullName;
+  return rest.replace(/^[\s\-_·:：]+/, '') || fullName;
+}
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'zh-CN');
+const isSensor = (domain: string) => domain === 'sensor' || domain === 'binary_sensor';
+
+/** 按设备分组拼目录。registries 为 null（WebSocket 读不到）时退回一组平铺。 */
+export function buildDirectory(
+  states: HomeAssistantRawState[],
+  registries: HomeAssistantRegistries | null,
+  whitelisted: Set<string>,
+): SmartHomeDirectoryDevice[] {
+  const entityRegistry = new Map(registries?.entities.map((entry) => [entry.entity_id, entry]) ?? []);
+  const deviceRegistry = new Map(registries?.devices.map((device) => [device.id, device]) ?? []);
+  const areaNames = new Map(registries?.areas.map((area) => [area.area_id, area.name]) ?? []);
+  const groups = new Map<string | null, SmartHomeDirectoryEntry[]>();
+
+  for (const raw of states) {
+    const domain = domainOf(raw.entity_id);
+    if (!isSupported(domain)) continue;
+    const entry = entityRegistry.get(raw.entity_id);
+    if (entry?.disabled_by) continue;
+    const device = entry?.device_id ? deviceRegistry.get(entry.device_id) : undefined;
+    if (device?.disabled_by) continue;
+    const deviceName = device ? device.name_by_user || device.name || null : null;
+    const category = entry?.entity_category ?? null;
+    const fullName = friendlyName(raw);
+    const item: SmartHomeDirectoryEntry = {
+      entityId: raw.entity_id,
+      domain,
+      name: stripDeviceName(fullName, deviceName),
+      fullName,
+      state: presentHomeAssistantState(raw),
+      whitelisted: whitelisted.has(raw.entity_id),
+      category,
+      // 被用户在 HA 里隐藏的实体也折起来
+      primary: !entry?.hidden_by && isPrimarySmartHomeEntity(domain, category),
+    };
+    const key = device ? device.id : null;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+
+  const result = [...groups.entries()].map(([id, entities]): SmartHomeDirectoryDevice => {
+    const device = id ? deviceRegistry.get(id) : undefined;
+    return {
+      id,
+      name: device ? device.name_by_user || device.name || '未命名设备' : registries ? '没有归属设备的' : '全部实体',
+      area: device?.area_id ? areaNames.get(device.area_id) ?? null : null,
+      manufacturer: device?.manufacturer ?? null,
+      model: device?.model ?? null,
+      // 主实体在前；主实体里设备本体（扫地机、窗帘这类）排在它的传感器前面
+      entities: entities.sort(
+        (a, b) =>
+          Number(b.primary) - Number(a.primary) || Number(isSensor(a.domain)) - Number(isSensor(b.domain)) || byName(a, b),
+      ),
+    };
+  });
+  return result.sort((a, b) => {
+    if ((a.id === null) !== (b.id === null)) return a.id === null ? 1 : -1;
+    if ((a.area === null) !== (b.area === null)) return a.area === null ? 1 : -1;
+    return (a.area ?? '').localeCompare(b.area ?? '', 'zh-CN') || byName(a, b);
+  });
 }
 
 /**
@@ -99,24 +175,23 @@ export class SmartHomeService {
   }
 
   async directory(householdId: string): Promise<SmartHomeDirectory> {
-    const [snapshot, rows] = await Promise.all([
+    const [snapshot, rows, registries] = await Promise.all([
       this.snapshot(householdId),
       this.devices.find({ where: { householdId }, select: { entityId: true } }),
+      this.registries(householdId),
     ]);
-    const whitelisted = new Set(rows.map((row) => row.entityId));
-    const entities = snapshot.ok
-      ? snapshot.states
-          .filter((raw) => isSupported(domainOf(raw.entity_id)))
-          .map((raw) => ({
-            entityId: raw.entity_id,
-            domain: domainOf(raw.entity_id) as SmartHomeDomain,
-            name: friendlyName(raw),
-            state: presentHomeAssistantState(raw),
-            whitelisted: whitelisted.has(raw.entity_id),
-          }))
-          .sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name, 'zh-CN'))
-      : [];
-    return { connection: this.connection(snapshot), entities };
+    const connection = this.connection(snapshot);
+    if (!snapshot.ok) return { connection, grouped: false, groupingMessage: null, devices: [] };
+    return {
+      connection,
+      grouped: registries.ok,
+      groupingMessage: registries.ok ? null : `没读到设备信息（${registries.message}），先按实体平铺`,
+      devices: buildDirectory(
+        snapshot.states,
+        registries.ok ? registries.value : null,
+        new Set(rows.map((row) => row.entityId)),
+      ),
+    };
   }
 
   async states(householdId: string): Promise<SmartHomeStates> {
@@ -187,6 +262,19 @@ export class SmartHomeService {
       });
     });
     return { entityId };
+  }
+
+  /** 设备 / 实体 / 区域注册表（WebSocket）。目录是管理员偶尔打开的，不缓存。 */
+  private async registries(
+    householdId: string,
+  ): Promise<{ ok: true; value: HomeAssistantRegistries } | { ok: false; message: string }> {
+    const { target } = await this.settings.resolve(householdId);
+    if (!target) return { ok: false, message: '还没连上 Home Assistant' };
+    try {
+      return { ok: true, value: await fetchHomeAssistantRegistries(target) };
+    } catch (error) {
+      return { ok: false, message: failureMessage(error) };
+    }
   }
 
   private async snapshot(householdId: string): Promise<Snapshot> {

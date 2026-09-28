@@ -74,20 +74,49 @@ export const smartHomeEntityStateSchema = z.object({
 });
 export type SmartHomeEntityState = z.infer<typeof smartHomeEntityStateSchema>;
 
+export const SMART_HOME_ENTITY_CATEGORIES = ['config', 'diagnostic'] as const;
+export const smartHomeEntityCategory = z.enum(SMART_HOME_ENTITY_CATEGORIES);
+
+/** 设备卡里默认展开的「主实体」：这几类本体，以及不是诊断 / 配置项的传感器。其余折进「更多」。 */
+const PRIMARY_DOMAINS: readonly string[] = ['vacuum', 'cover', 'switch', 'climate', 'light'];
+export function isPrimarySmartHomeEntity(domain: string, category: string | null) {
+  if (category) return false;
+  return PRIMARY_DOMAINS.includes(domain) || domain === 'sensor' || domain === 'binary_sensor';
+}
+
 /** 实体目录的一条：管理员挑白名单用。 */
 export const smartHomeDirectoryEntrySchema = z.object({
   entityId: smartHomeEntityId,
   domain: smartHomeDomain,
-  /** HA 里的 friendly_name */
+  /** 去掉设备名前缀后的实体名（「厨下净水 RO到期预警」→「RO到期预警」）；本体实体就是设备名 */
   name: z.string(),
+  /** HA 里的 friendly_name 原样 */
+  fullName: z.string(),
   state: smartHomeEntityStateSchema,
   whitelisted: z.boolean(),
+  /** HA 实体注册表的 entity_category：diagnostic / config 折进「更多」 */
+  category: smartHomeEntityCategory.nullable(),
+  primary: z.boolean(),
 });
 export type SmartHomeDirectoryEntry = z.infer<typeof smartHomeDirectoryEntrySchema>;
 
+/** 目录里的一台设备（HA 设备注册表）。没有归属设备的实体归到 id 为 null 的一组。 */
+export const smartHomeDirectoryDeviceSchema = z.object({
+  id: z.string().nullable(),
+  name: z.string(),
+  area: z.string().nullable(),
+  manufacturer: z.string().nullable(),
+  model: z.string().nullable(),
+  entities: z.array(smartHomeDirectoryEntrySchema),
+});
+export type SmartHomeDirectoryDevice = z.infer<typeof smartHomeDirectoryDeviceSchema>;
+
 export const smartHomeDirectorySchema = z.object({
   connection: smartHomeConnectionSchema,
-  entities: z.array(smartHomeDirectoryEntrySchema),
+  /** 读到了设备注册表（WebSocket）。读不到时退回一组平铺，message 说原因 */
+  grouped: z.boolean(),
+  groupingMessage: z.string().nullable(),
+  devices: z.array(smartHomeDirectoryDeviceSchema),
 });
 export type SmartHomeDirectory = z.infer<typeof smartHomeDirectorySchema>;
 
@@ -154,7 +183,7 @@ export const smartHome = {
   entityDirectory: defineEndpoint({
     method: 'GET',
     path: '/smart-home/entity-directory',
-    summary: 'HA 上可挑进白名单的实体（管理员；门锁、安防不列）',
+    summary: 'HA 上可挑进白名单的实体，按设备分组（管理员；门锁、安防不列）',
     response: smartHomeDirectorySchema,
   }),
   devices: defineEndpoint({

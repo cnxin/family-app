@@ -3,7 +3,8 @@ import { useSmartHomeConnectorSettings } from '../lib/queries';
 import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { SmartHomeConnectorCard } from '../components/smart-home-connector';
-import { SmartHomeDirectoryPanel, SmartHomeWhitelistPanel } from '../components/smart-home-devices';
+import { SmartHomeDirectoryPanel } from '../components/smart-home-directory';
+import { SmartHomeWhitelistPanel } from '../components/smart-home-devices';
 import { EmptyState, Page, Panel } from '../components/ui';
 
 /** /house/smart-home/settings：连 HA、挑白名单、起中文名。只有管理员。 */
