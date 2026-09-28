@@ -165,6 +165,16 @@ test('实体目录按设备分组：默认只摆主实体、诊断类折进「�
   await expect(entity('sensor.kitchen_purifier_firmware')).toBeVisible();
   await expect(card('厨下净水').locator('[data-smart-home-entity]')).toHaveCount(5);
 
+  // 米家插座那种不标诊断类别的设备：最多展开 4 个（开关优先），其余包括「* 」开头的内部实体都折起来；
+  // HA 自己的服务型设备（Backup、Sun）和隐藏 / 停用的实体不出现
+  await expect(card('防潮箱').locator('[data-smart-home-entity]')).toHaveCount(4);
+  await expect(entity('switch.dehumidify_box')).toBeVisible();
+  await expect(entity('switch.dehumidify_box_loop')).toHaveCount(0);
+  await expect(card('防潮箱').getByRole('button', { name: /更多 4 项/ })).toBeVisible();
+  await expect(card('Backup')).toHaveCount(0);
+  await expect(card('Sun')).toHaveCount(0);
+  await expect(entity('sensor.dehumidify_box_hidden')).toHaveCount(0);
+
   // 整张卡可以收起
   await card('客厅窗帘').getByRole('button', { name: /客厅窗帘/ }).first().click();
   await expect(entity('cover.living_room_curtain')).toHaveCount(0);
@@ -186,7 +196,7 @@ test('实体目录按设备分组：默认只摆主实体、诊断类折进「�
   await expect(entity('vacuum.roborock_s8')).toBeVisible();
   await expect(card('Roborock S8').getByRole('button', { name: /更多/ })).toHaveCount(0);
   await chips.getByRole('button', { name: '传感器', exact: true }).click();
-  await expect(page.locator('[data-smart-home-directory-device]')).toHaveCount(3);
+  await expect(page.locator('[data-smart-home-directory-device]')).toHaveCount(4);
   await expect(card('客厅窗帘').locator('[data-smart-home-entity]')).toHaveCount(0);
   await expect(card('客厅窗帘').getByRole('button', { name: /更多 2 项/ })).toBeVisible();
   await chips.getByRole('button', { name: '全部', exact: true }).click();
