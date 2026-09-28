@@ -13,8 +13,8 @@ export class EventsController {
 
   @Get()
   stream(@CurrentUser() user: JwtUser & { exp?: number }, @Res() response: Response) {
-    const opened = this.events.open(user, response, typeof user.exp === 'number' ? user.exp * 1000 : null);
-    if (!opened) {
+    const result = this.events.open(user, response, typeof user.exp === 'number' ? user.exp * 1000 : null);
+    if (result === 'full') {
       response.status(429).json({
         error: { code: 'TOO_MANY_CONNECTIONS', message: '这个家庭同时打开的实时连接太多了，稍后再试' },
       });

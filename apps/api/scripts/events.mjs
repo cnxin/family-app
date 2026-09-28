@@ -1,7 +1,8 @@
 // H2a /events 事件通道黑盒：凭据、hello、写后按域推送、actor、读和失败的写不推、心跳间隔、
-// 连接上限、访客公开端点的显式推送。跨家庭收不到见 household-isolation.mjs。
+// 连接上限（含鉴权中途挂断不占名额）、访客公开端点的显式推送。跨家庭收不到见 household-isolation.mjs。
 // run-api-tests 把 EVENTS_HEARTBEAT_MS 设成 300，这里按它验间隔。
 import { randomUUID } from 'node:crypto';
+import { connect } from 'node:net';
 import { changedDomains, openEventStream } from './events-client.mjs';
 
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
@@ -30,6 +31,21 @@ async function login(loginName) {
   const response = await request('/auth/login', null, 'POST', { loginName, password: PASSWORD });
   if (response.status !== 201) throw new Error(`${loginName} 登录失败 ${response.status}`);
   return { token: response.body.data.accessToken ?? response.body.data.token, memberId: response.body.data.member.id };
+}
+
+/** 发出 GET /events 后立刻挂断：服务端还在鉴权时客户端就走了（页面秒切、开发模式 effect 挂两次）。 */
+function openAndHangUp(token) {
+  const { hostname, port } = new URL(BASE);
+  return new Promise((resolve) => {
+    const socket = connect(Number(port || 80), hostname, () => {
+      socket.write(
+        `GET /events HTTP/1.1\r\nHost: ${hostname}\r\nAccept: text/event-stream\r\nAuthorization: Bearer ${token}\r\n\r\n`,
+        () => socket.destroy(),
+      );
+    });
+    socket.on('close', resolve);
+    socket.on('error', resolve);
+  });
 }
 
 const isChanged = (domain) => (frame) => changedDomains(frame).includes(domain);
@@ -134,6 +150,20 @@ try {
   const again = await openEventStream(BASE, mom.token);
   opened.push(again);
   assert(again.status === 200, '断开之后名额立即归还');
+  again.close();
+
+  console.log('6. 鉴权还没完就挂断的连接不占名额');
+  for (let index = 0; index < 25; index += 1) await openAndHangUp(mom.token);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  // 第 2 步爸爸那条还开着，家里剩 19 个名额
+  const refill = [];
+  for (let index = 0; index < 19; index += 1) refill.push(await openEventStream(BASE, mom.token));
+  const full = await openEventStream(BASE, mom.token);
+  opened.push(...refill, full);
+  assert(
+    refill.every((one) => one.status === 200) && full.status === 429,
+    `连上前就走掉的 25 条请求之后名额一个不少（${refill.filter((one) => one.status === 200).length + 1}/20 后才 429）`,
+  );
 
   console.log('\n事件通道测试全部通过');
 } finally {

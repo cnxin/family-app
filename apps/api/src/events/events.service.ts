@@ -41,14 +41,22 @@ export class EventsService implements OnModuleDestroy {
     this.unsubscribe = bus.subscribe((change) => this.fanOut(change));
   }
 
-  /** 家庭连接数已满时返回 false，调用方回 429。 */
-  open(user: { householdId: string; memberId: string }, response: Response, expiresAtMs: number | null) {
+  /**
+   * 'full'：家庭连接数已满，调用方回 429；'gone'：鉴权（异步）还没做完客户端就挂断了，
+   * close 事件已经错过，这时登记就再也不会被清掉——页面秒切、开发模式 effect 挂两次都会这样。
+   */
+  open(
+    user: { householdId: string; memberId: string },
+    response: Response,
+    expiresAtMs: number | null,
+  ): 'opened' | 'full' | 'gone' {
+    if (response.destroyed || response.req.destroyed) return 'gone';
     const current = this.connections.get(user.householdId) ?? new Set<Connection>();
     if (current.size >= EVENTS_MAX_CONNECTIONS_PER_HOUSEHOLD) {
       this.logger.warn(
         `events_connection_rejected household=${user.householdId} open=${current.size} limit=${EVENTS_MAX_CONNECTIONS_PER_HOUSEHOLD}`,
       );
-      return false;
+      return 'full';
     }
 
     response.status(200);
@@ -77,7 +85,7 @@ export class EventsService implements OnModuleDestroy {
 
     const hello: EventsHello = { serverTime: this.clock.now().toISOString(), connectionId: connection.id };
     this.send(connection, 'hello', JSON.stringify(hello));
-    return true;
+    return 'opened';
   }
 
   /** 测试与运维用：当前各家庭的连接数。 */
