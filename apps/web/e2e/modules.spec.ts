@@ -90,7 +90,7 @@ test('模块请求 500：全部 shelf 放行，不能把功能藏到还可以开
   await emptyModuleHousehold(page, request);
   await page.route('**/api/system/modules', (route) => route.fulfill({ status: 500, json: { error: { message: '暂时失败' } } }));
   await page.goto('/home');
-  await expect(page.locator('[data-home-grid] a')).toHaveCount(14);
+  await expect(page.locator('[data-home-grid] a')).toHaveCount(15);
   await expect(page.getByRole('heading', { name: '还可以开启' })).toHaveCount(0);
 });
 

@@ -40,6 +40,12 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 例如先创建 `deploy/secrets/plex_token.txt`，再设置 `PLEX_TOKEN_FILE=/run/integration-secrets/plex_token.txt`。密钥文件权限保持 `600`。
 - API 镜像以内置 `node` 用户（UID 1000）运行。在 Linux/NAS 上应将连接器密钥文件属主设为 UID 1000，或使用只授予该 UID 读取权限的 ACL；不要通过放宽为全员可读来绕过权限问题。启动后用连接器状态接口确认文件可读。
 
+可选智能家居（Home Assistant，H3）：
+
+- `HOME_ASSISTANT_BASE_URL` 默认 `http://host.docker.internal:8123`（HA 跑在同一台宿主机上；编排给 API 加了 `host.docker.internal:host-gateway`，Linux/NAS 上也能解析）。
+- `HOME_ASSISTANT_TOKEN_FILE` 默认 `/run/integration-secrets/home_assistant_token.txt`，即 `deploy/secrets/home_assistant_token.txt`，放 HA 的长期访问令牌，权限 `600`、属主规则同媒体连接器。**文件不存在时只是「没配」**，API 照常启动；写入后不用重启，下次请求就会读到。
+- 同样是服务器默认值；家庭管理员可在「家庭设置 → 智能家居」填自己的地址和令牌（加密存库、不回显）。所有对 HA 的调用 3 秒超时，HA 挂了只影响智能家居那一页。
+
 可选影视元数据：
 
 - TMDB 推荐配置 `TMDB_API_TOKEN_FILE`，也兼容 `TMDB_API_KEY_FILE`；Bangumi 匿名搜索默认可用，长期部署应填写能识别当前实例的 `BANGUMI_USER_AGENT`。

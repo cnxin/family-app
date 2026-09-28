@@ -23,6 +23,7 @@ import { PointsModule } from './points/points.module';
 import { RecipesModule } from './recipes/recipes.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { ShoppingModule } from './shopping/shopping.module';
+import { SmartHomeModule } from './smart-home/smart-home.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TodayModule } from './today/today.module';
@@ -54,6 +55,7 @@ import { UploadModule } from './upload/upload.module';
     RecipesModule,
     RemindersModule,
     ShoppingModule,
+    SmartHomeModule,
     SystemModule,
     TasksModule,
     TodayModule,

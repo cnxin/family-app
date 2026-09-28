@@ -7,11 +7,11 @@ import { SHELF_MODULE_KEYS } from './system';
 // 对应查询失效、自己重取。
 
 /**
- * 域 key 的唯一来源：家里页 shelf 的 14 个（system.ts）+ 常驻域 + 设置类。
+ * 域 key 的唯一来源：家里页 shelf 的 15 个（system.ts）+ 常驻域 + 设置类。
  * 新增业务域先在这里加 key，再在下面的路由映射表里登记它的写端点。
  */
 export const CORE_DOMAIN_KEYS = ['menus', 'shopping', 'calendar', 'tasks', 'notifications'] as const;
-export const SETTINGS_DOMAIN_KEYS = ['members', 'household', 'backups', 'modules', 'smart-home'] as const;
+export const SETTINGS_DOMAIN_KEYS = ['members', 'household', 'backups', 'modules'] as const;
 export const DOMAIN_KEYS = [...SHELF_MODULE_KEYS, ...CORE_DOMAIN_KEYS, ...SETTINGS_DOMAIN_KEYS] as const;
 export const domainKey = z.enum(DOMAIN_KEYS);
 export type DomainKey = z.infer<typeof domainKey>;
@@ -123,6 +123,8 @@ export const EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/memories', domains: ['memories'] },
   { prefix: '/travel-plans', domains: ['travel', 'calendar', 'reminders'] },
   { prefix: '/travel-templates', domains: ['travel'] },
+
+  { prefix: '/smart-home', domains: ['smart-home'] },
 
   { prefix: '/system/backups', domains: ['backups'] },
   { prefix: '/system/modules', domains: ['modules'] },

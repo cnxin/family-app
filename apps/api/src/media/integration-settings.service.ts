@@ -45,6 +45,9 @@ export interface UpdateIntegrationSettingsInput {
   isPrimary?: boolean;
 }
 
+/** findRows 已按媒体的三种 kind 过滤；integrations 表里还有别的连接器（home_assistant）。 */
+type MediaIntegration = Integration & { kind: IntegrationKind };
+
 export interface ResolvedMediaConnectors {
   configs: MediaConnectorConfig[];
   version: string;
@@ -274,12 +277,12 @@ export class IntegrationSettingsService {
       .where('integration.householdId = :householdId', { householdId })
       .andWhere('integration.kind IN (:...kinds)', { kinds: KINDS });
     if (withCredentials) query.addSelect('secret.credentialEncrypted');
-    return query.getMany();
+    return query.getMany() as Promise<MediaIntegration[]>;
   }
 
   private mergeConfigs(
     defaults: MediaConnectorConfig[],
-    rows: Integration[],
+    rows: MediaIntegration[],
     withCredentials: boolean,
   ) {
     const byKind = new Map(rows.map((row) => [row.kind, row]));

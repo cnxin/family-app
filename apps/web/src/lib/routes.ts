@@ -53,7 +53,7 @@ export function toNewRoute(targetPath: string | null | undefined): string | null
 }
 
 export const attentionRoutes = {
-  assets: '/house/assets', guests: '/house/guests', travel: '/life/travel', inventory: '/house/inventory', polls: '/schedule/polls', points: '/house/points', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/home',
+  assets: '/house/assets', guests: '/house/guests', travel: '/life/travel', inventory: '/house/inventory', polls: '/schedule/polls', points: '/house/points', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
 } as const;
 
 

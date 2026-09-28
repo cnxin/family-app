@@ -68,6 +68,9 @@ const testEnvironment = {
   DOUBAN_API_TOKEN: '',
   BANGUMI_API_BASE_URL: 'http://127.0.0.1:1',
   BANGUMI_ACCESS_TOKEN: '',
+  HOME_ASSISTANT_BASE_URL: '',
+  HOME_ASSISTANT_TOKEN: '',
+  HOME_ASSISTANT_TOKEN_FILE: '',
 };
 const browserEnvironment = {
   ...testEnvironment,

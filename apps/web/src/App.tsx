@@ -23,6 +23,8 @@ import { KnowledgePage } from './pages/knowledge';
 import { MemoriesPage } from './pages/memories';
 import { TravelPage } from './pages/travel';
 import { BackupsPage } from './pages/backups';
+import { SmartHomePage } from './pages/smart-home';
+import { SmartHomeSettingsPage } from './pages/smart-home-settings';
 import { ActivityPage } from './pages/activity';
 import { MediaPage } from './pages/media';
 import { MediaLibraryPage } from './pages/media-library';
@@ -139,6 +141,8 @@ export function App() {
           <Route path="/house/assets" element={<AssetsPage />} />
           <Route path="/house/finance" element={<FinancePage />} />
           <Route path="/house/backups" element={<BackupsPage />} />
+          <Route path="/house/smart-home" element={<SmartHomePage />} />
+          <Route path="/house/smart-home/settings" element={<SmartHomeSettingsPage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />
           <Route path="/life" element={<RedirectKeepingSearch to="/life/media" />} />
           <Route path="/life/media" element={<MediaPage />} />
