@@ -342,6 +342,7 @@ export function InventoryView() {
           key={batchEditor === 'new' ? 'new' : batchEditor.id}
           batch={batchEditor === 'new' ? null : batchEditor}
           inventory={list}
+          batches={activeBatches}
           onClose={() => setBatchEditor(null)}
         />
       ) : null}
