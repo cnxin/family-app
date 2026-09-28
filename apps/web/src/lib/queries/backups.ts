@@ -59,7 +59,7 @@ export function useBackupDashboard(enabled: boolean) {
     queryKey: ['backup-dashboard'],
     queryFn: () => api<BackupDashboard>('/system/backups'),
     enabled,
-    refetchInterval: enabled ? 10_000 : false,
+    // 不再轮询：备份 worker 写库的变化由 API 侧观察后推 backups 域
   });
 }
 

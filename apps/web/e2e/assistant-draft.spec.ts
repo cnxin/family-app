@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { apiClient } from './helpers';
+import { apiClient, withoutLiveEvents } from './helpers';
+
+// 不测实时更新：掐掉 /events，免得 networkidle 等不到、并行写入干扰计数（见 helpers）
+test.beforeEach(async ({ page }) => withoutLiveEvents(page));
 
 // 旧客户端踩过的坑：点「新对话」把输入框里没发出去的草稿一起清掉了。草稿属于输入框，不属于某次会话。
 test('小管家：点「+ 新对话」不清掉输入框里的草稿', async ({ page, request }) => {

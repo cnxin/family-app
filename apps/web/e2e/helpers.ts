@@ -134,3 +134,11 @@ export async function seedSession(page: Page, session: FreshSession) {
     }
   }, JSON.stringify(session));
 }
+
+/**
+ * 不测实时更新的用例掐掉 /events：它是一条不结束的长连接，会让 networkidle 永远等不到；
+ * 同家庭并行用例的写入还会经它触发这边重取，干扰计数型断言。测实时的用例（live-events）不用这个。
+ */
+export async function withoutLiveEvents(page: Page) {
+  await page.route('**/api/events', (route) => route.abort());
+}

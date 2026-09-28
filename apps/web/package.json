@@ -13,6 +13,7 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
+    "@family/api-client": "workspace:*",
     "@family/contracts": "workspace:*",
     "@family/shared": "workspace:*",
     "@tanstack/react-query": "^5.90.2",

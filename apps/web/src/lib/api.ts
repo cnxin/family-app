@@ -41,6 +41,15 @@ function refreshOnce() {
   return refreshing;
 }
 
+/** 给 /events 订阅用：和普通请求同一份凭据来源。 */
+export function getAccessToken() {
+  return accessToken;
+}
+/** 给 /events 订阅用：401 时走和普通请求同一个续期（并发时共用一次），失败时由 auth 那边登出。 */
+export function refreshAccessToken() {
+  return refreshOnce();
+}
+
 interface Options {
   method?: string;
   body?: unknown;

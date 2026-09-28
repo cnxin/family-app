@@ -12,13 +12,12 @@ import { api } from '../api';
 
 /**
  * 提醒是有时效的：到点了后台会发出去，状态从 scheduled 变 sent。
- * 所以待发的列表要轮询，否则页面上会一直挂着一条其实已经发了的。
+ * 到点发出后服务端推 reminders + notifications 域，列表跟着刷新，不再轮询。
  */
 export function useReminders(status: ReminderStatus | 'all' = 'all') {
   return useQuery({
     queryKey: ['reminders', status],
     queryFn: () => api<HouseholdReminder[]>(`/reminders?status=${status}`),
-    refetchInterval: status === 'scheduled' || status === 'all' ? 15_000 : false,
   });
 }
 

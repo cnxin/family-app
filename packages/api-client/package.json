@@ -1,0 +1,20 @@
+{
+  "name": "@family/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "小管家各端共用的客户端传输层（纯 TS，不依赖 DOM 框架）。目前只有 /events 订阅：SSE over fetch，凭据由调用方注入，传输层可替换。",
+  "main": "dist/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@family/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
