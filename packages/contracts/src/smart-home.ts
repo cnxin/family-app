@@ -71,6 +71,17 @@ export const smartHomeEntityStateSchema = z.object({
   /** vacuum 等自带的电量百分比 */
   battery: z.number().nullable(),
   lastChanged: nullableDateTime,
+  /** climate：设定温度、室内温度、可选模式、设定温度上下限 */
+  targetTemperature: z.number().nullable(),
+  currentTemperature: z.number().nullable(),
+  hvacModes: z.array(z.string()).nullable(),
+  minTemperature: z.number().nullable(),
+  maxTemperature: z.number().nullable(),
+  /**
+   * 状态未必是真的：红外遥控类（米家空调伴侣）HA 只记得上次发了什么，空调本身开没开它不知道。
+   * climate 一律当作这种（King 家的空调走红外），HA 自己报 assumed_state 的也算。页面上标「按上次操作显示」。
+   */
+  assumed: z.boolean(),
 });
 export type SmartHomeEntityState = z.infer<typeof smartHomeEntityStateSchema>;
 
@@ -164,12 +175,17 @@ export const SMART_HOME_ACTIONS = {
   cover: ['open', 'stop', 'close'],
   switch: ['turn_on', 'turn_off'],
   scene: ['activate'],
+  // 试探性纳入（2026-09-28 King）：开关、四种模式、设定温度 ±1。真机验证后再定去留
+  climate: [
+    'turn_on', 'turn_off', 'mode_cool', 'mode_heat', 'mode_fan_only', 'mode_auto', 'temperature_up', 'temperature_down',
+  ],
 } as const;
 export type SmartHomeControllableDomain = keyof typeof SMART_HOME_ACTIONS;
 export const SMART_HOME_CONTROLLABLE_DOMAINS = Object.keys(SMART_HOME_ACTIONS) as SmartHomeControllableDomain[];
 export const SMART_HOME_READONLY_COVER_CLASSES = ['garage', 'gate', 'door'] as const;
 export const smartHomeAction = z.enum([
   'start', 'pause', 'return_to_base', 'open', 'stop', 'close', 'turn_on', 'turn_off', 'activate',
+  'mode_cool', 'mode_heat', 'mode_fan_only', 'mode_auto', 'temperature_up', 'temperature_down',
 ]);
 export type SmartHomeAction = z.infer<typeof smartHomeAction>;
 

@@ -32,6 +32,8 @@ export const SAMPLE_DEVICES = [
   { id: 'dev_purifier', name: '厨下净水', name_by_user: null, area_id: 'kitchen', manufacturer: 'Haier', model: 'HRO' },
   // 米家智能插座：集成不标 entity_category，一台十来个实体（验「每台最多展开 4 个」和「* 」前缀）
   { id: 'dev_box', name: '防潮箱', name_by_user: null, area_id: 'bedroom', manufacturer: '小白', model: 'plug' },
+  // 米家空调伴侣（红外）：HA 只记得上次发了什么
+  { id: 'dev_ac', name: '空调伴侣', name_by_user: '空调插座', area_id: 'bedroom', manufacturer: 'Aqara', model: 'acpartner' },
   // HA 自己的服务型「设备」：目录里不该出现
   { id: 'dev_backup', name: 'Backup', name_by_user: null, area_id: null, manufacturer: 'Home Assistant', model: null, entry_type: 'service' },
   { id: 'dev_sun', name: 'Sun', name_by_user: null, area_id: null, manufacturer: null, model: null, entry_type: 'service' },
@@ -71,6 +73,14 @@ const SAMPLE = [
   entity('light.dehumidify_box_indicator', 'dev_box', 'config', '防潮箱 指示灯', 'on'),
   entity('sensor.dehumidify_box_hidden', 'dev_box', null, '防潮箱 被隐藏的', '1', {}, { hidden_by: 'user' }),
   entity('sensor.dehumidify_box_disabled', 'dev_box', null, '防潮箱 被停用的', '1', {}, { disabled_by: 'user' }),
+  entity('climate.bedroom_ac', 'dev_ac', null, '空调插座', 'off', {
+    hvac_modes: ['off', 'cool', 'heat', 'fan_only', 'auto'],
+    temperature: 26,
+    current_temperature: 28,
+    min_temp: 16,
+    max_temp: 30,
+    assumed_state: true,
+  }),
   entity('sensor.backup_manager_state', 'dev_backup', null, '备份管理器状态', 'idle'),
   entity('sensor.sun_next_dawn', 'dev_sun', 'diagnostic', '下个清晨', '2026-09-29T21:30:00+00:00', { device_class: 'timestamp' }),
 
@@ -187,7 +197,7 @@ export async function startFakeHomeAssistant({
         ha.serviceCalls.push({ domain: service[1], service: service[2], data });
         if (ha.serviceMode === 'hang') return;
         if (ha.serviceMode === 'fail') return send(500, { message: 'Service call failed' });
-        const next = applyService(service[1], service[2], data.entity_id);
+        const next = applyService(service[1], service[2], data.entity_id, data);
         send(200, next ? [next] : []);
       });
       return;
@@ -196,7 +206,7 @@ export async function startFakeHomeAssistant({
   }
 
   /** 服务调用对状态的影响，和真 HA 里这些实体的行为大致一致。 */
-  function applyService(domain, service, entityId) {
+  function applyService(domain, service, entityId, data = {}) {
     const current = ha.states.find((entry) => entry.entity_id === entityId);
     if (!current) return null;
     const transitions = {
@@ -210,6 +220,10 @@ export async function startFakeHomeAssistant({
       'switch.turn_on': ['on'],
       'switch.turn_off': ['off'],
       'scene.turn_on': [new Date().toISOString()],
+      'climate.turn_on': [current.attributes.last_mode ?? 'cool'],
+      'climate.turn_off': ['off', { last_mode: current.state === 'off' ? current.attributes.last_mode : current.state }],
+      'climate.set_hvac_mode': [data.hvac_mode ?? current.state],
+      'climate.set_temperature': [current.state, { temperature: data.temperature }],
     };
     const [state, attributes] = transitions[`${domain}.${service}`] ?? [current.state];
     return setState(entityId, state, attributes);

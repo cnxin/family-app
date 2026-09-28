@@ -138,3 +138,31 @@ test('管理员在设置页开放控制、改谁能控；最近的操作记下�
   await expect(page.locator('[data-smart-home-commands] li').first()).toContainText('客厅窗帘 · 关上');
   await expect(page.locator('[data-smart-home-commands] li').first()).toContainText('成功');
 });
+
+test('空调（试探性）：状态旁标「按上次操作显示」；打开、调温按 HA 的设定温度走', async ({ page, request }) => {
+  await apiClient(request).put('/smart-home/devices/climate.bedroom_ac', {
+    displayName: '空调插座',
+    area: '卧室',
+    controllable: true,
+  });
+  await page.goto('/house/smart-home');
+  const ac = page.locator('[data-smart-home-device="climate.bedroom_ac"]');
+  await expect(ac).toContainText('关着');
+  await expect(ac.locator('[data-smart-home-assumed]')).toHaveText('按上次操作显示');
+  await expect(page.locator('[data-smart-home-device="vacuum.roborock_s8"] [data-smart-home-assumed]')).toHaveCount(0);
+
+  await page.getByRole('button', { name: '空调插座：打开' }).click();
+  await expect(ac).toContainText('制冷', { timeout: 3_000 });
+  await expect(ac).toContainText('设定 26°');
+  await page.getByRole('button', { name: '空调插座：调高 1°' }).click();
+  await expect(ac).toContainText('设定 27°', { timeout: 3_000 });
+  await page.getByRole('button', { name: '空调插座：制热' }).click();
+  // 「制热」本身也是按钮上的字；切过去以后当前模式不再摆按钮，换成可以切回「制冷」
+  await expect(page.getByRole('button', { name: '空调插座：制冷' })).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByRole('button', { name: '空调插座：制热' })).toHaveCount(0);
+  expect(ha.serviceCalls.filter((call) => call.domain === 'climate').map((call) => call.service)).toEqual([
+    'turn_on',
+    'set_temperature',
+    'set_hvac_mode',
+  ]);
+});

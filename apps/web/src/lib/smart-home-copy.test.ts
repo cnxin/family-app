@@ -3,7 +3,21 @@ import type { SmartHomeEntityState } from '@family/contracts';
 import { arrangeDirectory, groupByArea, smartHomeButtons, smartHomeKind, smartHomeStateLine } from './smart-home-copy';
 
 function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartHomeEntityState {
-  return { state: value, unit: null, deviceClass: null, position: null, battery: null, lastChanged: null, ...extra };
+  return {
+    state: value,
+    unit: null,
+    deviceClass: null,
+    position: null,
+    battery: null,
+    lastChanged: null,
+    targetTemperature: null,
+    currentTemperature: null,
+    hvacModes: null,
+    minTemperature: null,
+    maxTemperature: null,
+    assumed: false,
+    ...extra,
+  };
 }
 
 describe('smartHomeStateLine', () => {
@@ -46,6 +60,10 @@ describe('smartHomeStateLine', () => {
     expect(smartHomeStateLine('switch', state('on')).tone).toBe('on');
     expect(smartHomeStateLine('light', state('off')).text).toBe('关着');
     expect(smartHomeStateLine('climate', state('cool')).text).toBe('制冷');
+    expect(smartHomeStateLine('climate', state('heat', { targetTemperature: 26, currentTemperature: 28.4 })).detail).toBe(
+      '设定 26° · 室内 28.4°',
+    );
+    expect(smartHomeStateLine('climate', state('off', { targetTemperature: 26, currentTemperature: 28 })).detail).toBe('室内 28°');
   });
 });
 
@@ -138,5 +156,19 @@ describe('smartHomeButtons', () => {
     expect(labels('switch', 'off')).toEqual(['打开']);
     expect(labels('scene', '2026-09-28T00:00:00Z')).toEqual(['执行']);
     expect(labels('sensor', '12')).toEqual([]);
+  });
+});
+
+describe('空调按钮（试探性）', () => {
+  it('关着只给「打开」；开着给关掉、其余模式、调温', () => {
+    expect(smartHomeButtons('climate', state('off')).map((one) => one.label)).toEqual(['打开']);
+    expect(smartHomeButtons('climate', state('cool')).map((one) => one.label)).toEqual([
+      '关掉', '制热', '送风', '自动', '调低 1°', '调高 1°',
+    ]);
+  });
+
+  it('只摆 HA 说这台有的模式', () => {
+    const buttons = smartHomeButtons('climate', state('cool', { hvacModes: ['off', 'cool', 'heat'] }));
+    expect(buttons.map((one) => one.action)).toEqual(['turn_off', 'mode_heat', 'temperature_down', 'temperature_up']);
   });
 });
