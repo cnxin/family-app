@@ -6,6 +6,7 @@ import {
   SMART_HOME_DOMAINS,
   type SmartHomeConnection,
   isPrimarySmartHomeEntity,
+  SMART_HOME_PRIMARY_LIMIT,
   smartHomeActionsFor,
   SMART_HOME_READONLY_COVER_CLASSES,
   type SmartHomeDevice as SmartHomeDeviceView,
@@ -93,22 +94,25 @@ export function buildDirectory(
     const domain = domainOf(raw.entity_id);
     if (!isSupported(domain)) continue;
     const entry = entityRegistry.get(raw.entity_id);
-    if (entry?.disabled_by) continue;
+    // 在 HA 里停用或隐藏的实体：用户已经表过态了，目录里不列
+    if (entry?.disabled_by || entry?.hidden_by) continue;
     const device = entry?.device_id ? deviceRegistry.get(entry.device_id) : undefined;
-    if (device?.disabled_by) continue;
+    // HA 自己的服务型「设备」（Backup、Sun 之类）不是家里的东西
+    if (device?.disabled_by || device?.entry_type === 'service') continue;
     const deviceName = device ? device.name_by_user || device.name || null : null;
     const category = entry?.entity_category ?? null;
     const fullName = friendlyName(raw);
+    const name = stripDeviceName(fullName, deviceName);
     const item: SmartHomeDirectoryEntry = {
       entityId: raw.entity_id,
       domain,
-      name: stripDeviceName(fullName, deviceName),
+      name,
       fullName,
       state: presentHomeAssistantState(raw),
       whitelisted: whitelisted.has(raw.entity_id),
       category,
-      // 被用户在 HA 里隐藏的实体也折起来
-      primary: !entry?.hidden_by && isPrimarySmartHomeEntity(domain, category),
+      // 先标候选，分完组再按每台设备的名额收紧
+      primary: isPrimarySmartHomeEntity(domain, category, name),
     };
     const key = device ? device.id : null;
     groups.set(key, [...(groups.get(key) ?? []), item]);
@@ -116,6 +120,14 @@ export function buildDirectory(
 
   const result = [...groups.entries()].map(([id, entities]): SmartHomeDirectoryDevice => {
     const device = id ? deviceRegistry.get(id) : undefined;
+    // 每台设备最多展开 SMART_HOME_PRIMARY_LIMIT 个：可控类优先，剩下的位置给传感器
+    entities
+      .filter((entry) => entry.primary)
+      .sort((a, b) => Number(isSensor(a.domain)) - Number(isSensor(b.domain)) || byName(a, b))
+      .slice(SMART_HOME_PRIMARY_LIMIT)
+      .forEach((entry) => {
+        entry.primary = false;
+      });
     return {
       id,
       name: device ? device.name_by_user || device.name || '未命名设备' : registries ? '没有归属设备的' : '全部实体',

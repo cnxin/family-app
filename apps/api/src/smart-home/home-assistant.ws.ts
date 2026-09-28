@@ -85,6 +85,8 @@ export interface HomeAssistantDevice {
   manufacturer?: string | null;
   model?: string | null;
   disabled_by?: string | null;
+  /** 'service' = HA 自己的服务（Backup、Sun…），不是家里的设备 */
+  entry_type?: string | null;
 }
 
 export interface HomeAssistantEntityRegistryEntry {

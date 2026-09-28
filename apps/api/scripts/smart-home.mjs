@@ -152,6 +152,24 @@ try {
       purifier.filter((entity) => !entity.primary).every((entity) => entity.category === 'diagnostic'),
     '主实体：本体 + 非诊断 / 配置的传感器；diagnostic、config（含配置类的开关）一律不算主实体',
   );
+  const box = byDevice['防潮箱'];
+  const boxPrimary = primaryOf(box);
+  assert(
+    box.entities.length === 8 &&
+      boxPrimary.length === 4 &&
+      boxPrimary.includes('switch.dehumidify_box') &&
+      !boxPrimary.includes('switch.dehumidify_box_loop') &&
+      box.entities.filter((entity) => entity.primary && entity.domain === 'sensor').length === 3,
+    '米家插座类设备（不标 entity_category）：最多展开 4 个，可控的开关优先、剩下 3 个给传感器；「* 」开头的内部实体不展开',
+  );
+  assert(
+    !ids.includes('sensor.dehumidify_box_hidden') &&
+      !ids.includes('sensor.dehumidify_box_disabled') &&
+      !('Backup' in byDevice) &&
+      !('Sun' in byDevice) &&
+      !ids.includes('sensor.backup_manager_state'),
+    '在 HA 里隐藏 / 停用的实体、HA 自己的服务型设备（Backup、Sun）都不列',
+  );
   assert(
     purifier[0].primary &&
       !purifier[purifier.length - 1].primary &&
@@ -182,7 +200,7 @@ try {
       flat.body.data.grouped === false &&
       flat.body.data.groupingMessage.startsWith('没读到设备信息') &&
       flat.body.data.devices.length === 1 &&
-      flat.body.data.devices[0].entities.length === ids.length,
+      flat.body.data.devices[0].entities.length >= ids.length,
     'WebSocket 读不到时退回一组平铺，并说明原因',
   );
 

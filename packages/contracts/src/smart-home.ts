@@ -77,11 +77,16 @@ export type SmartHomeEntityState = z.infer<typeof smartHomeEntityStateSchema>;
 export const SMART_HOME_ENTITY_CATEGORIES = ['config', 'diagnostic'] as const;
 export const smartHomeEntityCategory = z.enum(SMART_HOME_ENTITY_CATEGORIES);
 
-/** 设备卡里默认展开的「主实体」：这几类本体，以及不是诊断 / 配置项的传感器。其余折进「更多」。 */
-const PRIMARY_DOMAINS: readonly string[] = ['vacuum', 'cover', 'switch', 'climate', 'light'];
-export function isPrimarySmartHomeEntity(domain: string, category: string | null) {
-  if (category) return false;
-  return PRIMARY_DOMAINS.includes(domain) || domain === 'sensor' || domain === 'binary_sensor';
+/**
+ * 设备卡里默认展开的「主实体」候选：这几类本体（可控类），以及不是诊断 / 配置项的传感器。
+ * 米家集成给内部属性的实体名加「* 」前缀（「* 循环任务、按键倒计时 …」），也不算。
+ * 每台设备最多展开 SMART_HOME_PRIMARY_LIMIT 个，可控类优先、剩下位置给传感器，其余折进「更多」。
+ */
+export const SMART_HOME_PRIMARY_DOMAINS: readonly string[] = ['vacuum', 'cover', 'switch', 'climate', 'light'];
+export const SMART_HOME_PRIMARY_LIMIT = 4;
+export function isPrimarySmartHomeEntity(domain: string, category: string | null, name = '') {
+  if (category || name.trimStart().startsWith('*')) return false;
+  return SMART_HOME_PRIMARY_DOMAINS.includes(domain) || domain === 'sensor' || domain === 'binary_sensor';
 }
 
 /** 实体目录的一条：管理员挑白名单用。 */
