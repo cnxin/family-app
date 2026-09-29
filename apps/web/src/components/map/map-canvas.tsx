@@ -188,7 +188,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
 
   const startDraw = (event: PointerEvent<HTMLElement>) => {
     if (mode !== 'edit-full' || tool === 'select' || event.button !== 0) return false;
-    const start = viewport.toMap(event.clientX, event.clientY).map((v) => Math.round(v)) as MapPoint;
+    // 起点也要夹进图里：从图外面开始拖会出负坐标，服务端拒收
+    const [sx, sy] = viewport.toMap(event.clientX, event.clientY);
+    const start: MapPoint = [Math.round(Math.min(viewBox.w, Math.max(0, sx))), Math.round(Math.min(viewBox.h, Math.max(0, sy)))];
     let parentId: string | null = null;
     if (tool === 'container') {
       const room = roomAt(start);

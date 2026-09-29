@@ -89,6 +89,13 @@ test('手画导入：截图当底图 → 拖矩形画房间 → 起名字 → �
     await shot(page, 'map-import-crop-desktop.png');
     await page.getByRole('button', { name: '下一步' }).click();
     await expect(page.locator('[data-import-step="1"]')).toBeVisible();
+    // 自动识别先出草稿（map-detect.spec 测）；这条走手画：清空了自己画
+    await expect(page.locator('[data-detect-state="done"], [data-detect-state="failed"]')).toBeVisible({ timeout: 15_000 });
+    const clear = page.getByRole('button', { name: '清空自己画' });
+    if (await clear.isVisible()) await clear.click();
+    // 这张裁法（右下角收进去）下识别要能出结果，不能掉到兜底
+    await expect(page.locator('[data-detect-state]')).not.toContainText('Maximum call stack');
+    await expect(page.getByRole('tab', { name: '画房间' })).toHaveAttribute('aria-selected', 'true');
 
     const canvas = page.locator('[data-map-canvas]');
     const area = (await canvas.boundingBox())!;
@@ -101,7 +108,7 @@ test('手画导入：截图当底图 → 拖矩形画房间 → 起名字 → �
     await drag(0.35, 0.1, 0.55, 0.3);
     await drag(0.35, 0.45, 0.55, 0.62);
     await expect(page.locator('[data-map-room]')).toHaveCount(2);
-    await expect(page.getByText('已画 2 个房间')).toBeVisible();
+    await expect(page.getByText('2 个房间', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '下一步' }).click();
 
     await expect(page.locator('[data-import-step="2"]')).toBeVisible();

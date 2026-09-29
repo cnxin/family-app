@@ -46,16 +46,17 @@ export function MapEditBar({
 
   return (
     <div data-map-edit-bar className="mb-3 flex shrink-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {full ? <Segmented value={tool} onChange={onTool} options={TOOLS} /> : null}
+      {/* 一行不换行：选中 / 取消选中时工具条高度不变，否则地图区跟着变高变矮、画布重新铺满，东西就跳了 */}
+      <div className="-mx-1 flex min-h-11 items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none]">
+        {full ? <span className="shrink-0"><Segmented value={tool} onChange={onTool} options={TOOLS} /></span> : null}
         {onToggleBackground ? (
-          <Button variant="ghost" className={small} aria-pressed={showBackground} onClick={onToggleBackground}>
+          <Button variant="ghost" className={small + ' shrink-0'} aria-pressed={showBackground} onClick={onToggleBackground}>
             {showBackground ? '隐藏截图' : '显示截图'}
           </Button>
         ) : null}
         {selected && !renaming ? (
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-medium">{selected.name}</span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="max-w-[8em] truncate text-[13px] font-medium">{selected.name}</span>
             <Button variant="ghost" className={small} onClick={() => { setName(selected.name); setRenaming(true); }}>改名</Button>
             {full && selected.kind !== 'room' && selected.mapShape?.type === 'rect' ? (
               <Button variant="ghost" className={small} onClick={onRotate}>转 90°</Button>
