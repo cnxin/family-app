@@ -75,6 +75,8 @@ class HouseholdWatcher {
       onClose: (reason) => {
         this.subscription = null;
         if (this.stopped) return;
+        // 从推送掉下来：让客户端马上重读一次——页面没有刷新按钮了，得靠这一下才知道「连不上」
+        if (this.mode === 'push') this.changed();
         if (this.mode !== 'poll') this.log(`smart_home_live household=${this.householdId} mode=poll reason=${reason}`);
         this.mode = 'poll';
         this.startPolling();

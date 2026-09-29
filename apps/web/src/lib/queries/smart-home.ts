@@ -3,6 +3,7 @@ import type {
   CreateSmartHomeLinkBody,
   SmartHomeHistory,
   SmartHomeLink,
+  SmartHomeMergeReport,
   SmartHomePanel,
   UpdateSmartHomeLinkBody,
   SmartHomeAction,
@@ -36,6 +37,7 @@ export const smartHomeKeys = {
   panel: (id: string) => ['smart-home-panel', id] as const,
   /** 24 小时趋势，服务端缓存 5 分钟，这边不跟着 /events 刷 */
   history: (id: string, entityId: string) => ['smart-home-history', id, entityId] as const,
+  mergeReport: ['smart-home-merge-report'] as const,
 };
 
 export function useSmartHomeStates() {
@@ -167,6 +169,15 @@ export function useSmartHomeEntityCommand(deviceId: string) {
       void client.invalidateQueries({ queryKey: smartHomeKeys.panel(deviceId) });
       void client.invalidateQueries({ queryKey: smartHomeKeys.states });
     },
+  });
+}
+
+/** 最近一次「按实体 → 按设备」归并的结果（管理员；没归并过为 null）。 */
+export function useSmartHomeMergeReport(enabled: boolean) {
+  return useQuery({
+    queryKey: smartHomeKeys.mergeReport,
+    queryFn: () => api<SmartHomeMergeReport | null>('/smart-home/devices/merge-report'),
+    enabled,
   });
 }
 

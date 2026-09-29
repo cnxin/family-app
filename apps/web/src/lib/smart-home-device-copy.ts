@@ -101,3 +101,32 @@ export function deviceStatusLine(device: DeviceLike, { long = false } = {}): Sta
       return { ...base, detail: long ? base.detail : null };
   }
 }
+
+export interface PrimaryButton {
+  action: 'start' | 'pause' | 'open' | 'close' | 'stop' | 'turn_on' | 'turn_off';
+  /** 按钮上写的是「按下会发生什么」，不是当前状态（redesign §2.1） */
+  label: string;
+}
+
+/**
+ * 卡片上唯一的主按钮（redesign §3.3）：扫地机 暂停 / 继续 / 开始，窗帘 打开 / 关上 / 停，开关与空调 打开 / 关掉；
+ * 洗衣机、净水器、传感器没有。出错、离线、读不到状态时也没有。
+ */
+export function primaryButton(primaryDomain: string, state: SmartHomeEntityState | null): PrimaryButton | null {
+  const value = state?.state;
+  if (!value || value === 'unavailable' || value === 'unknown') return null;
+  switch (primaryDomain) {
+    case 'vacuum':
+      if (value === 'cleaning' || value === 'returning') return { action: 'pause', label: '暂停' };
+      if (value === 'error') return null;
+      return { action: 'start', label: value === 'paused' ? '继续' : '开始' };
+    case 'cover':
+      if (value === 'opening' || value === 'closing') return { action: 'stop', label: '停' };
+      return value === 'closed' ? { action: 'open', label: '打开' } : { action: 'close', label: '关上' };
+    case 'switch':
+    case 'climate':
+      return value === 'off' ? { action: 'turn_on', label: '打开' } : { action: 'turn_off', label: '关掉' };
+    default:
+      return null;
+  }
+}

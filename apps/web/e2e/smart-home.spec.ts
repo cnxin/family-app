@@ -8,6 +8,7 @@ import { apiClient, apiURL, freshMemberSession, seedSession } from './helpers';
 interface FakeHomeAssistant {
   url: string;
   states: { entity_id: string; state: string; attributes: Record<string, unknown> }[];
+  setState(entityId: string, state: string, attributes?: Record<string, unknown>): unknown;
   stop(): Promise<void>;
 }
 
@@ -88,32 +89,29 @@ test('管理员连上 HA、挑设备起中文名；家里页出现智能家居�
   await page.locator('[data-home-grid]').getByRole('link', { name: '智能家居', exact: true }).click();
   await expect(page).toHaveURL(/\/house\/smart-home$/);
 
-  // 只读页：按分组铺开，状态说人话
+  // 设备卡：按房间铺开，一句状态说人话（开 / 关靠颜色）
   const curtain = page.locator('[data-smart-home-device="cover.living_room_curtain"]');
   const vacuum = page.locator('[data-smart-home-device="vacuum.roborock_s8"]');
   await expect(page.getByRole('heading', { name: '客厅' })).toBeVisible();
   await expect(curtain).toContainText('客厅窗帘');
-  await expect(curtain).toContainText('开着');
   await expect(curtain).toContainText('开了 80%');
-  await expect(vacuum).toContainText('在充电座上');
-  await expect(vacuum).toContainText('电量 100%');
+  await expect(curtain).toHaveAttribute('data-tone', 'on');
+  await expect(vacuum).toContainText('在充电座上 · 100%');
   await expect(page.locator('[data-smart-home-connection="ok"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: '刷新' })).toHaveCount(0);
 
-  // HA 状态变了，点刷新就读到新的（E1 不推送；服务端缓存 2 秒）
-  ha.states = ha.states.map((entry) =>
-    entry.entity_id === 'vacuum.roborock_s8' ? { ...entry, state: 'cleaning' } : entry,
-  );
-  await page.waitForTimeout(2_100);
-  await page.getByRole('button', { name: '刷新' }).click();
-  await expect(vacuum).toContainText('正在清扫');
+  // HA 里状态变了：经 /events 推过来，不用刷新
+  ha.setState('vacuum.roborock_s8', 'cleaning');
+  await expect(vacuum).toContainText('正在清扫', { timeout: 3_000 });
 
-  // HA 停掉：这一页说连不上，设备照列、保留上次的状态，按钮收起；别的页面照常
+  // HA 停掉：页面自己知道（订阅断了会推一次），横幅说连不上、卡片保留上次状态；别的页面照常
   await ha.stop();
-  await page.waitForTimeout(2_100);
-  await page.getByRole('button', { name: '刷新' }).click();
-  await expect(page.getByRole('status').filter({ hasText: '连不上 Home Assistant' })).toContainText('暂时按不了');
+  await expect(page.getByRole('status').filter({ hasText: '连不上 Home Assistant' })).toContainText('暂时按不了', {
+    timeout: 5_000,
+  });
   await expect(page.locator('[data-smart-home-connection="down"]')).toBeVisible();
-  await expect(curtain).toContainText('开着');
+  await expect(curtain).toContainText('开了 80%');
+  await expect(page.getByRole('button', { name: '重试' })).toBeVisible();
   await page.goto('/house/shopping');
   await expect(page.getByRole('heading', { name: '购物清单' })).toBeVisible();
   if (!isMobile) await expect(page.getByText('连不上 Home Assistant')).toHaveCount(0);
@@ -136,7 +134,7 @@ test('普通成员：看得到设备和状态，看不到设置入口；设置�
     const filter = memberPage.locator('[data-smart-home-device="sensor.kitchen_purifier_ro_filter_life"]');
     await expect(filter).toContainText('RO滤芯');
     await expect(filter).toContainText('12%');
-    await expect(memberPage.getByRole('link', { name: '连接与设备设置' })).toHaveCount(0);
+    await expect(memberPage.getByRole('link', { name: '设置', exact: true })).toHaveCount(0);
     await memberPage.goto('/house/smart-home/settings');
     await expect(memberPage.getByText('这一页只有家庭管理员能改')).toBeVisible();
   } finally {

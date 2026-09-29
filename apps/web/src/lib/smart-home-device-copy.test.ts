@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SmartHomeEntityState } from '@family/contracts';
-import { deviceStatusLine, isPercentEntity, percentLabel, type DeviceLike } from './smart-home-device-copy';
+import { deviceStatusLine, isPercentEntity, percentLabel, primaryButton, type DeviceLike } from './smart-home-device-copy';
 
 function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartHomeEntityState {
   return {
@@ -57,5 +57,21 @@ describe('百分比类', () => {
     expect(isPercentEntity({ name: '电量', state: state('50', { unit: '%' }) })).toBe(true);
     expect(isPercentEntity({ name: '出水TDS', state: state('8', { unit: 'ppm' }) })).toBe(false);
     expect(percentLabel('初滤剩余百分比')).toBe('初滤剩余');
+  });
+});
+
+describe('primaryButton', () => {
+  it('写按下会发生什么；只读类、离线没有', () => {
+    expect(primaryButton('vacuum', state('cleaning'))).toEqual({ action: 'pause', label: '暂停' });
+    expect(primaryButton('vacuum', state('paused'))?.label).toBe('继续');
+    expect(primaryButton('vacuum', state('docked'))?.label).toBe('开始');
+    expect(primaryButton('vacuum', state('error'))).toBeNull();
+    expect(primaryButton('cover', state('closed'))?.label).toBe('打开');
+    expect(primaryButton('cover', state('open'))?.label).toBe('关上');
+    expect(primaryButton('cover', state('closing'))?.label).toBe('停');
+    expect(primaryButton('climate', state('cool'))?.label).toBe('关掉');
+    expect(primaryButton('switch', state('off'))?.label).toBe('打开');
+    expect(primaryButton('sensor', state('12'))).toBeNull();
+    expect(primaryButton('switch', state('unavailable'))).toBeNull();
   });
 });

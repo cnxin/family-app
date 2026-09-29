@@ -91,18 +91,18 @@ test('管理员和家人同开智能家居页：一边按、或有人在 HA 里�
     const curtainOf = (target: Page) => target.locator('[data-smart-home-device="cover.living_room_curtain"]');
     await expect(vacuumOf(memberPage)).toContainText('在充电座上');
 
-    // 按角色给按钮：扫地机全家能控；窗帘只有管理员
-    await expect(memberPage.getByRole('button', { name: '扫地机：开始清扫' })).toBeVisible();
-    await expect(curtainOf(memberPage).getByRole('group')).toHaveCount(0);
+    // 按角色给主按钮：扫地机全家能控；窗帘只有管理员
+    await expect(memberPage.getByRole('button', { name: '扫地机：开始' })).toBeVisible();
+    await expect(memberPage.getByRole('button', { name: '客厅窗帘：关上' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '客厅窗帘：关上' })).toBeVisible();
 
-    // 家人按「开始清扫」：HA 真的收到 vacuum.start；管理员那边不刷新 3 秒内变成正在清扫
-    await memberPage.getByRole('button', { name: '扫地机：开始清扫' }).click();
+    // 家人按「开始」：HA 真的收到 vacuum.start；管理员那边不刷新 3 秒内变成正在清扫
+    await memberPage.getByRole('button', { name: '扫地机：开始' }).click();
     await expect(vacuumOf(memberPage)).toContainText('正在清扫', { timeout: 3_000 });
     await expect(vacuumOf(page)).toContainText('正在清扫', { timeout: 3_000 });
     expect(ha.serviceCalls.filter((call) => call.service === 'start')).toHaveLength(1);
-    // 状态变了，按钮也跟着变
-    await expect(memberPage.getByRole('button', { name: '扫地机：回充' })).toBeVisible();
+    // 状态变了，主按钮也跟着变（写的是按下会发生什么）
+    await expect(memberPage.getByRole('button', { name: '扫地机：暂停' })).toBeVisible();
 
     // 管理员关窗帘：家人那边 3 秒内看到关着
     await page.getByRole('button', { name: '客厅窗帘：关上' }).click();
@@ -113,13 +113,13 @@ test('管理员和家人同开智能家居页：一边按、或有人在 HA 里�
     await expect(curtainOf(page)).toContainText('开了 60%', { timeout: 3_000 });
     await expect(curtainOf(memberPage)).toContainText('开了 60%', { timeout: 3_000 });
 
-    // 场景在右栏，家人能执行
+    // 场景在最上面一排，家人能执行
     await memberPage.getByRole('button', { name: '电影之夜：执行' }).click();
     await expect.poll(() => ha.serviceCalls.filter((call) => call.data.entity_id === 'scene.movie_night').length).toBe(1);
 
     // HA 那边出错：按钮恢复，提示说清原因
     await admin.patch(`/smart-home/devices/${ids.vacuum}`, { controllable: false });
-    await expect(vacuumOf(memberPage).getByRole('group')).toHaveCount(0, { timeout: 3_000 });
+    await expect(memberPage.getByRole('button', { name: '扫地机：暂停' })).toHaveCount(0, { timeout: 3_000 });
   } finally {
     await other.close();
     await admin.patch(`/household/members/${member.member.id}/status`, { enabled: false });
@@ -134,11 +134,13 @@ test('管理员在设置页开放控制、改谁能控；最近的操作记下�
   await row.getByRole('button', { name: '保存' }).click();
   await expect(row.getByRole('button', { name: '保存' })).toHaveCount(0);
 
-  // 主实体是传感器（净水器）的设备没有动作，不给开放控制的开关
   await page.getByRole('button', { name: '把厨下净水整台加进来' }).click();
+  // 能不能开放控制由服务端判断（主实体能控，或者名下有能控的子实体）；净水器一个都没有，打开了保存会被拒
   const sensorRow = page.locator('[data-smart-home-whitelisted="sensor.kitchen_purifier_ro_filter_life"]');
   await expect(sensorRow).toBeVisible();
-  await expect(sensorRow.getByRole('checkbox')).toHaveCount(0);
+  await sensorRow.getByRole('checkbox', { name: '允许在小管家里控制厨下净水' }).click();
+  await sensorRow.getByRole('button', { name: '保存' }).click();
+  await expect(page.getByText('这台设备只能看，不能在小管家里控制')).toBeVisible();
 
   await page.goto('/house/smart-home');
   await page.getByRole('button', { name: '客厅窗帘：关上' }).click();
@@ -148,23 +150,26 @@ test('管理员在设置页开放控制、改谁能控；最近的操作记下�
   await expect(page.locator('[data-smart-home-commands] li').first()).toContainText('成功');
 });
 
-test('空调（试探性）：状态旁标「按上次操作显示」；打开、调温按 HA 的设定温度走', async ({ page, request }) => {
+test('空调（试探性）：卡片上标「≈」、详情里写「按上次操作显示」；打开在卡片，调温、换模式在详情', async ({ page, request }) => {
   await addDevice(request, { haDeviceId: 'dev_ac' }, { displayName: '空调插座', area: '卧室', controllable: true });
   await page.goto('/house/smart-home');
   const ac = page.locator('[data-smart-home-device="climate.bedroom_ac"]');
-  await expect(ac).toContainText('关着');
-  await expect(ac.locator('[data-smart-home-assumed]')).toHaveText('按上次操作显示');
+  await expect(ac).toContainText('已关');
+  await expect(ac.locator('[data-smart-home-assumed]')).toBeVisible();
   await expect(page.locator('[data-smart-home-device="vacuum.roborock_s8"] [data-smart-home-assumed]')).toHaveCount(0);
 
+  // 卡片上只有一个主按钮：打开
   await page.getByRole('button', { name: '空调插座：打开' }).click();
-  await expect(ac).toContainText('制冷', { timeout: 3_000 });
-  await expect(ac).toContainText('设定 26°');
-  await page.getByRole('button', { name: '空调插座：调高 1°' }).click();
-  await expect(ac).toContainText('设定 27°', { timeout: 3_000 });
-  await page.getByRole('button', { name: '空调插座：制热' }).click();
-  // 「制热」本身也是按钮上的字；切过去以后当前模式不再摆按钮，换成可以切回「制冷」
-  await expect(page.getByRole('button', { name: '空调插座：制冷' })).toBeVisible({ timeout: 3_000 });
-  await expect(page.getByRole('button', { name: '空调插座：制热' })).toHaveCount(0);
+  await expect(ac).toContainText('制冷 26°', { timeout: 3_000 });
+
+  // 调温、换模式只在详情里
+  await page.getByRole('button', { name: '打开空调插座的详情' }).click();
+  const panel = page.locator('[data-smart-home-panel]');
+  await expect(page.getByText('≈ 按上次操作显示')).toBeVisible();
+  await panel.getByRole('button', { name: '目标温度：加' }).click();
+  await expect(ac).toContainText('制冷 27°', { timeout: 3_000 });
+  await panel.getByRole('radio', { name: '制热' }).click();
+  await expect(panel.getByRole('radio', { name: '制热' })).toHaveAttribute('aria-checked', 'true', { timeout: 3_000 });
   expect(ha.serviceCalls.filter((call) => call.domain === 'climate').map((call) => call.service)).toEqual([
     'turn_on',
     'set_temperature',
