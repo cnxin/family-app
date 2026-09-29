@@ -116,7 +116,11 @@ export function smartHomeStateLine(
     case 'number':
       return sensorLine(state, timeZone);
     case 'select':
+    case 'text':
       return { text: state.state, detail: null, tone: 'off' };
+    case 'button':
+      // 按钮的状态是上次按的时间，卡片上没意义
+      return { text: '按钮', detail: null, tone: 'off' };
   }
 }
 
@@ -257,4 +261,14 @@ export const SMART_HOME_ACTION_LABELS: Record<SmartHomeAction, string> = {
   mode_auto: '自动',
   temperature_up: '调高 1°',
   temperature_down: '调低 1°',
+  set_position: '调位置',
+  set_temperature: '设温度',
+  set_hvac_mode: '换模式',
+  set_fan_mode: '调风速',
+  set_swing_mode: '调摆风',
+  set_fan_speed: '调吸力',
+  clean_area: '分房间清扫',
+  select_option: '换选项',
+  set_value: '调数值',
+  press: '按一下',
 };

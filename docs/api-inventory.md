@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 295 个端点（POST 119 / GET 96 / PATCH 44 / DELETE 27 / PUT 9），公开端点 28 个，已定义契约 295 个。
+共 297 个端点（POST 119 / GET 98 / PATCH 44 / DELETE 27 / PUT 9），公开端点 28 个，已定义契约 297 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -29,7 +29,7 @@
 | recipes | 7 | 7 |
 | reminders | 5 | 5 |
 | shopping | 5 | 5 |
-| smart-home | 22 | 22 |
+| smart-home | 24 | 24 |
 | system | 10 | 10 |
 | tasks | 5 | 5 |
 | today | 1 | 1 |
@@ -376,7 +376,7 @@
 | GET | `/shopping-list` | `ShoppingController.list` | 登录 | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 | POST | `/shopping-list/generate` | `ShoppingController.generate` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 
-## smart-home（22）
+## smart-home（24）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -390,6 +390,8 @@
 | PATCH | `/smart-home/devices/:id` | `SmartHomeController.updateDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | DELETE | `/smart-home/devices/:id` | `SmartHomeController.removeDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | POST | `/smart-home/devices/:id/command` | `SmartHomeController.command` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| GET | `/smart-home/devices/:id/history` | `SmartHomeController.history` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| GET | `/smart-home/devices/:id/panel` | `SmartHomeController.panel` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/devices/merge-report` | `SmartHomeController.mergeReport` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/entity-directory` | `SmartHomeController.entityDirectory` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/links` | `SmartHomeLinksController.list` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |

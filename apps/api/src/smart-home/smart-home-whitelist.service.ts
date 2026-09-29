@@ -17,6 +17,7 @@ import { JwtUser } from '../auth/jwt.guard';
 import { SmartHomeDevice, SmartHomeLink, SmartHomeWebhookSettings } from '../entities';
 import { friendlyName } from './home-assistant.client';
 import { domainOf, entitiesOfDevice, haDeviceName, iconFor, pickDefaults } from './smart-home-devices';
+import { hasControllable } from './smart-home-panel.service';
 import { SmartHomeService, isReadonlyCover, presentSmartHomeDevice } from './smart-home.service';
 
 const PAGE_PATH = '/house/smart-home';
@@ -155,6 +156,12 @@ export class SmartHomeWhitelistService {
       if (!unique.every(belongs)) throw new BadRequestException('主面板项必须是这台设备的实体');
       row.featuredEntityIds = unique;
     }
+    if (input.acceptEntityIds !== undefined) {
+      // 「N 个新实体待确认」：放出来 = 记进 knownEntityIds（拍板 7）
+      const accepted = [...new Set(input.acceptEntityIds)];
+      if (!accepted.every(belongs)) throw new BadRequestException('只能确认这台设备自己的实体');
+      row.knownEntityIds = [...new Set([...(row.knownEntityIds ?? []), ...accepted])];
+    }
     if (input.hiddenEntityIds !== undefined) {
       const unique = [...new Set(input.hiddenEntityIds)];
       if (!unique.every(belongs)) throw new BadRequestException('只能藏这台设备自己的实体');
@@ -172,11 +179,14 @@ export class SmartHomeWhitelistService {
     if (input.pinnedToToday !== undefined) row.pinnedToToday = input.pinnedToToday;
     if (input.controllable !== undefined) row.controllable = input.controllable;
     if (row.controllable) {
-      if (!smartHomeActionsFor(row.primaryDomain).length) {
-        if (input.controllable) throw new BadRequestException('这类设备只能看，不能在小管家里控制');
-        // 换了个不能控的主实体：控制跟着关掉
+      const controllable =
+        smartHomeActionsFor(row.primaryDomain).length > 0 ||
+        hasControllable(row, await this.smartHome.deviceContext(row));
+      if (!controllable) {
+        if (input.controllable) throw new BadRequestException('这台设备只能看，不能在小管家里控制');
+        // 换了个不能控的主实体、也没有能控的子实体：控制跟着关掉
         row.controllable = false;
-      } else {
+      } else if (smartHomeActionsFor(row.primaryDomain).length) {
         const state = await this.smartHome.currentState(user.householdId, row.primaryEntityId);
         if (isReadonlyCover(row.primaryDomain, state?.deviceClass ?? null)) {
           throw new BadRequestException('车库门、大门这类只读，不能在小管家里控制');

@@ -21,8 +21,12 @@ export function homeAssistantWebSocketUrl(baseUrl: string) {
   return url.toString();
 }
 
-export function homeAssistantCommands(target: HomeAssistantTarget, types: string[]): Promise<unknown[]> {
+/** 一条 WebSocket 命令：只有 type 的写字符串，带参数的写对象（比如翻译接口的 language / integration）。 */
+export type HomeAssistantCommand = string | ({ type: string } & Record<string, unknown>);
+
+export function homeAssistantCommands(target: HomeAssistantTarget, commands: HomeAssistantCommand[]): Promise<unknown[]> {
   const timeoutMs = homeAssistantTimeoutMs();
+  const types = commands.map((command) => (typeof command === 'string' ? command : command.type));
   return new Promise((resolve, reject) => {
     let settled = false;
     let socket: WebSocket;
@@ -64,7 +68,9 @@ export function homeAssistantCommands(target: HomeAssistantTarget, types: string
       } else if (message.type === 'auth_invalid') {
         finish(new HomeAssistantError('令牌无效或权限不足', 401));
       } else if (message.type === 'auth_ok') {
-        types.forEach((type, index) => socket.send(JSON.stringify({ id: index + 1, type })));
+        commands.forEach((command, index) =>
+          socket.send(JSON.stringify({ id: index + 1, ...(typeof command === 'string' ? { type: command } : command) })),
+        );
       } else if (message.type === 'result' && typeof message.id === 'number') {
         if (!message.success) {
           finish(new HomeAssistantError(`Home Assistant 拒绝了 ${types[message.id - 1] ?? '命令'}：${message.error?.message ?? '未知原因'}`));
@@ -96,6 +102,11 @@ export interface HomeAssistantEntityRegistryEntry {
   entity_category: 'config' | 'diagnostic' | null;
   disabled_by?: string | null;
   hidden_by?: string | null;
+  /** 哪个集成（roborock、xiaomi_home…）：拼翻译键用，不做任何按集成的分支 */
+  platform?: string | null;
+  translation_key?: string | null;
+  /** 实体选项；扫地机的分区 ↔ 区域对应在 options.vacuum.area_mapping（HA 2026.3 起） */
+  options?: Record<string, unknown> | null;
 }
 
 export interface HomeAssistantArea {
@@ -124,6 +135,21 @@ export async function fetchHomeAssistantRegistries(target: HomeAssistantTarget):
     entities: asList<HomeAssistantEntityRegistryEntry>(entities).filter((entry) => typeof entry.entity_id === 'string'),
     areas: asList<HomeAssistantArea>(areas).filter((area) => typeof area.area_id === 'string'),
   };
+}
+
+/**
+ * HA 前端用的翻译（frontend/get_translations，category = entity）：select 选项、扫地机吸力档位这类原始值的中文。
+ * 键形如 component.<集成>.entity.<domain>.<translation_key>.state.<值>。取不到就返回空表，调用方用内置词表兜底。
+ */
+export async function fetchHomeAssistantTranslations(target: HomeAssistantTarget, integrations: string[]) {
+  if (!integrations.length) return new Map<string, string>();
+  const [result] = await homeAssistantCommands(target, [
+    { type: 'frontend/get_translations', language: 'zh-Hans', category: 'entity', integration: integrations },
+  ]);
+  const resources = (result as { resources?: Record<string, unknown> } | null)?.resources ?? {};
+  return new Map(
+    Object.entries(resources).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
 }
 
 export interface HomeAssistantSubscription {

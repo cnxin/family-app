@@ -13,6 +13,8 @@ import { defineEndpoint } from './registry';
 export const SMART_HOME_DOMAINS = [
   'vacuum', 'cover', 'light', 'switch', 'input_boolean', 'fan', 'climate', 'humidifier',
   'water_heater', 'scene', 'script', 'sensor', 'binary_sensor', 'select', 'number',
+  // R1b：详情面板里的按钮（例程、「响一下」）和只读文字
+  'button', 'text',
 ] as const;
 export const smartHomeDomain = z.enum(SMART_HOME_DOMAINS);
 export type SmartHomeDomain = z.infer<typeof smartHomeDomain>;
@@ -89,6 +91,11 @@ export const smartHomeEntityStateSchema = z.object({
    * climate 一律当作这种（King 家的空调走红外），HA 自己报 assumed_state 的也算。页面上标「按上次操作显示」。
    */
   assumed: z.boolean(),
+  /** R1b 详情面板：扫地机当前吸力、空调当前风速 / 摆风、室内湿度（没有为 null） */
+  fanSpeed: z.string().nullable(),
+  fanMode: z.string().nullable(),
+  swingMode: z.string().nullable(),
+  humidity: z.number().nullable(),
 });
 export type SmartHomeEntityState = z.infer<typeof smartHomeEntityStateSchema>;
 
@@ -232,6 +239,8 @@ export const updateSmartHomeDeviceBody = z
     /** 谁能控。admin = 家庭管理员；member = 全家 */
     minRole: z.enum(['admin', 'member']),
     pinnedToToday: z.boolean(),
+    /** 「N 个新实体待确认」：管理员点了，这些 HA 新冒出来的子实体才放出来（拍板 7） */
+    acceptEntityIds: z.array(smartHomeEntityId).max(200),
   })
   .partial()
   .strict();
@@ -297,6 +306,9 @@ export const SMART_HOME_READONLY_COVER_CLASSES = ['garage', 'gate', 'door'] as c
 export const smartHomeAction = z.enum([
   'start', 'pause', 'return_to_base', 'open', 'stop', 'close', 'turn_on', 'turn_off', 'activate',
   'mode_cool', 'mode_heat', 'mode_fan_only', 'mode_auto', 'temperature_up', 'temperature_down',
+  // R1b 详情面板（redesign §9.5）：带值的动作，值按 HA 当前属性校验
+  'set_position', 'set_temperature', 'set_hvac_mode', 'set_fan_mode', 'set_swing_mode', 'set_fan_speed',
+  'clean_area', 'select_option', 'set_value', 'press',
 ]);
 export type SmartHomeAction = z.infer<typeof smartHomeAction>;
 
@@ -305,7 +317,21 @@ export function smartHomeActionsFor(domain: string): readonly SmartHomeAction[] 
 }
 
 /** 一次控制。requestId 是幂等键：同一次点击重发（网络抖动、连点）只执行一次，返回第一次的结果。 */
-export const smartHomeCommandBody = z.object({ action: smartHomeAction, requestId: uuid }).strict();
+export const smartHomeCommandValue = z.union([
+  z.string().trim().min(1).max(100),
+  z.number().finite(),
+  z.array(z.string().trim().min(1).max(64)).min(1).max(30),
+]);
+export const smartHomeCommandBody = z
+  .object({
+    action: smartHomeAction,
+    requestId: uuid,
+    /** 这台设备的哪个子实体；缺省 = 主实体（R1b） */
+    entityId: smartHomeEntityId.optional(),
+    /** 带值的动作要的值：位置、温度、档位、选项、区域 id 列表… */
+    value: smartHomeCommandValue.optional(),
+  })
+  .strict();
 export type SmartHomeCommandBody = z.infer<typeof smartHomeCommandBody>;
 
 export const smartHomeCommandStatus = z.enum(['pending', 'succeeded', 'failed']);
@@ -358,6 +384,114 @@ export const smartHomeStatesSchema = z.object({
 });
 export type SmartHomeStates = z.infer<typeof smartHomeStatesSchema>;
 export type SmartHomeDeviceWithState = SmartHomeStates['devices'][number];
+
+// ---- R1b：详情面板（redesign §9） ---------------------------------------------------------------
+
+/** 一个可选值：HA 里的原始值 + 给人看的中文（HA 的翻译，取不到就用内置词表，再不行原样）。 */
+export const smartHomeChoiceSchema = z.object({ value: z.string(), label: z.string() });
+export type SmartHomeChoice = z.infer<typeof smartHomeChoiceSchema>;
+
+/**
+ * 这个实体在面板上怎么渲染、能发哪些动作（服务端 describeEntity 算；命令接口放行前用同一个函数）。
+ * null = 只读。通用控件不含任何厂商逻辑：数据只来自 HA 的通用属性。
+ */
+export const smartHomeControlSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('toggle') }),
+  z.object({ kind: z.literal('button') }),
+  z.object({ kind: z.literal('scene') }),
+  z.object({ kind: z.literal('select'), options: z.array(smartHomeChoiceSchema) }),
+  z.object({
+    kind: z.literal('number'),
+    min: z.number(),
+    max: z.number(),
+    step: z.number(),
+    unit: z.string().nullable(),
+    /** HA 的 mode：slider → 滑块；box → 步进；auto 按步数（≤ 100 步用滑块） */
+    display: z.enum(['slider', 'stepper']),
+  }),
+  z.object({
+    kind: z.literal('cover'),
+    actions: z.array(z.enum(['open', 'stop', 'close'])),
+    /** 有 SET_POSITION 且有 current_position：出位置滑块 */
+    position: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal('vacuum'),
+    actions: z.array(z.enum(['start', 'pause', 'return_to_base'])),
+    /** vacuum 本体的 fan_speed_list（HA 通用属性）；没有为 null */
+    fanSpeeds: z.array(smartHomeChoiceSchema).nullable(),
+    /** 支持 CLEAN_AREA、且 HA 里已把分区对应到区域：这些区域（HA 2026.3 起的 vacuum.clean_area）；否则 null */
+    areas: z.array(z.object({ id: z.string(), name: z.string() })).nullable(),
+  }),
+  z.object({
+    kind: z.literal('climate'),
+    hvacModes: z.array(smartHomeChoiceSchema),
+    min: z.number(),
+    max: z.number(),
+    /** target_temp_step；HA 没给按 0.5（与 HA 前端一致） */
+    step: z.number(),
+    fanModes: z.array(smartHomeChoiceSchema).nullable(),
+    swingModes: z.array(smartHomeChoiceSchema).nullable(),
+  }),
+]);
+export type SmartHomeControl = z.infer<typeof smartHomeControlSchema>;
+
+export const smartHomePanelEntitySchema = z.object({
+  entityId: smartHomeEntityId,
+  domain: z.string(),
+  name: z.string(),
+  category: smartHomeEntityCategory.nullable(),
+  state: smartHomeEntityStateSchema.nullable(),
+  control: smartHomeControlSchema.nullable(),
+});
+export type SmartHomePanelEntity = z.infer<typeof smartHomePanelEntitySchema>;
+
+/**
+ * 一台设备的完整控制面板（redesign §9.1）。主实体 + 主面板项 + 其余子实体按规则归位：
+ * more = 更多设置（能控的，config 类也在这）；info = 设备信息（diagnostic 与其余只读）；
+ * excluded = 排除名单里的操作（「此操作请在厂商 App 完成」）；pending = HA 新冒出来、还没确认的子实体（只给管理员）。
+ * 没权限的人拿到的 control 一律为 null，more 为空。
+ */
+export const smartHomePanelSchema = z.object({
+  device: smartHomeDeviceSchema,
+  connection: smartHomeConnectionSchema,
+  stale: z.boolean(),
+  asOf: nullableDateTime,
+  online: z.boolean(),
+  /** 这个人此刻能不能控这台（设备开放了控制 + 角色够） */
+  canControl: z.boolean(),
+  manufacturer: z.string().nullable(),
+  model: z.string().nullable(),
+  primary: smartHomePanelEntitySchema,
+  featured: z.array(smartHomePanelEntitySchema),
+  more: z.array(smartHomePanelEntitySchema),
+  info: z.array(smartHomePanelEntitySchema),
+  excluded: z.array(z.object({ entityId: smartHomeEntityId, name: z.string() })),
+  pending: z.array(z.object({ entityId: smartHomeEntityId, name: z.string(), domain: z.string() })),
+  /** 管理员挑主实体 / 主面板项 / 藏掉用的全部子实体（成员为空） */
+  catalog: z.array(
+    z.object({
+      entityId: smartHomeEntityId,
+      name: z.string(),
+      domain: z.string(),
+      category: smartHomeEntityCategory.nullable(),
+      hidden: z.boolean(),
+    }),
+  ),
+  /** 这台设备最近 3 条操作（全家可见，拍板 3） */
+  recent: z.array(smartHomeCommandSchema),
+});
+export type SmartHomePanel = z.infer<typeof smartHomePanelSchema>;
+
+export const smartHomeHistoryQuery = z.object({ entityId: smartHomeEntityId });
+export type SmartHomeHistoryQuery = z.infer<typeof smartHomeHistoryQuery>;
+/** 最近 24 小时的数值（服务端降采样到 ≤ 48 点）；不是数值、或 HA 历史取不到时 points 为空。 */
+export const smartHomeHistorySchema = z.object({
+  entityId: smartHomeEntityId,
+  unit: z.string().nullable(),
+  points: z.array(z.object({ at: isoDateTime, value: z.number() })),
+});
+export type SmartHomeHistory = z.infer<typeof smartHomeHistorySchema>;
 
 export const smartHome = {
   connectorSettings: defineEndpoint({
@@ -422,10 +556,25 @@ export const smartHome = {
   command: defineEndpoint({
     method: 'POST',
     path: '/smart-home/devices/:id/command',
-    summary: '控制一台白名单设备的主实体（幂等键 + 审计 + 逐次校验权限）；HA 失败回 502，审计照记',
+    summary: '控制一台白名单设备（缺省主实体，也可以是它的子实体；幂等键 + 审计 + 逐次校验权限 + 按 HA 属性校验值）；HA 失败回 502',
     params: smartHomeDeviceParams,
     body: smartHomeCommandBody,
     response: smartHomeCommandSchema,
+  }),
+  panel: defineEndpoint({
+    method: 'GET',
+    path: '/smart-home/devices/:id/panel',
+    summary: '一台设备的完整控制面板：主实体、主面板项、更多设置、设备信息、排除项、待确认的新实体、最近 3 条操作',
+    params: smartHomeDeviceParams,
+    response: smartHomePanelSchema,
+  }),
+  history: defineEndpoint({
+    method: 'GET',
+    path: '/smart-home/devices/:id/history',
+    summary: '这台设备某个数值子实体最近 24 小时（≤ 48 点；取不到为空）',
+    params: smartHomeDeviceParams,
+    query: smartHomeHistoryQuery,
+    response: smartHomeHistorySchema,
   }),
   mergeReport: defineEndpoint({
     method: 'GET',

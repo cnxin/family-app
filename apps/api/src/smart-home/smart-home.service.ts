@@ -23,7 +23,11 @@ import {
   presentHomeAssistantState,
   type HomeAssistantRawState,
 } from './home-assistant.client';
-import { fetchHomeAssistantRegistries, type HomeAssistantRegistries } from './home-assistant.ws';
+import {
+  fetchHomeAssistantRegistries,
+  fetchHomeAssistantTranslations,
+  type HomeAssistantRegistries,
+} from './home-assistant.ws';
 import { buildDirectory, type WhitelistIndex } from './smart-home-directory';
 import { domainOf, haDeviceName, stripDeviceName } from './smart-home-devices';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
@@ -35,6 +39,7 @@ export { buildDirectory } from './smart-home-directory';
 const STATES_CACHE_MS = 2_000;
 /** 注册表（设备 / 实体 / 区域）变得很少：状态页、控制、订阅都读它，缓存一分钟。目录每次读新的。 */
 const REGISTRY_CACHE_MS = 60_000;
+const TRANSLATION_CACHE_MS = 3_600_000;
 
 type Snapshot =
   | { ok: true; states: HomeAssistantRawState[]; checkedAt: Date }
@@ -77,6 +82,10 @@ const UNAVAILABLE_STATE: SmartHomeEntityState = {
   minTemperature: null,
   maxTemperature: null,
   assumed: false,
+  fanSpeed: null,
+  fanMode: null,
+  swingMode: null,
+  humidity: null,
 };
 
 export function presentSmartHomeDevice(row: SmartHomeDevice): SmartHomeDeviceView {
@@ -110,6 +119,7 @@ export class SmartHomeService {
   /** 最近一次读成功的状态：HA 连不上时页面按它灰显（redesign §2.4） */
   private readonly lastGood = new Map<string, { version: string; states: HomeAssistantRawState[]; checkedAt: Date }>();
   private readonly registryCache = new Map<string, { version: string; at: number; value: Promise<RegistryResult> }>();
+  private readonly translationCache = new Map<string, { key: string; at: number; value: Map<string, string> }>();
 
   constructor(
     @InjectRepository(SmartHomeDevice)
@@ -129,6 +139,7 @@ export class SmartHomeService {
     this.snapshots.delete(householdId);
     this.lastGood.delete(householdId);
     this.registryCache.delete(householdId);
+    this.translationCache.delete(householdId);
   }
 
   async test(householdId: string): Promise<SmartHomeConnection> {
@@ -193,29 +204,20 @@ export class SmartHomeService {
 
   async states(householdId: string, role: MemberRole): Promise<SmartHomeStates> {
     // 注册表只用来给主面板项起名（去设备名前缀），和读状态并行：HA 不回时总共只等一次超时
-    const [snapshot, rows, registries, { version }] = await Promise.all([
-      this.snapshot(householdId),
+    const [read, rows, registries] = await Promise.all([
+      this.readStates(householdId),
       this.rows(householdId),
       this.registries(householdId),
-      this.settings.resolve(householdId),
     ]);
-    const last = this.lastGood.get(householdId);
-    const fallback = !snapshot.ok && snapshot.configured && last?.version === version ? last : null;
-    const states = snapshot.ok ? snapshot.states : fallback?.states ?? null;
-    const byId = states ? new Map(states.map((raw) => [raw.entity_id, raw])) : null;
+    const { byId } = read;
     const deviceNames = new Map(
       registries.ok ? registries.value.devices.map((device) => [device.id, haDeviceName(device)]) : [],
     );
-    const present = (entityId: string) => {
-      if (!byId) return null;
-      const raw = byId.get(entityId);
-      // HA 上已经没有这个实体（被删了、改了 ID）：按 HA 自己的说法当 unavailable
-      return raw ? presentHomeAssistantState(raw) : { ...UNAVAILABLE_STATE };
-    };
+    const present = (entityId: string) => this.presentState(byId, entityId);
     return {
-      connection: this.connection(snapshot),
-      stale: Boolean(fallback),
-      asOf: snapshot.ok ? snapshot.checkedAt.toISOString() : fallback?.checkedAt.toISOString() ?? null,
+      connection: read.connection,
+      stale: read.stale,
+      asOf: read.asOf,
       devices: rows.map((row) => {
         const device = presentSmartHomeDevice(row);
         const primary = present(row.primaryEntityId);
@@ -237,6 +239,78 @@ export class SmartHomeService {
         };
       }),
     };
+  }
+
+  /**
+   * 读状态：连得上用最新的；连不上用最近一次读成功的（stale，页面灰显，redesign §2.4）；
+   * 连接设置改过或 API 重启后还没读到过，byId 为 null。
+   */
+  async readStates(householdId: string) {
+    const [snapshot, { version }] = await Promise.all([this.snapshot(householdId), this.settings.resolve(householdId)]);
+    const last = this.lastGood.get(householdId);
+    const fallback = !snapshot.ok && snapshot.configured && last?.version === version ? last : null;
+    const states = snapshot.ok ? snapshot.states : fallback?.states ?? null;
+    return {
+      snapshot,
+      live: snapshot.ok,
+      connection: this.connection(snapshot),
+      stale: Boolean(fallback),
+      asOf: snapshot.ok ? snapshot.checkedAt.toISOString() : fallback?.checkedAt.toISOString() ?? null,
+      byId: states ? new Map(states.map((raw) => [raw.entity_id, raw])) : null,
+    };
+  }
+
+  /** 一个实体此刻的样子；HA 上已经没有的按 unavailable，整个读不到为 null。 */
+  presentState(byId: Map<string, HomeAssistantRawState> | null, entityId: string): SmartHomeEntityState | null {
+    if (!byId) return null;
+    const raw = byId.get(entityId);
+    return raw ? presentHomeAssistantState(raw) : { ...UNAVAILABLE_STATE };
+  }
+
+  /**
+   * 一台设备的上下文（详情面板、子实体控制共用）：它名下有哪些子实体（HA 注册表；读不到时退回库里记着的）、
+   * 各自的注册表条目、HA 翻译、区域名。
+   */
+  async deviceContext(row: SmartHomeDevice) {
+    const [read, registries] = await Promise.all([this.readStates(row.householdId), this.registries(row.householdId)]);
+    const registry = registries.ok ? registries.value : null;
+    const device = row.haDeviceId ? registry?.devices.find((one) => one.id === row.haDeviceId) : undefined;
+    const entries = new Map(
+      (registry?.entities ?? [])
+        .filter((entry) =>
+          row.haDeviceId ? entry.device_id === row.haDeviceId : entry.entity_id === row.primaryEntityId,
+        )
+        .map((entry) => [entry.entity_id, entry]),
+    );
+    const ids =
+      row.haDeviceId && registry
+        ? [...entries.values()].filter((entry) => !entry.disabled_by && !entry.hidden_by).map((entry) => entry.entity_id)
+        : [...new Set([row.primaryEntityId, ...(row.featuredEntityIds ?? []), ...(row.knownEntityIds ?? [])])];
+    if (!ids.includes(row.primaryEntityId)) ids.unshift(row.primaryEntityId);
+    const platforms = [...new Set([...entries.values()].map((entry) => entry.platform).filter((one): one is string => Boolean(one)))];
+    const translations = await this.translations(row.householdId, platforms);
+    return {
+      ...read,
+      registryOk: Boolean(registry),
+      device,
+      deviceName: haDeviceName(device),
+      entries,
+      ids,
+      translations,
+      areaNames: new Map(registry?.areas.map((area) => [area.area_id, area.name]) ?? []),
+    };
+  }
+
+  /** HA 翻译（select 选项、吸力档位的中文），按家庭 + 集成缓存一小时；取不到就空表（调用方用内置词表）。 */
+  private async translations(householdId: string, platforms: string[]) {
+    const { target, version } = await this.settings.resolve(householdId);
+    if (!target || !platforms.length) return new Map<string, string>();
+    const key = `${version}:${[...platforms].sort().join(',')}`;
+    const cached = this.translationCache.get(householdId);
+    if (cached && cached.key === key && Date.now() - cached.at < TRANSLATION_CACHE_MS) return cached.value;
+    const value = await fetchHomeAssistantTranslations(target, platforms).catch(() => null);
+    if (value) this.translationCache.set(householdId, { key, at: Date.now(), value });
+    return value ?? new Map<string, string>();
   }
 
   /** 最新的 HA 状态（走 2 秒缓存）；连不上时 null。控制前查 device_class 用。 */

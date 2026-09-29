@@ -13,6 +13,8 @@ import {
   type SmartHomeWebhookBody,
   smartHomeCommandBody,
   smartHomeHouseholdParams,
+  smartHomeHistoryQuery,
+  type SmartHomeHistoryQuery,
   addSmartHomeDeviceBody,
   updateSmartHomeConnectorBody,
   updateSmartHomeDeviceBody,
@@ -23,7 +25,7 @@ import {
 } from '@family/contracts';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
-import { ZodBody, ZodParam } from '../common/zod';
+import { ZodBody, ZodParam, ZodQuery } from '../common/zod';
 import {
   Integration,
   SmartHomeCommandRecord,
@@ -46,6 +48,7 @@ import { SmartHomeMergeService } from './smart-home-merge.service';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
 import { SmartHomeService } from './smart-home.service';
 import { SmartHomeWhitelistService } from './smart-home-whitelist.service';
+import { SmartHomePanelService } from './smart-home-panel.service';
 
 /**
  * /smart-home：Home Assistant 接入（H3）。E1：连接设置、实体目录、白名单、状态快照；
@@ -59,6 +62,7 @@ export class SmartHomeController {
     private readonly settings: SmartHomeSettingsService,
     private readonly smartHome: SmartHomeService,
     private readonly whitelist: SmartHomeWhitelistService,
+    private readonly panels: SmartHomePanelService,
     private readonly commands: SmartHomeCommandsService,
     private readonly live: SmartHomeLiveService,
   ) {}
@@ -105,6 +109,20 @@ export class SmartHomeController {
   @Get('devices')
   devices(@CurrentUser() user: JwtUser) {
     return this.smartHome.list(user.householdId);
+  }
+
+  @Get('devices/:id/panel')
+  panel(@ZodParam('id', uuid) id: string, @CurrentUser() user: JwtUser) {
+    return this.panels.panel(id, user);
+  }
+
+  @Get('devices/:id/history')
+  history(
+    @ZodParam('id', uuid) id: string,
+    @ZodQuery(smartHomeHistoryQuery) query: SmartHomeHistoryQuery,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.panels.history(id, query.entityId, user);
   }
 
   @Get('devices/merge-report')
@@ -263,6 +281,7 @@ export class SmartHomeLinksController {
     SmartHomeSettingsService,
     SmartHomeService,
     SmartHomeWhitelistService,
+    SmartHomePanelService,
     SmartHomeCommandsService,
     SmartHomeLiveService,
     SmartHomeMergeService,
