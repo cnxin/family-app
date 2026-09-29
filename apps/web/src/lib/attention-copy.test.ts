@@ -120,7 +120,7 @@ describe('attentionCopy：逐域的单件与合并说法', () => {
       item({ domain: 'smart-home', kind: 'laundry', dueOn: '2026-09-22', entity: { id: entity.id, name: '晾衣服' } }),
       '2026-09-22',
     );
-    expect(laundry).toMatchObject({ title: '衣服好了两个多小时，还没晾', actionLabel: '去晾衣服', path: '/schedule/tasks' });
+    expect(laundry).toMatchObject({ title: '衣服好了两个多小时，还没晾', actionLabel: '去晾衣服', path: `/schedule/tasks?task=${entity.id}` });
     const offline = attentionCopy(
       item({ domain: 'smart-home', kind: 'offline', dueOn: undefined, entity: { id: entity.id, name: 'Home Assistant' } }),
     );

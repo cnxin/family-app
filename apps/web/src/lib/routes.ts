@@ -72,7 +72,7 @@ export function attentionPath(item: {
   if (item.domain === 'points' && item.entity) return `${attentionRoutes.points}?redemptionId=${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'smart-home') {
     if (item.kind === 'filter' && item.entity) return `${attentionRoutes['smart-home']}?device=${encodeURIComponent(item.entity.id)}`;
-    if (item.kind === 'laundry') return '/schedule/tasks';
+    if (item.kind === 'laundry' && item.entity) return `/schedule/tasks?task=${encodeURIComponent(item.entity.id)}`;
     if (item.kind === 'offline') return `${attentionRoutes['smart-home']}/settings`;
   }
   // 来访记录没有餐次，默认晚餐；点菜页读到 date 后会把参数抹掉。
