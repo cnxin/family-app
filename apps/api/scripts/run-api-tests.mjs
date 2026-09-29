@@ -146,6 +146,7 @@ const BUSINESS_SCRIPTS = [
   'smart-home-control',
   'smart-home-webhook',
   'smart-home-links',
+  'smart-home-panel',
   'today-attention',
   'events',
   'households',

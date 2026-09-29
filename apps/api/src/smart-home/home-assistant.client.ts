@@ -136,7 +136,30 @@ export function presentHomeAssistantState(raw: HomeAssistantRawState): SmartHome
     minTemperature: numberOrNull(attributes.min_temp),
     maxTemperature: numberOrNull(attributes.max_temp),
     assumed: raw.entity_id.startsWith('climate.') || attributes.assumed_state === true,
+    fanSpeed: stringOrNull(attributes.fan_speed),
+    fanMode: stringOrNull(attributes.fan_mode),
+    swingMode: stringOrNull(attributes.swing_mode),
+    humidity: numberOrNull(attributes.current_humidity),
   };
+}
+
+/**
+ * 一个实体一段时间的历史（GET /api/history/period/<开始>，minimal_response + no_attributes）。
+ * 返回 [时间, 值]，只留能当数字读的点。
+ */
+export async function fetchHomeAssistantHistory(target: HomeAssistantTarget, entityId: string, start: Date, end: Date) {
+  const query = new URLSearchParams({ filter_entity_id: entityId, end_time: end.toISOString() });
+  const body = await request(target, `api/history/period/${start.toISOString()}?${query}&minimal_response&no_attributes`);
+  const series = Array.isArray(body) && Array.isArray(body[0]) ? (body[0] as unknown[]) : [];
+  const points: { at: Date; value: number }[] = [];
+  for (const entry of series) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { state, last_changed: changed } = entry as { state?: unknown; last_changed?: unknown };
+    const value = typeof state === 'string' && state.trim() !== '' ? Number(state) : Number.NaN;
+    const at = typeof changed === 'string' ? new Date(changed) : null;
+    if (Number.isFinite(value) && at && !Number.isNaN(at.getTime())) points.push({ at, value });
+  }
+  return points;
 }
 
 export function friendlyName(raw: HomeAssistantRawState) {

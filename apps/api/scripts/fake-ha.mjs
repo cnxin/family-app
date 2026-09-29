@@ -2,6 +2,9 @@
 // REST：/api/、/api/config、/api/states。WebSocket（/api/websocket，不引依赖、手写最小帧）：
 // auth → config/device_registry/list、config/entity_registry/list、config/area_registry/list。
 // E2：POST /api/services/<domain>/<service>（按动作改状态并推事件）、WebSocket subscribe_events / ping。
+// R1b：WebSocket frontend/get_translations（中文翻译）、GET /api/history/period/<时间>（24 小时趋势）；
+// 服务里加上详情面板用到的 select / number / button / 吸力 / 按区域清扫 / 风速 / 摆风 / 窗帘位置。
+//   ha.history = { [entityId]: [{ state, last_changed }] } // 换一段历史（默认按当前值造 3 个点）
 //
 //   const ha = await startFakeHomeAssistant({ token });
 //   ha.url              // http://127.0.0.1:<port>
@@ -45,13 +48,44 @@ function entity(entity_id, device_id, entity_category, friendly_name, state, att
 }
 
 const SAMPLE = [
-  entity('vacuum.roborock_s8', 'dev_roborock', null, 'Roborock S8', 'docked', { battery_level: 100 }),
+  // supported_features 30524 = 真机 G30 U 的值（含 START / PAUSE / RETURN_HOME / FAN_SPEED / CLEAN_AREA）；
+  // 分区 ↔ 区域的对应在实体注册表的 options.vacuum.area_mapping（HA 2026.3 起）
+  entity(
+    'vacuum.roborock_s8',
+    'dev_roborock',
+    null,
+    'Roborock S8',
+    'docked',
+    { battery_level: 100, supported_features: 30524, fan_speed: 'balanced', fan_speed_list: ['quiet', 'balanced', 'turbo', 'max'] },
+    {
+      platform: 'roborock',
+      translation_key: 'roborock',
+      options: { vacuum: { area_mapping: { living_room: ['16'], kitchen: ['17', '18'], bedroom: [] } } },
+    },
+  ),
   entity('sensor.roborock_s8_cleaning_area', 'dev_roborock', null, 'Roborock S8 清扫面积', '32', { unit_of_measurement: 'm²' }),
   entity('sensor.roborock_s8_main_brush_left', 'dev_roborock', 'diagnostic', 'Roborock S8 主刷剩余', '120', { unit_of_measurement: 'h' }),
   entity('sensor.roborock_s8_filter_left', 'dev_roborock', 'diagnostic', 'Roborock S8 滤网剩余', '80', { unit_of_measurement: 'h' }),
-  entity('select.roborock_s8_mop_intensity', 'dev_roborock', 'config', 'Roborock S8 拖地强度', '中'),
+  entity(
+    'select.roborock_s8_mop_intensity',
+    'dev_roborock',
+    'config',
+    'Roborock S8 拖地强度',
+    'medium',
+    { options: ['off', 'low', 'medium', 'high'] },
+    { platform: 'roborock', translation_key: 'mop_intensity' },
+  ),
+  entity('number.roborock_s8_volume', 'dev_roborock', 'config', 'Roborock S8 音量', '60', {
+    min: 0, max: 100, step: 1, mode: 'auto', unit_of_measurement: '%',
+  }),
+  // 石头 App 里建的例程：没有类别的按钮；「重置耗材」没有 device_class、名字带「重置」；「重启」按 device_class 排除
+  entity('button.roborock_s8_routine', 'dev_roborock', null, 'Roborock S8 饭后打扫', 'unknown'),
+  entity('button.roborock_s8_reset_filter', 'dev_roborock', 'config', 'Roborock S8 重置滤网耗材', 'unknown'),
+  entity('button.roborock_s8_reboot', 'dev_roborock', 'config', 'Roborock S8 设备', 'unknown', { device_class: 'restart' }),
 
-  entity('cover.living_room_curtain', 'dev_curtain', null, '客厅窗帘', 'open', { current_position: 80, device_class: 'curtain' }),
+  entity('cover.living_room_curtain', 'dev_curtain', null, '客厅窗帘', 'open', {
+    current_position: 80, device_class: 'curtain', supported_features: 15,
+  }),
   entity('binary_sensor.living_room_curtain_fault', 'dev_curtain', 'diagnostic', '客厅窗帘 电机故障', 'off', { device_class: 'problem' }),
   entity('sensor.living_room_curtain_signal', 'dev_curtain', 'diagnostic', '客厅窗帘 信号强度', '-52', { unit_of_measurement: 'dBm' }),
   entity('number.living_room_curtain_speed', 'dev_curtain', 'config', '客厅窗帘 速度', '50'),
@@ -80,6 +114,14 @@ const SAMPLE = [
     min_temp: 16,
     max_temp: 30,
     assumed_state: true,
+    // 真机空调伴侣：步长 1、风速是中文、有上下摆风；supported_features 425 同真机
+    target_temp_step: 1,
+    fan_modes: ['自动', '低', '中', '高'],
+    fan_mode: '自动',
+    swing_modes: ['off', 'vertical'],
+    swing_mode: 'off',
+    current_humidity: 58,
+    supported_features: 425,
   }),
   entity('sensor.backup_manager_state', 'dev_backup', null, '备份管理器状态', 'idle'),
   entity('sensor.sun_next_dawn', 'dev_sun', 'diagnostic', '下个清晨', '2026-09-29T21:30:00+00:00', { device_class: 'timestamp' }),
@@ -93,6 +135,17 @@ const SAMPLE = [
 ];
 
 export const SAMPLE_STATES = SAMPLE.map((one) => one.state);
+/** HA 前端翻译（frontend/get_translations，zh-Hans）里这几个集成的键 */
+export const SAMPLE_TRANSLATIONS = {
+  'component.roborock.entity.select.mop_intensity.state.off': '关闭',
+  'component.roborock.entity.select.mop_intensity.state.low': '低',
+  'component.roborock.entity.select.mop_intensity.state.medium': '中',
+  'component.roborock.entity.select.mop_intensity.state.high': '高',
+  'component.roborock.entity.vacuum.roborock.state_attributes.fan_speed.state.quiet': '安静',
+  'component.roborock.entity.vacuum.roborock.state_attributes.fan_speed.state.balanced': '均衡',
+  'component.roborock.entity.vacuum.roborock.state_attributes.fan_speed.state.turbo': '强力',
+  'component.roborock.entity.vacuum.roborock.state_attributes.fan_speed.state.max': '最大',
+};
 export const SAMPLE_ENTITY_REGISTRY = SAMPLE.map((one) => one.registry);
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -159,6 +212,8 @@ export async function startFakeHomeAssistant({
     requests: [],
     serviceMode: 'ok',
     serviceCalls: [],
+    translations: SAMPLE_TRANSLATIONS,
+    history: {},
     setState,
     /** 掐断现有的 WebSocket（模拟网络抖动 / HA 重启），HTTP 照常 */
     dropWebSockets() {
@@ -188,6 +243,20 @@ export async function startFakeHomeAssistant({
       return send(200, { version, location_name: '测试的家', time_zone: 'Asia/Shanghai' });
     }
     if (request.method === 'GET' && request.url === '/api/states') return send(200, ha.states);
+    if (request.method === 'GET' && request.url?.startsWith('/api/history/period/')) {
+      const url = new URL(request.url, 'http://fake');
+      const entityId = url.searchParams.get('filter_entity_id');
+      const current = ha.states.find((entry) => entry.entity_id === entityId);
+      if (!current) return send(200, []);
+      const now = Date.now();
+      const series =
+        ha.history[entityId] ??
+        [3, 2, 1].map((hoursAgo, index) => ({
+          state: String(Number(current.state) - index),
+          last_changed: new Date(now - hoursAgo * 3_600_000).toISOString(),
+        }));
+      return send(200, [series.map((point) => ({ entity_id: entityId, ...point }))]);
+    }
     const service = /^\/api\/services\/([a-z_]+)\/([a-z_]+)$/.exec(request.url ?? '');
     if (request.method === 'POST' && service) {
       let raw = '';
@@ -224,6 +293,19 @@ export async function startFakeHomeAssistant({
       'climate.turn_off': ['off', { last_mode: current.state === 'off' ? current.attributes.last_mode : current.state }],
       'climate.set_hvac_mode': [data.hvac_mode ?? current.state],
       'climate.set_temperature': [current.state, { temperature: data.temperature }],
+      'climate.set_fan_mode': [current.state, { fan_mode: data.fan_mode }],
+      'climate.set_swing_mode': [current.state, { swing_mode: data.swing_mode }],
+      'cover.set_cover_position': [
+        data.position === 0 ? 'closed' : 'open',
+        { current_position: data.position },
+      ],
+      'vacuum.set_fan_speed': [current.state, { fan_speed: data.fan_speed }],
+      'vacuum.clean_area': ['cleaning'],
+      'select.select_option': [data.option ?? current.state],
+      'number.set_value': [String(data.value ?? current.state)],
+      'button.press': [new Date().toISOString()],
+      'light.turn_on': ['on'],
+      'light.turn_off': ['off'],
     };
     const [state, attributes] = transitions[`${domain}.${service}`] ?? [current.state];
     return setState(entityId, state, attributes);
@@ -233,7 +315,14 @@ export async function startFakeHomeAssistant({
     const index = ha.states.findIndex((entry) => entry.entity_id === entityId);
     if (index < 0) return null;
     const old = ha.states[index];
-    const next = { ...old, state, attributes: { ...old.attributes, ...attributes }, last_changed: new Date().toISOString() };
+    const at = new Date().toISOString();
+    const next = {
+      ...old,
+      state,
+      attributes: { ...old.attributes, ...attributes },
+      last_changed: state === old.state ? old.last_changed : at,
+      last_updated: at,
+    };
     ha.states = ha.states.map((entry, position) => (position === index ? next : entry));
     for (const client of clients) {
       for (const id of client.subscriptions) {
@@ -315,6 +404,14 @@ export async function startFakeHomeAssistant({
           client.subscriptions.add(message.id);
           clients.add(client);
           send({ id: message.id, type: 'result', success: true, result: null });
+          continue;
+        }
+        if (message.type === 'frontend/get_translations') {
+          const wanted = Array.isArray(message.integration) ? message.integration : [];
+          const resources = Object.fromEntries(
+            Object.entries(ha.translations).filter(([key]) => wanted.some((one) => key.startsWith(`component.${one}.`))),
+          );
+          send({ id: message.id, type: 'result', success: true, result: { resources } });
           continue;
         }
         if (message.type in results) {

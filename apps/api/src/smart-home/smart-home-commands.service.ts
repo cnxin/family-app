@@ -18,10 +18,13 @@ import { JwtUser } from '../auth/jwt.guard';
 import { SmartHomeCommandRecord, SmartHomeDevice } from '../entities';
 import { HomeAssistantError, callHomeAssistantService } from './home-assistant.client';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
-import { SmartHomeService, canControlDevice, isReadonlyCover, presentSmartHomeDevice } from './smart-home.service';
+import { SmartHomeControlError, actionFitsDomain, planCommand, type ServicePlan } from './smart-home-controls';
+import { domainOf } from './smart-home-devices';
+import { canOperate, controlFor, entityAccess } from './smart-home-panel.service';
+import { SmartHomeService, isReadonlyCover } from './smart-home.service';
 
-/** 简单动作 → HA service 名（domain 就是实体自己的 domain），只带 entity_id。 */
-const SERVICES: Partial<Record<SmartHomeAction, string>> = {
+/** 主实体的简单动作 → HA service 名（domain 就是实体自己的 domain），只带 entity_id，不用先读状态。 */
+const SIMPLE: Partial<Record<SmartHomeAction, string>> = {
   start: 'start',
   pause: 'pause',
   return_to_base: 'return_to_base',
@@ -33,27 +36,16 @@ const SERVICES: Partial<Record<SmartHomeAction, string>> = {
   activate: 'turn_on',
 };
 
-const HVAC_MODES: Partial<Record<SmartHomeAction, string>> = {
-  mode_cool: 'cool',
-  mode_heat: 'heat',
-  mode_fan_only: 'fan_only',
-  mode_auto: 'auto',
-};
-
-interface ServicePlan {
-  service: string;
-  data: Record<string, unknown>;
-  /** 审计里记的，比如 climate.set_temperature(27) */
-  label: string;
-}
-
 function isUniqueViolation(error: unknown) {
   return error instanceof QueryFailedError && (error.driverError as { code?: string } | undefined)?.code === '23505';
 }
 
 /**
- * E2 控制（home-assistant-plan §6）：每条指令都重新校验权限（不信前端）、带幂等键、落审计；
- * HA 失败回 502，审计里记下原因。成功后丢掉状态缓存，全局拦截器随即发 smart-home 事件。
+ * E2 控制（home-assistant-plan §6）+ R1b 详情面板的子实体控制（smart-home-redesign §9.5）：每条指令都重新校验权限
+ * （不信前端）、带幂等键、落审计；HA 失败回 502，审计里记下原因。成功后丢掉状态缓存，全局拦截器随即发 smart-home 事件。
+ *
+ * 放行顺序：设备在白名单 → 允许控制 + 角色够 → 子实体属于这台、没藏、已确认、不在排除名单、不是诊断类 →
+ * 控件描述里有这个动作 → 值按 HA 当前属性合法 → 幂等键查重 → 调 HA。
  */
 @Injectable()
 export class SmartHomeCommandsService {
@@ -66,29 +58,34 @@ export class SmartHomeCommandsService {
     private readonly smartHome: SmartHomeService,
   ) {}
 
-  /** 控制一台白名单设备的主实体（R1）。子实体的控制在 R1b 的详情面板里开放。 */
   async execute(deviceId: string, body: SmartHomeCommandBody, user: JwtUser): Promise<SmartHomeCommand> {
     const device = await this.devices.findOne({ where: { householdId: user.householdId, id: deviceId } });
     if (!device) throw new NotFoundException('白名单里没有这台设备');
-    const entityId = device.primaryEntityId;
-    const domain = device.primaryDomain;
-    if (!smartHomeActionsFor(domain).includes(body.action)) {
-      throw new BadRequestException('这台设备没有这个动作');
-    }
+    const entityId = body.entityId ?? device.primaryEntityId;
+    const domain = domainOf(entityId);
+    if (!actionFitsDomain(domain, body.action)) throw new BadRequestException('这台设备没有这个动作');
     if (!device.controllable) throw new ForbiddenException('这台设备没开放在小管家里控制');
-    if (!canControlDevice(presentSmartHomeDevice(device), user.role)) throw new ForbiddenException('这台设备只有管理员能控制');
-    if (domain === 'cover') {
-      const state = await this.smartHome.currentState(user.householdId, entityId);
-      if (isReadonlyCover(domain, state?.deviceClass ?? null)) {
-        throw new ForbiddenException('车库门、大门这类只读');
+    if (!canOperate(device, user.role)) throw new ForbiddenException('这台设备只有管理员能控制');
+    const simple =
+      entityId === device.primaryEntityId &&
+      body.value === undefined &&
+      SIMPLE[body.action] !== undefined &&
+      smartHomeActionsFor(domain).includes(body.action);
+
+    let plan: ServicePlan | null = null;
+    if (simple) {
+      if (domain === 'cover') {
+        const state = await this.smartHome.currentState(user.householdId, entityId);
+        if (isReadonlyCover(domain, state?.deviceClass ?? null)) throw new ForbiddenException('车库门、大门这类只读');
       }
+    } else {
+      plan = await this.plan(device, entityId, body, user);
     }
 
     // 同一次点击重发：直接交回上一次的结果（在按当前状态算调用之前，免得调温重发时已经到头而报冲突）
     const prior = await this.commands.findOne({ where: { householdId: user.householdId, requestId: body.requestId } });
     if (prior) return this.replay(user, body, entityId);
-    const plan = await this.plan(user.householdId, entityId, domain, body.action);
-    const service = plan.label;
+    const service = plan ?? { domain, service: SIMPLE[body.action] as string, data: {}, label: `${domain}.${SIMPLE[body.action]}` };
     let record: SmartHomeCommandRecord;
     try {
       record = await this.commands.save(
@@ -99,7 +96,7 @@ export class SmartHomeCommandsService {
           deviceId: device.id,
           entityId,
           action: body.action,
-          service,
+          service: service.label.slice(0, 80),
           status: 'pending',
           message: null,
           finishedAt: null,
@@ -113,12 +110,12 @@ export class SmartHomeCommandsService {
     const { target } = await this.settings.resolve(user.householdId);
     try {
       if (!target) throw new HomeAssistantError('还没连上 Home Assistant');
-      const { changed } = await callHomeAssistantService(target, domain, plan.service, {
+      const { changed } = await callHomeAssistantService(target, service.domain, service.service, {
         entity_id: entityId,
-        ...plan.data,
+        ...service.data,
       });
       record.status = 'succeeded';
-      record.message = `已执行 ${service}（${changed} 个实体有变化）`;
+      record.message = `已执行 ${service.label}（${changed} 个实体有变化）`;
     } catch (error) {
       record.status = 'failed';
       record.message = (error instanceof HomeAssistantError ? error.message : '执行失败').slice(0, 300);
@@ -130,24 +127,24 @@ export class SmartHomeCommandsService {
     return this.present(record, user.name, false);
   }
 
-  /** 这个动作要调哪个 service、带什么参数。空调的模式、温度要看 HA 里的当前状态。 */
-  private async plan(householdId: string, entityId: string, domain: string, action: SmartHomeAction): Promise<ServicePlan> {
-    const simple = SERVICES[action];
-    if (simple) return { service: simple, data: {}, label: `${domain}.${simple}` };
-    const state = await this.smartHome.currentState(householdId, entityId);
-    const mode = HVAC_MODES[action];
-    if (mode) {
-      if (state?.hvacModes && !state.hvacModes.includes(mode)) throw new BadRequestException('这台空调没有这个模式');
-      return { service: 'set_hvac_mode', data: { hvac_mode: mode }, label: `${domain}.set_hvac_mode(${mode})` };
+  /** 完整路径：子实体身份 → 控件描述 → 按 HA 当前属性校验值。 */
+  private async plan(device: SmartHomeDevice, entityId: string, body: SmartHomeCommandBody, user: JwtUser) {
+    const context = await this.smartHome.deviceContext(device);
+    const access = entityAccess(device, context, entityId);
+    if (access.kind === 'missing') throw new NotFoundException('这台设备没有这个实体');
+    if (access.kind === 'pending') throw new ForbiddenException('这是 Home Assistant 新冒出来的实体，管理员在详情里确认后才能用');
+    if (access.kind === 'excluded') throw new ForbiddenException('此操作请在厂商 App 完成');
+    if (!context.live) throw new BadGatewayException(`没执行成功：${context.connection.message}`);
+    const control = controlFor(device, context, entityId, access, canOperate(device, user.role));
+    if (!control) throw new BadRequestException(access.diagnostic ? '这个实体只能看' : '这个实体在小管家里只能看');
+    try {
+      return planCommand(domainOf(entityId), control, body.action, body.value, access.raw);
+    } catch (error) {
+      if (error instanceof SmartHomeControlError) {
+        throw error.status === 409 ? new ConflictException(error.message) : new BadRequestException(error.message);
+      }
+      throw error;
     }
-    // temperature_up / temperature_down：以 HA 里的设定温度为准 ±1，收在它给的上下限里
-    const current = state?.targetTemperature;
-    if (current == null) throw new ConflictException('读不到空调现在的设定温度，先在 Home Assistant 里设一次');
-    const min = state?.minTemperature ?? 16;
-    const max = state?.maxTemperature ?? 30;
-    const next = Math.min(max, Math.max(min, current + (action === 'temperature_up' ? 1 : -1)));
-    if (next === current) throw new ConflictException(action === 'temperature_up' ? `已经是最高的 ${max}° 了` : `已经是最低的 ${min}° 了`);
-    return { service: 'set_temperature', data: { temperature: next }, label: `${domain}.set_temperature(${next})` };
   }
 
   async recent(householdId: string): Promise<SmartHomeCommand[]> {
