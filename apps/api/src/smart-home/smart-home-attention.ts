@@ -40,7 +40,7 @@ export function filterLowCandidate({ rules, device, value }: FilterInput): Atten
 
 /**
  * HA 连不上超过一小时（只给管理员）：只看 SmartHomeService 记下的「从什么时候起连不上」，不为这条规则去等 HA。
- * API 重启时从重启那一刻重新计时，所以重启后最晚晚一小时才出。
+ * 起点是库里记的最近一次连通（integrations.lastSyncedAt），API 重启不归零；服务器默认的连接没处记，重启后从头计。
  */
 export function offlineCandidate(householdId: string, since: Date | null, now: Date): AttentionCandidate | null {
   if (!since || now.getTime() - since.getTime() < SMART_HOME_ATTENTION.offlineMs) return null;
@@ -77,7 +77,7 @@ export class SmartHomeAttentionSource implements AttentionSource, OnModuleInit {
     if (!devices.length) return [];
     const [filter, laundry] = await Promise.all([this.filter(context, devices), this.laundry(context)]);
     const offline = can('manage_integrations')
-      ? offlineCandidate(context.householdId, this.smartHome.unreachableSince(context.householdId), context.now)
+      ? offlineCandidate(context.householdId, await this.smartHome.unreachableSince(context.householdId), context.now)
       : null;
     return [filter, laundry, offline].filter((one): one is AttentionCandidate => one !== null);
   }

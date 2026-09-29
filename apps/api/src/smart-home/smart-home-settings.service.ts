@@ -64,6 +64,26 @@ export class SmartHomeSettingsService {
     };
   }
 
+  /**
+   * HA 最近一次连通的时刻，存在这家 integrations 行的 lastSyncedAt（HA 不做同步，这一列借来用），
+   * API 重启后「断了多久」照样接着算。服务器默认的连接没有这一行，返回 undefined。
+   */
+  async lastReachableAt(householdId: string): Promise<Date | null | undefined> {
+    const [row]: { lastSyncedAt: Date | null }[] = await this.dataSource.query(
+      `SELECT "lastSyncedAt" FROM integrations WHERE "householdId" = $1 AND kind = $2`,
+      [householdId, KIND],
+    );
+    return row ? row.lastSyncedAt : undefined;
+  }
+
+  /** 记一次连通。直接写这一列、不碰 updatedAt：updatedAt 是状态缓存和实时订阅的版本号，碰了就会重连。 */
+  async markReachable(householdId: string, at: Date) {
+    await this.dataSource.query(
+      `UPDATE integrations SET "lastSyncedAt" = $3 WHERE "householdId" = $1 AND kind = $2`,
+      [householdId, KIND, at],
+    );
+  }
+
   async resolve(householdId: string): Promise<ResolvedHomeAssistant> {
     const row = await this.findRow(householdId, true);
     if (row) {
@@ -117,6 +137,8 @@ export class SmartHomeSettingsService {
       }
       row.baseUrl = baseUrl;
       row.isEnabled = input.isEnabled ?? existing?.isEnabled ?? true;
+      // 设置改了，上一次「连通过」说的是旧设置，不能拿来算新设置断了多久
+      row.lastSyncedAt = null;
       if (row.isEnabled && !row.baseUrl) {
         throw new BadRequestException('启用时必须填写 Home Assistant 地址');
       }
