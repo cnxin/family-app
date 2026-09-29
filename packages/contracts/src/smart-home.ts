@@ -337,6 +337,10 @@ export type SmartHomeCommandBody = z.infer<typeof smartHomeCommandBody>;
 export const smartHomeCommandStatus = z.enum(['pending', 'succeeded', 'failed']);
 
 /** 控制审计：谁、什么时候、按了什么、HA 回了什么（home-assistant-plan §6.3）。 */
+export const SMART_HOME_COMMAND_SOURCES = ['manual', 'link'] as const;
+export const smartHomeCommandSource = z.enum(SMART_HOME_COMMAND_SOURCES);
+export type SmartHomeCommandSource = z.infer<typeof smartHomeCommandSource>;
+
 export const smartHomeCommandSchema = z.object({
   id: uuid,
   /** 这条操作对应的白名单设备；设备后来被移出、或 R1 之前对不上的历史记录为 null */
@@ -350,8 +354,14 @@ export const smartHomeCommandSchema = z.object({
   finishedAt: nullableDateTime,
   /** 这次是按 requestId 取回的上一次结果，没有再发给 HA */
   replayed: z.boolean(),
+  /** E5：家里人手按的（manual）还是 E4 联动按的（link）；E3（HA → 小管家）不发命令，记录在 webhook 事件里 */
+  source: smartHomeCommandSource,
+  /** source = link 时是哪条联动（联动删了为 null） */
+  linkName: z.string().nullable(),
 });
 export type SmartHomeCommand = z.infer<typeof smartHomeCommandSchema>;
+export const smartHomeCommandsQuery = z.object({ source: smartHomeCommandSource.optional() }).strict();
+export type SmartHomeCommandsQuery = z.infer<typeof smartHomeCommandsQuery>;
 
 /** 设备的一个子实体此刻的样子（卡片补半句、详情主面板项用）。 */
 export const smartHomeEntitySnapshotSchema = z.object({
@@ -585,7 +595,8 @@ export const smartHome = {
   commands: defineEndpoint({
     method: 'GET',
     path: '/smart-home/commands',
-    summary: '最近 50 次控制（管理员）',
+    summary: '最近 50 次控制（管理员），可按来源筛（手按 / 联动）',
+    query: smartHomeCommandsQuery,
     response: z.array(smartHomeCommandSchema),
   }),
   states: defineEndpoint({

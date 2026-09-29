@@ -3,7 +3,8 @@ import { useAuth } from '../lib/auth';
 import { shelfSegments } from '../lib/nav';
 import { usePins, PIN_LIMIT } from '../lib/pins';
 import { useModules, useSetModuleOverride } from '../lib/queries/modules';
-import { useAttention } from '../lib/queries';
+import { useAttention, useCachedSmartHomeStates } from '../lib/queries';
+import { smartHomeTileLine } from '../lib/smart-home-device-copy';
 import { attentionCopy } from '../lib/attention-copy';
 import { pushToast } from '../lib/toast';
 import { openPalette } from '../components/command-palette';
@@ -28,9 +29,14 @@ export default function HomePage() {
   const active = segments.filter((segment) => modules.visible(segment.key));
   const available = segments.filter((segment) => !modules.visible(segment.key));
   const pinned = pins.flatMap((key) => active.filter((segment) => segment.key === key));
+  // 智能家居图块（H3 E5）：有留意先说留意，没有就用今天页读过的设备状态说一句；家里页自己不去读
+  const smartHome = useCachedSmartHomeStates();
   const tile = (segment: typeof segments[number]) => {
     const item = attention.data?.items.find((entry) => entry.domain === segment.key);
-    return <HomeTile key={segment.key} segment={segment} status={item ? attentionCopy(item, attention.data?.today).title : undefined} editing={editing} busy={update.isPending}
+    const status = item
+      ? attentionCopy(item, attention.data?.today).title
+      : segment.key === 'smart-home' ? smartHomeTileLine(smartHome.data) : undefined;
+    return <HomeTile key={segment.key} segment={segment} status={status} editing={editing} busy={update.isPending}
       onHide={manager ? () => {
         const previous = modules.state(segment.key)?.override ?? null;
         update.mutate({ key: segment.key, override: 'off' }, { onSuccess: () => {

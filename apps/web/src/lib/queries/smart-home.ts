@@ -8,6 +8,7 @@ import type {
   UpdateSmartHomeLinkBody,
   SmartHomeAction,
   SmartHomeCommand,
+  SmartHomeCommandSource,
   SmartHomeConnection,
   SmartHomeConnectorSettings,
   SmartHomeDevice,
@@ -40,10 +41,24 @@ export const smartHomeKeys = {
   mergeReport: ['smart-home-merge-report'] as const,
 };
 
-export function useSmartHomeStates() {
+/** enabled：今天页、家里页在智能家居分段没开时不去读 HA */
+export function useSmartHomeStates(enabled = true) {
   return useQuery({
     queryKey: smartHomeKeys.states,
     queryFn: () => api<SmartHomeStates>('/smart-home/states'),
+    enabled,
+  });
+}
+
+/**
+ * 只读缓存、自己不发请求：家里页的规矩是状态行只来自留意、不为图块拉列表（home.spec 钉着）。
+ * 今天页「家里的设备」读过一次，这里就有；/events 推来变化时今天页那边会刷新同一份缓存。
+ */
+export function useCachedSmartHomeStates() {
+  return useQuery({
+    queryKey: smartHomeKeys.states,
+    queryFn: () => api<SmartHomeStates>('/smart-home/states'),
+    enabled: false,
   });
 }
 
@@ -181,11 +196,11 @@ export function useSmartHomeMergeReport(enabled: boolean) {
   });
 }
 
-/** 最近 50 次控制（管理员）。 */
-export function useSmartHomeCommands(enabled: boolean) {
+/** 最近 50 次控制（管理员）；source 只看手按 / 联动按的（E5）。键以 commands 开头，/events 按前缀一起失效。 */
+export function useSmartHomeCommands(enabled: boolean, source?: SmartHomeCommandSource) {
   return useQuery({
-    queryKey: smartHomeKeys.commands,
-    queryFn: () => api<SmartHomeCommand[]>('/smart-home/commands'),
+    queryKey: [...smartHomeKeys.commands, source ?? 'all'],
+    queryFn: () => api<SmartHomeCommand[]>(`/smart-home/commands${source ? `?source=${source}` : ''}`),
     enabled,
   });
 }
@@ -204,10 +219,11 @@ export function useSmartHomeWebhookSettings() {
   });
 }
 
-export function useSmartHomeWebhookEvents() {
+export function useSmartHomeWebhookEvents(enabled = true) {
   return useQuery({
     queryKey: smartHomeWebhookKeys.events,
     queryFn: () => api<SmartHomeWebhookEventRecord[]>('/smart-home/webhook-settings/events'),
+    enabled,
   });
 }
 

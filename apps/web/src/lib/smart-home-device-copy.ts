@@ -130,3 +130,39 @@ export function primaryButton(primaryDomain: string, state: SmartHomeEntityState
       return null;
   }
 }
+
+type StatesLike = {
+  connection: { configured: boolean; available: boolean };
+  devices: (DeviceLike & { pinnedToToday: boolean; online: boolean })[];
+};
+
+const isSceneDomain = (domain: string) => domain === 'scene' || domain === 'script';
+
+/**
+ * 今天页「家里的设备」（redesign §2.5）：勾了「在今天页显示」的设备，按服务端的排序取前 limit 台；
+ * 场景、脚本不算设备（它们在智能家居页的场景一排）。total 是智能家居页一共有几台，给「全部 N 台」用。
+ */
+export function todayDevices<T extends StatesLike['devices'][number]>(devices: T[], limit: number) {
+  const all = devices.filter((device) => !isSceneDomain(device.primaryDomain));
+  return { shown: all.filter((device) => device.pinnedToToday).slice(0, limit), total: all.length };
+}
+
+/**
+ * 家里页智能家居图块的状态行：连着时「N 台设备 · M 台在运行」（运行 = 卡片会着色的那些），
+ * 断开时「连不上 Home Assistant」；还没连、白名单是空的就不写（图块本身只有名字）。
+ */
+export function smartHomeTileLine(states: StatesLike | undefined): string | undefined {
+  if (!states?.connection.configured) return undefined;
+  const devices = states.devices.filter((device) => !isSceneDomain(device.primaryDomain));
+  if (!devices.length) return undefined;
+  if (!states.connection.available) return '连不上 Home Assistant';
+  const running = devices.filter((device) => device.online && deviceStatusLine(device).tone === 'on').length;
+  const warn = devices.filter((device) => device.online && deviceStatusLine(device).tone === 'warn').length;
+  const offline = devices.filter((device) => !device.online).length;
+  const tail = [
+    running ? `${running} 台在运行` : '',
+    warn ? `${warn} 台要留意` : '',
+    offline ? `${offline} 台离线` : '',
+  ].filter(Boolean);
+  return [`${devices.length} 台设备`, ...(tail.length ? tail : ['都歇着'])].join(' · ');
+}

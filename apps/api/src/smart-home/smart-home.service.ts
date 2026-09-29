@@ -7,9 +7,7 @@ import {
   type SmartHomeConnection,
   type SmartHomeDevice as SmartHomeDeviceView,
   type SmartHomeDirectory,
-  type SmartHomeDomain,
   type SmartHomeEntityState,
-  type SmartHomeIcon,
   type SmartHomeMergeReport,
   type SmartHomeStates,
 } from '@family/contracts';
@@ -33,6 +31,8 @@ import { domainOf, haDeviceName, stripDeviceName } from './smart-home-devices';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
 
 export { stripDeviceName } from './smart-home-devices';
+export { presentSmartHomeDevice } from './smart-home-present';
+import { presentSmartHomeDevice, UNAVAILABLE_STATE } from './smart-home-present';
 export { buildDirectory } from './smart-home-directory';
 
 /** 同一家庭几个人同时打开页面时合并成一次 HA 请求；连不上也缓存这么久，免得连点刷新一直等超时。 */
@@ -67,48 +67,6 @@ function failureMessage(error: unknown) {
   return error instanceof HomeAssistantError ? error.message : '网络不通，Home Assistant 可能没开';
 }
 
-/** HA 上已经没有这个实体（被删了、改了 ID）时的状态。 */
-const UNAVAILABLE_STATE: SmartHomeEntityState = {
-  state: 'unavailable',
-  unit: null,
-  deviceClass: null,
-  position: null,
-  battery: null,
-  lastChanged: null,
-  lastUpdated: null,
-  targetTemperature: null,
-  currentTemperature: null,
-  hvacModes: null,
-  minTemperature: null,
-  maxTemperature: null,
-  assumed: false,
-  fanSpeed: null,
-  fanMode: null,
-  swingMode: null,
-  humidity: null,
-};
-
-export function presentSmartHomeDevice(row: SmartHomeDevice): SmartHomeDeviceView {
-  return {
-    id: row.id,
-    haDeviceId: row.haDeviceId,
-    displayName: row.displayName,
-    area: row.area,
-    sortOrder: row.sortOrder,
-    icon: row.icon as SmartHomeIcon,
-    primaryEntityId: row.primaryEntityId,
-    primaryDomain: row.primaryDomain as SmartHomeDomain,
-    featuredEntityIds: row.featuredEntityIds ?? [],
-    hiddenEntityIds: row.hiddenEntityIds ?? [],
-    controllable: row.controllable,
-    minRole: row.minRole,
-    pinnedToToday: row.pinnedToToday,
-    legacy: row.mergeState === 'legacy',
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
 /**
  * 连接测试、实体目录、白名单（按设备）、状态快照。所有对 HA 的调用 3 秒超时，失败只影响这一页（§6.5）。
  * 控制（E2）、webhook（E3）不在这里；按实体 → 按设备的归并在 SmartHomeMergeService。
@@ -120,6 +78,8 @@ export class SmartHomeService {
   private readonly lastGood = new Map<string, { version: string; states: HomeAssistantRawState[]; checkedAt: Date }>();
   private readonly registryCache = new Map<string, { version: string; at: number; value: Promise<RegistryResult> }>();
   private readonly translationCache = new Map<string, { key: string; at: number; value: Map<string, string> }>();
+  /** 从哪一刻起连不上 HA（连上一次就清掉）：E5「HA 断开超过 1 小时」按它算。只在内存里，API 重启后从头计。 */
+  private readonly unreachable = new Map<string, Date>();
 
   constructor(
     @InjectRepository(SmartHomeDevice)
@@ -137,9 +97,20 @@ export class SmartHomeService {
   /** 连接设置变了：上次的状态、注册表都不作数了。 */
   forgetAll(householdId: string) {
     this.snapshots.delete(householdId);
+    this.unreachable.delete(householdId);
     this.lastGood.delete(householdId);
     this.registryCache.delete(householdId);
     this.translationCache.delete(householdId);
+  }
+
+  /** 读 HA 的结果记一笔（状态快照、实时订阅的轮询与重连都调）；ok 清零，失败只记第一次。 */
+  noteReachable(householdId: string, ok: boolean) {
+    if (ok) this.unreachable.delete(householdId);
+    else if (!this.unreachable.has(householdId)) this.unreachable.set(householdId, this.clock.now());
+  }
+
+  unreachableSince(householdId: string): Date | null {
+    return this.unreachable.get(householdId) ?? null;
   }
 
   async test(householdId: string): Promise<SmartHomeConnection> {
@@ -376,9 +347,13 @@ export class SmartHomeService {
           (states): Snapshot => {
             const checkedAt = this.clock.now();
             this.lastGood.set(householdId, { version, states, checkedAt });
+            this.noteReachable(householdId, true);
             return { ok: true, states, checkedAt };
           },
-          (error): Snapshot => ({ ok: false, configured: true, message: failureMessage(error), checkedAt: this.clock.now() }),
+          (error): Snapshot => {
+            this.noteReachable(householdId, false);
+            return { ok: false, configured: true, message: failureMessage(error), checkedAt: this.clock.now() };
+          },
         )
       : Promise.resolve({ ok: false, configured: false, message: '还没连上 Home Assistant', checkedAt: this.clock.now() });
     this.snapshots.set(householdId, { version, at: now, value });

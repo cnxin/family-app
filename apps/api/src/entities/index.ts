@@ -7853,7 +7853,9 @@ export class SmartHomeMergeReportRecord {
 @Unique('UQ_smart_home_commands_household_request', ['householdId', 'requestId'])
 @Index('IDX_smart_home_commands_household_created', ['householdId', 'createdAt'])
 @Index('IDX_smart_home_commands_device_created', ['deviceId', 'createdAt'])
+@Index('IDX_smart_home_commands_household_source_created', ['householdId', 'source', 'createdAt'])
 @Check('CHK_smart_home_commands_status', `"status" IN ('pending', 'succeeded', 'failed')`)
+@Check('CHK_smart_home_commands_source', `"source" IN ('manual', 'link')`)
 export class SmartHomeCommandRecord {
   @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_commands' })
   id: string;
@@ -7900,6 +7902,18 @@ export class SmartHomeCommandRecord {
   /** HA 回了什么：成功时是变化的实体数，失败时是原因 */
   @Column({ type: 'varchar', length: 300, nullable: true })
   message: string | null;
+
+  /** E5：家里人手按的（manual）还是 E4 联动按的（link） */
+  @Column({ type: 'varchar', length: 16, default: 'manual' })
+  source: 'manual' | 'link';
+
+  /** source = link 时是哪条联动；联动删了置空 */
+  @ManyToOne(() => SmartHomeLink, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'linkId', foreignKeyConstraintName: 'FK_smart_home_commands_link' })
+  link: SmartHomeLink | null;
+
+  @Column('uuid', { nullable: true })
+  linkId: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

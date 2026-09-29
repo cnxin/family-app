@@ -36,6 +36,8 @@ class HouseholdWatcher {
     public entityIds: Set<string>,
     private readonly onChange: () => void,
     private readonly log: (message: string) => void,
+    /** 每次连 / 读 HA 的成败，交给 SmartHomeService 记「从什么时候起连不上」 */
+    private readonly onReachable: (ok: boolean) => void,
   ) {}
 
   start() {
@@ -64,6 +66,7 @@ class HouseholdWatcher {
       onOpen: () => {
         if (this.mode !== 'push') this.log(`smart_home_live household=${this.householdId} mode=push`);
         this.mode = 'push';
+        this.onReachable(true);
         this.attempt = 0;
         this.stopPolling();
         // 断开期间可能错过了变化：连上时让客户端补读一次
@@ -95,6 +98,7 @@ class HouseholdWatcher {
     const poll = async () => {
       try {
         const states = await fetchHomeAssistantStates(this.target);
+        this.onReachable(true);
         const signature = states
           .filter((raw) => this.entityIds.has(raw.entity_id))
           .map((raw) => `${raw.entity_id}=${raw.state}@${raw.last_changed ?? ''}:${JSON.stringify(raw.attributes ?? {})}`)
@@ -104,6 +108,7 @@ class HouseholdWatcher {
         this.signature = signature;
       } catch {
         /* HA 连不上：页面自己会显示「连不上」，这里不重复推 */
+        this.onReachable(false);
       }
     };
     void poll();
@@ -189,6 +194,7 @@ export class SmartHomeLiveService implements OnModuleInit, OnModuleDestroy {
         this.bus.publish({ householdId, domains: ['smart-home'] });
       },
       (message) => this.logger.log(message),
+      (ok) => this.smartHome.noteReachable(householdId, ok),
     );
     this.watchers.set(householdId, watcher);
     watcher.start();

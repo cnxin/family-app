@@ -131,6 +131,8 @@ test('窗帘位置：拖动时不发、松手才发；键盘调节停手 0.6 秒
   expect(sent).toBeGreaterThanOrEqual(28);
   expect(sent).toBeLessThanOrEqual(32);
   await expect(slider).toHaveAttribute('aria-valuenow', String(sent), { timeout: 3_000 });
+  // 拖动的预览早就是这个值了，上面那句不代表回推到了：等锁放开再按键，否则按键落在锁住的滑块上被吃掉
+  await expect(slider).not.toHaveAttribute('aria-busy', 'true', { timeout: 3_000 });
 
   // 键盘：方向键只动预览，停手 0.6 秒发一次（发最终值）
   await slider.focus();

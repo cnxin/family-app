@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import type { AttentionItem } from '@family/contracts';
+import type { Capability } from '../auth/capabilities';
 
 export const ATTENTION_THRESHOLDS = {
   maintenanceDays: 7,
@@ -290,4 +291,24 @@ export class BackupAttentionRule implements AttentionRule {
   }
 }
 
-// 智能家居留意规则在 E 阶段接入；本阶段不查询或生成 smart-home 条目。
+/**
+ * 别的域往今天页挂留意规则的入口（H3 E5 起：智能家居）。域模块在 onModuleInit 里 register，
+ * 今天页只认这个接口，不 import 任何域的 Service；域模块开关（household_module_overrides）照样生效。
+ */
+export interface AttentionSource {
+  domain: AttentionItem['domain'];
+  run(context: AttentionRuleContext, can: (capability: Capability) => boolean): Promise<AttentionCandidate[]>;
+}
+
+@Injectable()
+export class AttentionRegistry {
+  private readonly sources: AttentionSource[] = [];
+
+  register(source: AttentionSource) {
+    this.sources.push(source);
+  }
+
+  list(): readonly AttentionSource[] {
+    return this.sources;
+  }
+}

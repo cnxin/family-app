@@ -15,6 +15,8 @@ import {
   smartHomeHouseholdParams,
   smartHomeHistoryQuery,
   type SmartHomeHistoryQuery,
+  smartHomeCommandsQuery,
+  type SmartHomeCommandsQuery,
   addSmartHomeDeviceBody,
   updateSmartHomeConnectorBody,
   updateSmartHomeDeviceBody,
@@ -40,6 +42,8 @@ import { SmartHomeLinksService } from './smart-home-links.service';
 import { RemindersModule } from '../reminders/reminders.module';
 import { ShoppingModule } from '../shopping/shopping.module';
 import { TasksModule } from '../tasks/tasks.module';
+import { TodayModule } from '../today/today.module';
+import { SmartHomeAttentionSource } from './smart-home-attention';
 import { SmartHomeLinkagesService } from './smart-home-linkages.service';
 import { SmartHomeWebhookService } from './smart-home-webhook.service';
 import { SmartHomeCommandsService } from './smart-home-commands.service';
@@ -170,8 +174,8 @@ export class SmartHomeController {
 
   @Get('commands')
   @RequireCapabilities('manage_integrations')
-  recentCommands(@CurrentUser() user: JwtUser) {
-    return this.commands.recent(user.householdId);
+  recentCommands(@ZodQuery(smartHomeCommandsQuery) query: SmartHomeCommandsQuery, @CurrentUser() user: JwtUser) {
+    return this.commands.recent(user.householdId, query.source);
   }
 
   @Get('states')
@@ -275,6 +279,7 @@ export class SmartHomeLinksController {
     TasksModule,
     ShoppingModule,
     RemindersModule,
+    TodayModule,
   ],
   controllers: [SmartHomeController, SmartHomeWebhookController, SmartHomeLinksController],
   providers: [
@@ -288,6 +293,7 @@ export class SmartHomeLinksController {
     SmartHomeWebhookService,
     SmartHomeLinkagesService,
     SmartHomeLinksService,
+    SmartHomeAttentionSource,
   ],
 })
 export class SmartHomeModule {}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { SmartHomeDeviceWithState } from '@family/contracts';
 import { useAuth } from '../lib/auth';
 import { useSmartHomeStates } from '../lib/queries';
@@ -26,7 +27,10 @@ function rooms(devices: SmartHomeDeviceWithState[]) {
 
 export function SmartHomePage() {
   const { session } = useAuth();
-  const [opened, setOpened] = useState<{ id: string; name: string } | null>(null);
+  const [picked, setOpened] = useState<{ id: string; name: string } | null>(null);
+  // ?device=<id>：今天页「滤芯快用完了」这类留意卡直接打开那台的详情
+  const [params, setParams] = useSearchParams();
+  const linked = params.get('device');
   const manager = session?.member.role !== 'member';
   const timeZone = session?.householdTimezone ?? 'Asia/Shanghai';
   const states = useSmartHomeStates();
@@ -37,6 +41,12 @@ export function SmartHomePage() {
   const scenes = data?.devices.filter(isScene) ?? [];
   const groups = data ? rooms(data.devices.filter((device) => !isScene(device))) : [];
   const count = data?.devices.filter((device) => !isScene(device)).length ?? 0;
+  const linkedDevice = linked ? data?.devices.find((device) => device.id === linked) : undefined;
+  const opened = picked ?? (linkedDevice ? { id: linkedDevice.id, name: linkedDevice.displayName } : null);
+  const close = () => {
+    setOpened(null);
+    if (linked) setParams({}, { replace: true });
+  };
 
   return (
     <Page
@@ -129,7 +139,7 @@ export function SmartHomePage() {
           )}
         </QueryFrame>
       </div>
-      {opened ? <DeviceDetail deviceId={opened.id} name={opened.name} onClose={() => setOpened(null)} /> : null}
+      {opened ? <DeviceDetail deviceId={opened.id} name={opened.name} onClose={close} /> : null}
     </Page>
   );
 }

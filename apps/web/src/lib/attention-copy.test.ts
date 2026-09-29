@@ -108,4 +108,27 @@ describe('attentionCopy：逐域的单件与合并说法', () => {
       attentionCopy(item({ domain: 'guests', kind: 'menu', kinds: ['menu', 'meal-request'], count: 2, entity: undefined })).title,
     ).toBe('2 件访客的事要处理');
   });
+
+  it('智能家居三条：按 kind 说人话，按钮一步到位（H3 E5）', () => {
+    const device = { id: '00000000-0000-4000-8000-000000000009', name: '厨下净水' };
+    const filter = attentionCopy(item({ domain: 'smart-home', kind: 'filter', dueOn: undefined, entity: device }), '2026-09-22');
+    expect(filter).toMatchObject({
+      domainLabel: '智能家居', title: '厨下净水的滤芯快用完了', actionLabel: '看滤芯',
+      path: '/house/smart-home?device=00000000-0000-4000-8000-000000000009',
+    });
+    const laundry = attentionCopy(
+      item({ domain: 'smart-home', kind: 'laundry', dueOn: '2026-09-22', entity: { id: entity.id, name: '晾衣服' } }),
+      '2026-09-22',
+    );
+    expect(laundry).toMatchObject({ title: '衣服好了两个多小时，还没晾', actionLabel: '去晾衣服', path: '/schedule/tasks' });
+    const offline = attentionCopy(
+      item({ domain: 'smart-home', kind: 'offline', dueOn: undefined, entity: { id: entity.id, name: 'Home Assistant' } }),
+    );
+    expect(offline).toMatchObject({ title: 'Home Assistant 连不上一个多小时了', actionLabel: '看连接', path: '/house/smart-home/settings' });
+    const merged = attentionCopy(
+      item({ domain: 'smart-home', kind: 'laundry', kinds: ['laundry', 'filter'], count: 2, entity: undefined }),
+      '2026-09-22',
+    );
+    expect(merged).toMatchObject({ title: '智能家居有 2 件事要看一下', actionLabel: '去看看', path: '/house/smart-home' });
+  });
 });

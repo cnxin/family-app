@@ -42,6 +42,9 @@ const kindActions: Partial<Record<string, string>> = {
   redemption: '去审批',
   budget: '看预算',
   backup: '看备份',
+  filter: '看滤芯',
+  laundry: '去晾衣服',
+  offline: '看连接',
 };
 
 const listActions: Record<AttentionItem['domain'], string> = {
@@ -98,6 +101,13 @@ function singleTitle(item: AttentionItem, today: string) {
       return `${name}本月预算超了`;
     case 'backup':
       return '备份需要看一下';
+    // 智能家居（H3 E5）：滤芯的 entity 是设备，晾衣服的是家务，连不上的是 Home Assistant 本身
+    case 'filter':
+      return `${name}的滤芯快用完了`;
+    case 'laundry':
+      return '衣服好了两个多小时，还没晾';
+    case 'offline':
+      return 'Home Assistant 连不上一个多小时了';
     default:
       return item.dueOn ? `${name} ${soon}需要处理` : `${name}需要处理`;
   }
@@ -129,7 +139,7 @@ function mergedTitle(item: AttentionItem): string {
     case 'backups':
       return `备份有 ${n} 件事要看一下`;
     case 'smart-home':
-      return `${n} 个设备要看一下`;
+      return `智能家居有 ${n} 件事要看一下`;
     default: {
       const unknown: never = item.domain;
       return `${n} 件${String(unknown)}要处理`;

@@ -3,7 +3,7 @@ import { apiClient, apiURL, stamp } from './helpers';
 
 // H3 E4：真 API + 假 Home Assistant。在设置页建联动「打扫就扫地」，到家务页把「打扫…」打勾，
 // 假 HA 收到 vacuum.start；HA 出错时打勾照常，联动上显示「没执行成功」。
-// 只在桌面项目跑一次：手机布局在别的 smart-home 用例里已经覆盖，这里只验链路（CI 时长吃紧）。
+// E5 起顺带验设置页「最近的操作」按来源筛。只在桌面项目跑一次：手机布局在别的 smart-home 用例里已经覆盖，这里只验链路（CI 时长吃紧）。
 
 interface FakeHomeAssistant {
   url: string;
@@ -75,6 +75,20 @@ test('设置页建联动「打扫就扫地」：家务打勾后扫地机开扫�
     await expect(page.getByRole('checkbox', { name: `完成${titles[1]}` })).toBeChecked();
     await page.goto('/house/smart-home/settings?section=linkages');
     await expect(row).toContainText('没执行成功', { timeout: 5_000 });
+
+    // E5：设置页「最近的操作」按来源筛——联动按的两次都在「联动」下、写着是哪条联动；「手动」下没有
+    await page.goto('/house/smart-home/settings');
+    const log = page.locator('[data-smart-home-commands]');
+    await expect(log.locator('[data-operation-kind="link"]')).toHaveCount(2);
+    const sources = page.getByRole('tablist', { name: '按来源筛' });
+    await sources.getByRole('tab', { name: '联动' }).click();
+    await expect(log).toHaveAttribute('data-source', 'link');
+    await expect(log.locator('li')).toHaveCount(2);
+    await expect(log.locator('li').first()).toContainText('联动「打扫就扫地」 · 扫地机');
+    await expect(log.locator('li').first()).toContainText('失败');
+    await sources.getByRole('tab', { name: '手动' }).click();
+    await expect(log).toHaveAttribute('data-source', 'manual');
+    await expect(log.locator('[data-operation-kind="link"]')).toHaveCount(0);
   } finally {
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
     const occurrences = await admin.get<{ taskId: string; task: { title: string } }[]>(`/tasks?start=${today}&end=${today}`);
