@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateSmartHomeLinkBody,
+  SmartHomeHistory,
   SmartHomeLink,
+  SmartHomePanel,
   UpdateSmartHomeLinkBody,
   SmartHomeAction,
   SmartHomeCommand,
@@ -30,6 +32,10 @@ export const smartHomeKeys = {
   directory: ['smart-home-directory'] as const,
   settings: ['smart-home-connector-settings'] as const,
   commands: ['smart-home-commands'] as const,
+  /** 详情面板：['smart-home-panel', 设备 id]；HA 状态一变经 /events 整组失效重取 */
+  panel: (id: string) => ['smart-home-panel', id] as const,
+  /** 24 小时趋势，服务端缓存 5 分钟，这边不跟着 /events 刷 */
+  history: (id: string, entityId: string) => ['smart-home-history', id, entityId] as const,
 };
 
 export function useSmartHomeStates() {
@@ -70,7 +76,10 @@ function useSmartHomeMutation<TInput, TResult>(run: (input: TInput) => Promise<T
     mutationFn: run,
     onSuccess: () => {
       void invalidateModules(client);
-      for (const key of Object.values(smartHomeKeys)) void client.invalidateQueries({ queryKey: key });
+      for (const key of Object.values(smartHomeKeys)) {
+        // 函数型的键（面板、趋势）按前缀失效
+        void client.invalidateQueries({ queryKey: typeof key === 'function' ? [key('', '')[0]] : key });
+      }
     },
   });
 }
@@ -122,6 +131,41 @@ export function useSmartHomeCommand() {
     onSettled: () => {
       void client.invalidateQueries({ queryKey: smartHomeKeys.states });
       void client.invalidateQueries({ queryKey: smartHomeKeys.commands });
+    },
+  });
+}
+
+/** 一台设备的完整控制面板（R1b）。打开详情时才读。 */
+export function useSmartHomePanel(id: string | null) {
+  return useQuery({
+    queryKey: smartHomeKeys.panel(id ?? ''),
+    queryFn: () => api<SmartHomePanel>(`/smart-home/devices/${id}/panel`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useSmartHomeHistory(id: string, entityId: string | null) {
+  return useQuery({
+    queryKey: smartHomeKeys.history(id, entityId ?? ''),
+    queryFn: () =>
+      api<SmartHomeHistory>(`/smart-home/devices/${id}/history?entityId=${encodeURIComponent(entityId ?? '')}`),
+    enabled: Boolean(entityId),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * 详情面板里的一次控制（子实体、带值）。requestId 由调用方给（usePendingCommands 管锁和幂等键）；
+ * 失败的提示由全局 mutation 错误处理弹。
+ */
+export function useSmartHomeEntityCommand(deviceId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { entityId: string; action: SmartHomeAction; value?: string | number | string[]; requestId: string }) =>
+      api<SmartHomeCommand>(`/smart-home/devices/${deviceId}/command`, { method: 'POST', body }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: smartHomeKeys.panel(deviceId) });
+      void client.invalidateQueries({ queryKey: smartHomeKeys.states });
     },
   });
 }
