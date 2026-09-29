@@ -78,6 +78,8 @@ export interface AssetBody {
   name?: string;
   category?: AssetCategory;
   location?: string | null;
+  /** I1：位置字典里的位置；给了非空值时服务端顺手清掉旧文本 */
+  locationId?: string | null;
   brand?: string | null;
   model?: string | null;
   serialNumber?: string | null;

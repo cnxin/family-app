@@ -7,12 +7,18 @@ import {
   useDeleteInventoryItem,
   useInventory,
   useInventoryBatches,
+  useLocations,
+  useSetLocation,
   useShoppingList,
   useUpsertInventoryItem,
 } from '../lib/queries';
+import { groupInventory, type InventoryGrouping } from '../lib/inventory-groups';
 import { pushToast } from '../lib/toast';
 import { QueryFrame } from '../components/query-state';
-import { Button, Card, Dialog, EmptyState, Page, Panel, SectionTitle } from '../components/ui';
+import { Button, Card, Dialog, EmptyState, Page, Panel, SectionTitle, Segmented } from '../components/ui';
+import { InventoryRow } from '../components/inventory-row';
+import { LocationLine } from '../components/location-field';
+import { LocateItemFlow } from '../components/locate-item';
 import { BatchDialog, CATEGORY_EMOJI, InventoryEditor } from '../components/inventory-editor';
 import { InventoryLog } from '../components/inventory-log';
 import { RestockPanel } from '../components/inventory-restock';
@@ -46,7 +52,11 @@ export function InventoryView() {
   const addShopping = useAddManualShoppingItem();
 
   const [filter, setFilter] = useState<'全部' | InventoryCategory>('全部');
+  const [grouping, setGrouping] = useState<InventoryGrouping>('category');
+  const locations = useLocations(true);
+  const setLocation = useSetLocation();
   const [editor, setEditor] = useState<InventoryItem | 'new' | null>(null);
+  const [preset, setPreset] = useState<{ name: string; locationId: string } | null>(null);
   const [batchEditor, setBatchEditor] = useState<InventoryBatch | 'new' | null>(null);
   const [deleting, setDeleting] = useState<InventoryItem | null>(null);
   const [restocking, setRestocking] = useState(false);
@@ -66,10 +76,8 @@ export function InventoryView() {
 
   const groups = useMemo(() => {
     const visible = filter === '全部' ? list : list.filter((item) => item.category === filter);
-    const map = new Map<InventoryCategory, InventoryItem[]>();
-    for (const item of visible) map.set(item.category, [...(map.get(item.category) ?? []), item]);
-    return [...map.entries()];
-  }, [filter, list]);
+    return groupInventory(visible, grouping, locations.data ?? []);
+  }, [filter, list, grouping, locations.data]);
 
   const adjust = (item: InventoryItem, offset: number) => {
     const next = Math.max(0, Math.round((Number(item.quantity) + offset) * 100) / 100);
@@ -139,6 +147,15 @@ export function InventoryView() {
             <Stat value={expiring.length} label="7 天内到期" tone="warm" />
             <Stat value={expired.length} label="已过期" tone="danger" />
           </div>
+          <Segmented<InventoryGrouping>
+            label="分组方式"
+            value={grouping}
+            options={[
+              { value: 'category', label: '按类别' },
+              { value: 'location', label: '按位置' },
+            ]}
+            onChange={setGrouping}
+          />
           <div className="flex flex-wrap gap-1.5">
             {(['全部', ...INVENTORY_CATEGORIES] as const).map((value) => (
               <button
@@ -166,106 +183,27 @@ export function InventoryView() {
         <EmptyState emoji="📦" title="还没有库存记录" hint="先记下大米、调料和饮料，不够时会提醒补货" />
       ) : null}
 
-      {groups.map(([category, rows]) => (
-        <div key={category}>
+      {groups.map(({ key, label, items: rows }) => (
+        <div key={key} data-inventory-group={label}>
           <p className="sticky top-0 z-10 border-b border-border bg-surface/90 px-3.5 py-1.5 text-[12px] font-medium text-ink-soft backdrop-blur">
-            {CATEGORY_EMOJI[category]} {category}
+            {grouping === 'category' ? `${CATEGORY_EMOJI[label as InventoryCategory]} ${label}` : label}
           </p>
           <div>
-            {rows.map((item) => {
-              const isLow = Number(item.quantity) <= Number(item.lowStockThreshold);
-              const queued = inShopping.has(item.name);
-              const summary = item.batchSummary;
-              return (
-                <div
-                  key={item.id}
-                  className={
-                    'flex items-center gap-2 border-b border-border px-3 py-2.5 last:border-b-0 ' +
-                    (isLow ? 'bg-warm-soft/50' : '')
-                  }
-                >
-                  <button
-                    type="button"
-                    aria-label={`编辑${item.name}`}
-                    onClick={() => setEditor(item)}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                  >
-                    <span className="text-lg">{CATEGORY_EMOJI[item.category]}</span>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate text-sm font-medium">{item.name}</span>
-                        {isLow ? (
-                          <span className="shrink-0 rounded-full bg-warm px-1.5 py-0.5 text-[10px] font-medium text-white">
-                            待补货
-                          </span>
-                        ) : null}
-                        {summary?.earliestExpiresOn ? (
-                          <span
-                            className={
-                              'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] ' +
-                              (summary.expiredCount
-                                ? 'bg-danger/10 text-danger'
-                                : summary.expiringCount
-                                  ? 'bg-warm-soft text-warm'
-                                  : 'bg-muted text-ink-soft')
-                            }
-                          >
-                            {summary.earliestExpiresOn}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="mt-0.5 block text-[12px] text-ink-soft">
-                        剩余 {Number(item.quantity)} {item.unit} · 低于{' '}
-                        {Number(item.lowStockThreshold)} 提醒
-                      </span>
-                      {summary?.activeBatchCount ? (
-                        <span className="mt-0.5 block text-[11px] text-ink-soft">
-                          {summary.activeBatchCount} 个批次 · 未分批 {summary.untrackedQuantity}{' '}
-                          {item.unit}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label={`减少${item.name}`}
-                      disabled={Number(item.quantity) <= 0 || upsert.isPending}
-                      onClick={() => adjust(item, -1)}
-                      className="grid size-8 place-items-center rounded-lg border border-border bg-surface text-ink-soft transition-colors duration-150 hover:bg-muted disabled:opacity-40"
-                    >
-                      −
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`增加${item.name}`}
-                      disabled={upsert.isPending}
-                      onClick={() => adjust(item, 1)}
-                      className="grid size-8 place-items-center rounded-lg border border-border bg-surface text-accent transition-colors duration-150 hover:bg-muted disabled:opacity-40"
-                    >
-                      +
-                    </button>
-                    {isLow ? (
-                      <button
-                        type="button"
-                        aria-label={queued ? `${item.name}已在购物清单` : `补货${item.name}`}
-                        disabled={queued || restocking}
-                        onClick={() => void addRestock([item])}
-                        className={
-                          'h-8 shrink-0 rounded-lg px-2 text-[12px] font-medium transition-colors duration-150 ' +
-                          (queued
-                            ? 'bg-muted text-ink-soft'
-                            : 'bg-warm-soft text-warm hover:brightness-95')
-                        }
-                      >
-                        {queued ? '已列入' : '补货'}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
+            {rows.map((item) => (
+              <InventoryRow
+                key={item.id}
+                item={item}
+                queued={inShopping.has(item.name)}
+                adjusting={upsert.isPending}
+                restocking={restocking}
+                locating={setLocation.isPending}
+                emptyLocationLabel={grouping === 'location' ? '记一下放哪儿' : undefined}
+                onEdit={() => setEditor(item)}
+                onAdjust={(offset) => adjust(item, offset)}
+                onRestock={() => void addRestock([item])}
+                onLocate={(locationId) => setLocation.mutate({ target: 'item', id: item.id, locationId })}
+              />
+            ))}
           </div>
         </div>
       ))}
@@ -291,31 +229,38 @@ export function InventoryView() {
                 (a.expiresOn ?? '9999-12-31').localeCompare(b.expiresOn ?? '9999-12-31'),
               )
               .map((batch) => (
-                <button
-                  key={batch.id}
-                  type="button"
-                  onClick={() => setBatchEditor(batch)}
-                  className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-left transition-colors duration-150 last:border-b-0 hover:bg-muted"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{batch.inventoryItem.name}</p>
-                    <p className="mt-0.5 text-[12px] text-ink-soft">
-                      {Number(batch.quantity)} {batch.inventoryItem.unit} · 到货 {batch.receivedOn}
-                    </p>
-                  </div>
-                  <span
-                    className={
-                      'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ' +
-                      (batch.status === 'expired'
-                        ? 'bg-danger/10 text-danger'
-                        : batch.status === 'expiring'
-                          ? 'bg-warm-soft text-warm'
-                          : 'bg-muted text-ink-soft')
-                    }
+                <div key={batch.id} className="border-b border-border px-3 py-2.5 last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => setBatchEditor(batch)}
+                    className="flex w-full items-center gap-3 rounded-lg text-left transition-colors duration-150 hover:bg-muted"
                   >
-                    {batchStatusLabel(batch)}
-                  </span>
-                </button>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{batch.inventoryItem.name}</p>
+                      <p className="mt-0.5 text-[12px] text-ink-soft">
+                        {Number(batch.quantity)} {batch.inventoryItem.unit} · 到货 {batch.receivedOn}
+                      </p>
+                    </div>
+                    <span
+                      className={
+                        'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ' +
+                        (batch.status === 'expired'
+                          ? 'bg-danger/10 text-danger'
+                          : batch.status === 'expiring'
+                            ? 'bg-warm-soft text-warm'
+                            : 'bg-muted text-ink-soft')
+                      }
+                    >
+                      {batchStatusLabel(batch)}
+                    </span>
+                  </button>
+                  <LocationLine
+                    locationId={batch.locationId}
+                    name={`${batch.inventoryItem.name}这一批`}
+                    pending={setLocation.isPending}
+                    onChange={(locationId) => setLocation.mutate({ target: 'batch', id: batch.id, locationId })}
+                  />
+                </div>
               ))}
           </Card>
         </div>
@@ -329,13 +274,25 @@ export function InventoryView() {
         <InventoryEditor
           key={editor === 'new' ? 'new' : editor.id}
           item={editor === 'new' ? null : editor}
-          onClose={() => setEditor(null)}
+          preset={editor === 'new' ? preset : null}
+          onClose={() => {
+            setEditor(null);
+            setPreset(null);
+          }}
           onRequestDelete={(item) => {
             setEditor(null);
             setDeleting(item);
           }}
         />
       ) : null}
+
+      <LocateItemFlow
+        items={list}
+        onCreate={(next) => {
+          setPreset(next);
+          setEditor('new');
+        }}
+      />
 
       {batchEditor ? (
         <BatchDialog

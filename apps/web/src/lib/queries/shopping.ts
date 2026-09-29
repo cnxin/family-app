@@ -73,10 +73,12 @@ export function useConfirmShoppingReceipt() {
       shoppingItemId: string;
       inventoryItemId?: string;
       batch?: BatchDatesInput;
+      /** I1「放哪儿」：分批时记在新批次上，不分批时记成物品的默认位置 */
+      locationId?: string | null;
     }) =>
       api<InventoryActionResult>(`/shopping-items/${input.shoppingItemId}/confirm-stock`, {
         method: 'POST',
-        body: { inventoryItemId: input.inventoryItemId, batch: input.batch },
+        body: { inventoryItemId: input.inventoryItemId, batch: input.batch, locationId: input.locationId ?? undefined },
       }),
     onSuccess: () => invalidateInventory(client),
   });

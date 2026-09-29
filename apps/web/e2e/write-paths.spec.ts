@@ -619,7 +619,13 @@ test('资产：登记一件家电、补档案、停用', async ({ page, request 
     await page.getByRole('button', { name: '+ 登记资产' }).click();
     const form = page.getByRole('dialog', { name: '登记家庭资产' });
     await form.getByLabel('资产名称').fill(name);
-    await form.getByLabel('存放位置').fill('客厅');
+    // I1：存放位置改用位置选择器——在选择器里直接新建一个房间就选上了
+    const room = stamp('客厅');
+    await form.getByRole('button', { name: /存放位置：选个位置/ }).click();
+    const picker = page.getByRole('dialog', { name: '放哪儿？' });
+    await picker.getByLabel('新建位置名字').fill(room);
+    await picker.getByRole('button', { name: '新建', exact: true }).click();
+    await expect(form.getByRole('button', { name: `存放位置：${room}` })).toBeVisible();
     const created = waitFor(page, 'POST', /\/assets$/);
     await form.getByRole('button', { name: '保存资产' }).click();
     const createdResponse = await created;
@@ -630,6 +636,7 @@ test('资产：登记一件家电、补档案、停用', async ({ page, request 
     // 从列表点进详情
     await page.getByRole('link', { name: new RegExp(name) }).first().click();
     await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+    await expect(page.locator('[data-asset-location]')).toContainText(`上次放在 ${room}`);
 
     // 编辑档案：补一个品牌，详情右栏立刻能看到
     await page.getByRole('button', { name: '编辑档案' }).click();

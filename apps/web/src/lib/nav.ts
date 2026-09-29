@@ -66,6 +66,7 @@ export const SCENES: NavScene[] = [
       { key: shelfModuleKey.enum.inventory, tier: 'shelf', glyph: '库', label: '库存', path: '/house/inventory', ready: true },
       { key: 'shopping', tier: 'core', glyph: '购', label: '购物', path: '/house/shopping', ready: true },
       { key: shelfModuleKey.enum.assets, tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
+      { key: shelfModuleKey.enum.locations, tier: 'shelf', glyph: '位', label: '位置', path: '/house/locations', ready: true },
       { key: shelfModuleKey.enum.finance, tier: 'shelf', glyph: '账', label: '财务', path: '/house/finance', ready: true, managerOnly: true },
       { key: shelfModuleKey.enum.points, tier: 'shelf', glyph: '分', label: '积分', path: '/house/points', ready: true },
       { key: shelfModuleKey.enum.guests, tier: 'shelf', glyph: '客', label: '访客', path: '/house/guests', ready: true },

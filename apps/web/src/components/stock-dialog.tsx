@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ShoppingItem } from '@family/contracts';
-import { todayISO, useConfirmShoppingReceipt, useShoppingInventoryPreview } from '../lib/queries';
+import { todayISO, useConfirmShoppingReceipt, useInventory, useShoppingInventoryPreview } from '../lib/queries';
+import { LocationField } from './location-field';
 import { pushToast } from '../lib/toast';
 import { Button, Dialog, Input, SectionTitle } from './ui';
 
@@ -28,12 +29,17 @@ export function StockDialog({ item, onClose }: { item: ShoppingItem; onClose: ()
   const [expiresOn, setExpiresOn] = useState('');
   const [openedOn, setOpenedOn] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // 放哪儿：没动过就用这个库存物品平时放的地方（item-location-plan §1「默认带出上次的位置」）
+  const [location, setLocation] = useState<string | null | undefined>(undefined);
+  const inventory = useInventory();
 
   const preview = useShoppingInventoryPreview(item.id, selectedId, true);
   const confirm = useConfirmShoppingReceipt();
   const data = preview.data;
   const selected = data?.selectedInventoryItem ?? null;
   const name = itemName(item);
+  const itemDefault = inventory.data?.find((one) => one.id === selected?.id)?.defaultLocationId ?? null;
+  const chosenLocation = location === undefined ? itemDefault : location;
   const datesValid = [productionDate, expiresOn, openedOn].every(validOptionalDate);
   const canSubmit = Boolean(data?.canConfirm && selected && datesValid) && !confirm.isPending;
 
@@ -44,6 +50,7 @@ export function StockDialog({ item, onClose }: { item: ShoppingItem; onClose: ()
       {
         shoppingItemId: item.id,
         inventoryItemId: selected.id,
+        locationId: chosenLocation,
         batch: trackBatch
           ? {
               receivedOn: todayISO(),
@@ -138,6 +145,9 @@ export function StockDialog({ item, onClose }: { item: ShoppingItem; onClose: ()
 
           {selected ? (
             <>
+              <div className="mt-3">
+                <LocationField value={chosenLocation} onChange={setLocation} />
+              </div>
               <button
                 type="button"
                 role="checkbox"

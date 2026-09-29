@@ -25,6 +25,7 @@ import { TravelPage } from './pages/travel';
 import { BackupsPage } from './pages/backups';
 import { SmartHomePage } from './pages/smart-home';
 import { SmartHomeSettingsPage } from './pages/smart-home-settings';
+import { LocationsPage } from './pages/locations';
 import { ActivityPage } from './pages/activity';
 import { MediaPage } from './pages/media';
 import { MediaLibraryPage } from './pages/media-library';
@@ -143,6 +144,7 @@ export function App() {
           <Route path="/house/backups" element={<BackupsPage />} />
           <Route path="/house/smart-home" element={<SmartHomePage />} />
           <Route path="/house/smart-home/settings" element={<SmartHomeSettingsPage />} />
+          <Route path="/house/locations" element={<LocationsPage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />
           <Route path="/life" element={<RedirectKeepingSearch to="/life/media" />} />
           <Route path="/life/media" element={<MediaPage />} />
