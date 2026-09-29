@@ -23,6 +23,7 @@ const TEST_UPLOAD_DIR = join(
   `family-app-web-test-${randomUUID().replaceAll('-', '')}`,
 );
 const TEST_PASSWORD = `web-${randomUUID()}`;
+const WEB_TEST_TOKEN_SECONDS = 3600;
 const apiRoot = process.cwd();
 const repoRoot = resolve(apiRoot, '../..');
 const playwrightArgs = rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs;
@@ -45,7 +46,9 @@ const testEnvironment = {
   FAMILY_WEB_URL: WEB_URL,
   INTEGRATION_SECRET_KEY: '',
   INTEGRATION_SECRET_KEY_FILE: '',
-  JWT_EXPIRES_SECONDS: '900',
+  // 用例直接拿 auth.setup 存下的访问令牌调 API，整套跑完之前不能过期。
+  // 900 秒时 CI 上 Playwright 已跑到 14.5 分钟（见 pre-trial-plan E4），再加用例就一串 401。
+  JWT_EXPIRES_SECONDS: String(WEB_TEST_TOKEN_SECONDS),
   JWT_SECRET: 'family-app-web-test-jwt-secret',
   JWT_SECRET_FILE: '',
   LOGIN_RATE_LIMIT: '100',
@@ -186,7 +189,16 @@ try {
 
   const browserCommand = ['pnpm', '--filter', 'web', 'test:web'];
   if (playwrightArgs.length) browserCommand.push(...playwrightArgs);
-  await runProcess('corepack', browserCommand, repoRoot, browserEnvironment);
+  const browserStarted = Date.now();
+  try {
+    await runProcess('corepack', browserCommand, repoRoot, browserEnvironment);
+  } finally {
+    // 每次都报一下用了令牌寿命的多少：超过八成就该分片或再拉长，别等到一串 401 才发现
+    const minutes = (Date.now() - browserStarted) / 60_000;
+    const share = Math.round(((Date.now() - browserStarted) / 1000 / WEB_TEST_TOKEN_SECONDS) * 100);
+    const line = `Playwright 用时 ${minutes.toFixed(1)} 分钟，占测试访问令牌寿命（${WEB_TEST_TOKEN_SECONDS / 60} 分钟）的 ${share}%`;
+    console.log(share >= 80 ? `⚠️ ${line}，快到上限了` : line);
+  }
 } finally {
   await stopApi();
   if (databaseCreated) {
