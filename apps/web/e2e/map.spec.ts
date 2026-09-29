@@ -295,3 +295,21 @@ test('家人只有看模式：没有「编辑」和「重新导入」', async ({
     await cleanup(request, [places.living.id, places.bedroom.id], places.item.id);
   }
 });
+
+test('管理员导出地图：下载一个 JSON，带房间形状和底图', async ({ page, request, isMobile }) => {
+  test.skip(isMobile, '导出按钮在电脑上');
+  const tag = randomUUID().slice(0, 4);
+  const places = await setupMap(request, tag);
+  try {
+    await page.goto('/house/map');
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: '导出' }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/^家庭地图-\d{4}-\d{2}-\d{2}\.json$/);
+    const data = JSON.parse(readFileSync((await file.path())!, 'utf8'));
+    expect(data.locations.find((one: { id: string }) => one.id === places.living.id).mapShape.type).toBe('polygon');
+    expect(data.map.viewBox.w).toBe(1000);
+  } finally {
+    await cleanup(request, [places.living.id, places.bedroom.id], places.item.id);
+  }
+});

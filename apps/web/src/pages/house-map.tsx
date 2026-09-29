@@ -9,7 +9,10 @@ import type { MapMode } from '../components/map/map-types';
 import { QueryFrame } from '../components/query-state';
 import { SoftLink } from '../components/soft-link';
 import { Skeleton } from '../components/skeleton';
-import { EmptyState, Page, Segmented, buttonClass } from '../components/ui';
+import { Button, EmptyState, Page, Segmented, buttonClass } from '../components/ui';
+import { api } from '../lib/api';
+import { pushToast } from '../lib/toast';
+import type { HouseholdMapExport } from '@family/contracts';
 
 /**
  * /house/map：家庭地图（item-location-plan §3 I2b）。位置管理页与地图合并为一页（拍板 §6 第 2 条）：
@@ -104,6 +107,9 @@ export function HouseMapPage() {
             {hasMap ? (
               <SoftLink to="/house/map/import" className={buttonClass('ghost', 'min-h-10 border border-border')}>重新导入</SoftLink>
             ) : null}
+            {hasMap ? (
+              <Button variant="ghost" className="min-h-10 border border-border" onClick={() => void exportMap()}>导出</Button>
+            ) : null}
           </div>
         ) : null
       }
@@ -138,6 +144,21 @@ export function HouseMapPage() {
       )}
     </Page>
   );
+}
+
+/** I2c：地图 + 所有位置的形状 + 底图，存成一个 JSON 文件（备份不靠它，uploads 本来就在备份里） */
+async function exportMap() {
+  try {
+    const data = await api<HouseholdMapExport>('/map/export');
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `家庭地图-${data.exportedAt.slice(0, 10)}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    pushToast(error instanceof Error ? error.message : '导出失败');
+  }
 }
 
 /** 手机上地图占满到底部标签栏之上：按自己在屏幕上的位置量出剩余高度（转屏、键盘收起时重量）。 */

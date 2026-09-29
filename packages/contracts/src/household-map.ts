@@ -51,6 +51,26 @@ export const putHouseholdMapBody = z
   .strict();
 export type PutHouseholdMapBody = z.infer<typeof putHouseholdMapBody>;
 
+/** GET /map/export：地图 + 所有位置（含归档的）的形状 + 底图本身，自己留一份、换机器导回来用 */
+export const householdMapExportSchema = z.object({
+  exportedAt: isoDateTime,
+  map: householdMapSchema,
+  locations: z.array(
+    z.object({
+      id: z.uuid(),
+      parentId: z.uuid().nullable(),
+      kind: z.enum(['room', 'zone', 'container', 'slot']),
+      name: z.string(),
+      pathLabel: z.string(),
+      mapShape: mapShapeSchema.nullable(),
+      archivedAt: isoDateTime.nullable(),
+    }),
+  ),
+  /** 底图原样（base64）；没传过是 null */
+  background: z.object({ contentType: z.string(), base64: z.string() }).nullable(),
+});
+export type HouseholdMapExport = z.infer<typeof householdMapExportSchema>;
+
 export const householdMap = {
   get: defineEndpoint({
     method: 'GET',
@@ -70,6 +90,12 @@ export const householdMap = {
     path: '/map/background',
     summary: '上传底图（管理员；multipart 字段 file，PNG / JPEG / WebP ≤ 2 MB，存私有目录）',
     response: householdMapSchema,
+  }),
+  export: defineEndpoint({
+    method: 'GET',
+    path: '/map/export',
+    summary: '导出地图（管理员；地图、所有位置的形状、底图 base64）',
+    response: householdMapExportSchema,
   }),
   background: defineEndpoint({
     method: 'GET',

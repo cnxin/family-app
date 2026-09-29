@@ -37,6 +37,11 @@ export class MapController {
     return this.maps.setBackground(file, user);
   }
 
+  @Get('export')
+  export(@CurrentUser() user: JwtUser) {
+    return this.maps.export(user);
+  }
+
   @Get('background')
   async background(@CurrentUser() user: JwtUser, @Res() response: Response) {
     const { body, contentType } = await this.maps.background(user.householdId);

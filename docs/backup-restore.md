@@ -19,7 +19,7 @@ Docker 命名卷用于持久化，不等于备份。本项目的完整开发备�
 每次备份包含：
 
 - `database.dump`：`pg_dump` 自定义格式数据库转储。
-- `uploads.tar.gz`：菜谱图片和其他上传附件。
+- `uploads.tar.gz`：菜谱图片和其他上传附件。整个 `uploads` 目录原样打包，包括不对外公开的 `.private/`：资产资料（`.private/assets/`）和家庭地图底图（`.private/maps/<家庭>/`，I2 起）。地图的房间 / 柜子形状在数据库 `storage_locations.mapShape`、地图本身在 `household_maps`，随 `database.dump` 走；还原后地图与底图都在（item-location-plan §5 第 9 条）。另有「地图 → 导出」（`GET /map/export`）给管理员自己留一份 JSON，不替代备份。
 - `manifest.txt`：备份时间、Git 提交和迁移版本。
 - `checksums.sha256`：上述文件的完整性校验。
 
