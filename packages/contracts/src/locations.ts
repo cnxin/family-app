@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { idParams, isoDateTime, nullableDateTime, removedResponse, uuid } from './common';
 import { numericString } from './dishes';
+import { mapShapeSchema } from './household-map';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/locations/（I1 位置字典，docs/item-location-plan.md §2、§3 I1）。
 // 位置是「上次放在」，不是真相；三级到顶（房间 → 柜子 / 区域 → 层格），同一层里没归档的不重名。
-// 地图（mapShape、household_maps）是 I2 的事，这里的契约一概不带。
+// I2 起每个位置带 mapShape（房间多边形 / 柜子矩形，坐标见 household-map.ts）；地图本身在 household-map.ts。
 
 export const STORAGE_LOCATION_KINDS = ['room', 'zone', 'container', 'slot'] as const;
 export const storageLocationKind = z.enum(STORAGE_LOCATION_KINDS);
@@ -26,6 +27,8 @@ export const storageLocationSchema = z.object({
   icon: z.string().nullable(),
   sortOrder: z.number().int(),
   note: z.string().nullable(),
+  /** 在家庭地图上的形状；层格（slot）不上图，永远是 null */
+  mapShape: mapShapeSchema.nullable(),
   /** 'unsorted' = 系统节点「未整理」（不能改名、移动、归档、删除） */
   systemKey: z.enum(['unsorted']).nullable(),
   archivedAt: nullableDateTime,
@@ -98,6 +101,32 @@ export const storageLocationContentsSchema = z.object({
 });
 export type StorageLocationContents = z.infer<typeof storageLocationContentsSchema>;
 
+/** 地图编辑器改形状（管理员）：null = 从地图上拿掉（位置本身不动） */
+export const setLocationShapeBody = z.object({ mapShape: mapShapeSchema.nullable() }).strict();
+export type SetLocationShapeBody = z.infer<typeof setLocationShapeBody>;
+
+/** 按名字找东西放在哪（地图搜索高亮、⌘K、agent 共用）：只返回记了位置的 */
+export const itemLocationQuery = z.object({ q: z.string().trim().min(1).max(40) }).strict();
+export const itemLocationHitSchema = z.object({
+  type: z.enum(['item', 'batch', 'asset']),
+  /** item / asset 是自己的 id；batch 是批次 id */
+  id: uuid,
+  /** 库存物品 id（item、batch 有；asset 为 null）——跳库存页用 */
+  inventoryItemId: uuid.nullable(),
+  name: z.string(),
+  /** 「2 盒 · 到期 2026-10-03」这类补充；没有就 null */
+  detail: z.string().nullable(),
+  locationId: uuid,
+  /** 「客厅 / 电视柜 / 第二层」 */
+  pathLabel: z.string(),
+  /** 所在房间（地图高亮用） */
+  roomId: uuid,
+  /** 最近一次入库的日期（批次是它自己的入库日，物品取最近一批；资产没有）；YYYY-MM-DD */
+  placedOn: z.string().nullable(),
+});
+export const itemLocationHitListSchema = z.array(itemLocationHitSchema);
+export type ItemLocationHit = z.infer<typeof itemLocationHitSchema>;
+
 /** 一跳改位置（「找不到 → 改」）：批次、资产共用；null = 不记了 */
 export const setLocationBody = z.object({ locationId: uuid.nullable() }).strict();
 export type SetLocationBody = z.infer<typeof setLocationBody>;
@@ -145,6 +174,21 @@ export const locations = {
     summary: '删除位置（管理员；有子位置或被引用时 409，只能归档）',
     params: idParams,
     response: removedResponse,
+  }),
+  find: defineEndpoint({
+    method: 'GET',
+    path: '/locations/find',
+    summary: '按物品名找「上次放在」哪（库存物品、批次、资产，只含记了位置的）',
+    query: itemLocationQuery,
+    response: itemLocationHitListSchema,
+  }),
+  shape: defineEndpoint({
+    method: 'PATCH',
+    path: '/locations/:id/shape',
+    summary: '改位置在地图上的形状（管理员；地图编辑器高频调用）',
+    params: idParams,
+    body: setLocationShapeBody,
+    response: storageLocationSchema,
   }),
   contents: defineEndpoint({
     method: 'GET',

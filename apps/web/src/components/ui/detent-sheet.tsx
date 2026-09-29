@@ -21,11 +21,17 @@ export function DetentSheet({
   header,
   children,
   onClose,
+  modal = true,
+  mediumShown = MEDIUM_SHOWN,
 }: {
   title: string;
   header: ReactNode;
   children: ReactNode;
   onClose: () => void;
+  /** false：不压暗、不锁页面，sheet 上方的内容照样能点（家庭地图：抽屉开着还能点别的房间） */
+  modal?: boolean;
+  /** 半开档露出多高（占屏幕比例），默认 0.6 */
+  mediumShown?: number;
 }) {
   const sheet = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
@@ -44,7 +50,7 @@ export function DetentSheet({
   /** 拖动中挂在 window 上的监听；卸载时摘掉 */
   const detach = useRef<() => void>(() => undefined);
 
-  const medium = height * (1 - MEDIUM_SHOWN);
+  const medium = height * (1 - mediumShown);
   const apply = useCallback(
     (value: number) => {
       y.current = value;
@@ -76,7 +82,7 @@ export function DetentSheet({
   // 打开：从屏幕底下弹到 60% 档
   useEffect(() => {
     apply(height);
-    settle(height * (1 - MEDIUM_SHOWN));
+    settle(height * (1 - mediumShown));
     sheet.current?.focus();
     return () => {
       stop.current();
@@ -94,13 +100,13 @@ export function DetentSheet({
     window.addEventListener('resize', onResize);
     document.addEventListener('keydown', onKey);
     const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    if (modal) document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('resize', onResize);
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = previous;
+      if (modal) document.body.style.overflow = previous;
     };
-  }, [close]);
+  }, [close, modal]);
 
   // 按下时就在 window 上听移动和松开：手指一甩第一步就可能出了 sheet 的边（落到遮罩上），
   // 只挂在 sheet 上会收不到。真正拖起来（过了 6px）才捕获指针，普通点按照常落到按钮上。
@@ -172,16 +178,19 @@ export function DetentSheet({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50">
-      <div ref={scrim} className="absolute inset-0 bg-black/35" style={{ opacity: 0 }} onMouseDown={close} />
+    <div className={'fixed inset-0 z-50 ' + (modal ? '' : 'pointer-events-none')}>
+      {modal ? <div ref={scrim} className="absolute inset-0 bg-black/35" style={{ opacity: 0 }} onMouseDown={close} /> : null}
       <div
         ref={sheet}
         role="dialog"
-        aria-modal="true"
+        aria-modal={modal}
         aria-label={title}
         tabIndex={-1}
         data-sheet-detent={detent}
-        className="absolute inset-x-0 bottom-0 flex flex-col rounded-t-[24px] border-t border-border bg-surface shadow-xl outline-none"
+        className={
+          'absolute inset-x-0 bottom-0 flex flex-col rounded-t-[24px] border-t border-border shadow-xl outline-none ' +
+          (modal ? 'bg-surface' : 'pointer-events-auto bg-surface/92 backdrop-blur-xl')
+        }
         style={{ height, transform: `translateY(${height}px)` }}
         onPointerDown={onPointerDown}
       >

@@ -131,3 +131,24 @@ export async function uploadPhoto(file: File): Promise<string> {
   const data = await postForm<{ url: string }>('/upload', form);
   return data.url;
 }
+
+/** 要登录的二进制（家庭地图底图）：同一套 401 续期，拿回 Blob。 */
+export async function apiBlob(path: string): Promise<Blob> {
+  const send = async (token: string | null) => {
+    const response = await fetch(`/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!response.ok) {
+      const text = await response.text();
+      const payload = text ? (JSON.parse(text) as { error?: { code?: string; message?: string } }) : null;
+      throw new ApiError(payload?.error?.code ?? 'UNKNOWN', payload?.error?.message ?? '请求失败', response.status);
+    }
+    return response.blob();
+  };
+  try {
+    return await send(accessToken);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error;
+    const renewed = await refreshOnce();
+    if (!renewed) throw error;
+    return send(renewed);
+  }
+}

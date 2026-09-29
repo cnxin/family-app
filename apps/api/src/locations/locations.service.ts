@@ -3,6 +3,9 @@ import { DataSource, EntityManager, IsNull } from 'typeorm';
 import {
   UNSORTED_LOCATION_NAME,
   type CreateStorageLocationBody,
+  type ItemLocationHit,
+  type MapShape,
+  type SetLocationShapeBody,
   type StorageLocation as StorageLocationView,
   type StorageLocationContents,
   type StorageLocationKind,
@@ -10,7 +13,9 @@ import {
 } from '@family/contracts';
 import { isHouseholdManager, isUniqueViolation } from '@family/shared';
 import { JwtUser } from '../auth/jwt.guard';
-import { StorageLocation } from '../entities';
+import { HouseholdMap, StorageLocation } from '../entities';
+import { findItemLocations } from './location-find';
+import { shapeProblem } from './map-shape';
 import { LocationRuleError, kindFor, placeTree, subtreeHeight, subtreeIds, type PlacedRow } from './location-tree';
 
 const NAME_TAKEN = (name: string) => new ConflictException(`这一层已经有「${name}」了`);
@@ -44,6 +49,38 @@ export class LocationsService {
       .filter((placed) => !placed.row.archivedAt && placed.row.name.toLowerCase().includes(needle))
       .slice(0, 20)
       .map(({ row, pathLabel }) => ({ id: row.id, name: row.name, kind: row.kind, pathLabel }));
+  }
+
+  /** 「那个东西上次放在哪」：地图搜索、⌘K、agent 共用（location-find.ts） */
+  async find(householdId: string, q: string): Promise<ItemLocationHit[]> {
+    const manager = this.dataSource.manager;
+    return findItemLocations(manager, householdId, q, placeTree(await this.rows(manager, householdId)));
+  }
+
+  /** 地图编辑器改形状（I2）。null = 从地图上拿掉；画上去之前家里得先有地图。 */
+  async setShape(id: string, body: SetLocationShapeBody, user: JwtUser): Promise<StorageLocationView> {
+    this.assertManager(user);
+    await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(StorageLocation);
+      const row = await repo.findOne({ where: { id, householdId: user.householdId }, lock: { mode: 'pessimistic_write' } });
+      if (!row) throw new NotFoundException('位置不存在');
+      if (row.archivedAt) throw new BadRequestException('这个位置已经归档了');
+      if (body.mapShape) {
+        const map = await manager.getRepository(HouseholdMap).findOne({ where: { householdId: user.householdId, isActive: true } });
+        if (!map) throw new BadRequestException('先导入家庭地图');
+        const parent = row.parentId ? await repo.findOne({ where: { id: row.parentId, householdId: user.householdId } }) : null;
+        const problem = shapeProblem(
+          body.mapShape,
+          { w: 1000, h: map.viewBoxHeight },
+          row.kind,
+          (parent?.mapShape as MapShape | null | undefined) ?? null,
+        );
+        if (problem) throw new BadRequestException(problem);
+      }
+      row.mapShape = body.mapShape;
+      await repo.save(row);
+    });
+    return this.one(user.householdId, id);
   }
 
   async create(body: CreateStorageLocationBody, user: JwtUser): Promise<StorageLocationView> {
@@ -277,6 +314,7 @@ export class LocationsService {
       icon: row.icon,
       sortOrder: row.sortOrder,
       note: row.note,
+      mapShape: row.kind === 'slot' ? null : ((row.mapShape as MapShape | null) ?? null),
       systemKey: row.systemKey,
       archivedAt: row.archivedAt?.toISOString() ?? null,
       depth,

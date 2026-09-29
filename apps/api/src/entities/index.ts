@@ -8192,7 +8192,46 @@ export class StorageLocation {
   updatedAt: Date;
 }
 
+/** I2 家庭地图（item-location-plan §2.2）：一家一张，形状在 storage_locations.mapShape。 */
+@Entity('household_maps')
+@Check('CHK_household_maps_viewbox', `"viewBoxWidth" = 1000 AND "viewBoxHeight" BETWEEN 100 AND 4000`)
+@Index('UQ_household_maps_active', ['householdId'], { unique: true, where: '"isActive"' })
+export class HouseholdMap {
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_household_maps' })
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_household_maps_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 40, default: '家' })
+  title: string;
+
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
+  @Column({ type: 'int' })
+  viewBoxWidth: number;
+
+  @Column({ type: 'int' })
+  viewBoxHeight: number;
+
+  /** uploads/.private/maps/<householdId>/ 下的文件名 */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  backgroundFile: string | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 export const ALL_ENTITIES = [
+  HouseholdMap,
   StorageLocation,
   HouseholdModuleOverride,
   SmartHomeLink,

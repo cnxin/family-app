@@ -25,7 +25,10 @@ export function LocationNode({
   selected,
   siblings,
   onSelect,
+  actionsWhenSelected = false,
 }: {
+  /** 窄栏（地图页左树）：操作按钮只在选中的那行出现，免得名字被挤掉 */
+  actionsWhenSelected?: boolean;
   location: StorageLocation;
   manager: boolean;
   selected: boolean;
@@ -82,7 +85,7 @@ export function LocationNode({
             {location.itemCount ? ` · ${location.itemCount} 样` : ''}
           </span>
         </button>
-        {manager && !archived ? (
+        {manager && !archived && (!actionsWhenSelected || selected) ? (
           <span className="-mt-1 flex flex-wrap items-center sm:mt-0">
             {childKinds(location).map((kind) => (
               <button key={kind} type="button" className={small} onClick={() => { setName(''); setRenaming(false); setAdding(kind); }}>

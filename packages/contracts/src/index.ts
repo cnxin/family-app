@@ -32,6 +32,7 @@ export * from './households';
 export * from './events';
 export * from './smart-home';
 export * from './locations';
+export * from './household-map';
 
 import { buildContractIndex } from './registry';
 import { activities } from './activities';
@@ -51,6 +52,7 @@ import { households } from './households';
 import { events } from './events';
 import { smartHome, smartHomeLinks, smartHomeWebhook } from './smart-home';
 import { locations } from './locations';
+import { householdMap } from './household-map';
 import { calendar } from './calendar';
 import { dishes } from './dishes';
 import { inventory } from './inventory';
@@ -93,6 +95,7 @@ export const contracts = {
   events,
   smartHome,
   locations,
+  householdMap,
   smartHomeWebhook,
   smartHomeLinks,
 };

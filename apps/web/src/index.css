@@ -160,3 +160,34 @@ body {
     -webkit-backdrop-filter: none;
   }
 }
+
+/* 家庭地图（I2）：房间平涂的淡色，六个色相轮着用；深色模式降明度、保留色相。
+   命中高亮用 accent 描边 + 一次呼吸（reduced-motion 时只留描边）。 */
+:root {
+  --map-room-0: oklch(0.93 0.04 250);
+  --map-room-1: oklch(0.93 0.045 158);
+  --map-room-2: oklch(0.935 0.045 60);
+  --map-room-3: oklch(0.925 0.04 305);
+  --map-room-4: oklch(0.945 0.05 95);
+  --map-room-5: oklch(0.93 0.04 20);
+  --map-stroke: oklch(0.62 0.02 60);
+}
+html[data-theme='dark'] {
+  --map-room-0: oklch(0.34 0.045 250);
+  --map-room-1: oklch(0.34 0.045 158);
+  --map-room-2: oklch(0.35 0.05 60);
+  --map-room-3: oklch(0.34 0.045 305);
+  --map-room-4: oklch(0.36 0.05 95);
+  --map-room-5: oklch(0.34 0.045 20);
+  --map-stroke: oklch(0.55 0.02 60);
+}
+@keyframes map-hit {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.35; }
+}
+.map-hit {
+  animation: map-hit 1.4s ease-in-out 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-hit { animation: none; }
+}

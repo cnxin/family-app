@@ -25,7 +25,8 @@ import { TravelPage } from './pages/travel';
 import { BackupsPage } from './pages/backups';
 import { SmartHomePage } from './pages/smart-home';
 import { SmartHomeSettingsPage } from './pages/smart-home-settings';
-import { LocationsPage } from './pages/locations';
+import { HouseMapPage } from './pages/house-map';
+import { HouseMapImportPage } from './pages/house-map-import';
 import { ActivityPage } from './pages/activity';
 import { MediaPage } from './pages/media';
 import { MediaLibraryPage } from './pages/media-library';
@@ -68,6 +69,8 @@ const REDIRECTS: [string, string][] = [
   ['/members', '/house/members'],
   ['/guests', '/house/guests'],
   ['/home-assets', '/house/assets'],
+  // I1 时位置管理页的路径；I2 与地图合并成 /house/map
+  ['/house/locations', '/house/map'],
   ['/profile', '/me/profile'],
   ['/assistant', '/me/assistant'],
   ['/calendar', '/schedule/calendar'],
@@ -144,7 +147,8 @@ export function App() {
           <Route path="/house/backups" element={<BackupsPage />} />
           <Route path="/house/smart-home" element={<SmartHomePage />} />
           <Route path="/house/smart-home/settings" element={<SmartHomeSettingsPage />} />
-          <Route path="/house/locations" element={<LocationsPage />} />
+          <Route path="/house/map" element={<HouseMapPage />} />
+          <Route path="/house/map/import" element={<HouseMapImportPage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />
           <Route path="/life" element={<RedirectKeepingSearch to="/life/media" />} />
           <Route path="/life/media" element={<MediaPage />} />
