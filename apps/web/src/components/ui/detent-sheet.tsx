@@ -1,0 +1,193 @@
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { animateSpring, project, rubberband } from '../../lib/spring';
+
+/** 全屏档时离屏幕顶部留多少（露一点背后的页面，知道自己在一层 sheet 里）。 */
+const TOP_GAP = 12;
+/** 打开时停在约 60% 高。 */
+const MEDIUM_SHOWN = 0.6;
+/** 手指动过这么多才算拖，不然是点按。 */
+const DRAG_SLOP = 6;
+
+type Detent = 'medium' | 'full';
+
+/**
+ * 手机上的两档 sheet（smart-home-redesign §9.7、apple-design §3~§9）：打开停在约 60%，上滑到全屏，下拉到底关闭。
+ * 跟手、随时能抓住反向（弹簧从当前位置和速度出发）；松手按速度投射决定停哪一档；拉过顶有橡皮筋阻尼。
+ * 60% 档时整张都能拖（内容不滚）；全屏档时内容正常滚，拖头部往下收。从滑块、输入框、下拉框开始的拖动不接管。
+ */
+export function DetentSheet({
+  title,
+  header,
+  children,
+  onClose,
+}: {
+  title: string;
+  header: ReactNode;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const sheet = useRef<HTMLDivElement>(null);
+  const scrim = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(() => window.innerHeight - TOP_GAP);
+  const [detent, setDetent] = useState<Detent>('medium');
+  const y = useRef(height);
+  const stop = useRef<() => void>(() => undefined);
+  const drag = useRef<{
+    pointerId: number;
+    startY: number;
+    startSheetY: number;
+    active: boolean;
+    history: { y: number; t: number }[];
+  } | null>(null);
+  const closing = useRef(false);
+
+  const medium = height * (1 - MEDIUM_SHOWN);
+  const apply = useCallback(
+    (value: number) => {
+      y.current = value;
+      if (sheet.current) sheet.current.style.transform = `translateY(${value}px)`;
+      if (scrim.current) scrim.current.style.opacity = String(Math.max(0, Math.min(1, 1 - value / height)));
+    },
+    [height],
+  );
+
+  const settle = useCallback(
+    (target: number, velocity = 0) => {
+      stop.current();
+      stop.current = animateSpring(y.current, target, velocity, (value) => apply(value), () => {
+        if (target >= height) onClose();
+      });
+    },
+    [apply, height, onClose],
+  );
+
+  const close = useCallback(() => {
+    if (closing.current) return;
+    closing.current = true;
+    settle(height);
+  }, [height, settle]);
+
+  // 打开：从屏幕底下弹到 60% 档
+  useEffect(() => {
+    apply(height);
+    settle(height * (1 - MEDIUM_SHOWN));
+    sheet.current?.focus();
+    return () => stop.current();
+    // 只在打开时跑一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => setHeight(window.innerHeight - TOP_GAP);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('resize', onResize);
+    document.addEventListener('keydown', onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [close]);
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (drag.current || closing.current) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('[role="slider"], input, select, textarea')) return;
+    const onHandle = Boolean(target.closest('[data-sheet-handle]'));
+    if (!onHandle && detent === 'full') return; // 全屏档：内容自己滚
+    stop.current(); // 抓住正在动的 sheet
+    drag.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startSheetY: y.current,
+      active: false,
+      history: [{ y: event.clientY, t: event.timeStamp }],
+    };
+  };
+
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+    const delta = event.clientY - current.startY;
+    if (!current.active) {
+      if (Math.abs(delta) < DRAG_SLOP) return;
+      current.active = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    current.history = [...current.history.slice(-5), { y: event.clientY, t: event.timeStamp }];
+    const raw = current.startSheetY + delta;
+    apply(raw < 0 ? -rubberband(-raw, height) : raw);
+  };
+
+  const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+    drag.current = null;
+    if (!current.active) return;
+    const first = current.history[0];
+    const last = current.history[current.history.length - 1];
+    const seconds = Math.max(0.016, (last.t - first.t) / 1000);
+    const velocity = (last.y - first.y) / seconds;
+    const projected = y.current + project(velocity);
+    const stops: [Detent | 'closed', number][] = [
+      ['full', 0],
+      ['medium', medium],
+      ['closed', height],
+    ];
+    const [next, target] = stops.reduce((best, one) => (Math.abs(one[1] - projected) < Math.abs(best[1] - projected) ? one : best));
+    if (next === 'closed') {
+      closing.current = true;
+    } else {
+      setDetent(next);
+    }
+    settle(target, velocity);
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-50">
+      <div ref={scrim} className="absolute inset-0 bg-black/35" style={{ opacity: 0 }} onMouseDown={close} />
+      <div
+        ref={sheet}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        data-sheet-detent={detent}
+        className="absolute inset-x-0 bottom-0 flex flex-col rounded-t-[24px] border-t border-border bg-surface shadow-xl outline-none"
+        style={{ height, transform: `translateY(${height}px)` }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+      >
+        <div data-sheet-handle className="shrink-0 touch-none px-5 pb-3 pt-2">
+          <button
+            type="button"
+            aria-label={detent === 'full' ? '收回一半' : '拉到全屏'}
+            className="mx-auto mb-2 block h-5 w-16"
+            onClick={() => {
+              const next = detent === 'full' ? 'medium' : 'full';
+              setDetent(next);
+              settle(next === 'full' ? 0 : medium);
+            }}
+          >
+            <span aria-hidden="true" className="mx-auto block h-[5px] w-9 rounded-full bg-border" />
+          </button>
+          {header}
+        </div>
+        <div
+          className={`min-h-0 flex-1 px-5 ${detent === 'full' ? 'overflow-y-auto overscroll-contain' : 'touch-none overflow-hidden'}`}
+          style={{ paddingBottom: `calc(${detent === 'full' ? 0 : medium}px + 28px + env(safe-area-inset-bottom))` }}
+        >
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

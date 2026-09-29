@@ -148,14 +148,20 @@ export function Dialog({
   children,
   footer,
   maxWidth = 480,
+  maxHeight = '88vh',
   place = 'sheet',
+  titleBar = true,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   maxWidth?: number;
+  /** 最大高度（CSS 长度）；智能家居详情在桌面上用 80vh */
+  maxHeight?: string;
   place?: 'sheet' | 'center';
+  /** false：不画自带的标题栏（内容自己带标题和关闭按钮，比如智能家居详情）；aria-label 仍用 title */
+  titleBar?: boolean;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -189,12 +195,13 @@ export function Dialog({
         aria-modal="true"
         aria-label={title}
         data-dialog-place={place}
-        style={{ maxWidth }}
+        style={{ maxWidth, maxHeight }}
         className={
-          'flex max-h-[88vh] w-full flex-col border border-border bg-surface shadow-xl ' +
+          'flex w-full flex-col border border-border bg-surface shadow-xl ' +
           (centered ? 'rounded-card' : 'rounded-t-card sm:rounded-card')
         }
       >
+        {titleBar ? (
         <div className="flex items-start gap-3 border-b border-border px-4 py-3">
           <h2 className="flex-1 text-[15px] font-semibold">{title}</h2>
           <button
@@ -206,6 +213,7 @@ export function Dialog({
             ✕
           </button>
         </div>
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
         {footer ? (
           <div className="border-t border-border px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] sm:pb-3">

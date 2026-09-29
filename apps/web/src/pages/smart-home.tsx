@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { SmartHomeConnection, SmartHomeDeviceWithState } from '@family/contracts';
 import { useAuth } from '../lib/auth';
 import { useSmartHomeStates } from '../lib/queries';
@@ -5,6 +6,7 @@ import { groupByArea, smartHomeStateLine, type StateLine } from '../lib/smart-ho
 import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { SmartHomeControls } from '../components/smart-home-controls';
+import { DeviceDetail } from '../components/smart-home-panel';
 import { SoftLink } from '../components/soft-link';
 import { Button, EmptyState, Page, Panel } from '../components/ui';
 
@@ -18,12 +20,29 @@ const TONE: Record<StateLine['tone'], string> = {
   muted: 'text-ink-soft',
 };
 
-function DeviceRow({ device, timeZone, live }: { device: SmartHomeDeviceWithState; timeZone: string; live: boolean }) {
+function DeviceRow({
+  device,
+  timeZone,
+  live,
+  onOpen,
+}: {
+  device: SmartHomeDeviceWithState;
+  timeZone: string;
+  live: boolean;
+  onOpen: () => void;
+}) {
   const line = smartHomeStateLine(device.primaryDomain, device.primary, timeZone);
   return (
     <li data-smart-home-device={device.primaryEntityId} className="border-b border-border px-3.5 py-2.5 last:border-b-0">
       <div className="flex min-h-7 items-center gap-3">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{device.displayName}</span>
+        <button
+          type="button"
+          aria-label={`打开${device.displayName}的详情`}
+          className="min-h-11 min-w-0 flex-1 truncate text-left text-sm font-medium hover:text-accent"
+          onClick={onOpen}
+        >
+          {device.displayName}
+        </button>
         <span className="shrink-0 text-right">
           <span className={`block text-sm ${TONE[line.tone]}`}>{line.text}</span>
           {line.detail ? <span className="block text-[12px] text-ink-soft">{line.detail}</span> : null}
@@ -76,6 +95,7 @@ function ConnectionPanel({ connection, manager }: { connection: SmartHomeConnect
 
 export function SmartHomePage() {
   const { session } = useAuth();
+  const [opened, setOpened] = useState<{ id: string; name: string } | null>(null);
   const manager = session?.member.role !== 'member';
   const timeZone = session?.householdTimezone ?? 'Asia/Shanghai';
   const states = useSmartHomeStates();
@@ -133,7 +153,13 @@ export function SmartHomePage() {
               <Panel key={group.area} title={group.area} grow={false}>
                 <ul>
                   {group.items.map((device) => (
-                    <DeviceRow key={device.id} device={device} timeZone={timeZone} live={live} />
+                    <DeviceRow
+                      key={device.id}
+                      device={device}
+                      timeZone={timeZone}
+                      live={live}
+                      onOpen={() => setOpened({ id: device.id, name: device.displayName })}
+                    />
                   ))}
                 </ul>
               </Panel>
@@ -162,6 +188,7 @@ export function SmartHomePage() {
           <ConnectionPanel connection={data.connection} manager={manager} />
         </aside>
       ) : null}
+      {opened ? <DeviceDetail deviceId={opened.id} name={opened.name} onClose={() => setOpened(null)} /> : null}
     </Page>
   );
 }
