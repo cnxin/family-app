@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智能家居 · 手机 · 设备页</title>
+<!-- 结构示意稿：只看信息层级与布局。颜色取 apps/web/src/index.css 的近似值，字体、圆角、间距不算数。
+     两屏：左 = 正常；右 = 整个 HA 断开（卡片保留上次状态灰显 + 顶部横幅）。 -->
+<style>
+:root{--bg:#f8f4ec;--surface:#fffdf8;--muted:#f1ebe0;--border:#e4dcce;--ink:#2a241f;--soft:#857b70;--accent:#2f6b4f;--accent-soft:#e0efe5;--warm:#b8662a;--warm-soft:#f8eadb;--danger:#b93a32}
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:#d9d4ca;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);display:flex;gap:32px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+.frame-label{font-size:13px;color:#4d463e;margin:0 0 8px}
+.phone{width:390px;min-height:844px;background:var(--bg);border-radius:36px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+main{flex:1;display:flex;flex-direction:column;gap:20px;padding:16px 20px 24px}
+header{display:flex;align-items:center;gap:8px}
+header .back{min-width:44px;min-height:44px;display:grid;place-items:center;margin-left:-12px;color:var(--accent);font-size:15px}
+header h1{margin:0;font-size:26px;font-weight:700;flex:1}
+header .gear{width:44px;height:44px;display:grid;place-items:center;border-radius:999px;color:var(--soft)}
+.sub{margin:-16px 0 0;font-size:13px;color:var(--soft)}
+.sub .dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--accent);margin-right:6px;vertical-align:1px}
+/* 场景：横向滚动一排，一键执行 */
+.scenes{display:flex;gap:8px;overflow-x:auto;margin:0 -20px;padding:0 20px;scrollbar-width:none}
+.scene{flex:none;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 16px 0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--border);font-size:14px;white-space:nowrap}
+.scene svg{color:var(--accent)}
+/* 房间分段 */
+.room h2{margin:0 0 8px 4px;font-size:13px;font-weight:600;color:var(--soft);letter-spacing:.02em}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+/* 设备卡：图标 + 名称 + 一句状态 + 至多一个主按钮。开/关/运行/离线靠颜色，不靠文字 */
+.card{position:relative;display:flex;flex-direction:column;gap:2px;min-height:112px;padding:12px;border-radius:18px;background:var(--surface);border:1px solid var(--border)}
+.card .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--muted);color:var(--soft)}
+.name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.state{font-size:13px;color:var(--soft)}
+.main{min-height:44px;min-width:56px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:14px;font-weight:500;color:var(--ink)}
+.card.on{background:var(--accent-soft);border-color:transparent}
+.card.on .ico{background:var(--accent);color:#fff}
+.card.on .state{color:var(--accent)}
+.card.on .main{background:var(--surface);border-color:transparent}
+.card.warn .ico{background:var(--warm-soft);color:var(--warm)}
+.card.warn .state{color:var(--warm)}
+.card.offline{opacity:.5}
+.card.offline .ico{background:var(--muted);color:var(--soft)}
+.assumed{font-size:11px;color:var(--soft);margin-left:4px}
+/* HA 断开时 */
+.banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#f7e3df;color:var(--danger);font-size:13px;line-height:1.5}
+.stale .card{opacity:.55;filter:grayscale(1)}
+.stale .card .main{display:none}
+nav{display:grid;grid-template-columns:repeat(4,1fr);padding:8px 12px 24px;background:var(--surface);border-top:1px solid var(--border)}
+nav a{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:44px;font-size:11px;color:var(--soft);text-decoration:none}
+nav a.cur{color:var(--accent);font-weight:700}
+.note{max-width:360px;font-size:12.5px;line-height:1.7;color:#4d463e;background:#fffdf8;border-radius:14px;padding:14px 16px}
+.note b{color:var(--ink)}
+.note ol{margin:6px 0 0;padding-left:18px}
+</style>
+</head>
+<body>
+
+<!-- ============ 屏 1：正常 ============ -->
+<div>
+<p class="frame-label">① 正常（管理员视角，已开放控制的设备才有主按钮）</p>
+<div class="phone">
+<main>
+  <header>
+    <a class="back" href="#">‹ 家里</a>
+    <h1>智能家居</h1>
+    <a class="gear" href="#" aria-label="智能家居设置"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg></a>
+  </header>
+  <p class="sub"><span class="dot"></span>6 台设备 · 刚刚同步</p>
+
+  <!-- 第 1 层：场景。白名单里没有 scene / script 时整行不出现 -->
+  <div class="scenes" aria-label="场景">
+    <button class="scene"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>电影夜</button>
+    <button class="scene"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-6 8 6v8H4z"/></svg>回家</button>
+    <button class="scene"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5l-5 7 5 7M4 12h16"/></svg>出门</button>
+    <button class="scene"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M5 12H3M21 12h-2"/><circle cx="12" cy="12" r="4"/></svg>起床</button>
+  </div>
+
+  <!-- 第 2 层：房间分段 + 设备卡网格 -->
+  <section class="room">
+    <h2>客厅</h2>
+    <div class="grid">
+      <article class="card on">
+        <div class="top">
+          <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3"/></svg></span>
+          <button class="main" aria-label="扫地机：暂停">暂停</button>
+        </div>
+        <div class="name">扫地机</div>
+        <div class="state">清扫中 · 62%</div>
+      </article>
+      <article class="card on">
+        <div class="top">
+          <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 4h18M6 4v15c2-1 3-4 3-15M18 4v15c-2-1-3-4-3-15"/></svg></span>
+          <button class="main" aria-label="客厅窗帘：关上">关上</button>
+        </div>
+        <div class="name">客厅窗帘</div>
+        <div class="state">开着</div>
+      </article>
+      <article class="card">
+        <div class="top">
+          <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="8" rx="2"/><path d="M7 17l-1 2M12 17v2M17 17l1 2"/></svg></span>
+          <button class="main" aria-label="空调：打开">打开</button>
+        </div>
+        <div class="name">空调</div>
+        <div class="state">已关<span class="assumed" title="红外遥控，按上次操作显示">≈</span></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="room">
+    <h2>阳台</h2>
+    <div class="grid">
+      <article class="card on">
+        <div class="top">
+          <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.5"/><path d="M7.5 6.5h2"/></svg></span>
+          <!-- 海尔集成只读：没有主按钮 -->
+        </div>
+        <div class="name">洗衣机</div>
+        <div class="state">剩 23 分钟</div>
+      </article>
+      <!-- 离线：灰显，排到房间末尾（排在洗衣机后面是因为它离线，不是因为名字） -->
+      <article class="card offline">
+        <div class="top">
+          <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.5"/><path d="M10 12c1-1 3 1 4 0"/></svg></span>
+        </div>
+        <div class="name">烘干机</div>
+        <div class="state">离线</div>
+      </article>
+    </div>
+  </section>
+
+  <section class="room">
+    <h2>厨房</h2>
+    <div class="grid">
+      <article class="card warn">
+        <div class="top">
+          <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span>
+        </div>
+        <div class="name">厨下净水</div>
+        <div class="state">滤芯剩 8%</div>
+      </article>
+    </div>
+  </section>
+</main>
+<nav>
+  <a href="#">今天</a><a href="#">吃饭</a><a href="#">日程</a><a class="cur" href="#">家里</a>
+</nav>
+</div>
+</div>
+
+<!-- ============ 屏 2：HA 断开 ============ -->
+<div>
+<p class="frame-label">② 整个 Home Assistant 断开</p>
+<div class="phone">
+<main>
+  <header>
+    <a class="back" href="#">‹ 家里</a>
+    <h1>智能家居</h1>
+    <a class="gear" href="#" aria-label="智能家居设置"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg></a>
+  </header>
+  <div class="banner" role="status">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:1px"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>
+    <span>连不上 Home Assistant，下面是 10:32 的状态，暂时按不了。家里其他功能不受影响。</span>
+  </div>
+  <!-- 断开时场景行不出现（执行不了）；卡片保留上次状态，整体灰显，主按钮收起 -->
+  <div class="stale">
+    <section class="room">
+      <h2>客厅</h2>
+      <div class="grid">
+        <article class="card on"><div class="top"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3"/></svg></span><button class="main">暂停</button></div><div class="name">扫地机</div><div class="state">清扫中 · 62%</div></article>
+        <article class="card on"><div class="top"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 4h18M6 4v15c2-1 3-4 3-15M18 4v15c-2-1-3-4-3-15"/></svg></span><button class="main">关上</button></div><div class="name">客厅窗帘</div><div class="state">开着</div></article>
+        <article class="card"><div class="top"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="8" rx="2"/><path d="M7 17l-1 2M12 17v2M17 17l1 2"/></svg></span><button class="main">打开</button></div><div class="name">空调</div><div class="state">已关</div></article>
+      </div>
+    </section>
+    <section class="room" style="margin-top:20px">
+      <h2>阳台</h2>
+      <div class="grid">
+        <article class="card on"><div class="top"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.5"/></svg></span></div><div class="name">洗衣机</div><div class="state">剩 23 分钟</div></article>
+        <article class="card offline"><div class="top"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.5"/></svg></span></div><div class="name">烘干机</div><div class="state">离线</div></article>
+      </div>
+    </section>
+    <section class="room" style="margin-top:20px">
+      <h2>厨房</h2>
+      <div class="grid">
+        <article class="card warn"><div class="top"><span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span></div><div class="name">厨下净水</div><div class="state">滤芯剩 8%</div></article>
+      </div>
+    </section>
+  </div>
+</main>
+<nav>
+  <a href="#">今天</a><a href="#">吃饭</a><a href="#">日程</a><a class="cur" href="#">家里</a>
+</nav>
+</div>
+</div>
+
+<aside class="note">
+  <b>读图要点</b>
+  <ol>
+    <li>三层：场景一排（没有就不出现）→ 房间分段 → 设备卡。连接状态收进标题下一行小字，不再占右栏。</li>
+    <li>一张卡只有：图标、中文名、一句状态、至多一个主按钮。<b>按钮上的字 = 按下会发生的事</b>（暂停 / 关上 / 打开），不是当前状态。</li>
+    <li>状态靠颜色：松绿底 = 开着 / 运行中；平底 = 关着 / 待机；暖橙图标 = 要留意（滤芯低、暂停、出错）；半透明 = 离线。</li>
+    <li>点主按钮 = 直接执行（成功给轻触感）；点卡片其他任何地方 = 打开详情 sheet。只读设备（洗衣机、净水）整张卡都是详情入口。</li>
+    <li>离线设备排到本房间末尾；「在今天页显示」的设备在这里照常按房间排，不单独置顶。</li>
+    <li>成员视角：没开放控制、或 minRole 不够的设备不出主按钮，卡片其余一样。</li>
+    <li>空调状态后的「≈」= 红外遥控，只知道上次发了什么（现有 assumed 字段），详情里写全。</li>
+  </ol>
+</aside>
+
+</body>
+</html>
