@@ -2,7 +2,6 @@ import { expect, test, type APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { householdToday } from '@family/shared';
 import { apiClient, expectNoHorizontalOverflow, stamp, watchPageErrors } from './helpers';
 
 // I1 位置字典（docs/item-location-plan.md §3 I1）：购物入库时选「放哪儿」→ 库存「按位置」能看到 → 行内一跳改位置；
@@ -25,6 +24,9 @@ async function archiveAll(request: APIRequestContext, ids: string[]) {
   for (const id of ids) await admin.post(`/locations/${id}/archive`, {}).catch(() => undefined);
 }
 
+test.describe('设备日期与家庭日期不同', () => {
+  // 浏览器放在檀香山：一天里有 18 小时它的日期比上海早一天，和 CI（UTC）在上海过零点后跑是同一种情况
+  test.use({ timezoneId: 'Pacific/Honolulu' });
 test('购物入库选「放哪儿」→ 库存按位置分组能看到 → 行内一跳改位置', async ({ page, request }) => {
   const admin = apiClient(request);
   const tag = randomUUID().slice(0, 4);
@@ -33,11 +35,16 @@ test('购物入库选「放哪儿」→ 库存按位置分组能看到 → 行�
   const item = await admin.post<{ id: string }>('/inventory-items', {
     name, category: '调料', quantity: 0, unit: '瓶', lowStockThreshold: 0, restockQuantity: 1,
   });
-  const today = householdToday('Asia/Shanghai');
+  // 购物页的「今天」按设备日期（timezone-audit T3 后置），也不读 ?date=：购物项按浏览器自己的日期建，
+  // 否则 CI（UTC）在上海过了零点、UTC 还没过零点的那 8 小时里，页面上找不到这一项
+  const today = await page.evaluate(() => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  });
   const bought = await admin.post<{ id: string }>('/shopping-items', { date: today, customName: name, totalQty: 2, unit: '瓶' });
   await admin.patch(`/shopping-items/${bought.id}`, { checked: true });
   try {
-    await page.goto(`/house/shopping?date=${today}`);
+    await page.goto('/house/shopping');
     // 最里面那个同时含名字和「入库」按钮的 div 就是这一行（祖先在 DOM 顺序里排在前面）
     const row = page.locator('div').filter({ hasText: name }).filter({ has: page.getByRole('button', { name: '入库', exact: true }) }).last();
     await row.getByRole('button', { name: '入库', exact: true }).click();
@@ -71,6 +78,8 @@ test('购物入库选「放哪儿」→ 库存按位置分组能看到 → 行�
     await admin.delete(`/shopping-items/${bought.id}`).catch(() => undefined);
     await archiveAll(request, [places.kitchen.id, places.storeroom.id]);
   }
+});
+
 });
 
 test('⌘K「记一下东西放哪」：先挑位置，再挑库存里的东西', async ({ page, request }, info) => {
