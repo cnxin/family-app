@@ -4,6 +4,7 @@
 // run-api-tests 把联动轮询设成 0.3 秒、命令超时 1.5 秒。
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { usageReport } from './usage-report-probe.mjs';
 import { startFakeHomeAssistant } from './fake-ha.mjs';
 
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
@@ -125,6 +126,25 @@ try {
       byHand.every((one) => one.source === 'manual' && one.linkName === null) && !byHand.some((one) => one.id === byLink[0].id) &&
       badSource.status === 400,
     '操作记录按来源筛（E5）：联动按的记 source=link 并带联动名，「手按」里没有它；不认识的来源 400',
+  );
+  const report = await usageReport(1);
+  const [{ name: householdName }] = (await db.query('SELECT name FROM households WHERE id = $1', [householdId])).rows;
+  const section = report.split('\n## ').find((part) => part.startsWith(`${householdName}（`)) ?? '';
+  const [{ manual: manualCount, link: linkCount }] = (
+    await db.query(
+      `SELECT count(*) FILTER (WHERE source = 'manual')::int AS manual, count(*) FILTER (WHERE source = 'link')::int AS link
+         FROM smart_home_commands WHERE "householdId" = $1`,
+      [householdId],
+    )
+  ).rows;
+  const total = (label) => {
+    const line = section.split('\n').find((row) => row.startsWith(`| ${label} |`));
+    return line ? Number(line.split('|').at(-3).trim()) : 0;
+  };
+  assert(
+    linkCount === 1 && total('智能家居（联动控制）') === linkCount && total('智能家居（手动控制）') === manualCount &&
+      section.includes('source = link，记在家庭主人名下'),
+    `用量统计（usage-report.mjs）按来源分开数智能家居控制：联动 ${linkCount}、手动 ${manualCount}，与审计表一致`,
   );
   await complete(cleanId, member, 'pending');
   await complete(cleanId);

@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { createModuleHousehold } from './system-modules-fixtures.mjs';
+import { usageReport } from './usage-report-probe.mjs';
 
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
 const PASSWORD = process.env.SEED_ACCOUNT_PASSWORD || 'family1234';
@@ -206,6 +207,28 @@ try {
     otherTree.length === 0 && otherUse.status === 404 && otherPeek.status === 404 && otherBatch.status === 404 && otherAsset.status === 404,
     '另一个家庭：位置树是空的；引用、查看内容、改别家批次 / 资产的位置都是 404',
   );
+  console.log('7. 用量统计里的位置快照（usage-report.mjs）');
+  const report = await usageReport(1);
+  const [{ items, itemsLocated, batches, batchesLocated, assets, assetsLocated }] = (
+    await db.query(
+      `SELECT (SELECT count(*) FROM inventory_items WHERE "householdId" = $1)::int AS items,
+              (SELECT count(*) FROM inventory_items WHERE "householdId" = $1 AND "defaultLocationId" IS NOT NULL)::int AS "itemsLocated",
+              (SELECT count(*) FROM inventory_batches WHERE "householdId" = $1 AND quantity > 0)::int AS batches,
+              (SELECT count(*) FROM inventory_batches WHERE "householdId" = $1 AND quantity > 0 AND "locationId" IS NOT NULL)::int AS "batchesLocated",
+              (SELECT count(*) FROM home_assets WHERE "householdId" = $1 AND status = 'active')::int AS assets,
+              (SELECT count(*) FROM home_assets WHERE "householdId" = $1 AND status = 'active' AND "locationId" IS NOT NULL)::int AS "assetsLocated"`,
+      [ownerSession.member.householdId],
+    )
+  ).rows;
+  assert(
+    itemsLocated >= 2 && batchesLocated >= 2 && assetsLocated >= 1 &&
+      report.includes(`- 库存物品记着默认位置：${itemsLocated} / ${items}`) &&
+      report.includes(`- 在用批次记着位置：${batchesLocated} / ${batches}`) &&
+      report.includes(`- 在用资产记着位置：${assetsLocated} / ${assets}`) &&
+      report.includes('只给现状快照'),
+    `用量统计的位置快照与库里一致（库存 ${itemsLocated}/${items}、批次 ${batchesLocated}/${batches}、资产 ${assetsLocated}/${assets}），并说明位置不按成员计数`,
+  );
+
   const onlyUnsorted = await createModuleHousehold(db, 'member');
   await request('/locations', onlyUnsorted.token, 'POST', { name: '随手放' });
   assert(!(await hasData(onlyUnsorted.token)), '只有家人建在「未整理」下的位置：家里页 hasData 仍是 false');
