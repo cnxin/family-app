@@ -202,18 +202,19 @@ test('观影设置（mock）：用户映射——在线账号可关联和取消�
   // 在线账号：选成员 → PUT mapping {memberId}
   const online = page.getByRole('article', { name: '客厅 Plex 用户 e2e 在线账号' });
   const select = online.getByRole('combobox', { name: 'e2e 在线账号 对应的家庭成员' });
-  const mapRequest = page.waitForRequest('**/api/media/playback-users/plex/plex-user-1/mapping');
+  // 等响应而不是请求：request 事件可能先于 route 回调到达，那时回调里记的变量还没写
+  const mapResponse = page.waitForResponse('**/api/media/playback-users/plex/plex-user-1/mapping');
   await select.selectOption(momId);
-  expect((await mapRequest).method()).toBe('PUT');
+  expect((await mapResponse).request().method()).toBe('PUT');
   expect(mappedBody).toEqual({ memberId: momId });
   await expect(page.locator('main [aria-live="polite"]')).toHaveText('已把 e2e 在线账号 关联到 妈妈');
   await expect(page.getByRole('alert').filter({ hasText: '已把 e2e 在线账号 关联到 妈妈' })).toBeVisible();
   await expect(select).toHaveValue(momId);
 
   // 选回「未关联」→ DELETE 那条映射
-  const unmapRequest = page.waitForRequest(`**/api/media/playback-user-mappings/${MAPPING_ID}`);
+  const unmapResponse = page.waitForResponse(`**/api/media/playback-user-mappings/${MAPPING_ID}`);
   await select.selectOption('');
-  await unmapRequest;
+  expect((await unmapResponse).request().method()).toBe('DELETE');
   expect(unmapped).toBe(true);
   await expect(page.locator('main [aria-live="polite"]')).toHaveText('已取消 e2e 在线账号 的成员关联');
   await expect(select).toHaveValue('');
