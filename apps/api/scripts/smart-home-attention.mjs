@@ -1,5 +1,6 @@
 // H3 E5 黑盒：智能家居的三条「需要留意」规则（pre-trial-plan H3、smart-home-redesign §2.5）。
-// 滤芯低于阈值（严格小于、跟 E3 规则里选的实体走）；洗烘完成超过 2 小时「晾衣服」还没打勾；HA 连不上超过 1 小时只给管理员。
+// 滤芯低于阈值（严格小于、跟 E3 规则里选的实体走）；洗烘完成超过 2 小时「晾衣服」还没打勾；HA 连不上超过 1 小时只给管理员
+// （时长按 integrations 行里记的最近一次连通算，API 重启不归零）。
 // 三条合成一张卡（一个域一张卡）；家庭把智能家居分段收起时一条都不出。时间用 x-test-clock 推，不真等。
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -151,6 +152,10 @@ try {
   );
 
   console.log('3. HA 连不上超过 1 小时（只给管理员）');
+  const lastReachable = async () =>
+    (await db.query(`SELECT "lastSyncedAt" FROM integrations WHERE "householdId" = $1 AND kind = 'home_assistant'`, [householdId]))
+      .rows[0]?.lastSyncedAt ?? null;
+  assert(await until(async () => (await lastReachable()) !== null, 3_000), '连着时把「最近一次连通」记进这家的 integrations 行');
   await ha.stop();
   const downAt = Date.now();
   await wait(1_500); // 实时订阅掉线后每 0.3 秒拉一次，记下「从什么时候起连不上」
@@ -161,10 +166,23 @@ try {
     '断了 1 小时 1 分：管理员看到「Home Assistant 连不上」',
   );
   assert((await card(member, at(new Date(downAt + 61 * 60_000)))) === undefined, '成员看不到这一条（他们也处理不了）');
+  // 模拟 API 重启：内存里这一轮的「第一次失败」是刚才，库里的最近一次连通是 61 分钟前
+  await db.query(
+    `UPDATE integrations SET "lastSyncedAt" = now() - interval '61 minutes' WHERE "householdId" = $1 AND kind = 'home_assistant'`,
+    [householdId],
+  );
+  assert(
+    (await card(owner))?.kind === 'offline',
+    '断开时长按库里的最近一次连通算：库里是 61 分钟前，不用等内存里再计满一小时（API 重启不归零）',
+  );
   await ha.start();
   assert(
     await until(async () => (await card(owner, at(new Date(downAt + 61 * 60_000)))) === undefined, 5_000),
     'HA 回来了：实时订阅重连上，这条自动消失',
+  );
+  assert(
+    await until(async () => Date.now() - new Date(await lastReachable()).getTime() < 10_000, 3_000),
+    '连回来后「最近一次连通」更新成刚才',
   );
 
   console.log('4. 家庭把智能家居分段收起');

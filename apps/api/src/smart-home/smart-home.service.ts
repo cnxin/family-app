@@ -40,6 +40,7 @@ const STATES_CACHE_MS = 2_000;
 /** 注册表（设备 / 实体 / 区域）变得很少：状态页、控制、订阅都读它，缓存一分钟。目录每次读新的。 */
 const REGISTRY_CACHE_MS = 60_000;
 const TRANSLATION_CACHE_MS = 3_600_000;
+const REACHABLE_PERSIST_MS = 60_000;
 
 type Snapshot =
   | { ok: true; states: HomeAssistantRawState[]; checkedAt: Date }
@@ -78,8 +79,10 @@ export class SmartHomeService {
   private readonly lastGood = new Map<string, { version: string; states: HomeAssistantRawState[]; checkedAt: Date }>();
   private readonly registryCache = new Map<string, { version: string; at: number; value: Promise<RegistryResult> }>();
   private readonly translationCache = new Map<string, { key: string; at: number; value: Map<string, string> }>();
-  /** 从哪一刻起连不上 HA（连上一次就清掉）：E5「HA 断开超过 1 小时」按它算。只在内存里，API 重启后从头计。 */
+  /** 这一轮从哪一刻起连不上 HA（连上一次就清掉）。「断了多久」优先按库里记的最近一次连通算，见 unreachableSince */
   private readonly unreachable = new Map<string, Date>();
+  /** 最近一次把「连通过」写进库的时刻：连着时每分钟最多写一次 */
+  private readonly reachablePersistedAt = new Map<string, number>();
 
   constructor(
     @InjectRepository(SmartHomeDevice)
@@ -98,6 +101,7 @@ export class SmartHomeService {
   forgetAll(householdId: string) {
     this.snapshots.delete(householdId);
     this.unreachable.delete(householdId);
+    this.reachablePersistedAt.delete(householdId);
     this.lastGood.delete(householdId);
     this.registryCache.delete(householdId);
     this.translationCache.delete(householdId);
@@ -105,12 +109,28 @@ export class SmartHomeService {
 
   /** 读 HA 的结果记一笔（状态快照、实时订阅的轮询与重连都调）；ok 清零，失败只记第一次。 */
   noteReachable(householdId: string, ok: boolean) {
-    if (ok) this.unreachable.delete(householdId);
-    else if (!this.unreachable.has(householdId)) this.unreachable.set(householdId, this.clock.now());
+    const now = this.clock.now();
+    if (!ok) {
+      if (!this.unreachable.has(householdId)) this.unreachable.set(householdId, now);
+      return;
+    }
+    // 刚从断开恢复：立刻记；一直连着：每分钟最多记一次
+    const recovered = this.unreachable.delete(householdId);
+    const written = this.reachablePersistedAt.get(householdId);
+    if (!recovered && written !== undefined && Math.abs(now.getTime() - written) < REACHABLE_PERSIST_MS) return;
+    this.reachablePersistedAt.set(householdId, now.getTime());
+    void this.settings.markReachable(householdId, now).catch(() => this.reachablePersistedAt.delete(householdId));
   }
 
-  unreachableSince(householdId: string): Date | null {
-    return this.unreachable.get(householdId) ?? null;
+  /**
+   * 连不上时，从什么时候算起：库里记的最近一次连通（API 重启也不归零，精确到分钟）与这一轮第一次失败取早的；
+   * 服务器默认的连接没处记，只能按这一轮第一次失败算。连着时为 null。
+   */
+  async unreachableSince(householdId: string): Promise<Date | null> {
+    const failing = this.unreachable.get(householdId);
+    if (!failing) return null;
+    const last = await this.settings.lastReachableAt(householdId);
+    return last && last.getTime() < failing.getTime() ? last : failing;
   }
 
   async test(householdId: string): Promise<SmartHomeConnection> {
