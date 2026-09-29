@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { MAP_VIEWBOX_MAX_HEIGHT, MAP_VIEWBOX_WIDTH, type MapPolygon, type StorageLocation } from '@family/contracts';
-import { shapePoints } from '@family/shared';
+import { shapePoints, shapesTouch } from '@family/shared';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { locationKeys, useHouseholdMap, useLocations, usePutMap, useUploadMapBackground } from '../lib/queries';
@@ -9,13 +9,17 @@ import { pushToast } from '../lib/toast';
 import { canvasToUpload, cropToCanvas, ImportCrop, type CropBox } from '../components/map/import-crop';
 import { ImportName, type RoomDraft } from '../components/map/import-name';
 import { MapCanvas } from '../components/map/map-canvas';
+import { useRoomDetection } from '../components/map/use-room-detection';
+import { suggestCropInWorker } from '../lib/floorplan/run-detect';
+import { mergeRooms } from '../lib/floorplan/merge-rooms';
 import type { MapItem, MapTool } from '../components/map/map-types';
 import { useSoftNavigate } from '../components/soft-link';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
 /**
  * /house/map/import：导入向导（item-location-plan §3 I2a），四步每步可退回：
- * ① 裁剪 ② 房间（在截图上拖矩形手画；自动识别另接）③ 起名字 ④ 完成。
+ * ① 裁剪（默认框住有颜色的房间区域）② 房间（Worker 里自动识别成草稿；认不出、识别错都能在图上手画 / 改）
+ * ③ 起名字（草稿能删、能并进相邻房间）④ 完成。
  * 手画这条路从第一天起就得能走通：识别不到、识别得不对，都落到这里接着画。
  */
 
@@ -39,6 +43,10 @@ export function HouseMapImportPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [current, setCurrent] = useState(0);
   const [saving, setSaving] = useState(false);
+  const detection = useRoomDetection(useCallback((next: RoomDraft[]) => {
+    setDrafts(next);
+    setTool(next.length ? 'select' : 'room');
+  }, []));
 
   useEffect(() => () => {
     if (cropped) URL.revokeObjectURL(cropped.url);
@@ -56,6 +64,11 @@ export function HouseMapImportPage() {
   const rooms = (locations.data ?? []).filter((one) => one.kind === 'room' && !one.systemKey);
   const hadShapes = (locations.data ?? []).some((one) => one.mapShape);
   const names = drafts.map((one) => one.name.trim());
+  const currentDraft = drafts[Math.min(current, drafts.length - 1)];
+  // 并进相邻房间：和当前这块共用一段墙（识别出来的贴到墙中线；手画的允许隔一点缝）
+  const mergeTargets = currentDraft
+    ? drafts.filter((one) => one.id !== currentDraft.id && shapesTouch(one.shape, currentDraft.shape, 12))
+    : [];
   const namesOk = drafts.length > 0 && names.every(Boolean) && new Set(names).size === names.length;
 
   const pickFile = (file: File | undefined) => {
@@ -70,6 +83,9 @@ export function HouseMapImportPage() {
       setImage(next);
       setCrop({ x: 0, y: 0, w: next.naturalWidth, h: next.naturalHeight });
       setDrafts([]);
+      detection.reset();
+      // 默认框住房间所在的那块（App 的按钮、图例是白灰黑，框在外面）；算不出来就整张
+      suggestCropInWorker(next).then(setCrop, () => undefined);
     };
     next.onerror = () => pushToast('这张图打不开，换一张试试');
     next.src = url;
@@ -82,7 +98,9 @@ export function HouseMapImportPage() {
       if (!blob) return;
       setCropped({ canvas, url: URL.createObjectURL(blob) });
       setDrafts([]);
+      setSelectedId(null);
       setStep(1);
+      void detection.run(canvas);
     });
   };
 
@@ -178,8 +196,25 @@ export function HouseMapImportPage() {
                   删掉选中的
                 </Button>
               ) : null}
-              <span className="text-[13px] text-ink-soft">已画 {drafts.length} 个房间</span>
+              <span className="text-[13px] text-ink-soft">{drafts.length} 个房间</span>
+              <Button variant="ghost" className="min-h-10 border border-border" disabled={detection.status.state === 'running'} onClick={() => void detection.run(cropped.canvas)}>
+                重新识别
+              </Button>
+              {drafts.length ? (
+                <Button variant="ghost" className="min-h-10 border border-border" onClick={() => { setDrafts([]); setSelectedId(null); setTool('room'); }}>
+                  清空自己画
+                </Button>
+              ) : null}
             </div>
+            <p data-detect-state={detection.status.state} className="text-[13px] font-medium">
+              {detection.status.state === 'running'
+                ? '正在认房间…'
+                : detection.status.state === 'done'
+                  ? `认出 ${detection.status.count} 个房间（${(detection.status.ms / 1000).toFixed(1)} 秒）。这只是草稿：多的、碎的下一步能删能并，缺的在这里拖矩形补上，形状不对就改。`
+                  : detection.status.state === 'failed'
+                    ? `${detection.status.message}，直接在图上拖矩形画房间。`
+                    : ''}
+            </p>
             <p className="text-[13px] text-ink-soft">
               {tool === 'room' ? '按着房间的边拖一个矩形；L 形房间先画一个矩形，再到「改形状」里拖顶点、双击边加顶点。灰色没扫到的地方不用画。' : '点一个房间出顶点：拖顶点改形状，双击边加顶点，右键顶点删掉。'}
             </p>
@@ -219,6 +254,19 @@ export function HouseMapImportPage() {
             existingNames={rooms.map((one) => one.name)}
             onRename={(id, name) => setDrafts((list) => list.map((one) => (one.id === id ? { ...one, name } : one)))}
             onRemove={(id) => setDrafts((list) => list.filter((one) => one.id !== id))}
+            mergeTargets={mergeTargets}
+            onMerge={(targetId) => {
+              const source = drafts[Math.min(current, drafts.length - 1)];
+              const target = drafts.find((one) => one.id === targetId);
+              if (!source || !target) return;
+              const points = mergeRooms(source.shape.points, target.shape.points, viewBox);
+              const name = target.name.trim() || source.name;
+              const next = drafts
+                .filter((one) => one.id !== source.id)
+                .map((one) => (one.id === target.id ? { ...one, name, shape: { type: 'polygon' as const, points } } : one));
+              setDrafts(next);
+              setCurrent(Math.max(0, next.findIndex((one) => one.id === target.id)));
+            }}
           />
         ) : null}
         {step === 3 && cropped ? (

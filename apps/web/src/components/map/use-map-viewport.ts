@@ -127,17 +127,25 @@ export function useMapViewport(box: { w: number; h: number }) {
     return () => observer.disconnect();
   }, []);
 
-  // 第一次量到尺寸、或者用户还没动过时尺寸变了（转屏、侧栏收起）：重新铺满
+  // 第一次量到尺寸、或者尺寸大变（转屏、侧栏收起）且用户还没动过：重新铺满。
+  // 小变化（工具条多一行、抽屉、键盘）保持中心不动——不然点一下选中，整张图就跳一下
+  const lastSize = useRef<{ w: number; h: number } | null>(null);
   useEffect(() => {
     const next = fitted();
-    if (!next) return;
-    if (!touched.current || !current.current) {
+    if (!next || !size) return;
+    const before = lastSize.current;
+    lastSize.current = size;
+    const big = !before || Math.abs(size.w - before.w) > before.w * 0.25 || Math.abs(size.h - before.h) > before.h * 0.25;
+    if (!current.current || (big && !touched.current)) {
       current.current = next;
       setView(next);
-    } else {
-      commit(clampView(current.current));
+      return;
     }
-  }, [fitted, clampView, commit]);
+    const shifted = before
+      ? { ...current.current, x: current.current.x + (size.w - before.w) / 2, y: current.current.y + (size.h - before.h) / 2 }
+      : current.current;
+    commit(big ? clampView(shifted) : shifted);
+  }, [fitted, clampView, commit, size]);
 
   useEffect(() => () => {
     stop.current();
