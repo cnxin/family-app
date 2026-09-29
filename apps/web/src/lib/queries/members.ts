@@ -21,6 +21,17 @@ function invalidateMembers(client: ReturnType<typeof useQueryClient>) {
   }
 }
 
+/**
+ * 先把服务端回来的这一行写进管理列表的缓存，再让大家重新拉：光靠失效的话，重新拉取完成之前
+ * 再打开这个人的编辑框，拿到的还是改之前的那一行——这时再点保存，会把刚才的修改改回去。
+ */
+function saveMember(client: ReturnType<typeof useQueryClient>, saved: ManagedMember) {
+  client.setQueryData<ManagedMember[]>(['household-members'], (list) =>
+    list?.map((one) => (one.id === saved.id ? saved : one)),
+  );
+  invalidateMembers(client);
+}
+
 export function useUpdateManagedMember() {
   const client = useQueryClient();
   return useMutation({
@@ -32,7 +43,7 @@ export function useUpdateManagedMember() {
         method: 'PATCH',
         body: input.body,
       }),
-    onSuccess: () => invalidateMembers(client),
+    onSuccess: (saved) => saveMember(client, saved),
   });
 }
 
@@ -45,7 +56,7 @@ export function useUpdateManagedMemberStatus() {
         method: 'PATCH',
         body: { enabled: input.enabled },
       }),
-    onSuccess: () => invalidateMembers(client),
+    onSuccess: (saved) => saveMember(client, saved),
   });
 }
 
