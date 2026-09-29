@@ -13,6 +13,7 @@ export interface HomeAssistantRawState {
   state: string;
   attributes: Record<string, unknown>;
   last_changed?: string;
+  last_updated?: string;
 }
 
 export class HomeAssistantError extends Error {
@@ -118,6 +119,7 @@ function stringOrNull(value: unknown) {
 export function presentHomeAssistantState(raw: HomeAssistantRawState): SmartHomeEntityState {
   const attributes = raw.attributes && typeof raw.attributes === 'object' ? raw.attributes : {};
   const changed = raw.last_changed ? new Date(raw.last_changed) : null;
+  const updated = raw.last_updated ? new Date(raw.last_updated) : changed;
   return {
     state: raw.state.slice(0, 255),
     unit: stringOrNull(attributes.unit_of_measurement),
@@ -125,6 +127,7 @@ export function presentHomeAssistantState(raw: HomeAssistantRawState): SmartHome
     position: numberOrNull(attributes.current_position),
     battery: numberOrNull(attributes.battery_level),
     lastChanged: changed && !Number.isNaN(changed.getTime()) ? changed.toISOString() : null,
+    lastUpdated: updated && !Number.isNaN(updated.getTime()) ? updated.toISOString() : null,
     targetTemperature: numberOrNull(attributes.temperature),
     currentTemperature: numberOrNull(attributes.current_temperature),
     hvacModes: Array.isArray(attributes.hvac_modes)

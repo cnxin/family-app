@@ -13,13 +13,12 @@ import {
   type SmartHomeAction,
   type SmartHomeCommand,
   type SmartHomeCommandBody,
-  type SmartHomeDomain,
 } from '@family/contracts';
 import { JwtUser } from '../auth/jwt.guard';
 import { SmartHomeCommandRecord, SmartHomeDevice } from '../entities';
 import { HomeAssistantError, callHomeAssistantService } from './home-assistant.client';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
-import { SmartHomeService, canControlDevice, isReadonlyCover } from './smart-home.service';
+import { SmartHomeService, canControlDevice, isReadonlyCover, presentSmartHomeDevice } from './smart-home.service';
 
 /** 简单动作 → HA service 名（domain 就是实体自己的 domain），只带 entity_id。 */
 const SERVICES: Partial<Record<SmartHomeAction, string>> = {
@@ -67,18 +66,20 @@ export class SmartHomeCommandsService {
     private readonly smartHome: SmartHomeService,
   ) {}
 
-  async execute(entityId: string, body: SmartHomeCommandBody, user: JwtUser): Promise<SmartHomeCommand> {
-    const device = await this.devices.findOne({ where: { householdId: user.householdId, entityId } });
-    if (!device) throw new NotFoundException('白名单里没有这个设备');
-    if (!smartHomeActionsFor(device.domain).includes(body.action)) {
+  /** 控制一台白名单设备的主实体（R1）。子实体的控制在 R1b 的详情面板里开放。 */
+  async execute(deviceId: string, body: SmartHomeCommandBody, user: JwtUser): Promise<SmartHomeCommand> {
+    const device = await this.devices.findOne({ where: { householdId: user.householdId, id: deviceId } });
+    if (!device) throw new NotFoundException('白名单里没有这台设备');
+    const entityId = device.primaryEntityId;
+    const domain = device.primaryDomain;
+    if (!smartHomeActionsFor(domain).includes(body.action)) {
       throw new BadRequestException('这台设备没有这个动作');
     }
-    const view = { ...device, domain: device.domain as SmartHomeDomain, createdAt: '', updatedAt: '' };
     if (!device.controllable) throw new ForbiddenException('这台设备没开放在小管家里控制');
-    if (!canControlDevice(view, user.role)) throw new ForbiddenException('这台设备只有管理员能控制');
-    if (device.domain === 'cover') {
+    if (!canControlDevice(presentSmartHomeDevice(device), user.role)) throw new ForbiddenException('这台设备只有管理员能控制');
+    if (domain === 'cover') {
       const state = await this.smartHome.currentState(user.householdId, entityId);
-      if (isReadonlyCover(device.domain, state?.deviceClass ?? null)) {
+      if (isReadonlyCover(domain, state?.deviceClass ?? null)) {
         throw new ForbiddenException('车库门、大门这类只读');
       }
     }
@@ -86,7 +87,7 @@ export class SmartHomeCommandsService {
     // 同一次点击重发：直接交回上一次的结果（在按当前状态算调用之前，免得调温重发时已经到头而报冲突）
     const prior = await this.commands.findOne({ where: { householdId: user.householdId, requestId: body.requestId } });
     if (prior) return this.replay(user, body, entityId);
-    const plan = await this.plan(user.householdId, entityId, device.domain, body.action);
+    const plan = await this.plan(user.householdId, entityId, domain, body.action);
     const service = plan.label;
     let record: SmartHomeCommandRecord;
     try {
@@ -95,6 +96,7 @@ export class SmartHomeCommandsService {
           householdId: user.householdId,
           memberId: user.memberId,
           requestId: body.requestId,
+          deviceId: device.id,
           entityId,
           action: body.action,
           service,
@@ -111,7 +113,7 @@ export class SmartHomeCommandsService {
     const { target } = await this.settings.resolve(user.householdId);
     try {
       if (!target) throw new HomeAssistantError('还没连上 Home Assistant');
-      const { changed } = await callHomeAssistantService(target, device.domain, plan.service, {
+      const { changed } = await callHomeAssistantService(target, domain, plan.service, {
         entity_id: entityId,
         ...plan.data,
       });
@@ -174,6 +176,7 @@ export class SmartHomeCommandsService {
   private present(row: SmartHomeCommandRecord, memberName: string, replayed: boolean): SmartHomeCommand {
     return {
       id: row.id,
+      deviceId: row.deviceId,
       entityId: row.entityId,
       action: row.action as SmartHomeAction,
       status: row.status,

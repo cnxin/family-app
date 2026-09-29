@@ -1,26 +1,20 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
-  SMART_HOME_BLOCKED_DOMAINS,
-  SMART_HOME_DOMAINS,
-  type SmartHomeConnection,
-  isPrimarySmartHomeEntity,
-  SMART_HOME_PRIMARY_LIMIT,
   smartHomeActionsFor,
   SMART_HOME_READONLY_COVER_CLASSES,
+  type SmartHomeConnection,
   type SmartHomeDevice as SmartHomeDeviceView,
   type SmartHomeDirectory,
-  type SmartHomeDirectoryDevice,
-  type SmartHomeDirectoryEntry,
   type SmartHomeDomain,
+  type SmartHomeEntityState,
+  type SmartHomeIcon,
+  type SmartHomeMergeReport,
   type SmartHomeStates,
-  type UpsertSmartHomeDeviceBody,
 } from '@family/contracts';
-import { recordActivity } from '../activities/activity-log';
-import { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
-import { SmartHomeDevice, type MemberRole } from '../entities';
+import { SmartHomeDevice, SmartHomeMergeReportRecord, type MemberRole } from '../entities';
 import {
   HomeAssistantError,
   fetchHomeAssistantStates,
@@ -30,21 +24,32 @@ import {
   type HomeAssistantRawState,
 } from './home-assistant.client';
 import { fetchHomeAssistantRegistries, type HomeAssistantRegistries } from './home-assistant.ws';
+import { buildDirectory, type WhitelistIndex } from './smart-home-directory';
+import { domainOf, haDeviceName, stripDeviceName } from './smart-home-devices';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
+
+export { stripDeviceName } from './smart-home-devices';
+export { buildDirectory } from './smart-home-directory';
 
 /** 同一家庭几个人同时打开页面时合并成一次 HA 请求；连不上也缓存这么久，免得连点刷新一直等超时。 */
 const STATES_CACHE_MS = 2_000;
-const PAGE_PATH = '/house/smart-home';
+/** 注册表（设备 / 实体 / 区域）变得很少：状态页、控制、订阅都读它，缓存一分钟。目录每次读新的。 */
+const REGISTRY_CACHE_MS = 60_000;
 
 type Snapshot =
   | { ok: true; states: HomeAssistantRawState[]; checkedAt: Date }
   | { ok: false; configured: boolean; message: string; checkedAt: Date };
 
-/** 这个人能不能控这台：设备开放了控制、这类有动作，且角色够（minRole = member 时全家都行）。 */
-export function canControlDevice(device: SmartHomeDeviceView, role: MemberRole) {
+type RegistryResult = { ok: true; value: HomeAssistantRegistries } | { ok: false; message: string };
+
+/** 这个人能不能控这台：设备开放了控制、主实体这类有动作，且角色够（minRole = member 时全家都行）。 */
+export function canControlDevice(
+  device: Pick<SmartHomeDeviceView, 'controllable' | 'primaryDomain' | 'minRole'>,
+  role: MemberRole,
+) {
   return (
     device.controllable &&
-    smartHomeActionsFor(device.domain).length > 0 &&
+    smartHomeActionsFor(device.primaryDomain).length > 0 &&
     (device.minRole === 'member' || role === 'owner' || role === 'admin')
   );
 }
@@ -53,37 +58,19 @@ export function isReadonlyCover(domain: string, deviceClass: string | null) {
   return domain === 'cover' && (SMART_HOME_READONLY_COVER_CLASSES as readonly string[]).includes(deviceClass ?? '');
 }
 
-function domainOf(entityId: string) {
-  return entityId.slice(0, entityId.indexOf('.'));
-}
-
-function isSupported(domain: string): domain is SmartHomeDomain {
-  return (SMART_HOME_DOMAINS as readonly string[]).includes(domain);
-}
-
 function failureMessage(error: unknown) {
   return error instanceof HomeAssistantError ? error.message : '网络不通，Home Assistant 可能没开';
 }
 
-/**
- * 实体名去掉设备名前缀：HA 给「有实体名」的实体拼 friendly_name 是「设备名 实体名」，
- * 设备卡里已经有设备名了，只显示后半截。要求中间有分隔（空格、横线等），免得「客厅」吃掉「客厅窗帘」。
- */
-export function stripDeviceName(fullName: string, deviceName: string | null) {
-  if (!deviceName || fullName === deviceName || !fullName.startsWith(deviceName)) return fullName;
-  const rest = fullName.slice(deviceName.length);
-  if (!/^[\s\-_·:：]/.test(rest)) return fullName;
-  return rest.replace(/^[\s\-_·:：]+/, '') || fullName;
-}
-
 /** HA 上已经没有这个实体（被删了、改了 ID）时的状态。 */
-const UNAVAILABLE_STATE = {
+const UNAVAILABLE_STATE: SmartHomeEntityState = {
   state: 'unavailable',
   unit: null,
   deviceClass: null,
   position: null,
   battery: null,
   lastChanged: null,
+  lastUpdated: null,
   targetTemperature: null,
   currentTemperature: null,
   hvacModes: null,
@@ -92,85 +79,37 @@ const UNAVAILABLE_STATE = {
   assumed: false,
 };
 
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'zh-CN');
-const isSensor = (domain: string) => domain === 'sensor' || domain === 'binary_sensor';
-
-/** 按设备分组拼目录。registries 为 null（WebSocket 读不到）时退回一组平铺。 */
-export function buildDirectory(
-  states: HomeAssistantRawState[],
-  registries: HomeAssistantRegistries | null,
-  whitelisted: Set<string>,
-): SmartHomeDirectoryDevice[] {
-  const entityRegistry = new Map(registries?.entities.map((entry) => [entry.entity_id, entry]) ?? []);
-  const deviceRegistry = new Map(registries?.devices.map((device) => [device.id, device]) ?? []);
-  const areaNames = new Map(registries?.areas.map((area) => [area.area_id, area.name]) ?? []);
-  const groups = new Map<string | null, SmartHomeDirectoryEntry[]>();
-
-  for (const raw of states) {
-    const domain = domainOf(raw.entity_id);
-    if (!isSupported(domain)) continue;
-    const entry = entityRegistry.get(raw.entity_id);
-    // 在 HA 里停用或隐藏的实体：用户已经表过态了，目录里不列
-    if (entry?.disabled_by || entry?.hidden_by) continue;
-    const device = entry?.device_id ? deviceRegistry.get(entry.device_id) : undefined;
-    // HA 自己的服务型「设备」（Backup、Sun 之类）不是家里的东西
-    if (device?.disabled_by || device?.entry_type === 'service') continue;
-    const deviceName = device ? device.name_by_user || device.name || null : null;
-    const category = entry?.entity_category ?? null;
-    const fullName = friendlyName(raw);
-    const name = stripDeviceName(fullName, deviceName);
-    const item: SmartHomeDirectoryEntry = {
-      entityId: raw.entity_id,
-      domain,
-      name,
-      fullName,
-      state: presentHomeAssistantState(raw),
-      whitelisted: whitelisted.has(raw.entity_id),
-      category,
-      // 先标候选，分完组再按每台设备的名额收紧
-      primary: isPrimarySmartHomeEntity(domain, category, name),
-    };
-    const key = device ? device.id : null;
-    groups.set(key, [...(groups.get(key) ?? []), item]);
-  }
-
-  const result = [...groups.entries()].map(([id, entities]): SmartHomeDirectoryDevice => {
-    const device = id ? deviceRegistry.get(id) : undefined;
-    // 每台设备最多展开 SMART_HOME_PRIMARY_LIMIT 个：可控类优先，剩下的位置给传感器
-    entities
-      .filter((entry) => entry.primary)
-      .sort((a, b) => Number(isSensor(a.domain)) - Number(isSensor(b.domain)) || byName(a, b))
-      .slice(SMART_HOME_PRIMARY_LIMIT)
-      .forEach((entry) => {
-        entry.primary = false;
-      });
-    return {
-      id,
-      name: device ? device.name_by_user || device.name || '未命名设备' : registries ? '没有归属设备的' : '全部实体',
-      area: device?.area_id ? areaNames.get(device.area_id) ?? null : null,
-      manufacturer: device?.manufacturer ?? null,
-      model: device?.model ?? null,
-      // 主实体在前；主实体里设备本体（扫地机、窗帘这类）排在它的传感器前面
-      entities: entities.sort(
-        (a, b) =>
-          Number(b.primary) - Number(a.primary) || Number(isSensor(a.domain)) - Number(isSensor(b.domain)) || byName(a, b),
-      ),
-    };
-  });
-  return result.sort((a, b) => {
-    if ((a.id === null) !== (b.id === null)) return a.id === null ? 1 : -1;
-    if ((a.area === null) !== (b.area === null)) return a.area === null ? 1 : -1;
-    return (a.area ?? '').localeCompare(b.area ?? '', 'zh-CN') || byName(a, b);
-  });
+export function presentSmartHomeDevice(row: SmartHomeDevice): SmartHomeDeviceView {
+  return {
+    id: row.id,
+    haDeviceId: row.haDeviceId,
+    displayName: row.displayName,
+    area: row.area,
+    sortOrder: row.sortOrder,
+    icon: row.icon as SmartHomeIcon,
+    primaryEntityId: row.primaryEntityId,
+    primaryDomain: row.primaryDomain as SmartHomeDomain,
+    featuredEntityIds: row.featuredEntityIds ?? [],
+    hiddenEntityIds: row.hiddenEntityIds ?? [],
+    controllable: row.controllable,
+    minRole: row.minRole,
+    pinnedToToday: row.pinnedToToday,
+    legacy: row.mergeState === 'legacy',
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 /**
- * E1：实体目录、白名单、只读状态。所有对 HA 的调用 3 秒超时，失败只影响这一页（§6.5）。
- * 控制（E2）、webhook（E3）不在这里。
+ * 连接测试、实体目录、白名单（按设备）、状态快照。所有对 HA 的调用 3 秒超时，失败只影响这一页（§6.5）。
+ * 控制（E2）、webhook（E3）不在这里；按实体 → 按设备的归并在 SmartHomeMergeService。
  */
 @Injectable()
 export class SmartHomeService {
   private readonly snapshots = new Map<string, { version: string; at: number; value: Promise<Snapshot> }>();
+  /** 最近一次读成功的状态：HA 连不上时页面按它灰显（redesign §2.4） */
+  private readonly lastGood = new Map<string, { version: string; states: HomeAssistantRawState[]; checkedAt: Date }>();
+  private readonly registryCache = new Map<string, { version: string; at: number; value: Promise<RegistryResult> }>();
 
   constructor(
     @InjectRepository(SmartHomeDevice)
@@ -183,6 +122,13 @@ export class SmartHomeService {
   /** 设置变了就丢掉缓存（版本号本身也会变，这里是为了立刻释放）。 */
   forget(householdId: string) {
     this.snapshots.delete(householdId);
+  }
+
+  /** 连接设置变了：上次的状态、注册表都不作数了。 */
+  forgetAll(householdId: string) {
+    this.snapshots.delete(householdId);
+    this.lastGood.delete(householdId);
+    this.registryCache.delete(householdId);
   }
 
   async test(householdId: string): Promise<SmartHomeConnection> {
@@ -207,50 +153,88 @@ export class SmartHomeService {
   }
 
   async list(householdId: string): Promise<SmartHomeDeviceView[]> {
-    const rows = await this.devices
+    const rows = await this.rows(householdId);
+    return rows.map((row) => presentSmartHomeDevice(row));
+  }
+
+  private rows(householdId: string) {
+    return this.devices
       .createQueryBuilder('device')
       .where('device.householdId = :householdId', { householdId })
       .orderBy('device.area', 'ASC', 'NULLS LAST')
       .addOrderBy('device.sortOrder', 'ASC')
       .addOrderBy('device.displayName', 'ASC')
       .getMany();
-    return rows.map((row) => this.presentDevice(row));
+  }
+
+  async find(householdId: string, id: string) {
+    return this.devices.findOne({ where: { householdId, id } });
   }
 
   async directory(householdId: string): Promise<SmartHomeDirectory> {
     const [snapshot, rows, registries] = await Promise.all([
       this.snapshot(householdId),
-      this.devices.find({ where: { householdId }, select: { entityId: true } }),
-      this.registries(householdId),
+      this.devices.find({ where: { householdId } }),
+      this.registries(householdId, { fresh: true }),
     ]);
     const connection = this.connection(snapshot);
     if (!snapshot.ok) return { connection, grouped: false, groupingMessage: null, devices: [] };
+    const whitelist: WhitelistIndex = {
+      byHaDevice: new Map(rows.filter((row) => row.haDeviceId).map((row) => [row.haDeviceId as string, row.id])),
+      byEntity: new Map(rows.filter((row) => !row.haDeviceId).map((row) => [row.primaryEntityId, row.id])),
+    };
     return {
       connection,
       grouped: registries.ok,
       groupingMessage: registries.ok ? null : `没读到设备信息（${registries.message}），先按实体平铺`,
-      devices: buildDirectory(
-        snapshot.states,
-        registries.ok ? registries.value : null,
-        new Set(rows.map((row) => row.entityId)),
-      ),
+      devices: buildDirectory(snapshot.states, registries.ok ? registries.value : null, whitelist),
     };
   }
 
   async states(householdId: string, role: MemberRole): Promise<SmartHomeStates> {
-    const [snapshot, devices] = await Promise.all([this.snapshot(householdId), this.list(householdId)]);
-    const byId = snapshot.ok ? new Map(snapshot.states.map((raw) => [raw.entity_id, raw])) : null;
+    // 注册表只用来给主面板项起名（去设备名前缀），和读状态并行：HA 不回时总共只等一次超时
+    const [snapshot, rows, registries, { version }] = await Promise.all([
+      this.snapshot(householdId),
+      this.rows(householdId),
+      this.registries(householdId),
+      this.settings.resolve(householdId),
+    ]);
+    const last = this.lastGood.get(householdId);
+    const fallback = !snapshot.ok && snapshot.configured && last?.version === version ? last : null;
+    const states = snapshot.ok ? snapshot.states : fallback?.states ?? null;
+    const byId = states ? new Map(states.map((raw) => [raw.entity_id, raw])) : null;
+    const deviceNames = new Map(
+      registries.ok ? registries.value.devices.map((device) => [device.id, haDeviceName(device)]) : [],
+    );
+    const present = (entityId: string) => {
+      if (!byId) return null;
+      const raw = byId.get(entityId);
+      // HA 上已经没有这个实体（被删了、改了 ID）：按 HA 自己的说法当 unavailable
+      return raw ? presentHomeAssistantState(raw) : { ...UNAVAILABLE_STATE };
+    };
     return {
       connection: this.connection(snapshot),
-      devices: devices.map((device) => {
-        const raw = byId?.get(device.entityId);
-        // HA 上已经没有这个实体（被删了、改了 ID）：按 HA 自己的说法当 unavailable
-        const state = byId
-          ? raw
-            ? presentHomeAssistantState(raw)
-            : { ...UNAVAILABLE_STATE }
-          : null;
-        return { ...device, state, canControl: canControlDevice(device, role) };
+      stale: Boolean(fallback),
+      asOf: snapshot.ok ? snapshot.checkedAt.toISOString() : fallback?.checkedAt.toISOString() ?? null,
+      devices: rows.map((row) => {
+        const device = presentSmartHomeDevice(row);
+        const primary = present(row.primaryEntityId);
+        const deviceName = row.haDeviceId ? deviceNames.get(row.haDeviceId) ?? null : null;
+        return {
+          ...device,
+          primary,
+          featured: device.featuredEntityIds.map((entityId) => {
+            const raw = byId?.get(entityId);
+            return {
+              entityId,
+              domain: domainOf(entityId),
+              name: raw ? stripDeviceName(friendlyName(raw), deviceName ?? row.displayName) : entityId,
+              state: present(entityId),
+            };
+          }),
+          online: Boolean(primary && primary.state !== 'unavailable'),
+          canControl: canControlDevice(device, role),
+        };
       }),
     };
   }
@@ -263,90 +247,63 @@ export class SmartHomeService {
     return raw ? presentHomeAssistantState(raw) : null;
   }
 
-  async upsert(entityId: string, input: UpsertSmartHomeDeviceBody, user: JwtUser) {
-    const domain = domainOf(entityId);
-    if ((SMART_HOME_BLOCKED_DOMAINS as readonly string[]).includes(domain)) {
-      throw new BadRequestException('门锁和安防不接进小管家');
-    }
-    if (!isSupported(domain)) {
-      throw new BadRequestException('这类实体第一期还不支持');
-    }
-    if (input.controllable) {
-      if (!smartHomeActionsFor(domain).length) {
-        throw new BadRequestException('这类设备只能看，不能在小管家里控制');
-      }
-      const state = await this.currentState(user.householdId, entityId);
-      if (isReadonlyCover(domain, state?.deviceClass ?? null)) {
-        throw new BadRequestException('车库门、大门这类只读，不能在小管家里控制');
+  /** 这台设备现在能引用哪些子实体：HA 注册表里它名下的（能读到时），加上库里记着的。 */
+  async entitiesOf(row: SmartHomeDevice) {
+    const ids = new Set([row.primaryEntityId, ...(row.featuredEntityIds ?? []), ...(row.knownEntityIds ?? [])]);
+    if (row.haDeviceId) {
+      const registries = await this.registries(row.householdId);
+      if (registries.ok) {
+        for (const entry of registries.value.entities) {
+          if (entry.device_id === row.haDeviceId && !entry.disabled_by) ids.add(entry.entity_id);
+        }
       }
     }
-    const saved = await this.dataSource.transaction(async (manager) => {
-      const repository = manager.getRepository(SmartHomeDevice);
-      const existing = await repository.findOne({ where: { householdId: user.householdId, entityId } });
-      const row =
-        existing ??
-        repository.create({
-          householdId: user.householdId,
-          entityId,
-          domain,
-          sortOrder: await repository.count({ where: { householdId: user.householdId } }),
-        });
-      row.displayName = input.displayName;
-      if (input.area !== undefined) row.area = input.area?.trim() || null;
-      if (input.sortOrder !== undefined) row.sortOrder = input.sortOrder;
-      if (input.minRole !== undefined) row.minRole = input.minRole;
-      if (input.controllable !== undefined) row.controllable = input.controllable;
-      const result = await repository.save(row);
-      await recordActivity(manager, user, {
-        module: 'system',
-        action: existing ? 'smart_home_device_updated' : 'smart_home_device_added',
-        summary: existing ? `改了智能家居设备「${result.displayName}」` : `把「${result.displayName}」加进了智能家居`,
-        targetPath: PAGE_PATH,
-        metadata: { entityId },
-      });
-      return result;
-    });
-    return this.presentDevice(saved);
+    return ids;
   }
 
-  async remove(entityId: string, user: JwtUser) {
-    await this.dataSource.transaction(async (manager) => {
-      const repository = manager.getRepository(SmartHomeDevice);
-      const existing = await repository.findOne({ where: { householdId: user.householdId, entityId } });
-      if (!existing) throw new NotFoundException('白名单里没有这个设备');
-      await repository.delete(existing.id);
-      await recordActivity(manager, user, {
-        module: 'system',
-        action: 'smart_home_device_removed',
-        summary: `把「${existing.displayName}」移出了智能家居`,
-        targetPath: PAGE_PATH,
-        metadata: { entityId },
-      });
-    });
-    return { entityId };
+  async mergeReport(householdId: string): Promise<SmartHomeMergeReport | null> {
+    const row = await this.dataSource.getRepository(SmartHomeMergeReportRecord).findOne({ where: { householdId } });
+    return (row?.report as SmartHomeMergeReport | undefined) ?? null;
   }
 
-  /** 设备 / 实体 / 区域注册表（WebSocket）。目录是管理员偶尔打开的，不缓存。 */
-  private async registries(
-    householdId: string,
-  ): Promise<{ ok: true; value: HomeAssistantRegistries } | { ok: false; message: string }> {
-    const { target } = await this.settings.resolve(householdId);
+  /** 实时订阅要盯的实体：白名单设备名下的全部子实体（详情面板开着也要能实时变），读不到注册表时退回库里记着的。 */
+  async watchedEntityIds(householdId: string) {
+    const rows = await this.devices.find({ where: { householdId } });
+    const ids = new Set<string>();
+    for (const row of rows) for (const entityId of await this.entitiesOf(row)) ids.add(entityId);
+    return ids;
+  }
+
+  /** 设备 / 实体 / 区域注册表（WebSocket）。fresh 时不走缓存（目录、加设备、归并）。 */
+  async registries(householdId: string, { fresh = false }: { fresh?: boolean } = {}): Promise<RegistryResult> {
+    const { target, version } = await this.settings.resolve(householdId);
     if (!target) return { ok: false, message: '还没连上 Home Assistant' };
-    try {
-      return { ok: true, value: await fetchHomeAssistantRegistries(target) };
-    } catch (error) {
-      return { ok: false, message: failureMessage(error) };
-    }
+    const cached = this.registryCache.get(householdId);
+    const now = Date.now();
+    if (!fresh && cached && cached.version === version && now - cached.at < REGISTRY_CACHE_MS) return cached.value;
+    const value: Promise<RegistryResult> = fetchHomeAssistantRegistries(target).then(
+      (registries): RegistryResult => ({ ok: true, value: registries }),
+      (error): RegistryResult => ({ ok: false, message: failureMessage(error) }),
+    );
+    this.registryCache.set(householdId, { version, at: now, value });
+    const result = await value;
+    // 失败的别缓存一分钟：下一次立刻重试
+    if (!result.ok) this.registryCache.delete(householdId);
+    return result;
   }
 
-  private async snapshot(householdId: string): Promise<Snapshot> {
+  async snapshot(householdId: string): Promise<Snapshot> {
     const { target, version } = await this.settings.resolve(householdId);
     const cached = this.snapshots.get(householdId);
     const now = Date.now();
     if (cached && cached.version === version && now - cached.at < STATES_CACHE_MS) return cached.value;
     const value: Promise<Snapshot> = target
       ? fetchHomeAssistantStates(target).then(
-          (states): Snapshot => ({ ok: true, states, checkedAt: this.clock.now() }),
+          (states): Snapshot => {
+            const checkedAt = this.clock.now();
+            this.lastGood.set(householdId, { version, states, checkedAt });
+            return { ok: true, states, checkedAt };
+          },
           (error): Snapshot => ({ ok: false, configured: true, message: failureMessage(error), checkedAt: this.clock.now() }),
         )
       : Promise.resolve({ ok: false, configured: false, message: '还没连上 Home Assistant', checkedAt: this.clock.now() });
@@ -364,20 +321,5 @@ export class SmartHomeService {
           message: snapshot.message,
           version: null,
         };
-  }
-
-  private presentDevice(row: SmartHomeDevice): SmartHomeDeviceView {
-    return {
-      entityId: row.entityId,
-      domain: row.domain as SmartHomeDomain,
-      displayName: row.displayName,
-      area: row.area,
-      sortOrder: row.sortOrder,
-      controllable: row.controllable,
-      minRole: row.minRole,
-      pinnedToToday: row.pinnedToToday,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    };
   }
 }

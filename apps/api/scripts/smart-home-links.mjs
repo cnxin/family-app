@@ -66,34 +66,40 @@ try {
     request(`/tasks/${taskId}/instances/${today}`, token, 'PATCH', { status });
 
   await request('/smart-home/connector-settings', owner, 'PUT', { baseUrl: ha.url, credential: TOKEN });
-  await request('/smart-home/devices/vacuum.roborock_s8', owner, 'PUT', { displayName: '扫地机', controllable: true });
-  await request('/smart-home/devices/scene.movie_night', owner, 'PUT', { displayName: '电影之夜', controllable: true });
-  await request('/smart-home/devices/cover.living_room_curtain', owner, 'PUT', { displayName: '客厅窗帘' });
+  const add = async (body, patch) => {
+    const id = (await request('/smart-home/devices', owner, 'POST', body)).body.data.id;
+    await request(`/smart-home/devices/${id}`, owner, 'PATCH', patch);
+    return id;
+  };
+  const vacuumId = await add({ haDeviceId: 'dev_roborock' }, { displayName: '扫地机', controllable: true });
+  const sceneId = await add({ entityId: 'scene.movie_night' }, { displayName: '电影之夜', controllable: true });
+  const curtainId = await add({ haDeviceId: 'dev_curtain' }, { displayName: '客厅窗帘' });
 
   console.log('1. 规则校验与权限');
   const link = (body) => request('/smart-home/links', owner, 'POST', body);
   const invalid = await Promise.all([
-    link({ name: '窗帘', trigger: 'task_done', keyword: '打扫', targetEntityId: 'cover.living_room_curtain', action: 'close' }),
-    link({ name: '不在白名单', trigger: 'task_done', keyword: '打扫', targetEntityId: 'switch.nope', action: 'turn_on' }),
-    link({ name: '动作不对', trigger: 'task_done', keyword: '打扫', targetEntityId: 'vacuum.roborock_s8', action: 'open' }),
-    link({ name: '', trigger: 'task_done', keyword: '打扫', targetEntityId: 'vacuum.roborock_s8', action: 'start' }),
-    link({ name: '提前太多', trigger: 'calendar_before', keyword: '电影', offsetMinutes: 721, targetEntityId: 'scene.movie_night', action: 'activate' }),
+    link({ name: '窗帘', trigger: 'task_done', keyword: '打扫', targetDeviceId: curtainId, action: 'close' }),
+    link({ name: '不在白名单', trigger: 'task_done', keyword: '打扫', targetDeviceId: randomUUID(), action: 'turn_on' }),
+    link({ name: '动作不对', trigger: 'task_done', keyword: '打扫', targetDeviceId: vacuumId, action: 'open' }),
+    link({ name: '', trigger: 'task_done', keyword: '打扫', targetDeviceId: vacuumId, action: 'start' }),
+    link({ name: '提前太多', trigger: 'calendar_before', keyword: '电影', offsetMinutes: 721, targetDeviceId: sceneId, action: 'activate' }),
+    link({ name: '旧写法', trigger: 'task_done', keyword: '打扫', targetEntityId: 'vacuum.roborock_s8', action: 'start' }),
   ]);
   const memberCreate = await request('/smart-home/links', member, 'POST', {
-    name: '打扫就扫地', trigger: 'task_done', keyword: '打扫', targetEntityId: 'vacuum.roborock_s8', action: 'start',
+    name: '打扫就扫地', trigger: 'task_done', keyword: '打扫', targetDeviceId: vacuumId, action: 'start',
   });
   assert(
     invalid.every((one) => one.status === 400) && memberCreate.status === 403,
-    '目标没开放控制 / 不在白名单 / 动作不对 / 没名字 / 提前超过 12 小时都 400；成员不能建联动',
+    '目标没开放控制 / 不在白名单 / 动作不对 / 没名字 / 提前超过 12 小时 / 还按实体 ID 指目标都 400；成员不能建联动',
   );
-  const sweep = await link({ name: '打扫就扫地', trigger: 'task_done', keyword: '打扫', targetEntityId: 'vacuum.roborock_s8', action: 'start' });
+  const sweep = await link({ name: '打扫就扫地', trigger: 'task_done', keyword: '打扫', targetDeviceId: vacuumId, action: 'start' });
   const movie = await link({
-    name: '电影夜', trigger: 'calendar_before', keyword: '电影', offsetMinutes: 5, targetEntityId: 'scene.movie_night', action: 'activate',
+    name: '电影夜', trigger: 'calendar_before', keyword: '电影', offsetMinutes: 5, targetDeviceId: sceneId, action: 'activate',
   });
-  const selfLoop = await link({ name: '扫地就扫地', trigger: 'task_done', keyword: '扫地', targetEntityId: 'vacuum.roborock_s8', action: 'return_to_base' });
+  const selfLoop = await link({ name: '扫地就扫地', trigger: 'task_done', keyword: '扫地', targetDeviceId: vacuumId, action: 'return_to_base' });
   assert(
     sweep.status === 201 && sweep.body.data.offsetMinutes === 0 && movie.status === 201 && movie.body.data.offsetMinutes === 5 &&
-      selfLoop.status === 201,
+      selfLoop.status === 201 && sweep.body.data.targetDeviceId === vacuumId && sweep.body.data.targetEntityId === 'vacuum.roborock_s8',
     '建了三条：打扫 → 扫地机开扫、电影开始前 5 分钟 → 电影之夜场景、扫地 → 扫地机回充',
   );
 
@@ -209,7 +215,12 @@ try {
   assert(reminder.status === 201 && reminded, 'HA 停掉：日历提醒照常发到妈妈那里');
   assert(haDownRun, '同一场日程的联动这次记失败，不影响提醒');
 
-  console.log('7. 删除');
+  console.log('7. 被联动引用的设备、删除');
+  const blockedRemove = await request(`/smart-home/devices/${sceneId}`, owner, 'DELETE');
+  assert(
+    blockedRemove.status === 409 && blockedRemove.body.error.message.includes('电影夜'),
+    '还有联动在用的设备移不出白名单，说清是哪条（不级联删除，免得联动悄悄失效）',
+  );
   const removed = await request(`/smart-home/links/${movie.body.data.id}`, owner, 'DELETE');
   const again = await request(`/smart-home/links/${movie.body.data.id}`, owner, 'DELETE');
   const runsLeft = await db.query(`SELECT count(*)::int AS n FROM smart_home_link_runs WHERE "linkId" = $1`, [movie.body.data.id]);

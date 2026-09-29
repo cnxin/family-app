@@ -14,8 +14,9 @@ import type {
   SmartHomeWebhookEventRecord,
   SmartHomeWebhookSecret,
   SmartHomeWebhookSettings,
+  AddSmartHomeDeviceBody,
   UpdateSmartHomeConnectorBody,
-  UpsertSmartHomeDeviceBody,
+  UpdateSmartHomeDeviceBody,
 } from '@family/contracts';
 import { api } from '../api';
 import { invalidateModules } from './modules';
@@ -92,24 +93,29 @@ export function useTestSmartHomeConnector() {
   );
 }
 
-export function useUpsertSmartHomeDevice() {
-  return useSmartHomeMutation(({ entityId, body }: { entityId: string; body: UpsertSmartHomeDeviceBody }) =>
-    api<SmartHomeDevice>(`/smart-home/devices/${encodeURIComponent(entityId)}`, { method: 'PUT', body }),
+/** 目录里「加进来」：整台 HA 设备（或一个没有归属设备的实体），默认搭配由服务端算。 */
+export function useAddSmartHomeDevice() {
+  return useSmartHomeMutation((body: AddSmartHomeDeviceBody) =>
+    api<SmartHomeDevice>('/smart-home/devices', { method: 'POST', body }),
+  );
+}
+
+export function useUpdateSmartHomeDevice() {
+  return useSmartHomeMutation(({ id, body }: { id: string; body: UpdateSmartHomeDeviceBody }) =>
+    api<SmartHomeDevice>(`/smart-home/devices/${id}`, { method: 'PATCH', body }),
   );
 }
 
 export function useRemoveSmartHomeDevice() {
-  return useSmartHomeMutation((entityId: string) =>
-    api<{ entityId: string }>(`/smart-home/devices/${encodeURIComponent(entityId)}`, { method: 'DELETE' }),
-  );
+  return useSmartHomeMutation((id: string) => api<{ id: string }>(`/smart-home/devices/${id}`, { method: 'DELETE' }));
 }
 
 /** E2 控制。requestId 是这一次点击的幂等键：网络重发不会让 HA 执行两次。失败的提示由全局 mutation 错误处理弹。 */
 export function useSmartHomeCommand() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ entityId, action }: { entityId: string; action: SmartHomeAction }) =>
-      api<SmartHomeCommand>(`/smart-home/devices/${encodeURIComponent(entityId)}/command`, {
+    mutationFn: ({ deviceId, action }: { deviceId: string; action: SmartHomeAction }) =>
+      api<SmartHomeCommand>(`/smart-home/devices/${deviceId}/command`, {
         method: 'POST',
         body: { action, requestId: crypto.randomUUID() },
       }),

@@ -14,12 +14,12 @@ function confirmHaptic() {
  */
 export function SmartHomeControls({ device }: { device: SmartHomeDeviceWithState }) {
   const command = useSmartHomeCommand();
-  const buttons = smartHomeButtons(device.domain, device.state);
-  if (!device.canControl || !buttons.length || !device.state || device.state.state === 'unavailable') return null;
+  const buttons = smartHomeButtons(device.primaryDomain, device.primary);
+  if (!device.canControl || !buttons.length || !device.primary || device.primary.state === 'unavailable') return null;
   const pendingAction = command.isPending ? command.variables?.action : null;
 
   const run = (action: SmartHomeAction) =>
-    command.mutate({ entityId: device.entityId, action }, { onSuccess: () => confirmHaptic() });
+    command.mutate({ deviceId: device.id, action }, { onSuccess: () => confirmHaptic() });
 
   return (
     <div role="group" aria-label={`控制${device.displayName}`} className="flex shrink-0 flex-wrap justify-end gap-1.5">

@@ -14,7 +14,7 @@ const STATUS: Record<'pending' | 'succeeded' | 'failed', [string, string]> = {
 export function SmartHomeCommandsPanel() {
   const commands = useSmartHomeCommands(true);
   const devices = useSmartHomeDevices();
-  const names = new Map(devices.data?.map((device) => [device.entityId, device.displayName]) ?? []);
+  const names = new Map(devices.data?.map((device) => [device.id, device.displayName]) ?? []);
   const time = new Intl.DateTimeFormat('zh-CN', {
     month: 'numeric',
     day: 'numeric',
@@ -34,7 +34,7 @@ export function SmartHomeCommandsPanel() {
                 <li key={entry.id} className="flex items-start gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm">
-                      {entry.memberName} · {names.get(entry.entityId) ?? entry.entityId} · {SMART_HOME_ACTION_LABELS[entry.action]}
+                      {entry.memberName} · {(entry.deviceId && names.get(entry.deviceId)) || entry.entityId} · {SMART_HOME_ACTION_LABELS[entry.action]}
                     </span>
                     {entry.status === 'failed' && entry.message ? (
                       <span className="block truncate text-[12px] text-danger">{entry.message}</span>

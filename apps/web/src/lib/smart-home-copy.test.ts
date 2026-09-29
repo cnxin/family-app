@@ -10,6 +10,7 @@ function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartH
     position: null,
     battery: null,
     lastChanged: null,
+    lastUpdated: null,
     targetTemperature: null,
     currentTemperature: null,
     hvacModes: null,

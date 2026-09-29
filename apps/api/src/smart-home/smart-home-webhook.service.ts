@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { QueryFailedError, Repository } from 'typeorm';
@@ -25,6 +25,7 @@ import {
 import { SmartHomeEventRecord, SmartHomeWebhookSettings } from '../entities';
 import { EventBus } from '../events/event-bus';
 import { SmartHomeLinkagesService } from './smart-home-linkages.service';
+import { SmartHomeService } from './smart-home.service';
 
 const SCOPE = 'webhook:home_assistant';
 const SETTINGS_PATH = '/house/smart-home/settings';
@@ -61,6 +62,7 @@ export class SmartHomeWebhookService {
     private readonly clock: Clock,
     private readonly bus: EventBus,
     private readonly linkages: SmartHomeLinkagesService,
+    private readonly smartHome: SmartHomeService,
   ) {}
 
   async view(householdId: string): Promise<SmartHomeWebhookSettingsView> {
@@ -93,6 +95,16 @@ export class SmartHomeWebhookService {
   }
 
   async updateRules(rules: SmartHomeRules, user: JwtUser) {
+    // 触发实体按「设备 + 它的某个子实体」引用（redesign §4.2）：设备得在这家的白名单里，实体得是它名下的
+    const refs = [rules.laundry.washer, rules.laundry.dryer, rules.vacuum.trigger, rules.filter.trigger];
+    for (const ref of refs) {
+      if (!ref) continue;
+      const device = await this.smartHome.find(user.householdId, ref.deviceId);
+      if (!device) throw new BadRequestException('触发设备不在白名单里');
+      if (!(await this.smartHome.entitiesOf(device)).has(ref.entityId)) {
+        throw new BadRequestException(`「${device.displayName}」名下没有 ${ref.entityId}`);
+      }
+    }
     const row =
       (await this.settings.findOne({ where: { householdId: user.householdId } })) ??
       this.settings.create({ householdId: user.householdId });

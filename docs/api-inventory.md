@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 293 个端点（POST 118 / GET 95 / PATCH 43 / DELETE 27 / PUT 10），公开端点 28 个，已定义契约 293 个。
+共 295 个端点（POST 119 / GET 96 / PATCH 44 / DELETE 27 / PUT 9），公开端点 28 个，已定义契约 295 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -29,7 +29,7 @@
 | recipes | 7 | 7 |
 | reminders | 5 | 5 |
 | shopping | 5 | 5 |
-| smart-home | 20 | 20 |
+| smart-home | 22 | 22 |
 | system | 10 | 10 |
 | tasks | 5 | 5 |
 | today | 1 | 1 |
@@ -376,7 +376,7 @@
 | GET | `/shopping-list` | `ShoppingController.list` | 登录 | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 | POST | `/shopping-list/generate` | `ShoppingController.generate` | `manage_shopping` | ✓ | `apps/api/src/shopping/shopping.module.ts` |
 
-## smart-home（20）
+## smart-home（22）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -386,9 +386,11 @@
 | DELETE | `/smart-home/connector-settings` | `SmartHomeController.resetConnectorSettings` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | POST | `/smart-home/connector-settings/test` | `SmartHomeController.testConnectorSettings` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/devices` | `SmartHomeController.devices` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
-| PUT | `/smart-home/devices/:entityId` | `SmartHomeController.upsertDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
-| DELETE | `/smart-home/devices/:entityId` | `SmartHomeController.removeDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
-| POST | `/smart-home/devices/:entityId/command` | `SmartHomeController.command` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| POST | `/smart-home/devices` | `SmartHomeController.addDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| PATCH | `/smart-home/devices/:id` | `SmartHomeController.updateDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| DELETE | `/smart-home/devices/:id` | `SmartHomeController.removeDevice` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| POST | `/smart-home/devices/:id/command` | `SmartHomeController.command` | 登录 | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
+| GET | `/smart-home/devices/merge-report` | `SmartHomeController.mergeReport` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/entity-directory` | `SmartHomeController.entityDirectory` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | GET | `/smart-home/links` | `SmartHomeLinksController.list` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |
 | POST | `/smart-home/links` | `SmartHomeLinksController.create` | `manage_integrations` | ✓ | `apps/api/src/smart-home/smart-home.module.ts` |

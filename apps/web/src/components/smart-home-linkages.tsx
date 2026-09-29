@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SmartHomeRules, SmartHomeWebhookSecret, SmartHomeWebhookSettings } from '@family/contracts';
+import type { SmartHomeEntityRef, SmartHomeRules, SmartHomeWebhookSecret, SmartHomeWebhookSettings } from '@family/contracts';
 import {
   useRotateSmartHomeWebhook,
   useSmartHomeStates,
@@ -19,6 +19,10 @@ import { Button, EmptyState, Input, Panel, selectClass } from './ui';
 
 const time = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 
+type EntityOption = { ref: SmartHomeEntityRef; label: string };
+const refKey = (ref: SmartHomeEntityRef | null) => (ref ? `${ref.deviceId} ${ref.entityId}` : '');
+
+/** 触发实体 = 白名单设备 + 它的主实体或主面板项（R1 起按设备引用）。 */
 function EntitySelect({
   label,
   value,
@@ -26,22 +30,22 @@ function EntitySelect({
   onChange,
 }: {
   label: string;
-  value: string | null;
-  options: { entityId: string; displayName: string }[];
-  onChange: (value: string | null) => void;
+  value: SmartHomeEntityRef | null;
+  options: EntityOption[];
+  onChange: (value: SmartHomeEntityRef | null) => void;
 }) {
   return (
     <Field label={label}>
       <select
         aria-label={label}
         className={`${selectClass} min-h-11 w-full`}
-        value={value ?? ''}
-        onChange={(event) => onChange(event.target.value || null)}
+        value={refKey(value)}
+        onChange={(event) => onChange(options.find((option) => refKey(option.ref) === event.target.value)?.ref ?? null)}
       >
         <option value="">不设（这一项不生成自动化）</option>
         {options.map((option) => (
-          <option key={option.entityId} value={option.entityId}>
-            {option.displayName}（{option.entityId}）
+          <option key={refKey(option.ref)} value={refKey(option.ref)}>
+            {option.label}（{option.ref.entityId}）
           </option>
         ))}
       </select>
@@ -54,8 +58,15 @@ function RulesCard({ settings }: { settings: SmartHomeWebhookSettings }) {
   const save = useUpdateSmartHomeRules();
   const [rules, setRules] = useState<SmartHomeRules>(settings.rules);
   const devices = states.data?.devices ?? [];
-  const pick = (domains: string[]) =>
-    devices.filter((device) => domains.includes(device.domain)).map(({ entityId, displayName }) => ({ entityId, displayName }));
+  const pick = (domains: string[]): EntityOption[] =>
+    devices.flatMap((device) => [
+      ...(domains.includes(device.primaryDomain)
+        ? [{ ref: { deviceId: device.id, entityId: device.primaryEntityId }, label: device.displayName }]
+        : []),
+      ...device.featured
+        .filter((entity) => domains.includes(entity.domain))
+        .map((entity) => ({ ref: { deviceId: device.id, entityId: entity.entityId }, label: `${device.displayName} · ${entity.name}` })),
+    ]);
   const dirty = JSON.stringify(rules) !== JSON.stringify(settings.rules);
   const patch = <K extends keyof SmartHomeRules>(key: K, next: Partial<SmartHomeRules[K]>) =>
     setRules((current) => ({ ...current, [key]: { ...current[key], ...next } }));
@@ -64,7 +75,7 @@ function RulesCard({ settings }: { settings: SmartHomeWebhookSettings }) {
     <Panel title="三条联动" grow={false}>
       <div className="flex flex-col gap-4 px-3.5 py-3">
         <p className="text-[12px] leading-relaxed text-ink-soft">
-          触发实体从「家里人能看到的设备」里选；先在「连接与设备」把洗衣机 / 烘干机的完成状态、扫地机、滤芯寿命加进来。
+          触发实体从「家里人能看到的设备」里选（设备本身，或它的主面板项）；先在「连接与设备」把洗衣机 / 烘干机、扫地机、净水器加进来。
         </p>
 
         <section data-smart-home-rule="laundry" className="flex flex-col gap-2">
@@ -76,15 +87,15 @@ function RulesCard({ settings }: { settings: SmartHomeWebhookSettings }) {
           <div className="grid gap-2 sm:grid-cols-2">
             <EntitySelect
               label="洗衣机完成看哪个"
-              value={rules.laundry.washerEntityId}
+              value={rules.laundry.washer}
               options={pick(['binary_sensor', 'sensor', 'select'])}
-              onChange={(value) => patch('laundry', { washerEntityId: value })}
+              onChange={(value) => patch('laundry', { washer: value })}
             />
             <EntitySelect
               label="烘干机完成看哪个"
-              value={rules.laundry.dryerEntityId}
+              value={rules.laundry.dryer}
               options={pick(['binary_sensor', 'sensor', 'select'])}
-              onChange={(value) => patch('laundry', { dryerEntityId: value })}
+              onChange={(value) => patch('laundry', { dryer: value })}
             />
           </div>
           <Field label="完成时显示的状态（文字状态才要填；运行中 → 停止、剩余时间归零不用填）">
@@ -106,9 +117,9 @@ function RulesCard({ settings }: { settings: SmartHomeWebhookSettings }) {
           />
           <EntitySelect
             label="扫地机"
-            value={rules.vacuum.entityId}
+            value={rules.vacuum.trigger}
             options={pick(['vacuum'])}
-            onChange={(value) => patch('vacuum', { entityId: value })}
+            onChange={(value) => patch('vacuum', { trigger: value })}
           />
         </section>
 
@@ -121,9 +132,9 @@ function RulesCard({ settings }: { settings: SmartHomeWebhookSettings }) {
           <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
             <EntitySelect
               label="滤芯寿命"
-              value={rules.filter.entityId}
+              value={rules.filter.trigger}
               options={pick(['sensor'])}
-              onChange={(value) => patch('filter', { entityId: value })}
+              onChange={(value) => patch('filter', { trigger: value })}
             />
             <Field label="低于多少算低（%）">
               <Input
@@ -195,10 +206,12 @@ function WebhookCard({ settings }: { settings: SmartHomeWebhookSettings }) {
   const states = useSmartHomeStates();
   const [issued, setIssued] = useState<SmartHomeWebhookSecret | null>(null);
   const [origin, setOrigin] = useState(window.location.origin);
-  const entities = (states.data?.devices ?? []).map((device) => ({
-    entityId: device.entityId,
-    numeric: device.state != null && device.state.state.trim() !== '' && Number.isFinite(Number(device.state.state)),
-  }));
+  const isNumeric = (state: { state: string } | null) =>
+    state != null && state.state.trim() !== '' && Number.isFinite(Number(state.state));
+  const entities = (states.data?.devices ?? []).flatMap((device) => [
+    { entityId: device.primaryEntityId, numeric: isNumeric(device.primary) },
+    ...device.featured.map((entity) => ({ entityId: entity.entityId, numeric: isNumeric(entity.state) })),
+  ]);
 
   return (
     <Panel title="Home Assistant 回调" grow={false}>
