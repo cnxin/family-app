@@ -12,6 +12,7 @@ import {
 import { numericString } from './dishes';
 import { inventoryItemSchema, inventoryTransactionRecordSchema } from './inventory';
 import { shoppingItemRecordSchema } from './shopping';
+import { setLocationBody } from './locations';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/assets/assets.module.ts 与 docs/m5-home-assets-acceptance.md
@@ -66,7 +67,10 @@ export const homeAssetRecordSchema = z.object({
   householdId: uuid,
   name: z.string(),
   category: assetCategory,
+  /** 旧的自由文本；有 locationId 时不再显示，「整理到位置」后清空 */
   location: z.string().nullable(),
+  /** I1：位置字典里的位置 */
+  locationId: uuid.nullable(),
   brand: z.string().nullable(),
   model: z.string().nullable(),
   serialNumber: z.string().nullable(),
@@ -262,6 +266,8 @@ export const createAssetBody = z.object({
   name: z.string().min(1).max(120),
   category: assetCategory,
   location: z.string().max(80).nullish(),
+  /** I1：位置字典里的位置；给了非空值时旧文本一并清掉 */
+  locationId: uuid.nullish(),
   brand: z.string().max(80).nullish(),
   model: z.string().max(120).nullish(),
   serialNumber: z.string().max(120).nullish(),
@@ -353,6 +359,14 @@ export const assets = {
     summary: '修改资产或退役（退役会取消维护提醒）',
     params: idParams,
     body: updateAssetBody,
+    response: homeAssetSchema,
+  }),
+  setLocation: defineEndpoint({
+    method: 'PATCH',
+    path: '/assets/:id/location',
+    summary: '一跳改资产位置（「整理到位置」也走它，会清掉旧文本）',
+    params: idParams,
+    body: setLocationBody,
     response: homeAssetSchema,
   }),
   renew: defineEndpoint({

@@ -13,6 +13,7 @@ import {
   Patch,
   Post,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { Type } from 'class-transformer';
@@ -47,6 +48,7 @@ import {
   InventoryBatchesService,
 } from './inventory-batches.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
+import { usableLocationId } from '../locations/location-refs';
 import { isUniqueViolation } from '@family/shared';
 
 const INVENTORY_CATEGORIES: InventoryCategory[] = [
@@ -88,6 +90,11 @@ class CreateInventoryItemDto {
   @IsNumber()
   @Min(0.01)
   restockQuantity: number;
+
+  /** I1：默认位置 / 放哪儿；不填不拦 */
+  @IsOptional()
+  @IsUUID()
+  defaultLocationId?: string | null;
 }
 
 class UpdateInventoryItemDto {
@@ -130,6 +137,11 @@ class UpdateInventoryItemDto {
   @IsString()
   @MaxLength(120)
   idempotencyKey?: string;
+
+  /** I1：默认位置 / 放哪儿；不填不拦 */
+  @IsOptional()
+  @IsUUID()
+  defaultLocationId?: string | null;
 }
 
 class InventoryTransactionsQueryDto {
@@ -196,6 +208,11 @@ class CreateInventoryBatchDto extends BatchDatesDto {
   @IsNotEmpty()
   @MaxLength(120)
   idempotencyKey: string;
+
+  /** I1：默认位置 / 放哪儿；不填不拦 */
+  @IsOptional()
+  @IsUUID()
+  locationId?: string | null;
 }
 
 class UpdateInventoryBatchDto extends BatchDatesDto {
@@ -219,6 +236,17 @@ class ConfirmShoppingReceiptDto {
   @ValidateNested()
   @Type(() => BatchDatesDto)
   batch?: BatchDatesDto;
+
+  /** I1：默认位置 / 放哪儿；不填不拦 */
+  @IsOptional()
+  @IsUUID()
+  locationId?: string | null;
+}
+
+class SetLocationDto {
+  @IsOptional()
+  @IsUUID()
+  locationId: string | null;
 }
 
 @Injectable()
@@ -271,9 +299,11 @@ export class InventoryService {
             throw new ConflictException('这个食材和单位已经关联了库存');
           }
         }
+        const defaultLocationId = (await usableLocationId(manager, user.householdId, dto.defaultLocationId)) ?? null;
         const item = await items.save(
           items.create({
             householdId: user.householdId,
+            defaultLocationId,
             ingredientId: dto.ingredientId ?? null,
             name,
             category: dto.category,
@@ -326,6 +356,10 @@ export class InventoryService {
           .getOne();
         if (!item) throw new NotFoundException('库存项不存在');
 
+        if (dto.defaultLocationId !== undefined) {
+          item.defaultLocationId = (await usableLocationId(manager, user.householdId, dto.defaultLocationId)) ?? null;
+          await items.update({ id: item.id }, { defaultLocationId: item.defaultLocationId });
+        }
         const quantityBefore = Number(item.quantity);
         const quantityAfter = dto.quantity ?? quantityBefore;
         const quantityChanged = quantityAfter !== quantityBefore;
@@ -551,6 +585,16 @@ export class InventoryController {
     return this.batchesService.update(id, dto, user);
   }
 
+  @Patch('inventory-batches/:id/location')
+  @RequireCapabilities('manage_inventory')
+  setBatchLocation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetLocationDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.batchesService.setLocation(id, dto.locationId ?? null, user);
+  }
+
   @Get('shopping-items/:id/inventory-preview')
   shoppingPreview(
     @Param('id') id: string,
@@ -576,6 +620,7 @@ export class InventoryController {
       dto.inventoryItemId,
       dto.batch,
       user,
+      dto.locationId,
     );
   }
 

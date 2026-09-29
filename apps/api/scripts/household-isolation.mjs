@@ -70,6 +70,7 @@ const ids = {
   reminderRecipient: randomUUID(),
   shoppingItem: randomUUID(),
   inventoryItem: randomUUID(),
+  location: randomUUID(),
   mediaTitle: randomUUID(),
   mediaExternalRef: randomUUID(),
   householdMedia: randomUUID(),
@@ -236,6 +237,10 @@ try {
   await db.query(
     'INSERT INTO inventory_items (id, "householdId", name, category) VALUES ($1, $2, $3, $4)',
     [ids.inventoryItem, ids.household, '隔离测试库存', '其他'],
+  );
+  await db.query(
+    `INSERT INTO storage_locations (id, "householdId", "parentId", kind, name) VALUES ($1, $2, NULL, 'room', $3)`,
+    [ids.location, ids.household, '隔离测试位置'],
   );
   await db.query(
     `INSERT INTO media_titles
@@ -710,6 +715,25 @@ try {
   );
   assert(crossInventory.status === 404, '不能更新其他家庭库存');
 
+  // I1：位置字典按家庭隔离——看不到、搜不到、改不了、也不能拿来当自家东西的位置
+  const ownItem = await request('/inventory-items', defaultToken, 'POST', {
+    name: `隔离位置测试-${ids.location.slice(0, 6)}`, category: '其他', quantity: 0, unit: '个', lowStockThreshold: 0, restockQuantity: 1,
+  });
+  const defaultInventoryItemId = ownItem.body.data.id;
+  const [ownLocations, locationSearch, crossLocationEdit, crossLocationContents, crossLocationUse] = await Promise.all([
+    request('/locations?includeArchived=true', defaultToken),
+    request(`/locations/search?q=${encodeURIComponent('隔离测试位置')}`, defaultToken),
+    request(`/locations/${ids.location}`, defaultToken, 'PATCH', { name: '越界改名' }),
+    request(`/locations/${ids.location}/contents`, defaultToken),
+    request(`/inventory-items/${defaultInventoryItemId}`, defaultToken, 'PATCH', { defaultLocationId: ids.location }),
+  ]);
+  assert(
+    !ownLocations.body.data.some((one) => one.id === ids.location) && locationSearch.body.data.length === 0 &&
+      crossLocationEdit.status === 404 && crossLocationContents.status === 404 && crossLocationUse.status === 404,
+    '位置字典遵守家庭边界：列表与搜索看不到其他家庭的位置，改名、看内容、引用为自家库存位置都是 404',
+  );
+  await request(`/inventory-items/${defaultInventoryItemId}`, defaultToken, 'DELETE');
+
   const oldSession = await request('/dishes', oldToken);
   assert(oldSession.status === 401, '缺少会话 ID 的旧令牌会失效');
 
@@ -759,6 +783,7 @@ try {
   await db.query('DELETE FROM menu_items WHERE id = $1', [ids.menuItem]);
   await db.query('DELETE FROM shopping_items WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM inventory_items WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM storage_locations WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM media_requests WHERE id = $1', [ids.mediaRequest]);
   await db.query('DELETE FROM household_media WHERE id = $1', [ids.householdMedia]);
   await db.query('DELETE FROM media_external_refs WHERE id = $1', [ids.mediaExternalRef]);

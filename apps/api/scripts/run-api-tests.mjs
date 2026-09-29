@@ -156,6 +156,7 @@ const BUSINESS_SCRIPTS = [
   'shopping-inventory',
   'food-batches',
   'assets',
+  'locations',
 ];
 
 function parseCliOptions(argv) {

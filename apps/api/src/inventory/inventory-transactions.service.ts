@@ -20,6 +20,7 @@ import {
   BatchDatesInput,
   InventoryBatchesService,
 } from './inventory-batches.service';
+import { usableLocationId } from '../locations/location-refs';
 
 const MAX_QUANTITY = 99_999_999.99;
 
@@ -296,6 +297,7 @@ export class InventoryTransactionsService {
     inventoryItemId: string | undefined,
     batchDates: BatchDatesInput | undefined,
     user: JwtUser,
+    locationId?: string | null,
   ) {
     return this.dataSource.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
@@ -353,6 +355,9 @@ export class InventoryTransactionsService {
       const quantityAfter = roundQuantity(quantityBefore + quantity);
       assertQuantityRange(quantityAfter);
       target.quantity = quantityString(quantityAfter);
+      // I1「放哪儿」：分批时记在新批次上（物品还没有默认位置就顺手记上）；不分批时就是物品的默认位置
+      const location = (await usableLocationId(manager, user.householdId, locationId)) ?? null;
+      if (location && (!batchDates || !target.defaultLocationId)) target.defaultLocationId = location;
       await manager.getRepository(InventoryItem).save(target);
       const transaction = this.createTransaction(manager, {
         householdId: user.householdId,
@@ -378,6 +383,7 @@ export class InventoryTransactionsService {
           actor: user,
           sourceId: shoppingItem.id,
           dates: batchDates,
+          locationId: location,
         });
       }
       return { alreadyConfirmed: false, transactions: [saved] };

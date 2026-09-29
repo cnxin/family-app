@@ -9,6 +9,7 @@ import {
   uuid,
 } from './common';
 import { ingredientSchema, numericString } from './dishes';
+import { setLocationBody } from './locations';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/inventory/*（库存项、批次、不可变流水、菜单/购物联动）
@@ -84,6 +85,8 @@ export const inventoryItemSchema = z
     unit: z.string(),
     lowStockThreshold: numericString,
     restockQuantity: numericString,
+    /** I1：默认位置（「上次放在」）；路径文字从 GET /locations 取 */
+    defaultLocationId: uuid.nullable(),
     batchSummary: inventoryBatchSummarySchema.optional(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
@@ -102,6 +105,8 @@ export const createInventoryItemBody = z.object({
   unit: z.string().min(1).max(16),
   lowStockThreshold: z.number().min(0),
   restockQuantity: z.number().min(0.01),
+  /** I1：默认位置；不填不拦 */
+  defaultLocationId: uuid.nullish(),
 });
 export type CreateInventoryItemBody = z.infer<typeof createInventoryItemBody>;
 
@@ -174,6 +179,9 @@ export const inventoryBatchSchema = z
     openedOn: dateOnly.nullable(),
     sourceType: z.enum(INVENTORY_BATCH_SOURCE_TYPES),
     sourceId: uuid,
+    /** I1：这一批上次放在哪；没指定时取物品的默认位置 */
+    locationId: uuid.nullable(),
+    locationUpdatedAt: nullableDateTime,
     version: z.number().int(),
     createdById: uuid,
     createdBy: memberSchema,
@@ -202,6 +210,8 @@ export const createInventoryBatchBody = batchDatesInput.extend({
   inventoryItemId: uuid,
   quantity: z.number().min(0.01),
   idempotencyKey: z.string().min(1).max(120),
+  /** I1：放哪儿；不填取物品的默认位置 */
+  locationId: uuid.nullish(),
 });
 export type CreateInventoryBatchBody = z.infer<typeof createInventoryBatchBody>;
 
@@ -308,6 +318,8 @@ export type MenuInventoryPreview = z.infer<typeof menuInventoryPreviewSchema>;
 export const confirmShoppingReceiptBody = z.object({
   inventoryItemId: uuid.optional(),
   batch: batchDatesInput.optional(),
+  /** I1：放哪儿。分批时记在新批次上；不分批时记成物品的默认位置。不填不拦 */
+  locationId: uuid.nullish(),
 });
 
 export const inventory = {
@@ -366,6 +378,14 @@ export const inventory = {
     summary: '修改批次日期（乐观锁 expectedVersion）',
     params: idParams,
     body: updateInventoryBatchBody,
+    response: inventoryBatchSchema,
+  }),
+  setBatchLocation: defineEndpoint({
+    method: 'PATCH',
+    path: '/inventory-batches/:id/location',
+    summary: '一跳改批次位置（「找不到 → 改」）',
+    params: idParams,
+    body: setLocationBody,
     response: inventoryBatchSchema,
   }),
   shoppingPreview: defineEndpoint({
