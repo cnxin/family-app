@@ -3,177 +3,457 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>智能家居 · 手机 · 详情 sheet</title>
+<title>智能家居 · 手机 · 详情面板</title>
 <!-- 结构示意稿：只看信息层级与布局。颜色取 apps/web/src/index.css 的近似值。
-     两屏：左 = 扫地机（管理员）；右 = 空调（climate 的模式和温度只在这里）。 -->
+     四屏都画成「sheet 已上滑到全屏」并把可滚动内容画全长；虚线 = 手机首屏（844）的位置。
+     ① 扫地机（管理员，更多设置展开）② 空调（成员）③ 洗衣机（只读）④ 客厅窗帘（管理员，正在拖位置滑块）。
+     配套文字：docs/ui-prototypes/smart-home-redesign.md §9「详情面板」。 -->
 <style>
 :root{--bg:#f8f4ec;--surface:#fffdf8;--muted:#f1ebe0;--border:#e4dcce;--ink:#2a241f;--soft:#857b70;--accent:#2f6b4f;--accent-soft:#e0efe5;--warm:#b8662a;--warm-soft:#f8eadb;--danger:#b93a32}
 *{box-sizing:border-box}
-body{margin:0;padding:24px;background:#d9d4ca;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);display:flex;gap:32px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
-.frame-label{font-size:13px;color:#4d463e;margin:0 0 8px}
-.phone{position:relative;width:390px;height:844px;background:var(--bg);border-radius:36px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.12)}
-/* 背后的设备页，只画个影子 */
-.behind{padding:60px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.behind div{height:112px;border-radius:18px;background:var(--surface);border:1px solid var(--border)}
-.scrim{position:absolute;inset:0;background:rgba(30,24,18,.32)}
-/* 底部上推的 sheet */
-.sheet{position:absolute;left:0;right:0;bottom:0;max-height:90%;overflow:auto;background:var(--surface);border-radius:24px 24px 0 0;padding:8px 20px 28px;display:flex;flex-direction:column;gap:18px}
-.grab{width:36px;height:5px;border-radius:9px;background:var(--border);margin:0 auto 4px}
-.head{display:flex;gap:14px;align-items:center}
+body{margin:0;padding:24px;background:#d9d4ca;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);display:flex;gap:28px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+.col{width:390px}
+.frame-label{font-size:13px;color:#4d463e;margin:0 0 8px;line-height:1.5}
+.phone{position:relative;width:390px;background:rgba(30,24,18,.32);border-radius:36px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.12);padding-top:54px}
+.fold{position:absolute;left:0;right:0;top:844px;border-top:2px dashed #c0392b;z-index:5}
+.fold span{position:absolute;right:10px;top:-20px;font-size:11px;color:#c0392b;background:rgba(255,253,248,.9);padding:1px 6px;border-radius:6px}
+.sheet{background:var(--surface);border-radius:24px 24px 0 0;padding:8px 20px 32px;display:flex;flex-direction:column;gap:20px}
+.grab{width:36px;height:5px;border-radius:9px;background:var(--border);margin:0 auto}
+/* 1 头部 */
+.head{display:flex;gap:14px;align-items:flex-start}
 .ico{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:var(--accent);color:#fff;flex:none}
 .ico.off{background:var(--muted);color:var(--soft)}
-.head h2{margin:0;font-size:20px}
-.head p{margin:2px 0 0;font-size:13px;color:var(--soft)}
-.close{margin-left:auto;width:44px;height:44px;border-radius:99px;border:none;background:var(--muted);color:var(--soft);font-size:18px}
-.status{font-size:17px;font-weight:600;color:var(--accent)}
-.status small{display:block;font-size:12.5px;font-weight:400;color:var(--soft);margin-top:2px}
-h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--soft)}
+.head h2{margin:0;font-size:22px}
+.head .where{margin:2px 0 0;font-size:13px;color:var(--soft)}
+.close{margin-left:auto;width:44px;height:44px;border-radius:99px;border:none;background:var(--muted);color:var(--soft);font-size:18px;flex:none}
+.big{font-size:19px;font-weight:650;color:var(--accent);line-height:1.35}
+.big.off{color:var(--ink)}
+.tag{display:inline-flex;align-items:center;gap:4px;margin-top:6px;padding:3px 9px;border-radius:99px;font-size:12px;background:var(--warm-soft);color:var(--warm)}
+/* 通用块 */
+.blk{display:flex;flex-direction:column;gap:10px}
+h3{margin:0;font-size:13px;font-weight:600;color:var(--soft);display:flex;justify-content:space-between;align-items:baseline}
+h3 .aside{font-weight:400;font-size:12px}
+.src{font-size:11px;color:#a89d90;margin-top:-4px}
 .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .act{min-height:52px;border-radius:14px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:15px;color:var(--ink)}
 .act.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .act:disabled{color:#c4bbae}
+.act.wide{width:100%}
+.seg{display:grid;background:var(--muted);border-radius:12px;padding:3px;gap:3px}
+.seg button{min-height:44px;border:none;border-radius:10px;background:transparent;font:inherit;font-size:14px;color:var(--ink);position:relative}
+.seg button.cur{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.08);font-weight:600}
+.seg button.pending{background:var(--surface);color:var(--soft)}
+.seg button.pending::after{content:"";position:absolute;right:8px;top:50%;width:10px;height:10px;margin-top:-5px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:99px}
+.seg.dis button{color:#c4bbae}
+.pending-note{font-size:12px;color:var(--soft)}
+.rooms{display:flex;flex-wrap:wrap;gap:8px}
+.room{min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:14px;color:var(--ink)}
+.room.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.room.on::before{content:"✓ "}
+.bars{display:flex;flex-direction:column;gap:10px}
+.bar{display:grid;grid-template-columns:64px 1fr 76px;align-items:center;gap:10px;font-size:14px}
+.bar .track{height:8px;border-radius:9px;background:var(--muted);overflow:hidden}
+.bar .fill{height:100%;background:var(--accent);border-radius:9px}
+.bar.warn .fill{background:var(--warm)}
+.bar .v{text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.bar.warn .v{color:var(--warm)}
 .chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.chip{display:flex;flex-direction:column;padding:8px 12px;border-radius:12px;background:var(--muted)}
-.chip b{font-size:15px}
-.chip span{font-size:11.5px;color:var(--soft)}
-.chip.warn{background:var(--warm-soft)}
-.chip.warn b{color:var(--warm)}
+.chip{display:flex;flex-direction:column;padding:9px 12px;border-radius:12px;background:var(--muted)}
+.chip b{font-size:15px}.chip span{font-size:11.5px;color:var(--soft)}
+.temp{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:18px;background:var(--muted)}
+.temp button{width:64px;height:64px;border-radius:16px;border:none;background:var(--surface);font-size:28px;color:var(--ink)}
+.temp .v{font-size:44px;font-weight:600;font-variant-numeric:tabular-nums;text-align:center;line-height:1.1}
+.temp .v small{font-size:12px;font-weight:400;color:var(--soft);display:block}
+.power{display:flex;align-items:center;justify-content:space-between;min-height:64px;padding:0 16px;border-radius:18px;background:var(--accent-soft)}
+.power b{font-size:17px}
+.power span{font-size:12.5px;color:var(--soft);display:block}
+.sw{flex:none;width:52px;height:32px;border-radius:99px;background:var(--accent);position:relative}
+.sw::after{content:"";position:absolute;right:3px;top:3px;width:26px;height:26px;border-radius:99px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw.off{background:#cfc6b8}.sw.off::after{right:auto;left:3px}
+.sw.big{width:62px;height:38px}.sw.big::after{width:32px;height:32px}
+/* 滑块 */
+.slider{position:relative;height:44px;display:flex;align-items:center}
+.slider .track{position:absolute;left:0;right:0;height:10px;border-radius:9px;background:var(--muted)}
+.slider .fill{position:absolute;left:0;height:10px;border-radius:9px;background:var(--accent)}
+.slider .ghost{position:absolute;left:0;height:10px;border-radius:9px;background:var(--accent-soft)}
+.slider .thumb{position:absolute;width:30px;height:30px;margin-left:-15px;border-radius:99px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.slider .bubble{position:absolute;top:-30px;transform:translateX(-50%);padding:3px 8px;border-radius:8px;background:var(--ink);color:#fff;font-size:12px;white-space:nowrap}
+.scale{display:flex;justify-content:space-between;font-size:11.5px;color:var(--soft)}
+.progress{height:12px;border-radius:9px;background:var(--muted);overflow:hidden}
+.progress div{height:100%;background:var(--accent)}
+.steps{display:flex;justify-content:space-between;font-size:12px;color:var(--soft)}
+.steps .cur{color:var(--accent);font-weight:600}
+.ro-note{font-size:13px;color:var(--soft);padding:10px 12px;border-radius:12px;background:var(--muted);line-height:1.6}
+.slot{font-size:12px;color:var(--soft);padding:10px 12px;border-radius:12px;border:1px dashed var(--border);line-height:1.6}
+/* 折叠区 */
+details{border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+summary{list-style:none;display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:0 14px;font-size:15px;font-weight:500;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+summary .cnt{font-size:13px;color:var(--soft);font-weight:400}
+summary .cnt::after{content:" ›"}
+details[open] summary .cnt::after{content:" ⌄"}
+.rows{border-top:1px solid var(--border)}
+.row{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 14px;border-top:1px solid var(--border);font-size:14px}
+.row:first-child{border-top:none}
+.row .l{flex:1}
+.row .l small{display:block;font-size:11.5px;color:var(--soft)}
+.row .val{color:var(--soft);font-variant-numeric:tabular-nums}
+.row select{min-height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:14px;padding:0 8px}
+.mini-seg{display:flex;background:var(--muted);border-radius:10px;padding:2px}
+.mini-seg span{padding:7px 10px;font-size:13px;border-radius:8px}
+.mini-seg span.cur{background:var(--surface);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.stepper{display:flex;align-items:center;gap:6px}
+.stepper button{width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font-size:18px}
+.stepper b{min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.btn-sm{min-height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:14px}
+.row.excluded .l{color:var(--soft)}
+.kind{font-size:10.5px;color:#a89d90;border:1px solid var(--border);border-radius:5px;padding:0 4px;margin-left:4px;vertical-align:1px}
 .log{list-style:none;margin:0;padding:0;border:1px solid var(--border);border-radius:14px}
 .log li{display:flex;gap:10px;align-items:baseline;padding:10px 12px;font-size:13.5px;border-top:1px solid var(--border)}
 .log li:first-child{border-top:none}
-.log .who{flex:1}
-.log .t{font-size:12px;color:var(--soft)}
+.log .who{flex:1}.log .t{font-size:12px;color:var(--soft)}
 .ok{color:var(--accent)}.bad{color:var(--danger)}
-.toggle{display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:0 14px;border-radius:14px;background:var(--muted);font-size:15px}
-.sw{width:50px;height:30px;border-radius:99px;background:var(--accent);position:relative}
-.sw::after{content:"";position:absolute;right:3px;top:3px;width:24px;height:24px;border-radius:99px;background:#fff}
-.admin-link{font-size:13px;color:var(--accent);text-decoration:none;text-align:center;padding:4px 0}
-/* 空调 */
-.seg{display:grid;grid-template-columns:repeat(4,1fr);background:var(--muted);border-radius:12px;padding:3px;gap:3px}
-.seg button{min-height:44px;border:none;border-radius:10px;background:transparent;font:inherit;font-size:14px;color:var(--ink)}
-.seg button.cur{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.08);font-weight:600}
-.temp{display:flex;align-items:center;justify-content:space-between;padding:6px;border-radius:16px;background:var(--muted)}
-.temp button{width:56px;height:56px;border-radius:14px;border:none;background:var(--surface);font-size:24px;color:var(--ink)}
-.temp .v{font-size:34px;font-weight:600;font-variant-numeric:tabular-nums}
-.temp .v small{font-size:13px;font-weight:400;color:var(--soft);display:block;text-align:center}
-.hint{font-size:12px;color:var(--soft);line-height:1.6;margin:-8px 0 0}
-.power{display:flex;gap:8px}
-.power .act{flex:1}
-.note{max-width:360px;font-size:12.5px;line-height:1.7;color:#4d463e;background:#fffdf8;border-radius:14px;padding:14px 16px}
+.admin{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.admin .row{min-height:52px}
+.admin a{color:var(--accent);text-decoration:none}
+.note{width:100%;max-width:1640px;font-size:12.5px;line-height:1.75;color:#4d463e;background:#fffdf8;border-radius:14px;padding:14px 18px}
 .note b{color:var(--ink)}
-.note ol{margin:6px 0 0;padding-left:18px}
+.note ol{margin:6px 0 0;padding-left:18px;columns:2;column-gap:36px}
 </style>
 </head>
 <body>
 
-<!-- ============ 扫地机 ============ -->
-<div>
-<p class="frame-label">① 扫地机（管理员）</p>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-vac" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3"/></g></symbol>
+  <symbol id="i-cur" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 4h18M6 4v15c2-1 3-4 3-15M18 4v15c-2-1-3-4-3-15"/></symbol>
+  <symbol id="i-ac" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="8" rx="2"/><path d="M7 17l-1 2M12 17v2M17 17l1 2"/></g></symbol>
+  <symbol id="i-wash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.5"/><path d="M7.5 6.5h2"/></g></symbol>
+</svg>
+
+<!-- ======================= ① 扫地机 ======================= -->
+<div class="col">
+<p class="frame-label">① 扫地机 · 管理员 · 清扫中<br>主面板：三键 / 分房间 / 吸力 / 拖地水量 / 耗材；「更多设置」「设备信息」展开</p>
 <div class="phone">
-  <div class="behind"><div></div><div></div><div></div><div></div><div></div><div></div></div>
-  <div class="scrim"></div>
+  <div class="fold"><span>首屏 844</span></div>
   <section class="sheet" role="dialog" aria-label="扫地机">
     <div class="grab"></div>
+
+    <!-- 1 头部 -->
     <div class="head">
-      <span class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3"/></svg></span>
-      <div><h2>扫地机</h2><p>客厅 · Roborock G30 U</p></div>
+      <span class="ico"><svg width="28" height="28"><use href="#i-vac"/></svg></span>
+      <div>
+        <h2>扫地机</h2>
+        <p class="where">客厅 · Roborock G30 U</p>
+      </div>
       <button class="close" aria-label="关闭">✕</button>
     </div>
+    <div class="big">清扫中 · 客厅 · 电量 87%</div>
 
-    <div class="status">清扫中 · 电量 62%<small>10:12 开始，已经扫了 18 分钟</small></div>
-
-    <!-- 主实体的全部动作；此刻说不通的置灰而不是隐藏，位置不跳 -->
-    <div>
-      <h3>操作</h3>
+    <!-- 2 主面板：vacuum -->
+    <div class="blk">
       <div class="actions">
-        <button class="act" disabled>开始清扫</button>
+        <button class="act" disabled>开始</button>
         <button class="act primary">暂停</button>
         <button class="act">回充</button>
       </div>
     </div>
 
-    <!-- 次要实体 chips：最多 4 个，管理员在设置页挑 -->
-    <div>
-      <h3>更多信息</h3>
-      <div class="chips">
-        <div class="chip"><b>24 m²</b><span>本次面积</span></div>
-        <div class="chip"><b>80 小时</b><span>边刷剩余</span></div>
-        <div class="chip"><b>210 小时</b><span>主刷剩余</span></div>
-        <div class="chip warn"><b>12 小时</b><span>滤网剩余</span></div>
+    <div class="blk">
+      <h3>分房间清扫 <span class="aside">选好再点下面的按钮</span></h3>
+      <div class="rooms">
+        <button class="room on">客厅</button>
+        <button class="room on">餐厅</button>
+        <button class="room">主卧</button>
+        <button class="room">次卧</button>
+        <button class="room">厨房</button>
+        <button class="room">书房</button>
       </div>
+      <button class="act wide">清扫选中的 2 个房间</button>
+      <p class="src">房间 = HA 区域。只在扫地机支持 HA 通用的「按区域清扫」（2026.3 起的 vacuum.clean_area）、且 King 已在 HA 里把扫地机分区对应到区域时出现；否则整块不出现</p>
     </div>
 
-    <!-- 最近三条操作：审计表里这台设备的，家人和联动都算 -->
-    <div>
+    <div class="blk">
+      <h3>吸力</h3>
+      <div class="seg" style="grid-template-columns:repeat(5,1fr)">
+        <button>安静</button><button>标准</button><button class="pending">强力</button><button class="cur">MAX</button><button>MAX+</button>
+      </div>
+      <p class="pending-note">已发出「强力」，等扫地机回报（最多 8 秒），期间这一排不能再点</p>
+      <p class="src">来自 vacuum 本体的 fan_speed_list（HA 通用属性），不是子实体</p>
+    </div>
+
+    <div class="blk">
+      <h3>拖地水量</h3>
+      <div class="seg" style="grid-template-columns:repeat(4,1fr)">
+        <button>关</button><button>低</button><button class="cur">中</button><button>高</button>
+      </div>
+      <p class="src">select 子实体（HA 标的是 config），因为被设成「主面板项」才出现在这里，否则在「更多设置」</p>
+    </div>
+
+    <div class="blk">
+      <h3>耗材 <span class="aside">还能用多久</span></h3>
+      <div class="admin">
+        <div class="row"><span class="l">主刷</span><span class="val">216 小时</span></div>
+        <div class="row"><span class="l">边刷</span><span class="val">95 小时</span></div>
+        <div class="row"><span class="l" style="color:var(--warm)">滤网</span><span class="val" style="color:var(--warm)">9 小时 · 该换了</span></div>
+      </div>
+      <p class="src">HA 给的是剩余时长（不是百分比），所以不画进度条；只有单位是 % 的传感器才画条。三个都是「主面板项」</p>
+    </div>
+
+    <!-- 3 更多设置：其余可控子实体，按 HA 类型自动渲染 -->
+    <details open>
+      <summary>更多设置 <span class="cnt">6 项</span></summary>
+      <div class="rows">
+        <div class="row"><span class="l">勿扰模式<span class="kind">switch</span></span><span class="sw"></span></div>
+        <div class="row"><span class="l">自动集尘<span class="kind">switch</span></span><span class="sw off"></span></div>
+        <div class="row"><span class="l">拖布模式<span class="kind">select · ≤ 4 项</span></span><span class="mini-seg"><span>快拖</span><span class="cur">标准</span><span>深度</span></span></div>
+        <div class="row"><span class="l">清扫模式<span class="kind">select · &gt; 4 项</span></span><select><option>扫拖同时</option></select></div>
+        <div class="row"><span class="l">音量<span class="kind">number · 滑块</span></span><span style="width:130px" class="slider"><span class="track"></span><span class="fill" style="width:60%"></span><span class="thumb" style="left:60%;width:24px;height:24px;margin-left:-12px"></span></span></div>
+        <div class="row"><span class="l">饭后打扫<small>石头 App 里建的例程</small><span class="kind">button</span></span><button class="btn-sm">运行</button></div>
+      </div>
+    </details>
+
+    <!-- 设备信息：diagnostic 只读 + 被排除的操作 -->
+    <details open>
+      <summary>设备信息 <span class="cnt">7 项</span></summary>
+      <div class="rows">
+        <div class="row"><span class="l">WiFi 信号</span><span class="val">−52 dBm</span></div>
+        <div class="row"><span class="l">累计清扫面积</span><span class="val">1,204 m²</span></div>
+        <div class="row"><span class="l">累计清扫次数</span><span class="val">86 次</span></div>
+        <div class="row"><span class="l">传感器剩余</span><span class="val">21 小时</span></div>
+        <div class="row excluded"><span class="l">重置主刷耗材<small>此操作请在厂商 App 完成</small></span></div>
+        <div class="row excluded"><span class="l">重置滤网耗材<small>此操作请在厂商 App 完成</small></span></div>
+        <div class="row excluded"><span class="l">重启<small>此操作请在厂商 App 完成</small></span></div>
+      </div>
+    </details>
+
+    <!-- 4 最近操作 -->
+    <div class="blk">
       <h3>最近操作</h3>
       <ul class="log">
-        <li><span class="who">King · 开始清扫</span><span class="t">今天 10:12</span><span class="ok">✓</span></li>
-        <li><span class="who">智能家居联动 · 开始清扫<br><span class="t">家务「打扫客厅」打勾后</span></span><span class="t">昨天 19:40</span><span class="ok">✓</span></li>
-        <li><span class="who">妈妈 · 回充<br><span class="t">Home Assistant 没回应</span></span><span class="t">昨天 08:05</span><span class="bad">✕</span></li>
+        <li><span class="who">King · 清扫客厅、餐厅</span><span class="t">今天 10:12</span><span class="ok">✓</span></li>
+        <li><span class="who">智能家居联动 · 开始清扫<br><span class="t">家务「打扫」打勾后</span></span><span class="t">昨天 19:40</span><span class="ok">✓</span></li>
+        <li><span class="who">妈妈 · 吸力 → 安静<br><span class="t">Home Assistant 没回应</span></span><span class="t">昨天 08:05</span><span class="bad">✕</span></li>
       </ul>
     </div>
 
-    <!-- 管理员才有 -->
-    <label class="toggle">在今天页显示<span class="sw" aria-hidden="true"></span></label>
-    <a class="admin-link" href="#">改名字、房间、主 / 次实体 ›</a>
+    <!-- 5 管理员 -->
+    <div class="blk">
+      <h3>管理</h3>
+      <div class="admin">
+        <div class="row"><span class="l">在今天页显示</span><span class="sw"></span></div>
+        <div class="row"><span class="l">名称和房间<small>扫地机 · 客厅</small></span><a href="#">编辑 ›</a></div>
+        <div class="row"><span class="l">主实体和主面板项<small>主：扫地机本体 · 主面板项：水量、主刷、边刷、滤网</small></span><a href="#">选择 ›</a></div>
+      </div>
+    </div>
   </section>
 </div>
 </div>
 
-<!-- ============ 空调 ============ -->
-<div>
-<p class="frame-label">② 空调（成员，已开放「全家都能控」）</p>
+<!-- ======================= ② 空调 ======================= -->
+<div class="col">
+<p class="frame-label">② 空调 · 成员（已开放「全家都能控」）· 制冷<br>主面板：开关 / 模式 / 目标温度 / 风速 / 摆风 / 室内温度；「按上次操作显示」</p>
 <div class="phone">
-  <div class="behind"><div></div><div></div><div></div><div></div><div></div><div></div></div>
-  <div class="scrim"></div>
+  <div class="fold"><span>首屏 844</span></div>
   <section class="sheet" role="dialog" aria-label="空调">
     <div class="grab"></div>
     <div class="head">
-      <span class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="8" rx="2"/><path d="M7 17l-1 2M12 17v2M17 17l1 2"/></svg></span>
-      <div><h2>空调</h2><p>客厅 · 米家空调伴侣</p></div>
+      <span class="ico"><svg width="28" height="28"><use href="#i-ac"/></svg></span>
+      <div>
+        <h2>空调</h2>
+        <p class="where">客厅 · 米家空调伴侣（红外）</p>
+      </div>
       <button class="close" aria-label="关闭">✕</button>
     </div>
-
-    <div class="status">制冷 26°<small>按上次操作显示：红外遥控，空调自己开没开它不知道</small></div>
-
-    <div class="power">
-      <button class="act">关掉</button>
+    <div>
+      <div class="big">制冷 26° · 室内 27.5°</div>
+      <span class="tag">≈ 按上次操作显示</span>
     </div>
 
-    <!-- 模式和温度只在详情里，卡片上只有开/关 -->
-    <div>
-      <h3>模式</h3>
-      <div class="seg" role="radiogroup">
-        <button class="cur">制冷</button><button>制热</button><button>送风</button><button>自动</button>
+    <!-- 主面板：climate -->
+    <div class="power">
+      <div><b>开着</b><span>点右边关掉</span></div>
+      <span class="sw big" role="switch" aria-checked="true" aria-label="空调电源"></span>
+    </div>
+
+    <div class="blk">
+      <h3>模式 <span class="aside">只列 HA 说这台有的</span></h3>
+      <div class="seg" style="grid-template-columns:repeat(5,1fr)">
+        <button class="cur">制冷</button><button>制热</button><button>除湿</button><button>送风</button><button>自动</button>
       </div>
     </div>
-    <div>
-      <h3>设定温度</h3>
+
+    <div class="blk">
+      <h3>目标温度 <span class="aside">每次 1°（HA 的 target_temp_step；没给按 0.5°）</span></h3>
       <div class="temp">
         <button aria-label="调低 1 度">−</button>
         <div class="v">26°<small>16° ~ 30°</small></div>
         <button aria-label="调高 1 度">+</button>
       </div>
+      <p class="src">连按会合并：停手 0.6 秒后才发一次（带幂等键），发出后等回报</p>
     </div>
-    <p class="hint">每按一下发一次，按到头就不再发。</p>
 
-    <div>
-      <h3>更多信息</h3>
-      <div class="chips">
-        <div class="chip"><b>27.5°</b><span>室内温度</span></div>
-        <div class="chip"><b>58%</b><span>湿度</span></div>
+    <div class="blk">
+      <h3>风速</h3>
+      <div class="seg" style="grid-template-columns:repeat(4,1fr)">
+        <button class="cur">自动</button><button>低</button><button>中</button><button>高</button>
       </div>
     </div>
 
-    <div>
+    <div class="slot">摆风：这台空调伴侣在 HA 里没有 swing_modes，所以这一块<b>不出现</b>。有的空调在这里出一排分段（关 / 上下 / 左右 / 全摆），写法同风速。</div>
+
+    <div class="chips">
+      <div class="chip"><b>27.5°</b><span>室内温度</span></div>
+      <div class="chip"><b>58%</b><span>湿度</span></div>
+    </div>
+
+    <div class="ro-note">红外遥控：上面显示的是小管家（或 HA）上次发出去的指令。有人用遥控器改过，这里不会知道。</div>
+
+    <details>
+      <summary>更多设置 <span class="cnt">1 项</span></summary>
+    </details>
+    <details>
+      <summary>设备信息 <span class="cnt">2 项</span></summary>
+    </details>
+
+    <div class="blk">
       <h3>最近操作</h3>
       <ul class="log">
-        <li><span class="who">妈妈 · 制冷</span><span class="t">今天 14:02</span><span class="ok">✓</span></li>
-        <li><span class="who">妈妈 · 打开</span><span class="t">今天 14:01</span><span class="ok">✓</span></li>
+        <li><span class="who">妈妈 · 风速 → 自动</span><span class="t">今天 14:03</span><span class="ok">✓</span></li>
+        <li><span class="who">妈妈 · 制冷 26°</span><span class="t">今天 14:02</span><span class="ok">✓</span></li>
         <li><span class="who">King · 关掉</span><span class="t">昨天 23:30</span><span class="ok">✓</span></li>
       </ul>
     </div>
-    <!-- 成员视角：没有「在今天页显示」和设置入口 -->
+    <!-- 成员：没有「管理」块 -->
+  </section>
+</div>
+</div>
+
+<!-- ======================= ③ 洗衣机 ======================= -->
+<div class="col">
+<p class="frame-label">③ 洗衣机 · 管理员 · 只读为主<br>主面板：程序 / 剩余时间 / 门状态 / 进度；HA 没给启停的 button、switch，所以没有操作键</p>
+<div class="phone">
+  <div class="fold"><span>首屏 844</span></div>
+  <section class="sheet" role="dialog" aria-label="洗衣机">
+    <div class="grab"></div>
+    <div class="head">
+      <span class="ico"><svg width="28" height="28"><use href="#i-wash"/></svg></span>
+      <div>
+        <h2>洗衣机</h2>
+        <p class="where">阳台 · 卡萨帝</p>
+      </div>
+      <button class="close" aria-label="关闭">✕</button>
+    </div>
+    <div class="big">洗涤中 · 剩 23 分钟</div>
+
+    <!-- 主面板：洗衣机 / 烘干机 -->
+    <div class="blk">
+      <div class="progress" role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><div style="width:62%"></div></div>
+      <div class="steps"><span>洗涤</span><span class="cur">漂洗</span><span>脱水</span><span>完成 · 约 15:40</span></div>
+      <p class="src">主面板项里有单位是 % 的进度实体才画这条；没有就不画（不拿「总时长」去猜着算）。阶段那一行来自「程序阶段」类的传感器，同样没有就不出现</p>
+    </div>
+
+    <div class="chips">
+      <div class="chip"><b>标准洗</b><span>程序</span></div>
+      <div class="chip"><b>23 分钟</b><span>剩余时间</span></div>
+      <div class="chip"><b>关着 · 已锁</b><span>门</span></div>
+      <div class="chip"><b>40° · 1200 转</b><span>水温 · 脱水</span></div>
+    </div>
+
+    <div class="ro-note">这台在小管家里只能看：Home Assistant 没有给它「启动 / 暂停」的按钮或开关。</div>
+    <div class="slot">如果 HA 暴露了启动 / 暂停的 button 或 switch 子实体（且设备开放了控制），这里会出现「启动」「暂停」两键，位置同扫地机的三键。</div>
+
+    <!-- 没有可控子实体：更多设置整块不出现 -->
+    <details>
+      <summary>设备信息 <span class="cnt">4 项</span></summary>
+    </details>
+
+    <div class="blk">
+      <h3>最近操作</h3>
+      <ul class="log"><li><span class="who t">还没有人在小管家里操作过这台</span></li></ul>
+    </div>
+
+    <div class="blk">
+      <h3>管理</h3>
+      <div class="admin">
+        <div class="row"><span class="l">在今天页显示</span><span class="sw"></span></div>
+        <div class="row"><span class="l">名称和房间<small>洗衣机 · 阳台</small></span><a href="#">编辑 ›</a></div>
+        <div class="row"><span class="l">主实体和主面板项<small>主：运行状态 · 主面板项：进度、程序、剩余时间、门…</small></span><a href="#">选择 ›</a></div>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+
+<!-- ======================= ④ 窗帘 ======================= -->
+<div class="col">
+<p class="frame-label">④ 客厅窗帘 · 管理员 · 开了 40%<br>主面板：开 / 停 / 关 + 位置滑块（正在拖，松手才发）</p>
+<div class="phone">
+  <div class="fold"><span>首屏 844</span></div>
+  <section class="sheet" role="dialog" aria-label="客厅窗帘">
+    <div class="grab"></div>
+    <div class="head">
+      <span class="ico"><svg width="28" height="28"><use href="#i-cur"/></svg></span>
+      <div>
+        <h2>客厅窗帘</h2>
+        <p class="where">客厅 · 米家电动窗帘</p>
+      </div>
+      <button class="close" aria-label="关闭">✕</button>
+    </div>
+    <div class="big">开了 40%</div>
+
+    <!-- 主面板：cover -->
+    <div class="actions">
+      <button class="act">打开</button>
+      <button class="act">停</button>
+      <button class="act">关上</button>
+    </div>
+
+    <div class="blk">
+      <h3>位置 <span class="aside">0 = 全关，100 = 全开</span></h3>
+      <div class="slider" role="slider" aria-valuenow="70" aria-valuemin="0" aria-valuemax="100" aria-label="窗帘位置">
+        <div class="track"></div>
+        <div class="ghost" style="width:70%"></div>
+        <div class="fill" style="width:40%"></div>
+        <div class="thumb" style="left:70%"></div>
+        <div class="bubble" style="left:70%">70% · 松手就发</div>
+      </div>
+      <div class="scale"><span>全关</span><span>现在 40%</span><span>全开</span></div>
+      <p class="src">拖动时只动滑块、不发命令；松手发一次「开到 70%」。发出后滑块和三键置灰，直到 HA 回推新位置或 8 秒超时</p>
+    </div>
+
+    <details>
+      <summary>更多设置 <span class="cnt">2 项</span></summary>
+      <div class="rows">
+        <div class="row"><span class="l">手拉启动<small>轻拉一下窗帘自己走完</small><span class="kind">switch · config</span></span><span class="sw off"></span></div>
+        <div class="row"><span class="l">电机方向<span class="kind">select · config</span></span><span class="mini-seg"><span class="cur">正向</span><span>反向</span></span></div>
+      </div>
+    </details>
+    <details>
+      <summary>设备信息 <span class="cnt">3 项</span></summary>
+      <div class="rows">
+        <div class="row"><span class="l">固件版本</span><span class="val">2.1.3_0017</span></div>
+        <div class="row"><span class="l">电机状态</span><span class="val">正常</span></div>
+        <div class="row excluded"><span class="l">恢复出厂设置<small>此操作请在厂商 App 完成</small></span></div>
+      </div>
+    </details>
+
+    <div class="blk">
+      <h3>最近操作</h3>
+      <ul class="log">
+        <li><span class="who">King · 开到 40%</span><span class="t">今天 08:31</span><span class="ok">✓</span></li>
+        <li><span class="who">智能家居联动 · 关上<br><span class="t">日程「家庭电影夜」前 10 分钟</span></span><span class="t">周六 19:50</span><span class="ok">✓</span></li>
+        <li><span class="who">King · 打开</span><span class="t">周六 07:45</span><span class="ok">✓</span></li>
+      </ul>
+    </div>
+
+    <div class="blk">
+      <h3>管理</h3>
+      <div class="admin">
+        <div class="row"><span class="l">在今天页显示</span><span class="sw"></span></div>
+        <div class="row"><span class="l">名称和房间<small>客厅窗帘 · 客厅</small></span><a href="#">编辑 ›</a></div>
+        <div class="row"><span class="l">主实体和主面板项<small>主：窗帘本体 · 主面板项：无</small></span><a href="#">选择 ›</a></div>
+      </div>
+    </div>
   </section>
 </div>
 </div>
@@ -181,13 +461,17 @@ h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--soft)}
 <aside class="note">
   <b>读图要点</b>
   <ol>
-    <li>手机上从底部上推，可下拉关闭；桌面同一内容居中弹出（见 desktop-devices.html 的第二屏）。</li>
-    <li>从上到下：是谁（图标、名字、房间 · 型号）→ 现在怎样（状态句加一句补充）→ 能做什么（全部动作）→ 更多信息（次要实体 chips，最多 4 个）→ 最近三条操作 → 管理员开关。</li>
-    <li>动作按钮固定位置：此刻说不通的<b>置灰不隐藏</b>，免得按钮跳位；当前最该按的那个实心。</li>
-    <li>空调的模式、温度只在这里；卡片上只有一个「打开 / 关掉」。</li>
-    <li>chip 变暖橙 = 该留意（例：滤网剩 12 小时），阈值沿用留意规则那一套，不另起。</li>
-    <li>最近操作来自现有审计表，按设备过滤取 3 条，全家可见；联动触发的写清是哪条联动。</li>
-    <li>成员没权限时，操作区换成一行「管理员还没开放控制」，其余照常。</li>
+    <li>五段固定顺序：头部 → 主面板（按主实体类型定制）→ 更多设置（折叠）→ 设备信息（折叠）→ 最近操作 → 管理（仅管理员）。没有内容的段整段不出现（③ 没有「更多设置」）。</li>
+    <li>头部的大状态是卡片那句状态的完整版：卡片「清扫中 · 62%」，这里「清扫中 · 客厅 · 电量 87%」。离线 / HA 断开时在大状态下挂一个标签（「离线」「连不上 Home Assistant，显示的是 10:32 的状态」），所有控件置灰。</li>
+    <li>主面板只放这类设备「天天会动」的东西；其余可控子实体一律进「更多设置」，按 HA 类型自动渲染：select ≤ 4 项 = 分段、&gt; 4 项 = 下拉；number = 滑块（HA mode=slider）或步进（mode=box）；switch / input_boolean = 开关；button = 按钮；text = 只读。</li>
+    <li>entity_category = config 的进「更多设置」；diagnostic 的只读进「设备信息」。复位 / 重置 / 重启 / 恢复出厂 / 解绑这类 button 不渲染成按钮，列在「设备信息」里写「此操作请在厂商 App 完成」。</li>
+    <li>分段、开关、按钮：点一下就发；滑块和温度步进：松手（或停手 0.6 秒）才发。发出后这一个控件置灰并显示转圈，直到 HA 回推该实体的新状态或 8 秒超时；超时不回滚显示，只提示「没等到设备回报」。</li>
+    <li>手机：sheet 打开时停在约 60% 高（能看到头部 + 主面板上半），上滑到全屏，内容在 sheet 内滚动；下拉到底关闭。桌面：居中弹窗，最大高 80vh，内部滚动，头部固定。</li>
+    <li>扫地机的「分房间清扫」只走 HA 通用的 vacuum.clean_area（房间 = HA 区域），不调 Roborock 专有服务；这台不支持、或 HA 里还没把分区对应到区域，就整块不出现。吸力用 vacuum 自带的 fan_speed_list。</li>
+    <li>「主面板项」（原「次要实体」，至多 6 个）：管理员挑出来提到主面板的子实体，按类型渲染——传感器是一行数值（单位 % 时带条），select 是分段，number 是滑块。拖地水量、耗材就是这样上来的；没被挑中的按 entity_category 落到「更多设置」或「设备信息」。</li>
+    <li>洗衣机的实体长什么样（剩余时间、门、启停）在海尔社区集成里<b>没查到实例</b>，③ 是按通用规则推的样子，实现前要对真机目录核一遍。</li>
+    <li>成员视角：设备没开放控制、或 minRole 不够时，主面板的控件全部换成只读显示（值照看），「更多设置」整段不出现，「管理」不出现。</li>
+    <li>示意数据：设备名是 King 真机白名单里的；房间名、耗材数值、固件号等是编的，只示意位置。</li>
   </ol>
 </aside>
 
