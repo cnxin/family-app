@@ -4,11 +4,18 @@ import { randomUUID } from 'crypto';
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { basename, join, resolve } from 'path';
 import { DataSource, Repository } from 'typeorm';
-import { MAP_VIEWBOX_WIDTH, type HouseholdMap as HouseholdMapView, type PutHouseholdMapBody } from '@family/contracts';
+import {
+  MAP_VIEWBOX_WIDTH,
+  type HouseholdMap as HouseholdMapView,
+  type HouseholdMapExport,
+  type MapShape,
+  type PutHouseholdMapBody,
+} from '@family/contracts';
 import { isHouseholdManager } from '@family/shared';
 import { JwtUser } from '../auth/jwt.guard';
 import { HouseholdMap, StorageLocation } from '../entities';
 import { UPLOAD_DIR } from '../upload/upload.module';
+import { placeTree } from './location-tree';
 
 /** 底图放在 uploads/.private/maps/<家庭>/：/uploads 静态路由不给 .private，整个 uploads 目录本来就在备份里 */
 export const MAP_UPLOAD_DIR = join(UPLOAD_DIR, '.private', 'maps');
@@ -109,6 +116,41 @@ export class MapService {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new NotFoundException('底图文件不见了');
       throw error;
     }
+  }
+
+  /**
+   * I2c 导出：地图本身、所有位置（含归档的，形状照带）和底图原样。备份不靠它——uploads 整个目录（含 .private/maps）
+   * 本来就在备份里（backup-restore.md）；这是给「自己留一份 / 换机器导回来」的。
+   */
+  async export(user: JwtUser): Promise<HouseholdMapExport> {
+    this.assertManager(user);
+    const map = await this.maps.findOne({ where: { householdId: user.householdId, isActive: true } });
+    if (!map) throw new NotFoundException('还没有家庭地图');
+    const rows = await this.dataSource.getRepository(StorageLocation).find({ where: { householdId: user.householdId } });
+    let background: HouseholdMapExport['background'] = null;
+    if (map.backgroundFile) {
+      try {
+        const file = await this.background(user.householdId);
+        background = { contentType: file.contentType, base64: file.body.toString('base64') };
+      } catch (error) {
+        // 文件丢了也照样导出形状，底图记成 null
+        if (!(error instanceof NotFoundException)) throw error;
+      }
+    }
+    return {
+      exportedAt: new Date().toISOString(),
+      map: this.present(map),
+      locations: placeTree(rows).map(({ row, pathLabel }) => ({
+        id: row.id,
+        parentId: row.parentId,
+        kind: row.kind,
+        name: row.name,
+        pathLabel,
+        mapShape: row.kind === 'slot' ? null : ((row.mapShape as MapShape | null) ?? null),
+        archivedAt: row.archivedAt?.toISOString() ?? null,
+      })),
+      background,
+    };
   }
 
   private assertManager(user: JwtUser) {

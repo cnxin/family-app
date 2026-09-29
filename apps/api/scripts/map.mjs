@@ -223,7 +223,34 @@ try {
     '资产也能找；% 按字面匹配、不当通配；空关键词 400',
   );
 
-  console.log('6. 跨家庭');
+  console.log('6. 导出（I2c）');
+  const finalImage = png(20, 22);
+  await upload(owner, finalImage, 'image/png');
+  await shape(room.id, roomShape);
+  await shape(cabinet.id, { type: 'rect', x: 120, y: 120, w: 80, h: 40 });
+  const memberExport = await request('/map/export', member);
+  const exported = await request('/map/export', owner);
+  const noMap = await request('/map/export', fresh.token);
+  const data = exported.body.data;
+  const roomRow = data.locations.find((one) => one.id === room.id);
+  const slotRow = data.locations.find((one) => one.id === slot.id);
+  const archivedRow = data.locations.find((one) => one.id === archived.id);
+  assert(
+    memberExport.status === 403 && exported.status === 200 && noMap.status === 404 &&
+      data.map.id === put.body.data.id && data.map.viewBox.h === 900,
+    '导出只给管理员（家人 403）；没地图 404；带上地图本身',
+  );
+  assert(
+    roomRow?.mapShape?.points.length === 6 && roomRow.pathLabel === `客厅${tag}` && slotRow?.mapShape === null &&
+      slotRow.pathLabel === `客厅${tag} / 电视柜 / 第二层` && Boolean(archivedRow?.archivedAt),
+    '所有位置都在（含归档的），带路径和形状，层格形状为 null',
+  );
+  assert(
+    data.background?.contentType === 'image/png' && Buffer.from(data.background.base64, 'base64').equals(finalImage),
+    '底图原样导出（base64，字节一致）',
+  );
+
+  console.log('7. 跨家庭');
   const otherMap = await request('/map', fresh.token);
   const otherBackground = await fetch(`${BASE}/map/background`, { headers: { Authorization: `Bearer ${fresh.token}` } });
   const otherShape = await shape(room.id, roomShape, fresh.token);
