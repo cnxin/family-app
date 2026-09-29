@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { TaskOccurrence } from '@family/contracts';
 import { useCreateIntent } from '../lib/create-intent';
+import { useTaskIntent } from '../lib/task-intent';
 import { useAuth } from '../lib/auth';
 import { useHouseholdToday } from '../lib/use-household-today';
 import {
@@ -35,6 +36,9 @@ export function TasksPage() {
     node?.scrollIntoView({ block: 'center' });
     node?.focus();
   }, []);
+
+  // ?task=<id>：从「晾衣服」这类留意卡跳进来，滚到那件并高亮 2 秒
+  const highlighted = useTaskIntent(range.data, range.data !== undefined || range.isError, today);
 
   const byDate = new Map<string, typeof range.data>();
   for (const item of range.data ?? []) {
@@ -93,9 +97,11 @@ export function TasksPage() {
               {(items ?? []).map((item, index) => (
                 <div
                   key={item.id}
-                  className={`flex min-h-[52px] items-center gap-3 px-4 py-3 ${
+                  data-task-occurrence={item.id}
+                  data-highlighted={highlighted === item.id || undefined}
+                  className={`flex min-h-[52px] items-center gap-3 px-4 py-3 transition-colors duration-300 ease-out ${
                     index ? 'border-t border-border' : ''
-                  }`}
+                  } ${highlighted === item.id ? 'bg-accent-soft' : ''}`}
                 >
                   <Checkbox
                     label={`完成${item.task.title}`}
