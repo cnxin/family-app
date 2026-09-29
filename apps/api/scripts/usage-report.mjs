@@ -5,6 +5,8 @@
  * 两种计数来源，输出里逐行标明：
  *   - 流水：household_activity_logs（按 module）与 menu_events（点菜 / 厨房）。
  *   - 主表新增：不写流水的域，直接数各域主表最近 N 天新增的行（created_at + 创建人列）。
+ *     智能家居控制按来源（手动 / 联动）分开数，HA 打来的事件没有成员、记在「系统」一列。
+ *   - 位置（I1）另起一段现状快照：库存 / 批次 / 资产各有多少条记着位置。
  * 统计不到的（没有创建时间或创建人列的表）列在末尾，不猜。
  *
  * 本机（开发库）：
@@ -68,12 +70,33 @@ const TABLE_SOURCES = [
   { domain: '投票（投票人）', source: '主表新增 poll_votes', sql: `SELECT "householdId" AS household, "memberId" AS member FROM poll_votes WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '菜谱', source: '主表新增 dishes', sql: `SELECT "householdId" AS household, "createdBy" AS member FROM dishes WHERE "createdAt" >= LOCALTIMESTAMP - make_interval(days => $1)` },
   { domain: '库存', source: '主表新增 inventory_transactions', sql: `SELECT "householdId" AS household, "actorId" AS member FROM inventory_transactions WHERE "createdAt" >= now() - make_interval(days => $1)` },
+  // 智能家居控制按来源分开：联动按的记在家庭主人名下（联动以他的名义执行），不是他本人按的
+  { domain: '智能家居（手动控制）', source: '主表新增 smart_home_commands（source = manual）', sql: `SELECT "householdId" AS household, "memberId" AS member FROM smart_home_commands WHERE source = 'manual' AND "createdAt" >= now() - make_interval(days => $1)` },
+  { domain: '智能家居（联动控制）', source: '主表新增 smart_home_commands（source = link，记在家庭主人名下）', sql: `SELECT "householdId" AS household, "memberId" AS member FROM smart_home_commands WHERE source = 'link' AND "createdAt" >= now() - make_interval(days => $1)` },
+  { domain: '智能家居（HA 回报）', source: '主表新增 smart_home_events（HA 打来的，没有成员）', sql: `SELECT "householdId" AS household, NULL::uuid AS member FROM smart_home_events WHERE event <> 'ping' AND "receivedAt" >= now() - make_interval(days => $1)` },
 ];
+
+// 位置（I1）：不是写操作次数，是现状快照——各处有多少条记着位置。位置的改动没有操作人列，按成员数不了。
+const LOCATION_SNAPSHOT = `
+  SELECT h.id AS household,
+    (SELECT count(*) FROM storage_locations l WHERE l."householdId" = h.id AND l."archivedAt" IS NULL AND l."systemKey" IS NULL)::int AS locations,
+    (SELECT count(*) FROM storage_locations l JOIN storage_locations p ON p.id = l."parentId"
+      WHERE l."householdId" = h.id AND l."archivedAt" IS NULL AND p."systemKey" IS NOT NULL)::int AS unsorted,
+    (SELECT count(*) FROM inventory_items i WHERE i."householdId" = h.id)::int AS items,
+    (SELECT count(*) FROM inventory_items i WHERE i."householdId" = h.id AND i."defaultLocationId" IS NOT NULL)::int AS items_located,
+    (SELECT count(*) FROM inventory_batches b WHERE b."householdId" = h.id AND b.quantity > 0)::int AS batches,
+    (SELECT count(*) FROM inventory_batches b WHERE b."householdId" = h.id AND b.quantity > 0 AND b."locationId" IS NOT NULL)::int AS batches_located,
+    (SELECT count(*) FROM inventory_batches b WHERE b."householdId" = h.id AND b."locationUpdatedAt" >= now() - make_interval(days => $1))::int AS batches_moved,
+    (SELECT count(*) FROM home_assets a WHERE a."householdId" = h.id AND a.status = 'active')::int AS assets,
+    (SELECT count(*) FROM home_assets a WHERE a."householdId" = h.id AND a.status = 'active' AND a."locationId" IS NOT NULL)::int AS assets_located,
+    (SELECT count(*) FROM home_assets a WHERE a."householdId" = h.id AND a.status = 'active' AND a."locationId" IS NULL AND a.location IS NOT NULL)::int AS assets_text
+  FROM households h`;
 
 const UNCOUNTED = [
   '购物：shopping_items 没有创建时间和创建人列，无法按成员计数',
   '任务完成：只数新建任务；完成 / 认领（household_task_instances.resolvedById）不是新增行，未计入',
   '菜谱做法：dish_recipe_variants 没有创建人列，未计入',
+  '位置：storage_locations 与库存 / 批次 / 资产的位置列都没有操作人，只给现状快照（见各家庭「位置」一段），不按成员计数',
 ];
 
 const client = new pg.Client({
@@ -130,6 +153,7 @@ try {
       rows.push({ household: row.household, domain: table.domain, source: table.source, member: row.member, count: row.count });
     }
   }
+  const locations = new Map((await client.query(LOCATION_SNAPSHOT, [DAYS])).rows.map((row) => [row.household, row]));
   await client.query('COMMIT');
 
   console.log(`# 小管家用量：最近 ${DAYS} 天的写操作次数\n`);
@@ -145,8 +169,23 @@ try {
       .sort((left, right) => left.domain.localeCompare(right.domain, 'zh-CN'));
 
     console.log(`## ${household.name}（${household.timezone}）\n`);
+    const place = locations.get(household.id);
+    const locationLines = place
+      ? [
+          `- 位置：${place.locations} 个（不含「未整理」）；家人新建、还挂在「未整理」下待归位的 ${place.unsorted} 个`,
+          `- 库存物品记着默认位置：${place.items_located} / ${place.items}`,
+          `- 在用批次记着位置：${place.batches_located} / ${place.batches}（最近 ${DAYS} 天改过位置的 ${place.batches_moved} 个）`,
+          `- 在用资产记着位置：${place.assets_located} / ${place.assets}（还只有旧文字位置、没整理的 ${place.assets_text} 件）`,
+        ]
+      : [];
+    const printLocations = () => {
+      console.log('**位置（现状快照，不是写操作次数）**\n');
+      for (const line of locationLines) console.log(line);
+      console.log('');
+    };
     if (!domains.length) {
       console.log('这段时间没有写操作。\n');
+      printLocations();
       continue;
     }
     console.log(`| 域 | ${columns.map((column) => column.name).join(' | ')} | 合计 | 计数来源 |`);
@@ -166,6 +205,7 @@ try {
       console.log(`| ${domain} | ${cells.join(' | ')} | ${total} | ${source} |`);
     }
     console.log('');
+    printLocations();
   }
   console.log('**没有计入的写操作**\n');
   for (const line of UNCOUNTED) console.log(`- ${line}`);
