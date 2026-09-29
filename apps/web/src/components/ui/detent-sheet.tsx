@@ -41,6 +41,8 @@ export function DetentSheet({
     history: { y: number; t: number }[];
   } | null>(null);
   const closing = useRef(false);
+  /** 拖动中挂在 window 上的监听；卸载时摘掉 */
+  const detach = useRef<() => void>(() => undefined);
 
   const medium = height * (1 - MEDIUM_SHOWN);
   const apply = useCallback(
@@ -55,7 +57,10 @@ export function DetentSheet({
   const settle = useCallback(
     (target: number, velocity = 0) => {
       stop.current();
+      // 停稳了才标 settled（测试和读屏用：动画中的位置不作数）
+      if (sheet.current) sheet.current.dataset.sheetSettled = 'false';
       stop.current = animateSpring(y.current, target, velocity, (value) => apply(value), () => {
+        if (sheet.current) sheet.current.dataset.sheetSettled = 'true';
         if (target >= height) onClose();
       });
     },
@@ -73,7 +78,10 @@ export function DetentSheet({
     apply(height);
     settle(height * (1 - MEDIUM_SHOWN));
     sheet.current?.focus();
-    return () => stop.current();
+    return () => {
+      stop.current();
+      detach.current();
+    };
     // 只在打开时跑一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -94,6 +102,8 @@ export function DetentSheet({
     };
   }, [close]);
 
+  // 按下时就在 window 上听移动和松开：手指一甩第一步就可能出了 sheet 的边（落到遮罩上），
+  // 只挂在 sheet 上会收不到。真正拖起来（过了 6px）才捕获指针，普通点按照常落到按钮上。
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (drag.current || closing.current) return;
     const target = event.target as HTMLElement;
@@ -101,51 +111,64 @@ export function DetentSheet({
     const onHandle = Boolean(target.closest('[data-sheet-handle]'));
     if (!onHandle && detent === 'full') return; // 全屏档：内容自己滚
     stop.current(); // 抓住正在动的 sheet
-    drag.current = {
+    const element = event.currentTarget;
+    const current = {
       pointerId: event.pointerId,
       startY: event.clientY,
       startSheetY: y.current,
       active: false,
       history: [{ y: event.clientY, t: event.timeStamp }],
     };
-  };
+    drag.current = current;
 
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const current = drag.current;
-    if (!current || event.pointerId !== current.pointerId) return;
-    const delta = event.clientY - current.startY;
-    if (!current.active) {
-      if (Math.abs(delta) < DRAG_SLOP) return;
-      current.active = true;
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
-    current.history = [...current.history.slice(-5), { y: event.clientY, t: event.timeStamp }];
-    const raw = current.startSheetY + delta;
-    apply(raw < 0 ? -rubberband(-raw, height) : raw);
-  };
-
-  const onPointerEnd = (event: PointerEvent<HTMLDivElement>) => {
-    const current = drag.current;
-    if (!current || event.pointerId !== current.pointerId) return;
-    drag.current = null;
-    if (!current.active) return;
-    const first = current.history[0];
-    const last = current.history[current.history.length - 1];
-    const seconds = Math.max(0.016, (last.t - first.t) / 1000);
-    const velocity = (last.y - first.y) / seconds;
-    const projected = y.current + project(velocity);
-    const stops: [Detent | 'closed', number][] = [
-      ['full', 0],
-      ['medium', medium],
-      ['closed', height],
-    ];
-    const [next, target] = stops.reduce((best, one) => (Math.abs(one[1] - projected) < Math.abs(best[1] - projected) ? one : best));
-    if (next === 'closed') {
-      closing.current = true;
-    } else {
-      setDetent(next);
-    }
-    settle(target, velocity);
+    const onMove = (move: globalThis.PointerEvent) => {
+      if (move.pointerId !== current.pointerId) return;
+      const delta = move.clientY - current.startY;
+      if (!current.active) {
+        if (Math.abs(delta) < DRAG_SLOP) return;
+        current.active = true;
+        try {
+          element.setPointerCapture(move.pointerId);
+        } catch {
+          /* 指针已经抬起 */
+        }
+      }
+      current.history = [...current.history.slice(-5), { y: move.clientY, t: move.timeStamp }];
+      const raw = current.startSheetY + delta;
+      apply(raw < 0 ? -rubberband(-raw, height) : raw);
+    };
+    const onEnd = (end: globalThis.PointerEvent) => {
+      if (end.pointerId !== current.pointerId) return;
+      detach.current();
+      drag.current = null;
+      if (!current.active) return;
+      const first = current.history[0];
+      const last = current.history[current.history.length - 1];
+      const seconds = Math.max(0.016, (last.t - first.t) / 1000);
+      const velocity = (last.y - first.y) / seconds;
+      const projected = y.current + project(velocity);
+      const stops: [Detent | 'closed', number][] = [
+        ['full', 0],
+        ['medium', medium],
+        ['closed', height],
+      ];
+      const [next, to] = stops.reduce((best, one) => (Math.abs(one[1] - projected) < Math.abs(best[1] - projected) ? one : best));
+      if (next === 'closed') {
+        closing.current = true;
+      } else {
+        setDetent(next);
+      }
+      settle(to, velocity);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+    detach.current = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      detach.current = () => undefined;
+    };
   };
 
   return createPortal(
@@ -161,9 +184,6 @@ export function DetentSheet({
         className="absolute inset-x-0 bottom-0 flex flex-col rounded-t-[24px] border-t border-border bg-surface shadow-xl outline-none"
         style={{ height, transform: `translateY(${height}px)` }}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
       >
         <div data-sheet-handle className="shrink-0 touch-none px-5 pb-3 pt-2">
           <button
