@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
@@ -145,6 +145,9 @@ export function Segmented<T extends string>({
  * 模态框。默认手机贴底、sm 起居中；`place="center"` 时手机也居中（日历日期详情）。
  * Esc 关闭，点遮罩关闭，打开时锁住 body 滚动。
  */
+/** 开着的对话框，最后一个在最上面 */
+const openDialogs: symbol[] = [];
+
 export function Dialog({
   title,
   onClose,
@@ -166,18 +169,27 @@ export function Dialog({
   /** false：不画自带的标题栏（内容自己带标题和关闭按钮，比如智能家居详情）；aria-label 仍用 title */
   titleBar?: boolean;
 }) {
+  // 叠着开的时候（比如入库弹窗里再开位置选择器）只有最上面那层响应 Escape。
+  // onClose 放 ref 里：父组件每次重渲染都会给新的 onClose，不能因此重新挂监听、把自己挪到栈顶
+  const closeRef = useRef(onClose);
   useEffect(() => {
+    closeRef.current = onClose;
+  });
+  useEffect(() => {
+    const token = Symbol('dialog');
+    openDialogs.push(token);
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape' && openDialogs[openDialogs.length - 1] === token) closeRef.current();
     };
     document.addEventListener('keydown', onKey);
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
+      openDialogs.splice(openDialogs.indexOf(token), 1);
       document.body.style.overflow = previous;
     };
-  }, [onClose]);
+  }, []);
 
   // 一定要挂到 body 上：<main> 有 view-transition-name，自带一个层叠上下文，
   // 对话框留在里面的话 z-50 只在 main 内部算数，手机底部标签栏（z-30）会盖住对话框的底部按钮。

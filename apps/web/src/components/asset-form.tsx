@@ -9,6 +9,7 @@ import {
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { Button, Checkbox, Dialog, Input } from './ui';
+import { LocationField } from './location-field';
 
 const label = 'mb-1 block text-[12px] text-ink-soft';
 const chip = (active: boolean) =>
@@ -59,7 +60,8 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
   const save = useUpsertAsset();
   const [name, setName] = useState(editing?.name ?? '');
   const [category, setCategory] = useState<AssetCategory>(editing?.category ?? 'appliance');
-  const [location, setLocation] = useState(editing?.location ?? '');
+  // I1：存放位置改用位置字典；旧的自由文本不在表单里改，详情页「整理到位置」时清掉
+  const [locationId, setLocationId] = useState<string | null>(editing?.locationId ?? null);
   const [brand, setBrand] = useState(editing?.brand ?? '');
   const [model, setModel] = useState(editing?.model ?? '');
   const [serialNumber, setSerialNumber] = useState(editing?.serialNumber ?? '');
@@ -98,7 +100,7 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
         body: {
           name: name.trim(),
           category,
-          location: location.trim() || null,
+          locationId,
           brand: brand.trim() || null,
           model: model.trim() || null,
           serialNumber: serialNumber.trim() || null,
@@ -165,16 +167,7 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className={label}>存放位置</span>
-            <Input
-              value={location}
-              maxLength={80}
-              aria-label="存放位置"
-              placeholder="客厅、厨房"
-              onChange={(event) => setLocation(event.target.value)}
-            />
-          </label>
+          <LocationField label="存放位置" value={locationId} onChange={setLocationId} />
           <label className="block">
             <span className={label}>品牌</span>
             <Input

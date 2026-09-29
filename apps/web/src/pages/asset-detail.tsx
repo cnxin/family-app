@@ -9,6 +9,7 @@ import {
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { AssetForm } from '../components/asset-form';
+import { AssetLocation } from '../components/asset-location';
 import { ExpiryCard } from '../components/asset-expiry';
 import { AssetPlansPanel } from '../components/asset-plans';
 import { AssetDocumentsPanel } from '../components/asset-documents';
@@ -81,9 +82,9 @@ export function AssetDetailPage() {
             ← 家庭资产
           </SoftLink>
           {' · '}
-          {[ASSET_CATEGORY_LABELS[data.category], data.location || '没记存放位置']
-            .filter(Boolean)
-            .join(' · ')}
+          {ASSET_CATEGORY_LABELS[data.category]}
+          {' · '}
+          <AssetLocation asset={data} />
           {retired ? ' · 已停用' : ''}
         </>
       }

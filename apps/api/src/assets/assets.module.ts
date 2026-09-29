@@ -16,6 +16,7 @@ import {
   Res,
   UploadedFile,
   UseInterceptors,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
@@ -40,6 +41,7 @@ import { basename, extname, resolve, sep } from 'node:path';
 import { memoryStorage } from 'multer';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
+import { usableLocationId } from '../locations/location-refs';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { jwtSecret } from '../common/config';
@@ -120,6 +122,11 @@ class CreateAssetDto {
   @MaxLength(80)
   location?: string | null;
 
+  /** I1：位置字典里的位置；给了非空值时旧文本一并清掉 */
+  @IsOptional()
+  @IsUUID()
+  locationId?: string | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(80)
@@ -181,6 +188,10 @@ class UpdateAssetDto {
   @IsString()
   @MaxLength(80)
   location?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  locationId?: string | null;
 
   @IsOptional()
   @IsString()
@@ -474,6 +485,12 @@ function legacyAssetFilePath(url: string) {
   return path;
 }
 
+class SetAssetLocationDto {
+  @IsOptional()
+  @IsUUID()
+  locationId: string | null;
+}
+
 @Injectable()
 export class AssetsService {
   private readonly documentSigningSecret = jwtSecret();
@@ -550,7 +567,7 @@ export class AssetsService {
           householdId: user.householdId,
           name: dto.name.trim(),
           category: dto.category,
-          location: nullableText(dto.location),
+          ...(await this.locationFields(manager, user.householdId, dto.locationId, nullableText(dto.location))),
           brand: nullableText(dto.brand),
           model: nullableText(dto.model),
           serialNumber: nullableText(dto.serialNumber),
@@ -575,6 +592,22 @@ export class AssetsService {
       return asset.id;
     });
     return this.get(assetId, user.householdId);
+  }
+
+  /** I1：选了位置就清掉旧文本（「整理到位置」）；清掉位置时旧文本不动。 */
+  private async locationFields(manager: EntityManager, householdId: string, locationId: string | null | undefined, text: string | null) {
+    const usable = (await usableLocationId(manager, householdId, locationId)) ?? null;
+    return { locationId: usable, location: usable ? null : text };
+  }
+
+  /** 一跳改资产位置（「找不到 → 改」、旧文本「整理到位置」）。 */
+  async setLocation(id: string, locationId: string | null, user: JwtUser) {
+    await this.dataSource.transaction(async (manager) => {
+      const asset = await this.lockAsset(id, user.householdId, manager);
+      Object.assign(asset, await this.locationFields(manager, user.householdId, locationId, asset.location));
+      await manager.getRepository(HomeAsset).save(asset);
+    });
+    return this.get(id, user.householdId);
   }
 
   async update(id: string, dto: UpdateAssetDto, user: JwtUser) {
@@ -619,6 +652,9 @@ export class AssetsService {
       if (dto.category != null) asset.category = dto.category;
       if (Object.prototype.hasOwnProperty.call(dto, 'location')) {
         asset.location = nullableText(dto.location);
+      }
+      if (dto.locationId !== undefined) {
+        Object.assign(asset, await this.locationFields(manager, user.householdId, dto.locationId, asset.location));
       }
       if (Object.prototype.hasOwnProperty.call(dto, 'brand')) {
         asset.brand = nullableText(dto.brand);
@@ -1809,6 +1845,16 @@ export class AssetsController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.update(id, dto, user);
+  }
+
+  @Patch('assets/:id/location')
+  @RequireCapabilities('manage_assets')
+  setLocation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetAssetLocationDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.service.setLocation(id, dto.locationId ?? null, user);
   }
 
   @Post('assets/:id/renew')

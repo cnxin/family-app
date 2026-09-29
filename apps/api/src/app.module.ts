@@ -27,6 +27,7 @@ import { SmartHomeModule } from './smart-home/smart-home.module';
 import { SystemModule } from './system/system.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TodayModule } from './today/today.module';
+import { LocationsModule } from './locations/locations.module';
 import { TravelModule } from './travel/travel.module';
 import { UploadModule } from './upload/upload.module';
 
@@ -59,6 +60,7 @@ import { UploadModule } from './upload/upload.module';
     SystemModule,
     TasksModule,
     TodayModule,
+    LocationsModule,
     TravelModule,
     UploadModule,
   ],

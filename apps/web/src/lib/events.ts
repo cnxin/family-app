@@ -23,6 +23,7 @@ export const DOMAIN_QUERY_KEYS: Record<DomainKey, readonly string[]> = {
     'menu-inventory-preview', 'shopping-inventory-preview', 'maintenance-consumables-preview',
   ],
   assets: ['assets', 'asset', 'maintenance-consumables-preview'],
+  locations: ['locations'],
   finance: ['finance'],
   points: ['rewards', 'reward-redemptions', 'points-accounts', 'points-ledger'],
   guests: [

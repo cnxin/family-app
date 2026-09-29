@@ -37,6 +37,10 @@ const sources: Record<
   travel: 'SELECT 1 FROM travel_plans WHERE "householdId" = $1',
   memories: 'SELECT 1 FROM family_memories WHERE "householdId" = $1',
   knowledge: 'SELECT 1 FROM knowledge_articles WHERE "householdId" = $1',
+  // I1：「未整理」和家人挂在它下面的之外，家里有任何一个没归档的位置（管理员整理过才算这个域有数据）
+  locations: `SELECT 1 FROM storage_locations l WHERE l."householdId" = $1
+    AND l."systemKey" IS NULL AND l."archivedAt" IS NULL
+    AND NOT EXISTS (SELECT 1 FROM storage_locations p WHERE p.id = l."parentId" AND p."systemKey" IS NOT NULL)`,
 };
 
 // 智能家居：连接器配好了（家庭自己的一行：启用 + 地址 + 令牌；没有这一行才看服务器默认）且白名单非空。

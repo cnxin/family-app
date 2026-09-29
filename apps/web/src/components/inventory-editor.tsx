@@ -8,6 +8,8 @@ import {
   useUpsertInventoryItem,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { useSetLocation } from '../lib/queries/locations';
+import { LocationField } from './location-field';
 import { Button, Dialog, Input, selectClass } from './ui';
 
 export const CATEGORY_EMOJI: Record<InventoryCategory, string> = {
@@ -41,20 +43,24 @@ function Field({
 /** 新建 / 编辑一个库存项。改余量会记一条 adjustment 流水，所以这里也算一次「动库存」。 */
 export function InventoryEditor({
   item,
+  preset,
   onClose,
   onRequestDelete,
 }: {
   item: InventoryItem | null;
+  /** 新建时预填（⌘K「记一下东西放哪」带过来的名字和位置） */
+  preset?: { name: string; locationId: string } | null;
   onClose: () => void;
   onRequestDelete: (item: InventoryItem) => void;
 }) {
   const upsert = useUpsertInventoryItem();
-  const [name, setName] = useState(item?.name ?? '');
+  const [name, setName] = useState(item?.name ?? preset?.name ?? '');
   const [category, setCategory] = useState<InventoryCategory>(item?.category ?? '其他');
   const [quantity, setQuantity] = useState(String(Number(item?.quantity ?? 0)));
   const [unit, setUnit] = useState(item?.unit ?? '份');
   const [threshold, setThreshold] = useState(String(Number(item?.lowStockThreshold ?? 1)));
   const [restock, setRestock] = useState(String(Number(item?.restockQuantity ?? 1)));
+  const [location, setLocation] = useState<string | null>(item?.defaultLocationId ?? preset?.locationId ?? null);
 
   const numbers = [quantity, threshold, restock].map(Number);
   const valid =
@@ -74,6 +80,7 @@ export function InventoryEditor({
         unit: unit.trim(),
         lowStockThreshold: Number(threshold),
         restockQuantity: Number(restock),
+        defaultLocationId: location,
       },
       {
         onSuccess: () => {
@@ -166,6 +173,7 @@ export function InventoryEditor({
             />
           </Field>
         </div>
+        <LocationField label="平时放哪儿" value={location} onChange={setLocation} />
       </div>
     </Dialog>
   );
@@ -189,6 +197,9 @@ export function BatchDialog({
 }) {
   const create = useCreateInventoryBatch();
   const update = useUpdateInventoryBatch();
+  const setBatchLocation = useSetLocation();
+  // undefined = 没动过：新批次跟着物品的默认位置走，修改时保持原样
+  const [location, setLocation] = useState<string | null | undefined>(undefined);
   const [inventoryItemId, setInventoryItemId] = useState(
     batch?.inventoryItemId ?? inventory[0]?.id ?? '',
   );
@@ -198,8 +209,9 @@ export function BatchDialog({
   const [expiresOn, setExpiresOn] = useState(batch?.expiresOn ?? '');
   const [openedOn, setOpenedOn] = useState(batch?.openedOn ?? '');
 
-  const pending = create.isPending || update.isPending;
+  const pending = create.isPending || update.isPending || setBatchLocation.isPending;
   const item = inventory.find((option) => option.id === inventoryItemId);
+  const shownLocation = location === undefined ? (batch ? batch.locationId : item?.defaultLocationId ?? null) : location;
   const tracked = batches
     .filter((one) => one.inventoryItemId === inventoryItemId)
     .reduce((sum, one) => sum + Number(one.quantity), 0);
@@ -218,9 +230,12 @@ export function BatchDialog({
     if (!valid || pending) return;
     const done = { onSuccess: () => { pushToast(batch ? '批次已更新' : '批次已登记'); onClose(); } };
     if (batch) {
+      if (location !== undefined && location !== batch.locationId) {
+        setBatchLocation.mutate({ target: 'batch', id: batch.id, locationId: location });
+      }
       update.mutate({ id: batch.id, expectedVersion: batch.version, ...dates }, done);
     } else {
-      create.mutate({ inventoryItemId, quantity: Number(quantity), ...dates }, done);
+      create.mutate({ inventoryItemId, quantity: Number(quantity), ...dates, locationId: shownLocation }, done);
     }
   };
 
@@ -299,6 +314,7 @@ export function BatchDialog({
             onChange={(event) => setOpenedOn(event.target.value)}
           />
         </Field>
+        <LocationField value={shownLocation} onChange={setLocation} />
       </div>
     </Dialog>
   );

@@ -92,7 +92,7 @@ export function useInventoryBatches(
 export function useCreateInventoryBatch() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: BatchDatesInput & { inventoryItemId: string; quantity: number }) =>
+    mutationFn: (input: BatchDatesInput & { inventoryItemId: string; quantity: number; locationId?: string | null }) =>
       api<InventoryBatch>('/inventory-batches', {
         method: 'POST',
         body: {

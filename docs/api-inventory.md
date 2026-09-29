@@ -4,13 +4,13 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 297 个端点（POST 119 / GET 98 / PATCH 44 / DELETE 27 / PUT 9），公开端点 28 个，已定义契约 297 个。
+共 306 个端点（POST 121 / GET 101 / PATCH 47 / DELETE 28 / PUT 9），公开端点 28 个，已定义契约 306 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
 | activities | 1 | 1 |
 | agent | 39 | 39 |
-| assets | 18 | 18 |
+| assets | 19 | 19 |
 | auth | 16 | 16 |
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
@@ -18,8 +18,9 @@
 | finance | 13 | 13 |
 | guests | 21 | 21 |
 | households | 1 | 1 |
-| inventory | 13 | 13 |
+| inventory | 14 | 14 |
 | knowledge | 8 | 8 |
+| locations | 7 | 7 |
 | media | 32 | 32 |
 | memories | 8 | 8 |
 | menus | 7 | 7 |
@@ -86,7 +87,7 @@
 | POST | `/internal/agent/mcp` | `AgentMcpController.handle` | 公开 | ✓ | `apps/api/src/agent/agent-mcp.controller.ts` |
 | DELETE | `/internal/agent/mcp` | `AgentMcpController.methodNotAllowedDelete` | 公开 | ✓ | `apps/api/src/agent/agent-mcp.controller.ts` |
 
-## assets（18）
+## assets（19）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -99,6 +100,7 @@
 | PATCH | `/assets/:id` | `AssetsController.update` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
 | POST | `/assets/:id/documents` | `AssetsController.createDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
 | POST | `/assets/:id/documents/upload` | `AssetsController.FileInterceptor` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| PATCH | `/assets/:id/location` | `AssetsController.setLocation` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
 | POST | `/assets/:id/maintenance-plans` | `AssetsController.createPlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
 | POST | `/assets/:id/renew` | `AssetsController.renewSubscription` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
 | PATCH | `/maintenance-consumables/:id` | `AssetsController.updateConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
@@ -205,7 +207,7 @@
 | --- | --- | --- | --- | :-: | --- |
 | PATCH | `/households/me` | `HouseholdsController.update` | 登录 | ✓ | `apps/api/src/households/households.module.ts` |
 
-## inventory（13）
+## inventory（14）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -213,6 +215,7 @@
 | GET | `/inventory-batches` | `InventoryController.batches` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
 | POST | `/inventory-batches` | `InventoryController.createBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
 | PATCH | `/inventory-batches/:id` | `InventoryController.updateBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| PATCH | `/inventory-batches/:id/location` | `InventoryController.setBatchLocation` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
 | POST | `/inventory-items` | `InventoryController.create` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
 | PATCH | `/inventory-items/:id` | `InventoryController.update` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
 | DELETE | `/inventory-items/:id` | `InventoryController.remove` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
@@ -235,6 +238,18 @@
 | POST | `/knowledge-articles/:id/restore` | `KnowledgeController.restore` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
 | GET | `/knowledge-articles/:id/revisions` | `KnowledgeController.revisions` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
 | POST | `/knowledge-articles/:id/revisions/:version/restore` | `KnowledgeController.restoreRevision` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+
+## locations（7）
+
+| 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
+| --- | --- | --- | --- | :-: | --- |
+| GET | `/locations` | `LocationsController.list` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| POST | `/locations` | `LocationsController.create` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| PATCH | `/locations/:id` | `LocationsController.update` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| DELETE | `/locations/:id` | `LocationsController.remove` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| POST | `/locations/:id/archive` | `LocationsController.archive` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| GET | `/locations/:id/contents` | `LocationsController.contents` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| GET | `/locations/search` | `LocationsController.search` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
 
 ## media（32）
 

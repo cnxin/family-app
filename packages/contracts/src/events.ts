@@ -7,7 +7,7 @@ import { SHELF_MODULE_KEYS } from './system';
 // 对应查询失效、自己重取。
 
 /**
- * 域 key 的唯一来源：家里页 shelf 的 15 个（system.ts）+ 常驻域 + 设置类。
+ * 域 key 的唯一来源：家里页 shelf 的 16 个（system.ts）+ 常驻域 + 设置类。
  * 新增业务域先在这里加 key，再在下面的路由映射表里登记它的写端点。
  */
 export const CORE_DOMAIN_KEYS = ['menus', 'shopping', 'calendar', 'tasks', 'notifications'] as const;
@@ -68,7 +68,9 @@ export const EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/internal/agent/channels/:channelId/messages', domains: ['assistant'], emit: 'explicit' },
   { prefix: '/internal/agent/mcp', domains: ['assistant'], emit: 'explicit' },
 
-  { prefix: '/assets', domains: ['assets', 'reminders', 'calendar'] },
+  { prefix: '/assets', domains: ['assets', 'reminders', 'calendar', 'locations'] },
+  { prefix: '/assets/:id/location', domains: ['assets', 'locations'] },
+  { prefix: '/locations', domains: ['locations', 'inventory', 'assets'] },
   { prefix: '/asset-documents', domains: ['assets'] },
   { prefix: '/maintenance-plans', domains: ['assets', 'reminders', 'calendar', 'inventory'] },
   { prefix: '/maintenance-plans/:id/shopping-items', domains: ['assets', 'shopping'] },
@@ -99,6 +101,7 @@ export const EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/menu-items', domains: ['menus'] },
   { prefix: '/shopping-list', domains: ['shopping'] },
   { prefix: '/shopping-items', domains: ['shopping', 'inventory'] },
+  { prefix: '/shopping-items/:id/confirm-stock', domains: ['shopping', 'inventory', 'locations'] },
   { prefix: '/dishes', domains: ['recipes'] },
   { prefix: '/recipe-variants', domains: ['recipes'] },
 
@@ -115,8 +118,8 @@ export const EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/reward-redemptions', domains: ['points'] },
   { prefix: '/finance', domains: ['finance'] },
 
-  { prefix: '/inventory-items', domains: ['inventory', 'shopping'] },
-  { prefix: '/inventory-batches', domains: ['inventory'] },
+  { prefix: '/inventory-items', domains: ['inventory', 'shopping', 'locations'] },
+  { prefix: '/inventory-batches', domains: ['inventory', 'locations'] },
   { prefix: '/inventory-transactions', domains: ['inventory'] },
 
   { prefix: '/knowledge-articles', domains: ['knowledge'] },

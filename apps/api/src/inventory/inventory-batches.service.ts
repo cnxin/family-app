@@ -19,6 +19,7 @@ import {
   InventoryTransaction,
 } from '../entities';
 import { addDays, diffDays, householdToday, todayInShanghai } from '@family/shared';
+import { usableLocationId } from '../locations/location-refs';
 
 const MAX_QUANTITY = 99_999_999.99;
 
@@ -33,6 +34,8 @@ export interface CreateInventoryBatchInput extends BatchDatesInput {
   inventoryItemId: string;
   quantity: number;
   idempotencyKey: string;
+  /** I1：放哪儿；不填取物品的默认位置 */
+  locationId?: string | null;
 }
 
 export interface UpdateInventoryBatchInput extends BatchDatesInput {
@@ -229,12 +232,16 @@ export class InventoryBatchesService {
         );
       }
       const batchId = randomUUID();
+      const locationId =
+        (await usableLocationId(manager, user.householdId, input.locationId)) ?? item.defaultLocationId ?? null;
       const batch = await manager.getRepository(InventoryBatch).save(
         manager.getRepository(InventoryBatch).create({
           id: batchId,
           householdId: user.householdId,
           inventoryItemId: item.id,
           quantity: quantityString(input.quantity),
+          locationId,
+          locationUpdatedAt: locationId ? this.clock.now() : null,
           ...dates,
           sourceType: 'manual',
           sourceId: batchId,
@@ -305,6 +312,8 @@ export class InventoryBatchesService {
       actor: JwtUser;
       sourceId: string;
       dates: BatchDatesInput;
+      /** 已校验过的位置；null 时取物品的默认位置 */
+      locationId: string | null;
     },
   ) {
     const existing = await manager.getRepository(InventoryBatch).findOneBy({
@@ -319,6 +328,8 @@ export class InventoryBatchesService {
         householdId: input.actor.householdId,
         inventoryItemId: input.item.id,
         quantity: quantityString(input.quantity),
+        locationId: input.locationId ?? input.item.defaultLocationId ?? null,
+        locationUpdatedAt: (input.locationId ?? input.item.defaultLocationId) ? this.clock.now() : null,
         ...dates,
         sourceType: 'shopping_item',
         sourceId: input.sourceId,
@@ -516,6 +527,19 @@ export class InventoryBatchesService {
         .map((movement) => movement.inventoryTransactionId)
         .filter((id): id is string => Boolean(id)),
     );
+  }
+
+  /** 一跳改批次位置（「找不到 → 改」）。不动 version：位置不是日期，不和改日期的乐观锁打架。 */
+  async setLocation(id: string, locationId: string | null, user: JwtUser) {
+    await this.dataSource.transaction(async (manager) => {
+      const batch = await manager.getRepository(InventoryBatch).findOneBy({ id, householdId: user.householdId });
+      if (!batch) throw new NotFoundException('库存批次不存在');
+      const usable = (await usableLocationId(manager, user.householdId, locationId)) ?? null;
+      await manager
+        .getRepository(InventoryBatch)
+        .update({ id, householdId: user.householdId }, { locationId: usable, locationUpdatedAt: this.clock.now() });
+    });
+    return this.get(id, user.householdId);
   }
 
   private async get(id: string, householdId: string) {
