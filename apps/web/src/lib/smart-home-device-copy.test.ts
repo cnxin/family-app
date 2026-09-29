@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { SmartHomeEntityState } from '@family/contracts';
-import { deviceStatusLine, isPercentEntity, percentLabel, primaryButton, type DeviceLike } from './smart-home-device-copy';
+import {
+  deviceStatusLine,
+  isPercentEntity,
+  percentLabel,
+  primaryButton,
+  smartHomeTileLine,
+  todayDevices,
+  type DeviceLike,
+} from './smart-home-device-copy';
 
 function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartHomeEntityState {
   return {
@@ -73,5 +81,37 @@ describe('primaryButton', () => {
     expect(primaryButton('switch', state('off'))?.label).toBe('打开');
     expect(primaryButton('sensor', state('12'))).toBeNull();
     expect(primaryButton('switch', state('unavailable'))).toBeNull();
+  });
+});
+
+describe('今天页设备区块与家里页状态行（H3 E5）', () => {
+  const row = (name: string, extra: Partial<{ pinnedToToday: boolean; online: boolean; primaryDomain: string; primary: SmartHomeEntityState | null; icon: DeviceLike['icon'] }> = {}) => ({
+    name, icon: 'switch' as DeviceLike['icon'], primaryDomain: 'switch', primary: state('off'), featured: [], pinnedToToday: false, online: true, ...extra,
+  });
+
+  it('今天页只放勾了的设备，按原顺序取前 4 台；场景不算，也不算进「全部 N 台」', () => {
+    const devices = [
+      row('场景', { primaryDomain: 'scene', pinnedToToday: true }),
+      ...['一', '二', '三', '四', '五'].map((name) => row(name, { pinnedToToday: true })),
+      row('没勾'),
+    ];
+    const { shown, total } = todayDevices(devices, 4);
+    expect(shown.map((one) => one.name)).toEqual(['一', '二', '三', '四']);
+    expect(total).toBe(6);
+    expect(todayDevices([row('没勾')], 4).shown).toEqual([]);
+  });
+
+  it('状态行：连着数运行 / 要留意 / 离线；都没开写「都歇着」；断开、没连、没设备分别处理', () => {
+    const connected = { configured: true, available: true };
+    const running = row('扫地机', { icon: 'vacuum', primaryDomain: 'vacuum', primary: state('cleaning', { battery: 60 }) });
+    const low = row('净水', { icon: 'water_purifier', primaryDomain: 'sensor', primary: state('8', { unit: '%' }) });
+    const gone = row('插座', { online: false, primary: state('unavailable') });
+    expect(smartHomeTileLine({ connection: connected, devices: [running, low, gone, row('灯')] })).toBe(
+      '4 台设备 · 1 台在运行 · 1 台要留意 · 1 台离线',
+    );
+    expect(smartHomeTileLine({ connection: connected, devices: [row('灯')] })).toBe('1 台设备 · 都歇着');
+    expect(smartHomeTileLine({ connection: { configured: true, available: false }, devices: [row('灯')] })).toBe('连不上 Home Assistant');
+    expect(smartHomeTileLine({ connection: { configured: false, available: false }, devices: [] })).toBeUndefined();
+    expect(smartHomeTileLine({ connection: connected, devices: [row('场景', { primaryDomain: 'scene' })] })).toBeUndefined();
   });
 });

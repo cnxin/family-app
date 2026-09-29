@@ -117,6 +117,15 @@ try {
       firstRun.message.startsWith('「打扫卫生」打勾了'),
     '走 E2 的控制链路：审计里有这一条；规则上看得到最近一次运行',
   );
+  const byLink = (await request('/smart-home/commands?source=link', owner)).body.data;
+  const byHand = (await request('/smart-home/commands?source=manual', owner)).body.data;
+  const badSource = await request('/smart-home/commands?source=webhook', owner);
+  assert(
+    byLink.length === 1 && byLink[0].source === 'link' && byLink[0].linkName === '打扫就扫地' && byLink[0].action === 'start' &&
+      byHand.every((one) => one.source === 'manual' && one.linkName === null) && !byHand.some((one) => one.id === byLink[0].id) &&
+      badSource.status === 400,
+    '操作记录按来源筛（E5）：联动按的记 source=link 并带联动名，「手按」里没有它；不认识的来源 400',
+  );
   await complete(cleanId, member, 'pending');
   await complete(cleanId);
   await wait(500);

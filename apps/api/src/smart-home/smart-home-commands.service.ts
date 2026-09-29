@@ -12,6 +12,7 @@ import {
   smartHomeActionsFor,
   type SmartHomeAction,
   type SmartHomeCommand,
+  type SmartHomeCommandSource,
   type SmartHomeCommandBody,
 } from '@family/contracts';
 import { JwtUser } from '../auth/jwt.guard';
@@ -58,7 +59,13 @@ export class SmartHomeCommandsService {
     private readonly smartHome: SmartHomeService,
   ) {}
 
-  async execute(deviceId: string, body: SmartHomeCommandBody, user: JwtUser): Promise<SmartHomeCommand> {
+  /** origin：E4 联动按的传 linkId（审计里记来源），家里人手按的不传。 */
+  async execute(
+    deviceId: string,
+    body: SmartHomeCommandBody,
+    user: JwtUser,
+    origin: { linkId: string } | null = null,
+  ): Promise<SmartHomeCommand> {
     const device = await this.devices.findOne({ where: { householdId: user.householdId, id: deviceId } });
     if (!device) throw new NotFoundException('白名单里没有这台设备');
     const entityId = body.entityId ?? device.primaryEntityId;
@@ -100,6 +107,8 @@ export class SmartHomeCommandsService {
           status: 'pending',
           message: null,
           finishedAt: null,
+          source: origin ? 'link' : 'manual',
+          linkId: origin?.linkId ?? null,
         }),
       );
     } catch (error) {
@@ -147,10 +156,10 @@ export class SmartHomeCommandsService {
     }
   }
 
-  async recent(householdId: string): Promise<SmartHomeCommand[]> {
+  async recent(householdId: string, source?: SmartHomeCommandSource): Promise<SmartHomeCommand[]> {
     const rows = await this.commands.find({
-      where: { householdId },
-      relations: { member: true },
+      where: { householdId, ...(source ? { source } : {}) },
+      relations: { member: true, link: true },
       order: { createdAt: 'DESC' },
       take: 50,
     });
@@ -182,6 +191,8 @@ export class SmartHomeCommandsService {
       createdAt: row.createdAt.toISOString(),
       finishedAt: row.finishedAt?.toISOString() ?? null,
       replayed,
+      source: row.source,
+      linkName: row.link?.name ?? null,
     };
   }
 }

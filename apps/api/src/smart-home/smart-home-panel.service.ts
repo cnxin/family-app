@@ -204,7 +204,7 @@ export class SmartHomePanelService {
   private async recent(row: SmartHomeDevice): Promise<SmartHomeCommand[]> {
     const rows = await this.commands.find({
       where: { householdId: row.householdId, deviceId: row.id },
-      relations: { member: true },
+      relations: { member: true, link: true },
       order: { createdAt: 'DESC' },
       take: 3,
     });
@@ -219,6 +219,8 @@ export class SmartHomePanelService {
       createdAt: one.createdAt.toISOString(),
       finishedAt: one.finishedAt?.toISOString() ?? null,
       replayed: false,
+      source: one.source,
+      linkName: one.link?.name ?? null,
     }));
   }
 

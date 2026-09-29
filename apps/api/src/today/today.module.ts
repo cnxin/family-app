@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TodayAttentionController } from './today-attention.controller';
 import {
+  AttentionRegistry,
   AssetMaintenanceAttentionRule,
   AssetRenewalAttentionRule,
   AssetWarrantyAttentionRule,
@@ -30,6 +31,8 @@ import { TodayAttentionService } from './today-attention.service';
     PointsRedemptionAttentionRule,
     FinanceBudgetAttentionRule,
     BackupAttentionRule,
+    AttentionRegistry,
   ],
+  exports: [AttentionRegistry],
 })
 export class TodayModule {}

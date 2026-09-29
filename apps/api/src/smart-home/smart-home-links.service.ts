@@ -205,6 +205,7 @@ export class SmartHomeLinksService implements OnModuleInit, OnModuleDestroy {
         link.targetDeviceId,
         { action: link.action as SmartHomeAction, requestId: record.id },
         actor,
+        { linkId: link.id },
       );
       record.status = 'succeeded';
       record.message = `${reason}：${result.message ?? '已执行'}`.slice(0, 300);

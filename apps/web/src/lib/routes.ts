@@ -70,6 +70,11 @@ export function attentionPath(item: {
   if (item.domain === 'travel' && item.entity) return `${attentionRoutes.travel}/${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'polls' && item.entity) return `${attentionRoutes.polls}?pollId=${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'points' && item.entity) return `${attentionRoutes.points}?redemptionId=${encodeURIComponent(item.entity.id)}`;
+  if (item.domain === 'smart-home') {
+    if (item.kind === 'filter' && item.entity) return `${attentionRoutes['smart-home']}?device=${encodeURIComponent(item.entity.id)}`;
+    if (item.kind === 'laundry') return '/schedule/tasks';
+    if (item.kind === 'offline') return `${attentionRoutes['smart-home']}/settings`;
+  }
   // 来访记录没有餐次，默认晚餐；点菜页读到 date 后会把参数抹掉。
   if (item.domain === 'guests' && item.kind === 'menu' && item.dueOn) {
     return `/eat/order?date=${encodeURIComponent(item.dueOn)}&mealType=dinner`;

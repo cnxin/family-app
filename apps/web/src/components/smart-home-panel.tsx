@@ -115,7 +115,7 @@ function Recent({ panel }: { panel: SmartHomePanel }) {
           {panel.recent.map((entry) => (
             <li key={entry.id} className="flex items-baseline gap-2.5 border-t border-border px-3 py-2.5 text-[13.5px] first:border-t-0">
               <span className="min-w-0 flex-1">
-                {entry.memberName} · {entry.entityId !== panel.primary.entityId ? `${names.get(entry.entityId) ?? entry.entityId} · ` : ''}
+                {entry.source === 'link' ? `联动「${entry.linkName ?? '已删除'}」` : entry.memberName} · {entry.entityId !== panel.primary.entityId ? `${names.get(entry.entityId) ?? entry.entityId} · ` : ''}
                 {SMART_HOME_ACTION_LABELS[entry.action]}
                 {entry.status === 'failed' && entry.message ? (
                   <span className="block text-[12px] text-ink-soft">{entry.message}</span>

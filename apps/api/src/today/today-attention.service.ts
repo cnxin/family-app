@@ -6,6 +6,7 @@ import { hasCapability, type Capability } from '../auth/capabilities';
 import type { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
 import {
+  AttentionRegistry,
   AssetMaintenanceAttentionRule,
   AssetRenewalAttentionRule,
   AssetWarrantyAttentionRule,
@@ -44,6 +45,7 @@ const OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
   polls: 'polls',
   points: 'points',
   finance: 'finance',
+  'smart-home': 'smart-home',
 };
 
 @Injectable()
@@ -62,6 +64,7 @@ export class TodayAttentionService {
     private readonly pointsRedemption: PointsRedemptionAttentionRule,
     private readonly financeBudget: FinanceBudgetAttentionRule,
     private readonly backup: BackupAttentionRule,
+    private readonly registry: AttentionRegistry,
   ) {}
 
   async get(user: JwtUser): Promise<{ today: string; items: AttentionItem[] }> {
@@ -118,7 +121,13 @@ export class TodayAttentionService {
     if (allowed('finance') && can('manage_finance')) rules.push(this.financeBudget);
     if (can('manage_integrations')) rules.push(this.backup);
 
-    const candidates = (await Promise.all(rules.map((rule) => rule.run(context)))).flat();
+    const sources = this.registry.list().filter((source) => allowed(source.domain));
+    const candidates = (
+      await Promise.all([
+        ...rules.map((rule) => rule.run(context)),
+        ...sources.map((source) => source.run(context, can)),
+      ])
+    ).flat();
     return { today, items: this.merge(candidates) };
   }
 

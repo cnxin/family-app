@@ -108,13 +108,16 @@ export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  label,
 }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
+  /** 同一页有两组分段时给读屏区分（tablist 的名字） */
+  label?: string;
 }) {
   return (
-    <div role="tablist" className="inline-flex rounded-lg border border-border bg-muted p-0.5">
+    <div role="tablist" aria-label={label} className="inline-flex rounded-lg border border-border bg-muted p-0.5">
       {options.map((option) => {
         const active = option.value === value;
         return (

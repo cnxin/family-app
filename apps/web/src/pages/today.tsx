@@ -19,6 +19,7 @@ import { SoftLink } from '../components/soft-link';
 import { TodayStats, type TodayStat } from '../components/today-hero';
 import { TodayMeals } from '../components/today-meals';
 import { TodayReminders, TodayShopping } from '../components/today-aside';
+import { TodayDevices } from '../components/today-devices';
 import { AttentionSection, nextHouseholdMidnight, useAttentionSnooze } from '../components/attention-card';
 import { QueryFailure, QueryFrame, StaleNotice, queryPhase } from '../components/query-state';
 import { TaskAssignee } from '../components/task-assignee';
@@ -140,6 +141,8 @@ export function TodayPage() {
             onRetry={() => void menus.refetch()}
           />
         </section>
+
+        <TodayDevices />
 
         <Panel
           title="今日待办"
