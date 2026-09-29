@@ -1,8 +1,9 @@
-import type { ItemLocationHit } from '@family/contracts';
+import type { ItemLocationHit, StorageLocationContents } from '@family/contracts';
 import type { EntityManager } from 'typeorm';
 import type { PlacedRow, TreeRow } from './location-tree';
 
-// 「那个东西上次放在哪」：按名字找库存物品（默认位置）、有余量的批次、资产，只要记了位置的（I2 地图搜索、I3 ⌘K / agent 共用）。
+// 「那个东西上次放在哪」：按名字找库存物品（默认位置）、有余量的批次、资产，只要记了位置的（I2 地图搜索、I3 ⌘K / agent 共用）；
+// 以及「这个位置里放着什么」。都是纯函数（只吃 EntityManager），别的域（agent）直接调，不经过 LocationsService。
 // 口径是「上次放在」：只报记下来的位置，不推断、不校验。
 
 interface Row {
@@ -86,4 +87,33 @@ export async function findItemLocations<T extends TreeRow>(
     if (hits.length >= LIMIT) break;
   }
   return hits;
+}
+
+/** 这些位置下记着的库存物品（默认位置）、有余量的批次、资产：/locations/:id/contents 与 agent 的 list_location_contents 共用 */
+export async function readLocationContents(
+  manager: EntityManager,
+  householdId: string,
+  ids: string[],
+): Promise<Omit<StorageLocationContents, 'location'>> {
+  const [items, batches, assets] = await Promise.all([
+    manager.query(
+      `SELECT id, name, quantity::text AS quantity, unit, "defaultLocationId" AS "locationId"
+         FROM inventory_items WHERE "householdId" = $1 AND "defaultLocationId" = ANY($2) ORDER BY name`,
+      [householdId, ids],
+    ),
+    manager.query(
+      `SELECT b.id, b."inventoryItemId", i.name AS "itemName", b.quantity::text AS quantity, i.unit,
+              b."expiresOn"::text AS "expiresOn", b."locationId"
+         FROM inventory_batches b JOIN inventory_items i ON i.id = b."inventoryItemId"
+        WHERE b."householdId" = $1 AND b."locationId" = ANY($2) AND b.quantity > 0
+        ORDER BY b."expiresOn" NULLS LAST, i.name`,
+      [householdId, ids],
+    ),
+    manager.query(
+      `SELECT id, name, category, "locationId" FROM home_assets
+        WHERE "householdId" = $1 AND "locationId" = ANY($2) ORDER BY name`,
+      [householdId, ids],
+    ),
+  ]);
+  return { items, batches, assets };
 }

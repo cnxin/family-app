@@ -13,8 +13,8 @@ export const mapKeys = {
   find: (q: string) => ['locations', 'find', q] as const,
 };
 
-export function useHouseholdMap() {
-  return useQuery({ queryKey: mapKeys.map, queryFn: () => api<HouseholdMap | null>('/map') });
+export function useHouseholdMap(enabled = true) {
+  return useQuery({ queryKey: mapKeys.map, queryFn: () => api<HouseholdMap | null>('/map'), enabled });
 }
 
 /**
@@ -40,12 +40,12 @@ export function useMapBackground(map: HouseholdMap | null | undefined) {
 }
 
 /** 按名字找东西上次放在哪（地图搜索高亮、⌘K）；q 为空不发请求 */
-export function useFindItemLocations(q: string) {
+export function useFindItemLocations(q: string, enabled = true) {
   const needle = q.trim();
   return useQuery({
     queryKey: mapKeys.find(needle),
     queryFn: () => api<ItemLocationHit[]>(`/locations/find?q=${encodeURIComponent(needle)}`),
-    enabled: needle.length > 0,
+    enabled: enabled && needle.length > 0,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });

@@ -25,6 +25,8 @@ const TOOL_LABEL: Record<string, string> = {
   get_recent_memories: '查看家庭回忆',
   get_asset_detail: '查看资产详情',
   get_finance_summary: '查看家庭财务',
+  find_item: '找东西放在哪',
+  list_location_contents: '查看位置里放着什么',
   propose_finance_transaction: '生成记账提案',
 };
 

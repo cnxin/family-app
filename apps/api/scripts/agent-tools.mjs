@@ -19,9 +19,12 @@ const TOOL_NAMES = [
   'get_weather',
   'get_member_profile',
   'get_asset_detail',
+  'find_item',
+  'list_location_contents',
 ];
+// I3 的两个找东西工具只回 JSON（口径「上次放在」），不出卡片
 const PRESENTED_TOOL_NAMES = TOOL_NAMES.filter(
-  (name) => name !== 'get_travel_checklist',
+  (name) => !['get_travel_checklist', 'find_item', 'list_location_contents'].includes(name),
 );
 
 if (!DATABASE.startsWith('family_app_test_')) {
@@ -351,10 +354,10 @@ try {
   const registeredTools = listed.body?.result?.tools ?? [];
   const registeredNames = registeredTools.map((tool) => tool.name);
   assert(
-    registeredNames.length === 28 &&
-      new Set(registeredNames).size === 28 &&
+    registeredNames.length === 30 &&
+      new Set(registeredNames).size === 30 &&
       TOOL_NAMES.every((name) => registeredNames.includes(name)),
-    'MCP 目录精确注册 28 个工具且 10 个只读工具均有 schema',
+    'MCP 目录精确注册 30 个工具且 12 个只读工具均有 schema',
   );
   const descriptionFor = (name) =>
     registeredTools.find((tool) => tool.name === name)?.description ?? '';
@@ -710,6 +713,41 @@ try {
     ) && independentEvents.rows[0].count === 1,
     '不同 runId 的菜谱搜索次数相互独立',
   );
+
+  console.log('5. 找东西（I3）：find_item / list_location_contents，口径「上次放在」');
+  const tag = randomUUID().slice(0, 6);
+  const room = await request('/locations', owner.accessToken, 'POST', { name: `书房${tag}` });
+  const shelf = await request('/locations', owner.accessToken, 'POST', { parentId: room.data.id, name: '书柜', kind: 'container' });
+  const layer = await request('/locations', owner.accessToken, 'POST', { parentId: shelf.data.id, name: '顶层' });
+  const passport = await request('/assets', owner.accessToken, 'POST', { name: `护照袋${tag}`, category: 'other' });
+  await request(`/assets/${passport.data.id}/location`, owner.accessToken, 'PATCH', { locationId: layer.data.id });
+  const found = toolResult(await mcp(toolCall(40, 'find_item', runId, { name: `护照袋${tag}` })));
+  assert(
+    found?.found === 1 && found.items[0].lastPlacedAt === `上次放在 书房${tag} / 书柜 / 顶层` &&
+      found.answerStyle.includes('不要说「在 …」') && found.items[0].targetPath.startsWith('/house/map?focus='),
+    'find_item：返回「上次放在 房间 / 柜子 / 层」路径，并要求回答不说「在 …」',
+  );
+  const nothing = toolResult(await mcp(toolCall(41, 'find_item', runId, { name: `没有这个${tag}` })));
+  const blank = toolResult(await mcp(toolCall(42, 'find_item', runId, { name: ' ' })));
+  assert(nothing?.found === 0 && nothing.note && blank?.error === 'name_required', 'find_item：找不到说明没记过；空名字返回业务错误');
+  const inRoom = toolResult(await mcp(toolCall(43, 'list_location_contents', runId, { locationName: `书房${tag}` })));
+  const byPath = toolResult(await mcp(toolCall(44, 'list_location_contents', runId, { locationName: `书房${tag}/书柜` })));
+  assert(
+    inRoom?.location === `书房${tag}` && inRoom.items.some((item) => item.name === `护照袋${tag}` && item.lastPlacedAt === `上次放在 书房${tag} / 书柜 / 顶层`) &&
+      byPath?.location === `书房${tag} / 书柜` && byPath.items.length === 1,
+    'list_location_contents：按名字或路径，列出含子位置的东西（带「上次放在」）',
+  );
+  await request('/locations', owner.accessToken, 'POST', { parentId: room.data.id, name: '顶层' });
+  const ambiguous = toolResult(await mcp(toolCall(45, 'list_location_contents', runId, { locationName: '顶层' })));
+  const missing = toolResult(await mcp(toolCall(46, 'list_location_contents', runId, { locationName: `不存在${tag}` })));
+  assert(
+    ambiguous?.error === 'location_ambiguous' && ambiguous.candidates.length >= 2 && missing?.error === 'location_not_found',
+    'list_location_contents：同名位置给候选让追问，不自行挑选；没有这个位置说清楚',
+  );
+
+  // 归档掉，免得后面 locations.mjs「建第一个位置家里页才亮」被这里的数据带偏
+  await request(`/assets/${passport.data.id}/location`, owner.accessToken, 'PATCH', { locationId: null });
+  await request(`/locations/${room.data.id}/archive`, owner.accessToken, 'POST');
 
   console.log('A7.4-A 只读工具回归通过');
 } finally {

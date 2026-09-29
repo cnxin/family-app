@@ -4,6 +4,7 @@ import { useSetLocation } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { useLocationPath } from './location-field';
 import { LocationPicker } from './location-picker';
+import { MapLink } from './map/map-link';
 
 /**
  * 资产详情头部的位置（item-location-plan §2.3）：有位置写「上次放在 …」，点了就改；
@@ -33,6 +34,7 @@ export function AssetLocation({ asset }: { asset: HomeAsset }) {
           记一下放哪儿
         </button>
       )}
+      {path ? <MapLink locationId={asset.locationId} name={asset.name} /> : null}
       {open ? (
         <LocationPicker
           value={asset.locationId}

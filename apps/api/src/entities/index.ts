@@ -6523,6 +6523,8 @@ export class AgentSetting {
       'get_weather',
       'get_member_profile',
       'get_finance_summary',
+      'find_item',
+      'list_location_contents',
     ],
   })
   readToolsEnabled: string[];

@@ -18,6 +18,8 @@ export const AGENT_READ_TOOLS = [
   'get_member_profile',
   'get_asset_detail',
   'get_finance_summary',
+  'find_item',
+  'list_location_contents',
 ] as const;
 
 export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];

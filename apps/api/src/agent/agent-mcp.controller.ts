@@ -188,6 +188,22 @@ export class AgentMcpController {
         month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
       },
     );
+    register(
+      'find_item',
+      '这是查询某样东西（库存物品、食材批次、家庭资产）上次放在哪的唯一数据来源。用户问“XX 放哪了”“XX 在哪”时必须调用本工具；回答一律说“上次放在 …”，不得说成“在 …”，也不得凭对话历史猜位置',
+      {
+        runId,
+        name: z.string().min(1).max(40),
+      },
+    );
+    register(
+      'list_location_contents',
+      '这是查询某个位置（房间、柜子、层格）里记着哪些东西的唯一数据来源。用户问“XX 柜里有什么”时必须调用本工具；locationName 可以是名字或「客厅 / 电视柜」这样的路径；同名位置有多个时按返回的候选追问用户，不得自行挑选',
+      {
+        runId,
+        locationName: z.string().min(1).max(80),
+      },
+    );
     register('recall_preferences', '这是回顾当前成员已记录偏好的唯一数据来源。用户询问自己有哪些已记录偏好时必须调用本工具；不得仅凭对话历史声称某项偏好存在或不存在', {
       runId,
       scope: z.enum(['member_private', 'household']).optional(),

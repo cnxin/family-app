@@ -10,6 +10,7 @@ import {
 import { pushToast } from '../lib/toast';
 import { useSetLocation } from '../lib/queries/locations';
 import { LocationField } from './location-field';
+import { MapLink } from './map/map-link';
 import { Button, Dialog, Input, selectClass } from './ui';
 
 export const CATEGORY_EMOJI: Record<InventoryCategory, string> = {
@@ -174,6 +175,7 @@ export function InventoryEditor({
           </Field>
         </div>
         <LocationField label="平时放哪儿" value={location} onChange={setLocation} />
+        {item && location === item.defaultLocationId ? <MapLink locationId={location} name={item.name} className="-mt-1 self-start" /> : null}
       </div>
     </Dialog>
   );

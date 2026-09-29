@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AssetsService } from '../assets/assets.module';
 import { JwtUser } from '../auth/jwt.guard';
 import { CalendarService } from '../calendar/calendar.module';
@@ -42,6 +42,7 @@ import {
 import { encryptAgentContent } from './agent.crypto';
 import { AgentMemoryService } from './agent-memory.service';
 import { AgentProposalGroupsService } from './agent-proposal-groups.service';
+import { findItemTool, listLocationContentsTool } from './agent-location-tools';
 import { addDays, daysBetween, todayInShanghai } from '@family/shared';
 
 const MAX_RESULT_ITEMS = 20;
@@ -457,6 +458,7 @@ export class AgentToolsService {
     private readonly agentMemory: AgentMemoryService,
     private readonly finance: FinanceService,
     private readonly assets: AssetsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async execute(
@@ -848,6 +850,12 @@ export class AgentToolsService {
         targetPath: `/asset/${asset.id}`,
         untrustedContent: true,
       };
+    }
+    if (toolName === 'find_item') {
+      return findItemTool(this.dataSource.manager, user.householdId, input);
+    }
+    if (toolName === 'list_location_contents') {
+      return listLocationContentsTool(this.dataSource.manager, user.householdId, input);
     }
     if (toolName === 'get_finance_summary') {
       const month = typeof input.month === 'string' ? input.month : undefined;
@@ -1252,6 +1260,8 @@ export class AgentToolsService {
       get_weather: 'weather',
       get_member_profile: 'member',
       get_asset_detail: 'asset',
+      find_item: 'locations',
+      list_location_contents: 'locations',
       recall_preferences: 'agent_memory',
       remember_preference: 'agent_memory',
       propose_task: 'task',
