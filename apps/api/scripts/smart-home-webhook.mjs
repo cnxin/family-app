@@ -193,6 +193,33 @@ try {
     '在设置页关掉「扫完打勾」：再来的事件只记不做；阈值越界 400',
   );
   await request('/smart-home/webhook-settings/rules', owner, 'PUT', rules);
+
+  // R1：触发实体按「白名单设备 + 它名下的实体」引用
+  const [{ id: dryerDevice }] = (
+    await db.query(
+      `INSERT INTO smart_home_devices ("householdId", "primaryEntityId", "primaryDomain", "displayName", icon, "knownEntityIds")
+       VALUES ($1, 'binary_sensor.dryer_running', 'binary_sensor', '烘干机', 'dryer', '["binary_sensor.dryer_running", "sensor.dryer_left"]')
+       RETURNING id`,
+      [householdId],
+    )
+  ).rows;
+  const refRules = (dryer) => ({ ...rules, laundry: { ...rules.laundry, dryer } });
+  const refChecks = await Promise.all([
+    request('/smart-home/webhook-settings/rules', owner, 'PUT', refRules({ deviceId: randomUUID(), entityId: 'binary_sensor.dryer_running' })),
+    request('/smart-home/webhook-settings/rules', owner, 'PUT', refRules({ deviceId: dryerDevice, entityId: 'sensor.someone_else' })),
+    request('/smart-home/webhook-settings/rules', owner, 'PUT', refRules('binary_sensor.dryer_running')),
+  ]);
+  const refOk = await request('/smart-home/webhook-settings/rules', owner, 'PUT', refRules({ deviceId: dryerDevice, entityId: 'sensor.dryer_left' }));
+  assert(
+    refChecks.every((one) => one.status === 400) &&
+      refOk.status === 200 &&
+      refOk.body.data.rules.laundry.dryer.deviceId === dryerDevice &&
+      refOk.body.data.rules.laundry.dryer.entityId === 'sensor.dryer_left',
+    '触发实体按「设备 + 它名下的某个实体」引用：设备不在白名单、实体不是它的、还按实体 ID 写都 400；设备的次要实体可以当触发',
+  );
+  await request('/smart-home/webhook-settings/rules', owner, 'PUT', rules);
+  await db.query('DELETE FROM smart_home_devices WHERE id = $1', [dryerDevice]);
+
   const recent = await request('/smart-home/webhook-settings/events', owner);
   assert(
     recent.status === 200 && recent.body.data[0].result === '这条联动在设置里关着' && recent.body.data[0].status === 'ignored' &&

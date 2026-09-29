@@ -94,7 +94,8 @@ export class SmartHomeLinksService implements OnModuleInit, OnModuleDestroy {
       trigger: input.trigger,
       keyword: input.keyword,
       offsetMinutes: input.trigger === 'calendar_before' ? input.offsetMinutes ?? 10 : 0,
-      targetEntityId: input.targetEntityId,
+      targetDeviceId: input.targetDeviceId,
+      targetEntityId: '',
       action: input.action,
       enabled: input.enabled ?? true,
       createdById: user.memberId,
@@ -109,7 +110,10 @@ export class SmartHomeLinksService implements OnModuleInit, OnModuleDestroy {
     if (!row) throw new NotFoundException('联动不存在');
     Object.assign(row, input);
     if (row.trigger === 'task_done') row.offsetMinutes = 0;
-    await this.validateTarget(row, user.householdId);
+    // 目标设备不在了的旧联动只能停用或删掉：只关开关时不校验目标
+    if (row.enabled || input.targetDeviceId !== undefined || input.action !== undefined) {
+      await this.validateTarget(row, user.householdId);
+    }
     const saved = await this.links.save(row);
     return (await this.list(user.householdId)).find((link) => link.id === saved.id)!;
   }
@@ -120,14 +124,17 @@ export class SmartHomeLinksService implements OnModuleInit, OnModuleDestroy {
     return { id };
   }
 
-  /** 目标必须是白名单里开放了控制的设备，动作这类设备有。执行时 E2 还会再校验一遍。 */
+  /** 目标必须是白名单里开放了控制的设备，动作它的主实体有。执行时 E2 还会再校验一遍。 */
   private async validateTarget(row: SmartHomeLink, householdId: string) {
-    const device = await this.devices.findOne({ where: { householdId, entityId: row.targetEntityId } });
+    const device = row.targetDeviceId
+      ? await this.devices.findOne({ where: { householdId, id: row.targetDeviceId } })
+      : null;
     if (!device) throw new BadRequestException('目标设备不在白名单里');
     if (!device.controllable) throw new BadRequestException('目标设备还没开放控制，先在白名单里勾上「允许控制」');
-    if (!smartHomeActionsFor(device.domain).includes(row.action as SmartHomeAction)) {
+    if (!smartHomeActionsFor(device.primaryDomain).includes(row.action as SmartHomeAction)) {
       throw new BadRequestException('这台设备没有这个动作');
     }
+    row.targetEntityId = device.primaryEntityId;
   }
 
   // ---- 触发 ------------------------------------------------------------------------------------
@@ -193,8 +200,9 @@ export class SmartHomeLinksService implements OnModuleInit, OnModuleDestroy {
     const actor = await smartHomeActor(this.dataSource, link.householdId);
     try {
       if (!actor) throw new Error('家里没有在用的家庭主人');
+      if (!link.targetDeviceId) throw new Error('目标设备已经不在白名单里了');
       const result = await this.commands.execute(
-        link.targetEntityId,
+        link.targetDeviceId,
         { action: link.action as SmartHomeAction, requestId: record.id },
         actor,
       );
@@ -232,6 +240,7 @@ export class SmartHomeLinksService implements OnModuleInit, OnModuleDestroy {
       trigger: row.trigger,
       keyword: row.keyword,
       offsetMinutes: row.offsetMinutes,
+      targetDeviceId: row.targetDeviceId,
       targetEntityId: row.targetEntityId,
       action: row.action as SmartHomeAction,
       enabled: row.enabled,

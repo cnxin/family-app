@@ -3,9 +3,10 @@ import { isoDateTime, memberRole, nullableDateTime, uuid } from './common';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/smart-home/（H3 E1：连接器 + 实体目录 + 白名单 + 只读状态）。
-// 方案见 docs/home-assistant-plan.md，修正见 docs/pre-trial-plan.md H3。
+// 方案见 docs/home-assistant-plan.md，修正见 docs/pre-trial-plan.md H3；
+// 智能家居页重做（R1 起白名单按「设备」）见 docs/ui-prototypes/smart-home-redesign.md。
 //
-// 小管家只认管理员显式加进白名单的实体；HA 上新增设备不会自动出现。
+// 小管家只认管理员显式加进白名单的设备；HA 上新增设备不会自动出现。
 // 门锁、安防两个 domain 第一期连只读都不放（home-assistant-plan §8 拍板 2），目录里就过滤掉。
 
 /** 第一期认的 HA domain。控制（E2）只在其中一部分上开放，其余一律只读显示。 */
@@ -24,7 +25,8 @@ export const smartHomeEntityId = z
   .string()
   .max(255)
   .regex(/^[a-z_]+\.[a-z0-9_]+$/, '实体 ID 格式不对');
-export const smartHomeEntityParams = z.object({ entityId: smartHomeEntityId });
+/** 白名单设备的 id（smart_home_devices.id）。R1 起所有引用都用它，不再用实体 ID。 */
+export const smartHomeDeviceParams = z.object({ id: uuid });
 
 export const smartHomeSettingsMode = z.enum(['household', 'server_default']);
 
@@ -71,6 +73,11 @@ export const smartHomeEntityStateSchema = z.object({
   /** vacuum 等自带的电量百分比 */
   battery: z.number().nullable(),
   lastChanged: nullableDateTime,
+  /**
+   * HA 的 last_updated：只改属性（窗帘位置、空调风速）时 last_changed 不动、它会动。
+   * 详情面板靠它判断「发出去的命令回推到了」。
+   */
+  lastUpdated: nullableDateTime,
   /** climate：设定温度、室内温度、可选模式、设定温度上下限 */
   targetTemperature: z.number().nullable(),
   currentTemperature: z.number().nullable(),
@@ -100,6 +107,25 @@ export function isPrimarySmartHomeEntity(domain: string, category: string | null
   return SMART_HOME_PRIMARY_DOMAINS.includes(domain) || domain === 'sensor' || domain === 'binary_sensor';
 }
 
+/**
+ * 排除名单（redesign §9.4，King 2026-09-29 拍板 8）：名字里带这些词的可控实体（button、switch 等）一律不渲染成控件、
+ * 命令接口也拒，只在「设备信息」里写「此操作请在厂商 App 完成」。button 的 device_class 为 restart / update 同样排除。
+ * 真机上 Roborock 的「重置主刷耗材」没有 device_class、用的是「重置」；海尔净水器的「初滤复位」是 switch 不是 button。
+ */
+export const SMART_HOME_EXCLUDED_KEYWORDS = [
+  '复位', '重置', '重启', '恢复出厂', '解绑', 'reset', 'reboot', 'restart', 'factory', 'unbind', 'unpair',
+] as const;
+export const SMART_HOME_EXCLUDED_BUTTON_CLASSES = ['restart', 'update'] as const;
+
+export function isExcludedSmartHomeEntity(domain: string, deviceClass: string | null, names: readonly string[]) {
+  if ((SMART_HOME_BLOCKED_DOMAINS as readonly string[]).includes(domain)) return true;
+  // 只看能按的东西：传感器叫「上次复位时间」之类没关系
+  if (domain === 'sensor' || domain === 'binary_sensor') return false;
+  if (domain === 'button' && (SMART_HOME_EXCLUDED_BUTTON_CLASSES as readonly string[]).includes(deviceClass ?? '')) return true;
+  const text = names.join(' ').toLowerCase();
+  return SMART_HOME_EXCLUDED_KEYWORDS.some((keyword) => text.includes(keyword));
+}
+
 /** 实体目录的一条：管理员挑白名单用。 */
 export const smartHomeDirectoryEntrySchema = z.object({
   entityId: smartHomeEntityId,
@@ -112,7 +138,10 @@ export const smartHomeDirectoryEntrySchema = z.object({
   whitelisted: z.boolean(),
   /** HA 实体注册表的 entity_category：diagnostic / config 折进「更多」 */
   category: smartHomeEntityCategory.nullable(),
+  /** 目录里默认展开（设备卡上直接摆出来），其余折进「更多」 */
   primary: z.boolean(),
+  /** 整台设备「加进来」时这个实体默认当什么：主实体 / 主面板项 / 都不是 */
+  defaultRole: z.enum(['primary', 'featured']).nullable(),
 });
 export type SmartHomeDirectoryEntry = z.infer<typeof smartHomeDirectoryEntrySchema>;
 
@@ -124,6 +153,8 @@ export const smartHomeDirectoryDeviceSchema = z.object({
   manufacturer: z.string().nullable(),
   model: z.string().nullable(),
   entities: z.array(smartHomeDirectoryEntrySchema),
+  /** 这台已经在白名单里：对应的 smart_home_devices.id */
+  whitelistedDeviceId: uuid.nullable(),
 });
 export type SmartHomeDirectoryDevice = z.infer<typeof smartHomeDirectoryDeviceSchema>;
 
@@ -136,33 +167,111 @@ export const smartHomeDirectorySchema = z.object({
 });
 export type SmartHomeDirectory = z.infer<typeof smartHomeDirectorySchema>;
 
-/** 白名单里的一台设备。controllable / minRole / pinnedToToday 由 E2、E5 开放编辑。 */
+/** 卡片和详情用的图标类型。布局按它定，不按厂商定。 */
+export const SMART_HOME_ICONS = [
+  'vacuum', 'curtain', 'air_conditioner', 'washer', 'dryer', 'water_purifier', 'fridge',
+  'switch', 'light', 'fan', 'sensor', 'scene', 'other',
+] as const;
+export const smartHomeIcon = z.enum(SMART_HOME_ICONS);
+export type SmartHomeIcon = z.infer<typeof smartHomeIcon>;
+
+/** 主面板项上限（redesign §9.3，King 2026-09-29 拍板 9）。 */
+export const SMART_HOME_FEATURED_LIMIT = 6;
+/** 今天页最多几张设备卡（拍板 5）；设置页勾超了给提示。 */
+export const SMART_HOME_TODAY_LIMIT = 4;
+
+/**
+ * 白名单里的一台设备（redesign §4.1）。一台 = 一个主实体（卡片的状态句和唯一主按钮）+ 至多 6 个主面板项。
+ * haDeviceId 为 null 的是「单实体设备」：场景、脚本、没有归属设备的 helper。
+ * legacy：R1 迁移前按实体登记的旧行，等连上 HA 后按设备归并（§5）；归并前照常显示和控制。
+ */
 export const smartHomeDeviceSchema = z.object({
-  entityId: smartHomeEntityId,
-  domain: smartHomeDomain,
+  id: uuid,
+  haDeviceId: z.string().nullable(),
   displayName: z.string(),
   area: z.string().nullable(),
   sortOrder: z.number().int(),
+  icon: smartHomeIcon,
+  primaryEntityId: smartHomeEntityId,
+  primaryDomain: smartHomeDomain,
+  featuredEntityIds: z.array(smartHomeEntityId),
+  /** 管理员从详情面板里藏掉的子实体：既不显示也不放行命令 */
+  hiddenEntityIds: z.array(smartHomeEntityId),
   controllable: z.boolean(),
   minRole: memberRole,
   pinnedToToday: z.boolean(),
+  legacy: z.boolean(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });
 export type SmartHomeDevice = z.infer<typeof smartHomeDeviceSchema>;
 
-export const upsertSmartHomeDeviceBody = z
+/** 目录里「加进来」：整台 HA 设备，或一个没有归属设备的实体（场景、脚本…）。 */
+export const addSmartHomeDeviceBody = z
+  .object({
+    haDeviceId: z.string().trim().min(1).max(64).optional(),
+    entityId: smartHomeEntityId.optional(),
+  })
+  .strict()
+  .refine((body) => Boolean(body.haDeviceId) !== Boolean(body.entityId), {
+    message: '要么给 HA 设备，要么给一个没有归属设备的实体',
+  });
+export type AddSmartHomeDeviceBody = z.infer<typeof addSmartHomeDeviceBody>;
+
+export const updateSmartHomeDeviceBody = z
   .object({
     displayName: z.string().trim().min(1, '起个中文名').max(40, '名字不超过 40 字'),
-    area: z.string().trim().max(20, '分组不超过 20 字').nullable().optional(),
-    sortOrder: z.number().int().min(0).max(9999).optional(),
-    /** E2：允许在小管家里控制（只有 SMART_HOME_ACTIONS 里的 domain 能开） */
-    controllable: z.boolean().optional(),
-    /** E2：谁能控。admin = 家庭管理员；member = 全家 */
-    minRole: z.enum(['admin', 'member']).optional(),
+    area: z.string().trim().max(20, '房间不超过 20 字').nullable(),
+    sortOrder: z.number().int().min(0).max(9999),
+    icon: smartHomeIcon,
+    primaryEntityId: smartHomeEntityId,
+    featuredEntityIds: z.array(smartHomeEntityId).max(SMART_HOME_FEATURED_LIMIT, `主面板项最多 ${SMART_HOME_FEATURED_LIMIT} 个`),
+    hiddenEntityIds: z.array(smartHomeEntityId).max(200),
+    /** 允许在小管家里控制（主实体得是能控的类型） */
+    controllable: z.boolean(),
+    /** 谁能控。admin = 家庭管理员；member = 全家 */
+    minRole: z.enum(['admin', 'member']),
+    pinnedToToday: z.boolean(),
   })
+  .partial()
   .strict();
-export type UpsertSmartHomeDeviceBody = z.infer<typeof upsertSmartHomeDeviceBody>;
+export type UpdateSmartHomeDeviceBody = z.infer<typeof updateSmartHomeDeviceBody>;
+
+/** 指向「某台白名单设备的某个子实体」：E3 触发、E4 目标、E5 留意规则都用它（redesign §4.2）。 */
+export const smartHomeEntityRef = z.object({
+  deviceId: uuid,
+  entityId: smartHomeEntityId,
+});
+export type SmartHomeEntityRef = z.infer<typeof smartHomeEntityRef>;
+
+/** 归并报告的一行（redesign §5.3）：原来按实体登记的一行归到了哪台设备、当什么。 */
+export const smartHomeMergeRowSchema = z.object({
+  entityId: smartHomeEntityId,
+  displayName: z.string(),
+  /** 归到的 HA 设备名；null = HA 里查不到归属设备，保持单实体 */
+  haDeviceName: z.string().nullable(),
+  role: z.enum(['primary', 'featured', 'dropped', 'single']),
+});
+export const smartHomeMergeDeviceSchema = z.object({
+  deviceId: uuid.nullable(),
+  haDeviceId: z.string().nullable(),
+  displayName: z.string(),
+  primaryEntityId: smartHomeEntityId,
+  featuredEntityIds: z.array(smartHomeEntityId),
+  controllable: z.boolean(),
+  /** 主实体是传感器、但这台设备有可控实体：King 要手动决定换不换（拍板 2） */
+  sensorPrimaryWithControllable: z.boolean(),
+  controllableEntityIds: z.array(smartHomeEntityId),
+});
+export const smartHomeMergeReportSchema = z.object({
+  mergedAt: isoDateTime,
+  dryRun: z.boolean(),
+  rows: z.array(smartHomeMergeRowSchema),
+  devices: z.array(smartHomeMergeDeviceSchema),
+  /** 联动、规则、审计的引用改到了哪里 */
+  references: z.array(z.string()),
+});
+export type SmartHomeMergeReport = z.infer<typeof smartHomeMergeReportSchema>;
 
 // ---- E2：控制 -----------------------------------------------------------------------------------
 
@@ -175,6 +284,8 @@ export const SMART_HOME_ACTIONS = {
   cover: ['open', 'stop', 'close'],
   switch: ['turn_on', 'turn_off'],
   scene: ['activate'],
+  // 场景行里的脚本（King 2026-09-29 拍板 4）：script.turn_on，只限白名单里的脚本
+  script: ['activate'],
   // 试探性纳入（2026-09-28 King）：开关、四种模式、设定温度 ±1。真机验证后再定去留
   climate: [
     'turn_on', 'turn_off', 'mode_cool', 'mode_heat', 'mode_fan_only', 'mode_auto', 'temperature_up', 'temperature_down',
@@ -202,6 +313,8 @@ export const smartHomeCommandStatus = z.enum(['pending', 'succeeded', 'failed'])
 /** 控制审计：谁、什么时候、按了什么、HA 回了什么（home-assistant-plan §6.3）。 */
 export const smartHomeCommandSchema = z.object({
   id: uuid,
+  /** 这条操作对应的白名单设备；设备后来被移出、或 R1 之前对不上的历史记录为 null */
+  deviceId: uuid.nullable(),
   entityId: smartHomeEntityId,
   action: smartHomeAction,
   status: smartHomeCommandStatus,
@@ -214,12 +327,31 @@ export const smartHomeCommandSchema = z.object({
 });
 export type SmartHomeCommand = z.infer<typeof smartHomeCommandSchema>;
 
-/** 状态快照：白名单设备 + 各自当前状态（连不上 HA 时 state 为 null）+ 当前这个人能不能控。 */
+/** 设备的一个子实体此刻的样子（卡片补半句、详情主面板项用）。 */
+export const smartHomeEntitySnapshotSchema = z.object({
+  entityId: smartHomeEntityId,
+  domain: z.string(),
+  /** 去掉设备名前缀后的名字（「厨下净水 RO剩余百分比」→「RO剩余百分比」） */
+  name: z.string(),
+  /** HA 上没有这个实体时是 unavailable；整个 HA 连不上且没有上次状态时为 null */
+  state: smartHomeEntityStateSchema.nullable(),
+});
+export type SmartHomeEntitySnapshot = z.infer<typeof smartHomeEntitySnapshotSchema>;
+
+/**
+ * 状态快照：白名单设备 + 主实体和主面板项的状态 + 当前这个人能不能控。
+ * HA 连不上时给**上次**读到的状态（stale = true，asOf 是那一次的时间），页面灰显；API 重启后还没读到过则为 null。
+ */
 export const smartHomeStatesSchema = z.object({
   connection: smartHomeConnectionSchema,
+  stale: z.boolean(),
+  asOf: nullableDateTime,
   devices: z.array(
     smartHomeDeviceSchema.extend({
-      state: smartHomeEntityStateSchema.nullable(),
+      primary: smartHomeEntityStateSchema.nullable(),
+      featured: z.array(smartHomeEntitySnapshotSchema),
+      /** 主实体不是 unavailable（HA 连不上时按上次状态算） */
+      online: z.boolean(),
       canControl: z.boolean(),
     }),
   ),
@@ -262,31 +394,44 @@ export const smartHome = {
   devices: defineEndpoint({
     method: 'GET',
     path: '/smart-home/devices',
-    summary: '白名单设备',
+    summary: '白名单设备（按设备，一台一行）',
     response: z.array(smartHomeDeviceSchema),
   }),
-  upsertDevice: defineEndpoint({
-    method: 'PUT',
-    path: '/smart-home/devices/:entityId',
-    summary: '加进白名单 / 改中文名、分组、排序',
-    params: smartHomeEntityParams,
-    body: upsertSmartHomeDeviceBody,
+  addDevice: defineEndpoint({
+    method: 'POST',
+    path: '/smart-home/devices',
+    summary: '把一台 HA 设备（或一个没有归属设备的实体）加进白名单；主实体、主面板项、图标由服务端按默认规则算',
+    body: addSmartHomeDeviceBody,
+    response: smartHomeDeviceSchema,
+  }),
+  updateDevice: defineEndpoint({
+    method: 'PATCH',
+    path: '/smart-home/devices/:id',
+    summary: '改名字、房间、图标、排序、主实体、主面板项、藏掉的子实体、控制、今天页',
+    params: smartHomeDeviceParams,
+    body: updateSmartHomeDeviceBody,
     response: smartHomeDeviceSchema,
   }),
   removeDevice: defineEndpoint({
     method: 'DELETE',
-    path: '/smart-home/devices/:entityId',
-    summary: '移出白名单',
-    params: smartHomeEntityParams,
-    response: z.object({ entityId: smartHomeEntityId }),
+    path: '/smart-home/devices/:id',
+    summary: '移出白名单（有联动或规则引用时 409，列出是哪几条）',
+    params: smartHomeDeviceParams,
+    response: z.object({ id: uuid }),
   }),
   command: defineEndpoint({
     method: 'POST',
-    path: '/smart-home/devices/:entityId/command',
-    summary: '控制一台白名单设备（幂等键 + 审计 + 逐次校验权限）；HA 失败回 502，审计照记',
-    params: smartHomeEntityParams,
+    path: '/smart-home/devices/:id/command',
+    summary: '控制一台白名单设备的主实体（幂等键 + 审计 + 逐次校验权限）；HA 失败回 502，审计照记',
+    params: smartHomeDeviceParams,
     body: smartHomeCommandBody,
     response: smartHomeCommandSchema,
+  }),
+  mergeReport: defineEndpoint({
+    method: 'GET',
+    path: '/smart-home/devices/merge-report',
+    summary: '最近一次「按实体 → 按设备」归并的结果（管理员；没归并过为 null）',
+    response: smartHomeMergeReportSchema.nullable(),
   }),
   commands: defineEndpoint({
     method: 'GET',
@@ -344,25 +489,25 @@ export const smartHomeWebhookResultSchema = z.object({
 export const smartHomeRulesSchema = z.object({
   laundry: z.object({
     enabled: z.boolean(),
-    /** 洗衣机 / 烘干机「完成」看哪个实体（生成 HA 自动化用） */
-    washerEntityId: smartHomeEntityId.nullable(),
-    dryerEntityId: smartHomeEntityId.nullable(),
+    /** 洗衣机 / 烘干机「完成」看哪台设备的哪个子实体（生成 HA 自动化用） */
+    washer: smartHomeEntityRef.nullable(),
+    dryer: smartHomeEntityRef.nullable(),
     /** 实体是文字状态时，变成哪个值算完成（比如「完成」）；二元传感器 on→off、数值降到 0 以下不用填 */
     doneValue: z.string().trim().max(40).nullable(),
   }),
-  vacuum: z.object({ enabled: z.boolean(), entityId: smartHomeEntityId.nullable() }),
+  vacuum: z.object({ enabled: z.boolean(), trigger: smartHomeEntityRef.nullable() }),
   filter: z.object({
     enabled: z.boolean(),
-    entityId: smartHomeEntityId.nullable(),
+    trigger: smartHomeEntityRef.nullable(),
     /** 剩余低于多少（%）算低 */
     threshold: z.number().int().min(1).max(99),
   }),
 });
 export type SmartHomeRules = z.infer<typeof smartHomeRulesSchema>;
 export const DEFAULT_SMART_HOME_RULES: SmartHomeRules = {
-  laundry: { enabled: true, washerEntityId: null, dryerEntityId: null, doneValue: null },
-  vacuum: { enabled: true, entityId: null },
-  filter: { enabled: true, entityId: null, threshold: 10 },
+  laundry: { enabled: true, washer: null, dryer: null, doneValue: null },
+  vacuum: { enabled: true, trigger: null },
+  filter: { enabled: true, trigger: null, threshold: 10 },
 };
 
 export const smartHomeWebhookSettingsSchema = z.object({
@@ -435,7 +580,8 @@ export const smartHomeWebhook = {
  * 一条联动 = 触发 + 目标。触发按标题关键词匹配（周期家务、反复出现的日程都能一直生效）：
  * - task_done：标题含关键词的家务被打勾完成时；
  * - calendar_before：标题含关键词、有开始时间的日程，开始前 offsetMinutes 分钟。
- * 目标是白名单里开放了控制的设备 + 动作，走 E2 同一条控制链路（权限、审计、超时）。
+ * 目标是白名单里开放了控制的设备（的主实体）+ 动作，走 E2 同一条控制链路（权限、审计、超时）。
+ * R1 起按设备 id 引用；targetEntityId 是那台设备当时的主实体，只做显示。
  * 同一次发生（那一天的那件家务 / 那一场日程）只跑一次；失败不影响家务和日程本身，只在家庭动态里记一句。
  */
 export const SMART_HOME_LINK_TRIGGERS = ['task_done', 'calendar_before'] as const;
@@ -455,6 +601,8 @@ export const smartHomeLinkSchema = z.object({
   trigger: smartHomeLinkTrigger,
   keyword: z.string(),
   offsetMinutes: z.number().int(),
+  /** 目标设备；R1 之前建的、目标设备后来被移出的为 null（这种联动已停用） */
+  targetDeviceId: uuid.nullable(),
   targetEntityId: smartHomeEntityId,
   action: smartHomeAction,
   enabled: z.boolean(),
@@ -469,7 +617,7 @@ const linkFields = {
   trigger: smartHomeLinkTrigger,
   keyword: z.string().trim().min(1, '填一个标题里会出现的词').max(40, '关键词不超过 40 字'),
   offsetMinutes: z.number().int().min(0).max(SMART_HOME_LINK_MAX_OFFSET_MINUTES),
-  targetEntityId: smartHomeEntityId,
+  targetDeviceId: uuid,
   action: smartHomeAction,
   enabled: z.boolean(),
 };
@@ -490,7 +638,7 @@ export const smartHomeLinks = {
   create: defineEndpoint({
     method: 'POST',
     path: '/smart-home/links',
-    summary: '新建联动（目标必须在白名单里且开放了控制）',
+    summary: '新建联动（目标设备必须在白名单里且开放了控制）',
     body: createSmartHomeLinkBody,
     response: smartHomeLinkSchema,
   }),

@@ -3,10 +3,12 @@
  * 空库上的迁移演练不算数（教训 29）：维护记录「不可修改」触发器这类约束，只有表里有行才会撞上。
  *
  * 由 run-api-tests.mjs 全量模式在 seed.ts 之后、迁移演练之前调用，API 需已启动。
- * 至少造：菜单（含菜品）、来访、资产 + 维护计划、维护记录（上海 00:30 完成，UTC 仍是前一天）。
+ * 至少造：菜单（含菜品）、来访、资产 + 维护计划、维护记录（上海 00:30 完成，UTC 仍是前一天）、
+ * 智能家居（按设备的白名单含主面板项、联动、审计、E3 规则引用——让 R1 迁移的 down 在有数据时也跑一遍）。
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { startFakeHomeAssistant } from './fake-ha.mjs';
 
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
 const PASSWORD = process.env.SEED_ACCOUNT_PASSWORD || 'family1234';
@@ -79,4 +81,33 @@ await request(
 
 const details = await request(`/assets/${asset.id}`, token);
 assert(details.maintenanceRecords.some((record) => record.performedOn === '2026-01-16'), '夹具维护记录按家庭日期落库');
-console.log('  ✓ 迁移演练夹具：菜单、来访、资产与维护计划、维护记录已就绪');
+// 智能家居：连上假 HA，整台加两台设备（一台带主面板项），建联动、按一下、E3 规则引用一台设备的主面板项
+const HA_TOKEN = `migration-fixture-ha-${randomUUID()}`;
+const ha = await startFakeHomeAssistant({ token: HA_TOKEN });
+try {
+  await request('/smart-home/connector-settings', token, 'PUT', { baseUrl: ha.url, credential: HA_TOKEN });
+  const vacuum = await request('/smart-home/devices', token, 'POST', { haDeviceId: 'dev_roborock' });
+  const purifier = await request('/smart-home/devices', token, 'POST', { haDeviceId: 'dev_purifier' });
+  await request(`/smart-home/devices/${vacuum.id}`, token, 'PATCH', { controllable: true });
+  await request('/smart-home/links', token, 'POST', {
+    name: '迁移演练联动',
+    trigger: 'task_done',
+    keyword: '迁移演练',
+    targetDeviceId: vacuum.id,
+    action: 'start',
+  });
+  await request(`/smart-home/devices/${vacuum.id}/command`, token, 'POST', { action: 'start', requestId: randomUUID() });
+  const settings = await request('/smart-home/webhook-settings', token);
+  await request('/smart-home/webhook-settings/rules', token, 'PUT', {
+    ...settings.rules,
+    filter: { ...settings.rules.filter, trigger: { deviceId: purifier.id, entityId: 'sensor.kitchen_purifier_tds' } },
+  });
+  assert(purifier.featuredEntityIds.length > 0, '夹具里要有带主面板项的设备');
+} finally {
+  // 演练只需要设备、联动这些行；连接设置存在更早的 integrations 表里、演练回退不到，留着会让后面的
+  // smart-home.mjs 看到「家庭设置」而不是服务器默认——恢复默认
+  await request('/smart-home/connector-settings', token, 'DELETE');
+  await ha.stop();
+}
+
+console.log('  ✓ 迁移演练夹具：菜单、来访、资产与维护计划、维护记录、智能家居设备与联动已就绪');

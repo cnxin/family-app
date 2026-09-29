@@ -31,27 +31,37 @@ function eventsConnected(page: Page) {
 async function cleanSmartHome(request: APIRequestContext) {
   const admin = apiClient(request);
   const headers = { Authorization: `Bearer ${admin.accessToken}` };
-  for (const device of await admin.get<{ entityId: string }[]>('/smart-home/devices')) {
-    await admin.delete(`/smart-home/devices/${device.entityId}`);
+  for (const device of await admin.get<{ id: string }[]>('/smart-home/devices')) {
+    await admin.delete(`/smart-home/devices/${device.id}`);
   }
   await request.delete(`${apiURL}/smart-home/connector-settings`, { headers });
 }
 
+
+/** R1 起白名单按设备：整台加进来，再改名字 / 房间 / 控制。 */
+async function addDevice(request: APIRequestContext, body: Record<string, string>, patch: Record<string, unknown>) {
+  const admin = apiClient(request);
+  const device = await admin.post<{ id: string }>('/smart-home/devices', body);
+  await admin.patch(`/smart-home/devices/${device.id}`, patch);
+  return device.id;
+}
+
 let ha: FakeHomeAssistant;
+const ids = { vacuum: '', curtain: '', scene: '' };
 
 test.beforeEach(async ({ request }) => {
   ha = await startFakeHomeAssistant({ token: TOKEN });
   await cleanSmartHome(request);
   const admin = apiClient(request);
   await admin.put('/smart-home/connector-settings', { baseUrl: ha.url, credential: TOKEN });
-  await admin.put('/smart-home/devices/vacuum.roborock_s8', {
+  ids.vacuum = await addDevice(request, { haDeviceId: 'dev_roborock' }, {
     displayName: '扫地机',
     area: '客厅',
     controllable: true,
     minRole: 'member',
   });
-  await admin.put('/smart-home/devices/cover.living_room_curtain', { displayName: '客厅窗帘', area: '客厅', controllable: true });
-  await admin.put('/smart-home/devices/scene.movie_night', { displayName: '电影之夜', controllable: true, minRole: 'member' });
+  ids.curtain = await addDevice(request, { haDeviceId: 'dev_curtain' }, { displayName: '客厅窗帘', area: '客厅', controllable: true });
+  ids.scene = await addDevice(request, { entityId: 'scene.movie_night' }, { displayName: '电影之夜', controllable: true, minRole: 'member' });
 });
 
 test.afterEach(async ({ request }) => {
@@ -108,7 +118,7 @@ test('管理员和家人同开智能家居页：一边按、或有人在 HA 里�
     await expect.poll(() => ha.serviceCalls.filter((call) => call.data.entity_id === 'scene.movie_night').length).toBe(1);
 
     // HA 那边出错：按钮恢复，提示说清原因
-    await admin.put('/smart-home/devices/vacuum.roborock_s8', { displayName: '扫地机', area: '客厅', controllable: false });
+    await admin.patch(`/smart-home/devices/${ids.vacuum}`, { controllable: false });
     await expect(vacuumOf(memberPage).getByRole('group')).toHaveCount(0, { timeout: 3_000 });
   } finally {
     await other.close();
@@ -124,10 +134,9 @@ test('管理员在设置页开放控制、改谁能控；最近的操作记下�
   await row.getByRole('button', { name: '保存' }).click();
   await expect(row.getByRole('button', { name: '保存' })).toHaveCount(0);
 
-  // 传感器这类没有动作，不给开放控制的开关
-  await page.getByRole('button', { name: '把厨下净水 出水TDS加进来' }).click();
-  await page.getByRole('button', { name: '确认加入' }).click();
-  const sensorRow = page.locator('[data-smart-home-whitelisted="sensor.kitchen_purifier_tds"]');
+  // 主实体是传感器（净水器）的设备没有动作，不给开放控制的开关
+  await page.getByRole('button', { name: '把厨下净水整台加进来' }).click();
+  const sensorRow = page.locator('[data-smart-home-whitelisted="sensor.kitchen_purifier_ro_filter_life"]');
   await expect(sensorRow).toBeVisible();
   await expect(sensorRow.getByRole('checkbox')).toHaveCount(0);
 
@@ -140,11 +149,7 @@ test('管理员在设置页开放控制、改谁能控；最近的操作记下�
 });
 
 test('空调（试探性）：状态旁标「按上次操作显示」；打开、调温按 HA 的设定温度走', async ({ page, request }) => {
-  await apiClient(request).put('/smart-home/devices/climate.bedroom_ac', {
-    displayName: '空调插座',
-    area: '卧室',
-    controllable: true,
-  });
+  await addDevice(request, { haDeviceId: 'dev_ac' }, { displayName: '空调插座', area: '卧室', controllable: true });
   await page.goto('/house/smart-home');
   const ac = page.locator('[data-smart-home-device="climate.bedroom_ac"]');
   await expect(ac).toContainText('关着');

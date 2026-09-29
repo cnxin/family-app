@@ -81,8 +81,8 @@ export function homeAssistantAutomations({ rules, entities }: Pick<HaConfigInput
   const { laundry, vacuum, filter } = rules;
   if (laundry.enabled) {
     for (const [appliance, entityId, label] of [
-      ['washer', laundry.washerEntityId, '洗衣机'],
-      ['dryer', laundry.dryerEntityId, '烘干机'],
+      ['washer', laundry.washer?.entityId ?? null, '洗衣机'],
+      ['dryer', laundry.dryer?.entityId ?? null, '烘干机'],
     ] as const) {
       if (!entityId) continue;
       blocks.push(
@@ -95,22 +95,22 @@ export function homeAssistantAutomations({ rules, entities }: Pick<HaConfigInput
       );
     }
   }
-  if (vacuum.enabled && vacuum.entityId) {
+  if (vacuum.enabled && vacuum.trigger) {
     blocks.push(
       automation(
         'family_app_vacuum_done',
         '小管家 · 扫地完成',
-        [`    - trigger: state`, `      entity_id: ${vacuum.entityId}`, `      from: ["cleaning", "returning"]`, `      to: "docked"`],
+        [`    - trigger: state`, `      entity_id: ${vacuum.trigger.entityId}`, `      from: ["cleaning", "returning"]`, `      to: "docked"`],
         ['event: vacuum_done', 'entityId: "{{ trigger.entity_id | default(\'\') }}"'],
       ),
     );
   }
-  if (filter.enabled && filter.entityId) {
+  if (filter.enabled && filter.trigger) {
     blocks.push(
       automation(
         'family_app_filter_low',
         '小管家 · 净水器滤芯低',
-        [`    - trigger: numeric_state`, `      entity_id: ${filter.entityId}`, `      below: ${filter.threshold}`],
+        [`    - trigger: numeric_state`, `      entity_id: ${filter.trigger.entityId}`, `      below: ${filter.threshold}`],
         [
           'event: filter_low',
           'entityId: "{{ trigger.entity_id | default(\'\') }}"',

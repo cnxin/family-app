@@ -27,8 +27,8 @@ async function cleanSmartHome(request: APIRequestContext) {
   const admin = apiClient(request);
   const headers = { Authorization: `Bearer ${admin.accessToken}` };
   for (const link of await admin.get<{ id: string }[]>('/smart-home/links')) await admin.delete(`/smart-home/links/${link.id}`);
-  for (const device of await admin.get<{ entityId: string }[]>('/smart-home/devices')) {
-    await admin.delete(`/smart-home/devices/${device.entityId}`);
+  for (const device of await admin.get<{ id: string }[]>('/smart-home/devices')) {
+    await admin.delete(`/smart-home/devices/${device.id}`);
   }
   await request.delete(`${apiURL}/smart-home/connector-settings`, { headers });
 }
@@ -44,14 +44,15 @@ test('设置页建联动「打扫就扫地」：家务打勾后扫地机开扫�
   try {
     await cleanSmartHome(request);
     await admin.put('/smart-home/connector-settings', { baseUrl: ha.url, credential: TOKEN });
-    await admin.put('/smart-home/devices/vacuum.roborock_s8', { displayName: '扫地机', area: '客厅', controllable: true });
+    const vacuum = await admin.post<{ id: string }>('/smart-home/devices', { haDeviceId: 'dev_roborock' });
+    await admin.patch(`/smart-home/devices/${vacuum.id}`, { displayName: '扫地机', area: '客厅', controllable: true });
 
     // 设置页建联动
     await page.goto('/house/smart-home/settings?section=linkages');
     const form = page.locator('[data-smart-home-link-form]');
     await form.getByLabel('联动名字').fill('打扫就扫地');
     await form.getByLabel('标题关键词').fill('打扫');
-    await expect(form.getByLabel('联动目标设备')).toHaveValue('vacuum.roborock_s8');
+    await expect(form.getByLabel('联动目标设备')).toHaveValue(vacuum.id);
     await expect(form.getByLabel('联动动作')).toHaveValue('start');
     await form.getByRole('button', { name: '建这条联动' }).click();
     const row = page.locator('[data-smart-home-link="打扫就扫地"]');

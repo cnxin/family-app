@@ -12,13 +12,14 @@ import {
   type SmartHomeRules,
   type SmartHomeWebhookBody,
   smartHomeCommandBody,
-  smartHomeEntityId,
   smartHomeHouseholdParams,
+  addSmartHomeDeviceBody,
   updateSmartHomeConnectorBody,
-  upsertSmartHomeDeviceBody,
+  updateSmartHomeDeviceBody,
+  type AddSmartHomeDeviceBody,
   type SmartHomeCommandBody,
   type UpdateSmartHomeConnectorBody,
-  type UpsertSmartHomeDeviceBody,
+  type UpdateSmartHomeDeviceBody,
 } from '@family/contracts';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
@@ -30,6 +31,7 @@ import {
   SmartHomeEventRecord,
   SmartHomeLink,
   SmartHomeLinkRun,
+  SmartHomeMergeReportRecord,
   SmartHomeWebhookSettings,
 } from '../entities';
 import { SmartHomeLinksService } from './smart-home-links.service';
@@ -40,12 +42,15 @@ import { SmartHomeLinkagesService } from './smart-home-linkages.service';
 import { SmartHomeWebhookService } from './smart-home-webhook.service';
 import { SmartHomeCommandsService } from './smart-home-commands.service';
 import { SmartHomeLiveService } from './smart-home-live.service';
+import { SmartHomeMergeService } from './smart-home-merge.service';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
 import { SmartHomeService } from './smart-home.service';
+import { SmartHomeWhitelistService } from './smart-home-whitelist.service';
 
 /**
  * /smart-home：Home Assistant 接入（H3）。E1：连接设置、实体目录、白名单、状态快照；
  * E2：控制（幂等键 + 审计 + 逐次校验权限）与 HA 状态经 /events 推送（SmartHomeLiveService）。
+ * 智能家居页重做 R1：白名单按设备（:id 是 smart_home_devices.id），旧的按实体登记的行由 SmartHomeMergeService 归并。
  * 看全家都能看；设置、目录、白名单、审计只有管理员；能不能控按设备的 minRole（home-assistant-plan §4.4）。
  */
 @Controller('smart-home')
@@ -53,6 +58,7 @@ export class SmartHomeController {
   constructor(
     private readonly settings: SmartHomeSettingsService,
     private readonly smartHome: SmartHomeService,
+    private readonly whitelist: SmartHomeWhitelistService,
     private readonly commands: SmartHomeCommandsService,
     private readonly live: SmartHomeLiveService,
   ) {}
@@ -70,7 +76,7 @@ export class SmartHomeController {
     @CurrentUser() user: JwtUser,
   ) {
     const result = await this.settings.update(body, user);
-    this.smartHome.forget(user.householdId);
+    this.smartHome.forgetAll(user.householdId);
     void this.live.refresh(user.householdId);
     return result;
   }
@@ -79,7 +85,7 @@ export class SmartHomeController {
   @RequireCapabilities('manage_integrations')
   async resetConnectorSettings(@CurrentUser() user: JwtUser) {
     const result = await this.settings.reset(user);
-    this.smartHome.forget(user.householdId);
+    this.smartHome.forgetAll(user.householdId);
     void this.live.refresh(user.householdId);
     return result;
   }
@@ -101,33 +107,47 @@ export class SmartHomeController {
     return this.smartHome.list(user.householdId);
   }
 
-  @Put('devices/:entityId')
+  @Get('devices/merge-report')
   @RequireCapabilities('manage_integrations')
-  async upsertDevice(
-    @ZodParam('entityId', smartHomeEntityId) entityId: string,
-    @ZodBody(upsertSmartHomeDeviceBody) body: UpsertSmartHomeDeviceBody,
-    @CurrentUser() user: JwtUser,
-  ) {
-    const device = await this.smartHome.upsert(entityId, body, user);
+  mergeReport(@CurrentUser() user: JwtUser) {
+    return this.smartHome.mergeReport(user.householdId);
+  }
+
+  @Post('devices')
+  @RequireCapabilities('manage_integrations')
+  async addDevice(@ZodBody(addSmartHomeDeviceBody) body: AddSmartHomeDeviceBody, @CurrentUser() user: JwtUser) {
+    const device = await this.whitelist.add(body, user);
     void this.live.refresh(user.householdId);
     return device;
   }
 
-  @Delete('devices/:entityId')
+  @Patch('devices/:id')
   @RequireCapabilities('manage_integrations')
-  async removeDevice(@ZodParam('entityId', smartHomeEntityId) entityId: string, @CurrentUser() user: JwtUser) {
-    const result = await this.smartHome.remove(entityId, user);
+  async updateDevice(
+    @ZodParam('id', uuid) id: string,
+    @ZodBody(updateSmartHomeDeviceBody) body: UpdateSmartHomeDeviceBody,
+    @CurrentUser() user: JwtUser,
+  ) {
+    const device = await this.whitelist.update(id, body, user);
+    void this.live.refresh(user.householdId);
+    return device;
+  }
+
+  @Delete('devices/:id')
+  @RequireCapabilities('manage_integrations')
+  async removeDevice(@ZodParam('id', uuid) id: string, @CurrentUser() user: JwtUser) {
+    const result = await this.whitelist.remove(id, user);
     void this.live.refresh(user.householdId);
     return result;
   }
 
-  @Post('devices/:entityId/command')
+  @Post('devices/:id/command')
   command(
-    @ZodParam('entityId', smartHomeEntityId) entityId: string,
+    @ZodParam('id', uuid) id: string,
     @ZodBody(smartHomeCommandBody) body: SmartHomeCommandBody,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.commands.execute(entityId, body, user);
+    return this.commands.execute(id, body, user);
   }
 
   @Get('commands')
@@ -232,6 +252,7 @@ export class SmartHomeLinksController {
       SmartHomeEventRecord,
       SmartHomeLink,
       SmartHomeLinkRun,
+      SmartHomeMergeReportRecord,
     ]),
     TasksModule,
     ShoppingModule,
@@ -241,8 +262,10 @@ export class SmartHomeLinksController {
   providers: [
     SmartHomeSettingsService,
     SmartHomeService,
+    SmartHomeWhitelistService,
     SmartHomeCommandsService,
     SmartHomeLiveService,
+    SmartHomeMergeService,
     SmartHomeWebhookService,
     SmartHomeLinkagesService,
     SmartHomeLinksService,

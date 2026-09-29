@@ -5,6 +5,7 @@ import { SmartHomeDevice } from '../entities';
 import { EventBus } from '../events/event-bus';
 import { fetchHomeAssistantStates, type HomeAssistantTarget } from './home-assistant.client';
 import { subscribeHomeAssistantStates, type HomeAssistantSubscription } from './home-assistant.ws';
+import { SmartHomeMergeService } from './smart-home-merge.service';
 import { SmartHomeSettingsService } from './smart-home-settings.service';
 import { SmartHomeService } from './smart-home.service';
 
@@ -16,7 +17,7 @@ function envMs(name: string, fallback: number, min = 50) {
 /**
  * 一个家庭的 HA 状态盯梢：优先 WebSocket 订阅 state_changed（推），断了退回定时拉 /api/states 比对
  * （pre-trial-plan H3：有了 /events 就不该让客户端轮询，服务端退化为 30 秒一次），同时按退避重连 WebSocket。
- * 只看白名单里的实体；有变化就调 onChange（已去抖）。
+ * 只看白名单设备名下的实体；有变化就调 onChange（已去抖）。
  */
 class HouseholdWatcher {
   private subscription: HomeAssistantSubscription | null = null;
@@ -129,6 +130,7 @@ export class SmartHomeLiveService implements OnModuleInit, OnModuleDestroy {
     private readonly devices: Repository<SmartHomeDevice>,
     private readonly settings: SmartHomeSettingsService,
     private readonly smartHome: SmartHomeService,
+    private readonly merge: SmartHomeMergeService,
     private readonly bus: EventBus,
   ) {}
 
@@ -164,9 +166,10 @@ export class SmartHomeLiveService implements OnModuleInit, OnModuleDestroy {
   }
 
   async refresh(householdId: string) {
-    const rows = await this.devices.find({ where: { householdId }, select: { entityId: true } });
-    const entityIds = new Set(rows.map((row) => row.entityId));
     const { target, version } = await this.settings.resolve(householdId);
+    // 有按实体登记的旧行、HA 又连得上：先按设备归并（R1，幂等；连不上就等下一轮对账）
+    if (target) await this.merge.mergeIfNeeded(householdId);
+    const entityIds = await this.smartHome.watchedEntityIds(householdId);
     if (!target || !entityIds.size) return this.stop(householdId);
     const existing = this.watchers.get(householdId);
     if (existing && existing.version === version) {

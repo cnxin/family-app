@@ -7741,11 +7741,32 @@ export class HouseholdModuleOverride {
   member: Member;
 }
 
-/** H3 E1：Home Assistant 实体白名单。小管家只认这里登记过的实体。 */
+/**
+ * H3 白名单。R1 起一行 = 一台设备（smart-home-redesign §4.1）：主实体决定卡片的状态句和主按钮，
+ * 主面板项（至多 6 个）进详情主面板；haDeviceId 为 null 的是单实体设备（场景、脚本…）。
+ * mergeState = 'legacy'：迁移前按实体登记的旧行，等连上 HA 后由 SmartHomeMergeService 按设备归并。
+ */
 @Entity('smart_home_devices')
-@Unique('UQ_smart_home_devices_household_entity', ['householdId', 'entityId'])
-@Check('CHK_smart_home_devices_domain', `"domain" NOT IN ('lock', 'alarm_control_panel') AND "entityId" LIKE "domain" || '.%'`)
+@Unique('UQ_smart_home_devices_household_primary', ['householdId', 'primaryEntityId'])
+@Index('UQ_smart_home_devices_household_ha_device', ['householdId', 'haDeviceId'], {
+  unique: true,
+  where: '"haDeviceId" IS NOT NULL',
+})
+@Check('CHK_smart_home_devices_domain', `"primaryDomain" NOT IN ('lock', 'alarm_control_panel') AND "primaryEntityId" LIKE "primaryDomain" || '.%'`)
 @Check('CHK_smart_home_devices_min_role', `"minRole" IN ('owner', 'admin', 'member')`)
+@Check(
+  'CHK_smart_home_devices_icon',
+  `"icon" IN ('vacuum', 'curtain', 'air_conditioner', 'washer', 'dryer', 'water_purifier', 'fridge', 'switch', 'light', 'fan', 'sensor', 'scene', 'other')`,
+)
+@Check('CHK_smart_home_devices_merge_state', `"mergeState" IN ('legacy', 'ok')`)
+@Check(
+  'CHK_smart_home_devices_entity_lists',
+  `CASE WHEN jsonb_typeof("featuredEntityIds") = 'array'
+                AND jsonb_typeof("hiddenEntityIds") = 'array'
+                AND jsonb_typeof("knownEntityIds") = 'array'
+            THEN jsonb_array_length("featuredEntityIds") <= 6
+            ELSE false END`,
+)
 export class SmartHomeDevice {
   @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_devices' })
   id: string;
@@ -7757,17 +7778,39 @@ export class SmartHomeDevice {
   @Column('uuid')
   householdId: string;
 
+  /** HA 设备注册表的 id；null = 单实体设备 */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  haDeviceId: string | null;
+
   @Column({ type: 'varchar', length: 255 })
-  entityId: string;
+  primaryEntityId: string;
 
   @Column({ type: 'varchar', length: 32 })
-  domain: string;
+  primaryDomain: string;
 
   @Column({ type: 'varchar', length: 40 })
   displayName: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   area: string | null;
+
+  @Column({ type: 'varchar', length: 24, default: 'other' })
+  icon: string;
+
+  /** 主面板项，至多 6 个，顺序即显示顺序 */
+  @Column({ type: 'jsonb', default: [] })
+  featuredEntityIds: string[];
+
+  /** 管理员藏掉的子实体：不显示、也不放行命令 */
+  @Column({ type: 'jsonb', default: [] })
+  hiddenEntityIds: string[];
+
+  /** 管理员确认过的子实体（加进来 / 归并时的全部，之后点「放出来」的）；HA 新冒出来的不在里面，默认藏着 */
+  @Column({ type: 'jsonb', default: [] })
+  knownEntityIds: string[];
+
+  @Column({ type: 'varchar', length: 16, default: 'ok' })
+  mergeState: 'legacy' | 'ok';
 
   @Column({ type: 'int', default: 0 })
   sortOrder: number;
@@ -7788,10 +7831,28 @@ export class SmartHomeDevice {
   updatedAt: Date;
 }
 
+/** 智能家居页重做：最近一次「按实体 → 按设备」归并的结果，每个家庭一行（redesign §5.3）。 */
+@Entity('smart_home_merge_reports')
+export class SmartHomeMergeReportRecord {
+  @PrimaryColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_merge_reports' })
+  householdId: string;
+
+  @ManyToOne(() => Household, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_smart_home_merge_reports_household' })
+  household: Household;
+
+  @Column({ type: 'jsonb' })
+  report: Record<string, unknown>;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+}
+
 /** H3 E2：智能家居控制审计。(householdId, requestId) 唯一，即幂等键。 */
 @Entity('smart_home_commands')
 @Unique('UQ_smart_home_commands_household_request', ['householdId', 'requestId'])
 @Index('IDX_smart_home_commands_household_created', ['householdId', 'createdAt'])
+@Index('IDX_smart_home_commands_device_created', ['deviceId', 'createdAt'])
 @Check('CHK_smart_home_commands_status', `"status" IN ('pending', 'succeeded', 'failed')`)
 export class SmartHomeCommandRecord {
   @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_smart_home_commands' })
@@ -7814,6 +7875,14 @@ export class SmartHomeCommandRecord {
 
   @Column('uuid')
   requestId: string;
+
+  /** 哪台白名单设备；设备移出后置空，审计本身留着 */
+  @ManyToOne(() => SmartHomeDevice, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'deviceId', foreignKeyConstraintName: 'FK_smart_home_commands_device' })
+  device: SmartHomeDevice | null;
+
+  @Column('uuid', { nullable: true })
+  deviceId: string | null;
 
   @Column({ type: 'varchar', length: 255 })
   entityId: string;
@@ -7907,6 +7976,7 @@ export class SmartHomeEventRecord {
 /** H3 E4：小管家 → HA 的联动规则（家务打勾 / 日程开始前 → 控制一台白名单设备）。 */
 @Entity('smart_home_links')
 @Index('IDX_smart_home_links_household', ['householdId'])
+@Index('IDX_smart_home_links_target_device', ['targetDeviceId'])
 @Check('CHK_smart_home_links_trigger', `"trigger" IN ('task_done', 'calendar_before')`)
 @Check('CHK_smart_home_links_offset', `"offsetMinutes" >= 0 AND "offsetMinutes" <= 720`)
 export class SmartHomeLink {
@@ -7932,6 +8002,15 @@ export class SmartHomeLink {
   @Column({ type: 'int', default: 0 })
   offsetMinutes: number;
 
+  /** 目标设备（R1 起）；R1 之前建的、目标早已移出白名单的为 null，这种联动已停用 */
+  @ManyToOne(() => SmartHomeDevice, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'targetDeviceId', foreignKeyConstraintName: 'FK_smart_home_links_target_device' })
+  targetDevice: SmartHomeDevice | null;
+
+  @Column('uuid', { nullable: true })
+  targetDeviceId: string | null;
+
+  /** 目标设备的主实体（建联动时的），只做显示和审计 */
   @Column({ type: 'varchar', length: 255 })
   targetEntityId: string;
 
@@ -8004,6 +8083,7 @@ export const ALL_ENTITIES = [
   SmartHomeEventRecord,
   SmartHomeCommandRecord,
   SmartHomeDevice,
+  SmartHomeMergeReportRecord,
   Account,
   Household,
   Member,

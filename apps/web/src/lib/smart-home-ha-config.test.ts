@@ -34,20 +34,20 @@ describe('homeAssistantAutomations', () => {
 
   it('二元传感器：运行中 → 停止；数值：降到 1 以下；填了完成值：变成那个值', () => {
     const binary = homeAssistantAutomations({
-      rules: rules({ laundry: { enabled: true, washerEntityId: null, dryerEntityId: 'binary_sensor.dryer', doneValue: null } }),
+      rules: rules({ laundry: { enabled: true, washer: null, dryer: { deviceId: '00000000-0000-4000-8000-000000000001', entityId: 'binary_sensor.dryer' }, doneValue: null } }),
       entities: [],
     });
     expect(binary).toContain('entity_id: binary_sensor.dryer\n      from: "on"\n      to: "off"');
     expect(binary).toContain('appliance: dryer');
 
     const numeric = homeAssistantAutomations({
-      rules: rules({ laundry: { enabled: true, washerEntityId: 'sensor.washer_left', dryerEntityId: null, doneValue: null } }),
+      rules: rules({ laundry: { enabled: true, washer: { deviceId: '00000000-0000-4000-8000-000000000001', entityId: 'sensor.washer_left' }, dryer: null, doneValue: null } }),
       entities: [{ entityId: 'sensor.washer_left', numeric: true }],
     });
     expect(numeric).toContain('trigger: numeric_state\n      entity_id: sensor.washer_left\n      below: 1');
 
     const text = homeAssistantAutomations({
-      rules: rules({ laundry: { enabled: true, washerEntityId: 'sensor.washer_state', dryerEntityId: null, doneValue: '完成' } }),
+      rules: rules({ laundry: { enabled: true, washer: { deviceId: '00000000-0000-4000-8000-000000000001', entityId: 'sensor.washer_state' }, dryer: null, doneValue: '完成' } }),
       entities: [],
     });
     expect(text).toContain('entity_id: sensor.washer_state\n      to: "完成"');
@@ -56,8 +56,8 @@ describe('homeAssistantAutomations', () => {
   it('扫地机：清扫中 / 回充中 → 在充电座上；滤芯：低于阈值带上当前值', () => {
     const yaml = homeAssistantAutomations({
       rules: rules({
-        vacuum: { enabled: true, entityId: 'vacuum.g30' },
-        filter: { enabled: true, entityId: 'sensor.ro_life', threshold: 15 },
+        vacuum: { enabled: true, trigger: { deviceId: '00000000-0000-4000-8000-000000000001', entityId: 'vacuum.g30' } },
+        filter: { enabled: true, trigger: { deviceId: '00000000-0000-4000-8000-000000000001', entityId: 'sensor.ro_life' }, threshold: 15 },
       }),
       entities: [],
     });
@@ -69,7 +69,7 @@ describe('homeAssistantAutomations', () => {
 
   it('关着的联动不生成；事件 id 用触发的 context id', () => {
     const yaml = homeAssistantAutomations({
-      rules: rules({ vacuum: { enabled: false, entityId: 'vacuum.g30' }, filter: { enabled: true, entityId: 'sensor.ro', threshold: 10 } }),
+      rules: rules({ vacuum: { enabled: false, trigger: { deviceId: '00000000-0000-4000-8000-000000000001', entityId: 'vacuum.g30' } }, filter: { enabled: true, trigger: { deviceId: '00000000-0000-4000-8000-000000000001', entityId: 'sensor.ro' }, threshold: 10 } }),
       entities: [],
     });
     expect(yaml).not.toContain('vacuum_done');

@@ -70,14 +70,14 @@ function LinkRow({ link, deviceName }: { link: SmartHomeLink; deviceName: string
   );
 }
 
-function NewLinkForm({ devices }: { devices: { entityId: string; displayName: string; domain: string }[] }) {
+function NewLinkForm({ devices }: { devices: { id: string; displayName: string; primaryDomain: string }[] }) {
   const create = useCreateSmartHomeLink();
   const [name, setName] = useState('');
   const [trigger, setTrigger] = useState<SmartHomeLinkTrigger>('task_done');
   const [keyword, setKeyword] = useState('');
   const [offset, setOffset] = useState(10);
-  const [target, setTarget] = useState(devices[0]?.entityId ?? '');
-  const domain = devices.find((device) => device.entityId === target)?.domain ?? '';
+  const [target, setTarget] = useState(devices[0]?.id ?? '');
+  const domain = devices.find((device) => device.id === target)?.primaryDomain ?? '';
   const actions = smartHomeActionsFor(domain);
   const [action, setAction] = useState<SmartHomeAction | ''>('');
   const chosen = action && actions.includes(action) ? action : actions[0] ?? '';
@@ -103,7 +103,7 @@ function NewLinkForm({ devices }: { devices: { entityId: string; displayName: st
             trigger,
             keyword: keyword.trim(),
             ...(trigger === 'calendar_before' ? { offsetMinutes: offset } : {}),
-            targetEntityId: target,
+            targetDeviceId: target,
             action: chosen,
           },
           {
@@ -157,7 +157,7 @@ function NewLinkForm({ devices }: { devices: { entityId: string; displayName: st
             }}
           >
             {devices.map((device) => (
-              <option key={device.entityId} value={device.entityId}>
+              <option key={device.id} value={device.id}>
                 {device.displayName}
               </option>
             ))}
@@ -191,10 +191,10 @@ export function SmartHomeLinksPanel() {
   const links = useSmartHomeLinks();
   const states = useSmartHomeStates();
   const all = states.data?.devices ?? [];
-  const names = new Map(all.map((device) => [device.entityId, device.displayName]));
+  const names = new Map(all.map((device) => [device.id, device.displayName]));
   const controllable = all
-    .filter((device) => device.controllable && smartHomeActionsFor(device.domain).length > 0)
-    .map(({ entityId, displayName, domain }) => ({ entityId, displayName, domain }));
+    .filter((device) => device.controllable && smartHomeActionsFor(device.primaryDomain).length > 0)
+    .map(({ id, displayName, primaryDomain }) => ({ id, displayName, primaryDomain }));
 
   return (
     <Panel title="小管家 → Home Assistant" grow={false}>
@@ -205,14 +205,18 @@ export function SmartHomeLinksPanel() {
         {links.data?.length ? (
           <ul className="mt-2">
             {links.data.map((link) => (
-              <LinkRow key={link.id} link={link} deviceName={names.get(link.targetEntityId) ?? link.targetEntityId} />
+              <LinkRow
+                key={link.id}
+                link={link}
+                deviceName={(link.targetDeviceId && names.get(link.targetDeviceId)) || `${link.targetEntityId}（设备已不在白名单）`}
+              />
             ))}
           </ul>
         ) : (
           <EmptyState emoji="🔗" title="还没有联动" hint="比如「打扫」打勾后让扫地机开扫，电影夜开始前关窗帘" />
         )}
       </QueryFrame>
-      <NewLinkForm key={controllable.map((device) => device.entityId).join(',')} devices={controllable} />
+      <NewLinkForm key={controllable.map((device) => device.id).join(',')} devices={controllable} />
     </Panel>
   );
 }

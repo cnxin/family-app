@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { SmartHomeDirectoryDevice, SmartHomeDirectoryEntry } from '@family/contracts';
-import { useSmartHomeDirectory, useUpsertSmartHomeDevice } from '../lib/queries';
+import { useAddSmartHomeDevice, useSmartHomeDirectory } from '../lib/queries';
 import { SMART_HOME_KINDS, arrangeDirectory, smartHomeStateLine, type SmartHomeKind } from '../lib/smart-home-copy';
 import { pushToast } from '../lib/toast';
 import { QueryFrame } from './query-state';
@@ -9,89 +9,69 @@ import { Button, EmptyState, Input, Panel } from './ui';
 
 // HA 的实体目录：按设备一张卡（设备 / 实体 / 区域三张注册表拼出来），默认只摆主实体，
 // 诊断 / 配置类折进「更多」。米家、海尔一台设备十几个子实体，平铺就没法挑了。
+// 智能家居页重做 R1 起白名单按设备：整台「加进来」，主实体和主面板项由服务端按默认规则算（卡里标「主」「面板」预览）；
+// 只有没有归属设备的实体（场景、脚本…）还是一个一个加。
 
 /** 确认加进白名单时给一下轻触感；桌面没有振动器就什么都不发生。 */
 function confirmHaptic() {
   navigator.vibrate?.(10);
 }
 
-/** 目录里的一条：点「加进来」就地展开，别名默认是去掉设备名前缀的实体名，可改。 */
-function DirectoryRow({ entry, area }: { entry: SmartHomeDirectoryEntry; area: string | null }) {
-  const upsert = useUpsertSmartHomeDevice();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState(entry.name.slice(0, 40));
-  const [group, setGroup] = useState(area ?? '');
+const ROLE_LABEL = { primary: '主', featured: '面板' } as const;
+
+/** 目录里的一条实体：名字、状态、默认当什么；没有归属设备的实体自己带「加进来」。 */
+function DirectoryRow({ entry, standalone }: { entry: SmartHomeDirectoryEntry; standalone: boolean }) {
+  const add = useAddSmartHomeDevice();
   const line = smartHomeStateLine(entry.domain, entry.state);
 
   return (
-    <li data-smart-home-entity={entry.entityId} className="flex flex-col gap-2 border-t border-border px-3.5 py-2.5">
-      <div className="flex items-center gap-3">
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm">{entry.name}</span>
-          <span className="block truncate text-[12px] text-ink-soft">
-            {line.text} · {entry.entityId}
-          </span>
+    <li data-smart-home-entity={entry.entityId} className="flex items-center gap-3 border-t border-border px-3.5 py-2.5">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">
+          {entry.name}
+          {entry.defaultRole ? (
+            <span
+              data-smart-home-default-role={entry.defaultRole}
+              className="ml-1.5 rounded-full bg-accent-soft px-1.5 py-px text-[11px] text-accent"
+            >
+              {ROLE_LABEL[entry.defaultRole]}
+            </span>
+          ) : null}
         </span>
-        {entry.whitelisted ? (
+        <span className="block truncate text-[12px] text-ink-soft">
+          {line.text} · {entry.entityId}
+        </span>
+      </span>
+      {standalone ? (
+        entry.whitelisted ? (
           <span className="shrink-0 text-[12px] text-accent">已加</span>
-        ) : !open ? (
+        ) : (
           <Button
             variant="outline"
             className="min-h-11 shrink-0 px-3"
             aria-label={`把${entry.fullName}加进来`}
-            onClick={() => setOpen(true)}
+            disabled={add.isPending}
+            onClick={() =>
+              add.mutate(
+                { entityId: entry.entityId },
+                {
+                  onSuccess: () => {
+                    confirmHaptic();
+                    pushToast(`「${entry.fullName}」已加进智能家居`);
+                  },
+                },
+              )
+            }
           >
             加进来
           </Button>
-        ) : null}
-      </div>
-      {open && !entry.whitelisted ? (
-        <form
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            upsert.mutate(
-              { entityId: entry.entityId, body: { displayName: name.trim(), area: group.trim() || null } },
-              {
-                onSuccess: () => {
-                  confirmHaptic();
-                  pushToast(`「${name.trim()}」已加进智能家居`);
-                  setOpen(false);
-                },
-              },
-            );
-          }}
-        >
-          <Input
-            aria-label={`${entry.fullName} 的中文名`}
-            className="min-w-0 flex-[2]"
-            placeholder="中文名"
-            maxLength={40}
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <Input
-            aria-label={`${entry.fullName} 的分组`}
-            className="min-w-0 flex-1"
-            placeholder="分组，比如客厅"
-            maxLength={20}
-            value={group}
-            onChange={(event) => setGroup(event.target.value)}
-          />
-          <Button type="submit" className="min-h-11" disabled={upsert.isPending || !name.trim()}>
-            确认加入
-          </Button>
-          <Button type="button" variant="ghost" className="min-h-11" onClick={() => setOpen(false)}>
-            取消
-          </Button>
-        </form>
+        )
       ) : null}
     </li>
   );
 }
 
-/** 一台设备一张卡：标题是设备名 + 区域，可整张收起；主实体之外的折在「更多 N 项」里。 */
+/** 一台设备一张卡：标题是设备名 + 区域，可整张收起；整台「加进来」；主实体之外的折在「更多 N 项」里。 */
 function DeviceCard({
   device,
   shown,
@@ -101,36 +81,61 @@ function DeviceCard({
   shown: SmartHomeDirectoryEntry[];
   more: SmartHomeDirectoryEntry[];
 }) {
+  const add = useAddSmartHomeDevice();
   const [collapsed, setCollapsed] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const bodyId = `smart-home-device-${device.id ?? 'none'}`;
-  const added = device.entities.filter((entry) => entry.whitelisted).length;
+  const standalone = device.id === null;
+  const haDeviceId = device.id;
 
   return (
     <section data-smart-home-directory-device={device.name} className="rounded-lg border border-border">
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        aria-controls={bodyId}
-        className="flex min-h-12 w-full items-center gap-3 px-3.5 py-2 text-left hover:bg-muted"
-        onClick={() => setCollapsed((value) => !value)}
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{device.name}</span>
-          <span className="block truncate text-[12px] text-ink-soft">
-            {[device.area, device.manufacturer, `${device.entities.length} 个实体`, added ? `已加 ${added}` : null]
-              .filter(Boolean)
-              .join(' · ')}
+      <div className="flex items-center gap-2 pr-2">
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-3.5 py-2 text-left hover:bg-muted"
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{device.name}</span>
+            <span className="block truncate text-[12px] text-ink-soft">
+              {[device.area, device.manufacturer, `${device.entities.length} 个实体`].filter(Boolean).join(' · ')}
+            </span>
           </span>
-        </span>
-        <span aria-hidden="true" className={`shrink-0 text-ink-soft transition-transform duration-150 ease-out ${collapsed ? '' : 'rotate-90'}`}>
-          ›
-        </span>
-      </button>
+          <span aria-hidden="true" className={`shrink-0 text-ink-soft transition-transform duration-150 ease-out ${collapsed ? '' : 'rotate-90'}`}>
+            ›
+          </span>
+        </button>
+        {haDeviceId === null ? null : device.whitelistedDeviceId ? (
+          <span className="shrink-0 px-2 text-[12px] text-accent">已加</span>
+        ) : (
+          <Button
+            variant="outline"
+            className="min-h-11 shrink-0 px-3"
+            aria-label={`把${device.name}整台加进来`}
+            disabled={add.isPending}
+            onClick={() =>
+              add.mutate(
+                { haDeviceId },
+                {
+                  onSuccess: (created) => {
+                    confirmHaptic();
+                    pushToast(`「${created.displayName}」已加进智能家居`);
+                  },
+                },
+              )
+            }
+          >
+            加进来
+          </Button>
+        )}
+      </div>
       {collapsed ? null : (
         <ul id={bodyId}>
           {shown.map((entry) => (
-            <DirectoryRow key={entry.entityId} entry={entry} area={device.area} />
+            <DirectoryRow key={entry.entityId} entry={entry} standalone={standalone} />
           ))}
           {more.length ? (
             <>
@@ -147,7 +152,9 @@ function DeviceCard({
                   </span>
                 </button>
               </li>
-              {showMore ? more.map((entry) => <DirectoryRow key={entry.entityId} entry={entry} area={device.area} />) : null}
+              {showMore
+                ? more.map((entry) => <DirectoryRow key={entry.entityId} entry={entry} standalone={standalone} />)
+                : null}
             </>
           ) : null}
         </ul>
@@ -230,8 +237,9 @@ export function SmartHomeDirectoryPanel({ configured }: { configured: boolean })
                 <DeviceCard
                   key={`${group.device.id ?? 'none'}:${search}:${kind}`}
                   device={group.device}
-                  shown={group.shown}
-                  more={group.more}
+                  // 没有归属设备的（场景、脚本…）要一个一个加，不折叠
+                  shown={group.device.id === null ? [...group.shown, ...group.more] : group.shown}
+                  more={group.device.id === null ? [] : group.more}
                 />
               ))
             ) : (

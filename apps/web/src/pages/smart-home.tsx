@@ -18,21 +18,21 @@ const TONE: Record<StateLine['tone'], string> = {
   muted: 'text-ink-soft',
 };
 
-function DeviceRow({ device, timeZone }: { device: SmartHomeDeviceWithState; timeZone: string }) {
-  const line = smartHomeStateLine(device.domain, device.state, timeZone);
+function DeviceRow({ device, timeZone, live }: { device: SmartHomeDeviceWithState; timeZone: string; live: boolean }) {
+  const line = smartHomeStateLine(device.primaryDomain, device.primary, timeZone);
   return (
-    <li data-smart-home-device={device.entityId} className="border-b border-border px-3.5 py-2.5 last:border-b-0">
+    <li data-smart-home-device={device.primaryEntityId} className="border-b border-border px-3.5 py-2.5 last:border-b-0">
       <div className="flex min-h-7 items-center gap-3">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{device.displayName}</span>
         <span className="shrink-0 text-right">
           <span className={`block text-sm ${TONE[line.tone]}`}>{line.text}</span>
           {line.detail ? <span className="block text-[12px] text-ink-soft">{line.detail}</span> : null}
-          {device.state?.assumed && device.state.state !== 'unavailable' ? (
+          {device.primary?.assumed && device.primary.state !== 'unavailable' ? (
             <span data-smart-home-assumed className="block text-[11px] text-warm">按上次操作显示</span>
           ) : null}
         </span>
       </div>
-      {device.canControl ? (
+      {device.canControl && live ? (
         <div className="mt-2 flex justify-end">
           <SmartHomeControls device={device} />
         </div>
@@ -80,8 +80,15 @@ export function SmartHomePage() {
   const timeZone = session?.householdTimezone ?? 'Asia/Shanghai';
   const states = useSmartHomeStates();
   const data = states.data;
-  const scenes = data?.devices.filter((device) => device.domain === 'scene') ?? [];
-  const groups = data ? groupByArea(data.devices.filter((device) => device.domain !== 'scene')) : [];
+  const isScene = (device: SmartHomeDeviceWithState) => device.primaryDomain === 'scene' || device.primaryDomain === 'script';
+  const scenes = data?.devices.filter(isScene) ?? [];
+  const groups = data ? groupByArea(data.devices.filter((device) => !isScene(device))) : [];
+  // HA 连不上时服务端给的是上次的状态（stale）：照样显示，但按不了
+  const live = Boolean(data?.connection.available);
+  const staleAt =
+    data?.stale && data.asOf
+      ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone }).format(new Date(data.asOf))
+      : null;
 
   return (
     <Page
@@ -102,7 +109,7 @@ export function SmartHomePage() {
         <QueryFrame query={states} skeleton={<Panel className="p-3"><ListSkeleton rows={4} /></Panel>}>
           {data && data.connection.configured && !data.connection.available ? (
             <p role="status" className="rounded-card border border-danger/30 bg-danger/5 px-3.5 py-2.5 text-sm text-danger">
-              连不上 Home Assistant：{data.connection.message}。家里其他功能不受影响。
+              连不上 Home Assistant：{data.connection.message}。{staleAt ? `下面是 ${staleAt} 的状态，暂时按不了。` : ''}家里其他功能不受影响。
             </p>
           ) : null}
           {data && !data.devices.length ? (
@@ -126,7 +133,7 @@ export function SmartHomePage() {
               <Panel key={group.area} title={group.area} grow={false}>
                 <ul>
                   {group.items.map((device) => (
-                    <DeviceRow key={device.entityId} device={device} timeZone={timeZone} />
+                    <DeviceRow key={device.id} device={device} timeZone={timeZone} live={live} />
                   ))}
                 </ul>
               </Panel>
@@ -141,12 +148,12 @@ export function SmartHomePage() {
               <ul>
                 {scenes.map((scene) => (
                   <li
-                    key={scene.entityId}
-                    data-smart-home-device={scene.entityId}
+                    key={scene.id}
+                    data-smart-home-device={scene.primaryEntityId}
                     className="flex min-h-12 items-center gap-3 border-b border-border px-3.5 py-2 last:border-b-0"
                   >
                     <span className="min-w-0 flex-1 truncate text-sm">{scene.displayName}</span>
-                    <SmartHomeControls device={scene} />
+                    {live ? <SmartHomeControls device={scene} /> : null}
                   </li>
                 ))}
               </ul>
