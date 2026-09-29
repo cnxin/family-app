@@ -14,7 +14,7 @@ import {
 import { isHouseholdManager, isUniqueViolation } from '@family/shared';
 import { JwtUser } from '../auth/jwt.guard';
 import { HouseholdMap, StorageLocation } from '../entities';
-import { findItemLocations } from './location-find';
+import { findItemLocations, readLocationContents } from './location-find';
 import { shapeProblem } from './map-shape';
 import { LocationRuleError, kindFor, placeTree, subtreeHeight, subtreeIds, type PlacedRow } from './location-tree';
 
@@ -190,26 +190,7 @@ export class LocationsService {
   async contents(id: string, householdId: string): Promise<StorageLocationContents> {
     const location = await this.one(householdId, id, true);
     const ids = subtreeIds(await this.rows(this.dataSource.manager, householdId), id);
-    const [items, batches, assets] = await Promise.all([
-      this.dataSource.query(
-        `SELECT id, name, quantity::text AS quantity, unit, "defaultLocationId" AS "locationId"
-           FROM inventory_items WHERE "householdId" = $1 AND "defaultLocationId" = ANY($2) ORDER BY name`,
-        [householdId, ids],
-      ),
-      this.dataSource.query(
-        `SELECT b.id, b."inventoryItemId", i.name AS "itemName", b.quantity::text AS quantity, i.unit,
-                b."expiresOn"::text AS "expiresOn", b."locationId"
-           FROM inventory_batches b JOIN inventory_items i ON i.id = b."inventoryItemId"
-          WHERE b."householdId" = $1 AND b."locationId" = ANY($2) AND b.quantity > 0
-          ORDER BY b."expiresOn" NULLS LAST, i.name`,
-        [householdId, ids],
-      ),
-      this.dataSource.query(
-        `SELECT id, name, category, "locationId" FROM home_assets
-          WHERE "householdId" = $1 AND "locationId" = ANY($2) ORDER BY name`,
-        [householdId, ids],
-      ),
-    ]);
+    const { items, batches, assets } = await readLocationContents(this.dataSource.manager, householdId, ids);
     return { location, items, batches, assets };
   }
 

@@ -6,7 +6,7 @@ import { ACTIONS } from '../lib/actions';
 import { coreSegments, shelfSegments, settingsSegments } from '../lib/nav';
 import { useAuth } from '../lib/auth';
 import { prefetchSearchSources } from '../lib/prefetch';
-import { useAgentStatus } from '../lib/queries';
+import { useAgentStatus, useFindItemLocations, useHouseholdMap } from '../lib/queries';
 
 /** 顶栏那个按钮也要能开，用一个自定义事件把两边接起来，免得再拉一层 context。 */
 export function openPalette() {
@@ -17,7 +17,7 @@ interface Entry {
   id: string;
   label: string;
   hint: string;
-  kind: 'action' | 'page' | 'dish' | 'agent';
+  kind: 'action' | 'page' | 'dish' | 'item' | 'agent';
   go: () => void;
 }
 
@@ -27,7 +27,7 @@ function includes(text: string, keyword: string) {
 
 /**
  * ⌘K：功能一多，导航再怎么分也不如直接说出名字快。
- * 除了页面，还能搜菜品（搜到就直接跳菜谱），以后加成员、任务也是往这里塞。
+ * 除了页面，还能搜菜品（搜到就直接跳菜谱）、搜东西放在哪（I3：「上次放在 …」，跳地图高亮），以后加成员、任务也是往这里塞。
  */
 const NO_DISHES: Dish[] = [];
 
@@ -40,6 +40,14 @@ export function CommandPalette() {
   const client = useQueryClient();
   const agent = useAgentStatus(open);
   const inputRef = useRef<HTMLInputElement>(null);
+  // I3 找东西：按物品名搜「上次放在」，停手 200 ms 再问；回车跳地图对准并高亮（没有地图就去库存 / 资产）
+  const [itemQuery, setItemQuery] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => setItemQuery(open ? query : ''), 200);
+    return () => window.clearTimeout(timer);
+  }, [open, query]);
+  const found = useFindItemLocations(itemQuery, open);
+  const map = useHouseholdMap(open);
   const listRef = useRef<HTMLDivElement>(null);
 
   // 打开的同时把上次的输入清掉——放在打开动作里而不是 effect 里，少一次级联渲染
@@ -127,6 +135,20 @@ export function CommandPalette() {
     }));
     const pageHits = pages.filter((entry) => includes(entry.label, keyword));
     const dishHits = dishesOnly.filter((entry) => includes(entry.label, keyword));
+    const itemHits: Entry[] = (itemQuery.trim() === query.trim() ? found.data ?? [] : []).slice(0, 6).map((hit) => ({
+      id: `item-${hit.type}-${hit.id}-${hit.locationId}`,
+      label: hit.name,
+      hint: `上次放在 ${hit.pathLabel}`,
+      kind: 'item' as const,
+      go: () =>
+        navigate(
+          map.data
+            ? `/house/map?${new URLSearchParams({ focus: hit.locationId, q: hit.name })}`
+            : hit.type === 'asset'
+              ? `/house/assets/${hit.id}`
+              : '/house/inventory',
+        ),
+    }));
     const ask = agent.data?.enabled
       ? [{
           id: 'ask-agent',
@@ -136,8 +158,9 @@ export function CommandPalette() {
           go: () => navigate(`/me/assistant?draft=${encodeURIComponent(query.trim())}`),
         }]
       : [];
-    return [...named, ...pageHits, ...aliased, ...dishHits, ...ask].slice(0, 20);
-  }, [agent.data?.enabled, entries, navigate, query, session?.member.role]);
+    // 顺序和下面分组显示的顺序一致，上下键和回车才对得上
+    return [...named, ...aliased, ...pageHits, ...dishHits, ...itemHits, ...ask].slice(0, 20);
+  }, [agent.data?.enabled, entries, found.data, itemQuery, map.data, navigate, query, session?.member.role]);
 
   if (!open) return null;
 
@@ -151,6 +174,7 @@ export function CommandPalette() {
     { title: '动作', items: results.filter((entry) => entry.kind === 'action') },
     { title: '页面', items: results.filter((entry) => entry.kind === 'page') },
     { title: '菜品', items: results.filter((entry) => entry.kind === 'dish') },
+    { title: '东西放在哪', items: results.filter((entry) => entry.kind === 'item') },
     { title: '小管家', items: results.filter((entry) => entry.kind === 'agent') },
   ];
   let shown = 0;
@@ -171,7 +195,7 @@ export function CommandPalette() {
         <input
           ref={inputRef}
           value={query}
-          placeholder="去哪儿？输入页面或菜名"
+          placeholder="去哪儿？输入页面、菜名，或要找的东西"
           aria-label="搜索页面或菜品"
           onChange={(event) => {
             setQuery(event.target.value);
@@ -214,7 +238,9 @@ export function CommandPalette() {
                         }
                       >
                         <span className="flex-1 truncate text-sm">{entry.label}</span>
-                        <span className="shrink-0 text-[12px] text-ink-soft">{entry.hint}</span>
+                        <span className={'text-[12px] text-ink-soft ' + (entry.kind === 'item' ? 'min-w-0 max-w-[62%] truncate' : 'shrink-0')}>
+                          {entry.hint}
+                        </span>
                       </button>
                     );
                   })}
