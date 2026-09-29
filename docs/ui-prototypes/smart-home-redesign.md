@@ -1,13 +1,14 @@
 # 智能家居页重做：按设备归组、分出主次（方案，待 King 确认）
 
 > 状态：**方案 + 示意稿，未动产品代码**。写于 2026-09-29，插在 H3 E5 之前。
+> 二稿（同日）：详情从「按钮放大版」改为完整控制面板，新增 §9，§2.3 / §4 / §5.2 / §6 / §7 / §8 跟着改。
 > 配套示意稿：`docs/ui-prototypes/smart-home/` 下四个自包含 HTML（直接用浏览器打开）。
 > 上游文档：`docs/home-assistant-plan.md`（原方案）、`docs/pre-trial-plan.md` H3（修正与进度）。
 
 | 示意稿 | 画面 |
 | --- | --- |
 | `phone-devices.html` | 手机 · 设备页：① 正常 ② 整个 HA 断开 |
-| `phone-detail-sheet.html` | 手机 · 详情 sheet：① 扫地机（管理员）② 空调（成员；模式和温度只在这里） |
+| `phone-detail-sheet.html` | 手机 · 详情面板（2026-09-29 二稿，见 §9）：① 扫地机（分房间、吸力、水量、耗材）② 空调（风速）③ 洗衣机（只读 + 进度）④ 客厅窗帘（位置滑块） |
 | `desktop-devices.html` | 桌面 · 设备页（四列）+ 居中详情（只读的洗衣机） |
 | `phone-today-devices.html` | 手机 · 今天页「家里的设备」区块 + 变体（HA 断开 / 没有置顶） |
 
@@ -21,8 +22,9 @@
 **现在的问题**：`smart_home_devices` 一行是一个 HA **实体**。King 挑一台洗衣机，页面上就是「洗衣机 运行状态」「洗衣机 剩余时间」「洗衣机 程序」几行平铺，
 按钮全摆在行里（空调一行最多七个按钮），没有「这是一台什么设备、现在怎样、最该按哪个」的主次。
 
-**方案**：白名单从「实体」改成「设备」。一台设备 = 一个**主实体**（决定卡片的状态句和唯一主按钮）+ 至多 4 个**次要实体**（只在详情里当信息 chips）。
-页面按「场景 → 房间 → 设备卡」三层摆；卡片只有图标、名字、一句状态、至多一个主按钮；其余全部进详情 sheet。
+**方案**：白名单从「实体」改成「设备」。一台设备 = 一个**主实体**（决定卡片的状态句和唯一主按钮）+ 至多 6 个**主面板项**（原稿叫「次要实体」、上限 4，二稿改名改上限，见 §9.3）。
+页面按「场景 → 房间 → 设备卡」三层摆；卡片只有图标、名字、一句状态、至多一个主按钮，是**入口**；
+点进去的详情是这台设备的**完整控制面板**（§9），不是卡片按钮的放大版。
 
 ---
 
@@ -105,19 +107,10 @@
 - 房间内：`sortOrder`；**离线设备排到本房间末尾**。
 - 「在今天页显示」的设备在这一页**不单独置顶、不重复出现**，只在自己房间里正常排。
 
-### 2.3 详情 sheet
+### 2.3 详情面板
 
-从上到下：
-
-1. **是谁**：图标、名字、房间 · 厂商型号（来自 HA 设备注册表）。
-2. **现在怎样**：状态句 + 一句补充（「10:12 开始，已经扫了 18 分钟」；空调写「按上次操作显示」，沿用现有 `assumed`）。
-3. **能做什么**：主实体的**全部动作**，按钮位置固定；此刻说不通的**置灰不隐藏**，免得按钮跳位。空调的开关、四种模式、设定温度 ±1 **只在这里**。没权限时换成一行「管理员还没开放控制」。只读设备写「这台只能看」及原因。
-4. **更多信息**：次要实体 chips，最多 4 个（剩余时间、电量、滤芯寿命、主刷寿命……）；到阈值的 chip 变暖橙，阈值沿用留意规则，不另起。
-5. **最近操作**：审计表里这台设备的最近 3 条（谁 / 动作 / 时间 / 成败），联动触发的写清是哪条联动。
-6. **管理员**：「在今天页显示」开关；一个「改名字、房间、主 / 次实体 ›」链接跳设置页并展开这一行。
-
-手机：底部上推，下拉可关，进入用 ease-out（iOS 那条 `cubic-bezier(0.32, 0.72, 0, 1)`，与 `index.css` 的 pop-in 同一条），`prefers-reduced-motion` 时不动。
-桌面：同一内容居中弹出，宽 440，Esc 和点遮罩关闭。
+**二稿已整节重写，见 §9。** 一稿「按钮放大版 + 信息 chips」的写法作废。
+`desktop-devices.html` 第二屏只示意桌面弹窗的**容器**（居中、遮罩、内部滚动），里面的内容以 §9 和 `phone-detail-sheet.html` 为准。
 
 ### 2.4 断开与离线
 
@@ -141,7 +134,7 @@
 结构不变（连接 / 白名单 / 最近操作在左，目录在右；「联动」分段不变），只改两处：
 
 - **目录**：「加进来」的对象从实体改为**设备**。每台设备的卡头一个「加进来」按钮；卡里给每个实体标「主」「次」徽标，预览加进来后的默认搭配。没有归属设备的实体（场景、脚本、helper）照旧一个一个加，各自成为「单实体设备」。
-- **白名单表**：一台设备一行（图标、名字、房间、主实体一句状态）。行内「展开」后可改：中文名、房间、图标类型、主实体（单选，本设备的实体，可控类在前）、次要实体（多选至多 4 个，旁边显示当前值方便挑）、允许控制、谁能控、在今天页显示。
+- **白名单表**：一台设备一行（图标、名字、房间、主实体一句状态）。行内「展开」后可改：中文名、房间、图标类型、主实体（单选，本设备的实体，可控类在前）、主面板项（多选至多 6 个，旁边显示当前值方便挑）、藏掉的子实体、允许控制、谁能控、在今天页显示。
 
 ---
 
@@ -154,13 +147,13 @@
 | 扫地机 | 清扫中 · 62% / 充电中 87% / 在充电座上 / 回充中 / 暂停了（暖橙）/ 出错了（暖橙） | 主实体 vacuum 的状态 + `battery` |
 | 窗帘 | 开着 / 开了 40% / 关着 / 正在打开 | cover 状态 + `position` |
 | 空调 | 已关 / 制冷 26° / 送风（后缀「≈」表示按上次操作显示） | climate 状态 + 设定温度 |
-| 洗衣机 / 烘干机 | 剩 23 分钟 / 洗好了 · 烘好了（暖橙）/ 空闲 | 主实体（运行状态）；运行中时若有「时长」类次要实体（单位 min / h），取它拼「剩 N 分钟」 |
+| 洗衣机 / 烘干机 | 剩 23 分钟 / 洗好了 · 烘好了（暖橙）/ 空闲 | 主实体（运行状态）；运行中时若有「时长」类主面板项（单位 min / h），取它拼「剩 N 分钟」 |
 | 净水器 | 滤芯剩 64% / 滤芯剩 8%（暖橙，低于联动里设的阈值） | 主实体（滤芯寿命传感器） |
 | 开关 / 灯 / 风扇 | 开着 / 已关 | on / off |
 | 其他传感器 | 27.5° / 58% / 3 分钟 | 值 + 单位（沿用 `sensorLine`） |
 | 任意 | 离线 / 不知道 | `unavailable` / `unknown` |
 
-实现是 `smart-home-copy.ts` 里新增 `deviceStatusLine(device)`：以现有 `smartHomeStateLine` 为底，再按图标类型借一个次要实体补半句。
+实现是 `smart-home-copy.ts` 里新增 `deviceStatusLine(device)`：以现有 `smartHomeStateLine` 为底，再按图标类型借一个主面板项补半句。
 
 ### 3.2 颜色
 
@@ -202,17 +195,19 @@
 | `icon` | varchar(24) | 图标类型：`vacuum` `curtain` `air_conditioner` `washer` `dryer` `water_purifier` `fridge` `switch` `light` `fan` `sensor` `scene` `other` |
 | `primaryEntityId` | varchar(255) | 由原 `entityId` 改名；决定状态句和主按钮 |
 | `primaryDomain` | varchar(32) | 由原 `domain` 改名；门锁 / 安防 CHECK 照旧 |
-| `secondaryEntityIds` | text[] default '{}' | 至多 4 个（CHECK `cardinality <= 4`）；只读，只进详情 chips |
+| `featuredEntityIds` | text[] default '{}' | **主面板项**（一稿叫 `secondaryEntityIds`，至多 4、只读）。二稿：至多 6 个（CHECK `cardinality <= 6`），在详情主面板里按类型渲染，可控的就能控（§9.3） |
+| `hiddenEntityIds` | text[] default '{}' | 二稿新增：管理员从详情面板里藏掉的子实体；藏掉的既不显示也不放行命令 |
 | `controllable` / `minRole` / `pinnedToToday` / `sortOrder` | — | 不变，含义从「这个实体」变成「这台设备（的主实体）」 |
 | `mergeState` | varchar(16) | `legacy`（迁移前的旧行，待归并）/ `ok`；§5 用 |
 
 唯一约束：`(householdId, haDeviceId)`（haDeviceId 非空时）、`(householdId, primaryEntityId)`。
-一个实体只能出现在一台设备里（主或次），服务端校验；HA 能连时，主 / 次实体必须属于同一个 `haDeviceId`。
+HA 能连时，主实体和主面板项必须属于同一个 `haDeviceId`（单实体设备只有主实体）。
+详情面板里「更多设置」「设备信息」的其余子实体**不存库**，每次按 HA 注册表现算（§9.4）。
 
 **默认值**（目录里「加进来」时服务端算好，管理员可改）：
 
 - 主实体 = 该设备第一个可控实体（`SMART_HOME_CONTROLLABLE_DOMAINS`，按 vacuum → cover → climate → switch 的顺序）；没有则第一个没有 `entity_category`、也不带米家「* 」前缀的传感器。
-- 次要实体 = 除主实体外，前 4 个非诊断 / 非配置传感器（沿用现在目录的 `isPrimarySmartHomeEntity` 规则与排序）。
+- 主面板项 = 除主实体外，前 6 个非诊断 / 非配置传感器（沿用现在目录的 `isPrimarySmartHomeEntity` 规则与排序）。这只是起点：扫地机的拖地水量（config 类 select）、耗材（diagnostic 类传感器）默认都不在里面，要管理员挑一次（§9.3）。
 - 图标类型 = 主实体 domain 推出（vacuum → 扫地机，cover → 窗帘，climate → 空调）；传感器类按设备名 / 型号关键词（洗衣 / 烘干 / 净水 / 冰箱）推，推不出为 `other`。
 - 中文名 = HA 设备的 `name_by_user || name`；房间 = HA 设备的区域名。
 
@@ -223,14 +218,14 @@ E3 / E4 以及 E5 里凡是指向「某台设备的某个实体」的地方，�
 ```ts
 export const smartHomeEntityRef = z.object({
   deviceId: uuid,              // smart_home_devices.id
-  entityId: smartHomeEntityId, // 必须是这台设备的主实体或次要实体
+  entityId: smartHomeEntityId, // 必须属于这台设备（HA 注册表；单实体设备 = 主实体），且没被藏掉
 });
 ```
 
 | 用处 | 现在 | 改为 | 额外约束 |
 | --- | --- | --- | --- |
-| E3 联动规则（`smart_home_webhook_settings.rules` jsonb） | `washerEntityId` `dryerEntityId` `vacuum.entityId` `filter.entityId` | `washer` `dryer` `vacuum.trigger` `filter.trigger`，均为 `smartHomeEntityRef \| null` | 触发实体可以是次要实体（洗衣机的「运行状态」、净水器的「滤芯寿命」） |
-| E4 联动（`smart_home_links`） | `targetEntityId` | 加 `targetDeviceId uuid FK → smart_home_devices ON DELETE RESTRICT`，`targetEntityId` 保留 | 目标实体**必须是主实体**（只有主实体能控） |
+| E3 联动规则（`smart_home_webhook_settings.rules` jsonb） | `washerEntityId` `dryerEntityId` `vacuum.entityId` `filter.entityId` | `washer` `dryer` `vacuum.trigger` `filter.trigger`，均为 `smartHomeEntityRef \| null` | 触发实体可以是设备的任何子实体（洗衣机的「运行状态」、净水器的「滤芯寿命」） |
+| E4 联动（`smart_home_links`） | `targetEntityId` | 加 `targetDeviceId uuid FK → smart_home_devices ON DELETE RESTRICT`，`targetEntityId` 保留；加 `value jsonb null` | 目标 = 设备 + 子实体（默认主实体）+ 动作（+ 值），**建联动时和执行时都用命令接口同一个校验函数**（§9.5）。本轮联动页的界面只开放主实体，子实体目标等有真实需要再开 |
 | E5 今天页设备卡 | （未实现） | `pinnedToToday` 的设备，按设备 id 出 | — |
 | E5 留意规则 | （未实现，`today-attention.rules.ts` 只有占位注释） | `AttentionItem.entity` 指向设备 id，文案用设备中文名；阈值取 E3 规则里的 ref | — |
 | 审计 `smart_home_commands` | `entityId` | 加 `deviceId uuid null`（历史行能对上的回填，对不上的留 null） | 详情「最近操作」按 `deviceId` 查 |
@@ -245,19 +240,23 @@ export const smartHomeEntityRef = z.object({
 | 目录 | `GET /smart-home/entity-directory`：设备分组，实体带 `whitelisted`、`primary` | 设备带 `whitelistedDeviceId`；实体带 `defaultRole: 'primary' \| 'secondary' \| null`（加进来时的默认搭配预览） |
 | 白名单列表 | `GET /smart-home/devices` | 同路径，返回新设备形状 |
 | 加进来 | `PUT /smart-home/devices/:entityId` | `POST /smart-home/devices`，body `{ haDeviceId }` 或 `{ entityId }`（单实体），服务端算默认值 |
-| 改 | 同上 PUT | `PATCH /smart-home/devices/:id`：名字、房间、图标、排序、主实体、次要实体、控制、minRole、今天页 |
+| 改 | 同上 PUT | `PATCH /smart-home/devices/:id`：名字、房间、图标、排序、主实体、主面板项、藏掉的子实体、控制、minRole、今天页 |
 | 移出 | `DELETE /smart-home/devices/:entityId` | `DELETE /smart-home/devices/:id`（被引用 409） |
-| 控制 | `POST /smart-home/devices/:entityId/command` | `POST /smart-home/devices/:id/command`：永远作用于**主实体**；幂等键、审计、权限逐次校验照旧 |
+| 控制 | `POST /smart-home/devices/:entityId/command` | `POST /smart-home/devices/:id/command`，body 加 `entityId`（缺省 = 主实体）和 `value`；幂等键、审计、权限逐次校验照旧。详见 §9.5 |
+| 详情面板 | — | 新增 `GET /smart-home/devices/:id/panel`：头部、主面板、主面板项、更多设置、设备信息、被排除项，每项带「怎么渲染」的控件描述（§9.4） |
+| 趋势 | — | 新增 `GET /smart-home/devices/:id/history?entityId=`：24 小时数值，服务端降采样到 ≤ 48 点（§9.2 传感器） |
 | 最近操作 | `GET /smart-home/commands`（管理员，50 条） | 保留；新增 `GET /smart-home/devices/:id/commands`（全家可见，3 条，只含成员名 / 动作 / 时间 / 成败） |
-| 状态 | `GET /smart-home/states`：每个实体一行，断开时 `state: null` | 每台设备一行：`primary: {entityId, state}`、`secondary: [{entityId, label, state}]`、`online`、`canControl`；顶层加 `asOf`、`stale`——**断开时给上次状态**（`smart-home-live` 已常驻订阅，留住最后一份快照即可） |
+| 状态 | `GET /smart-home/states`：每个实体一行，断开时 `state: null` | 每台设备一行：`primary: {entityId, state}`、`featured: [{entityId, label, state}]`、`online`、`canControl`；顶层加 `asOf`、`stale`——**断开时给上次状态**（`smart-home-live` 已常驻订阅，留住最后一份快照即可） |
 | 归并 | — | `GET /smart-home/devices/merge-report`（管理员）：最近一次归并的结果（§5） |
 
-推送不变：HA `state_changed` 经 `/events` 推 `smart-home`，只是订阅的实体集合从「白名单实体」变成「所有设备的主 + 次实体」。
+推送不变：HA `state_changed` 经 `/events` 推 `smart-home`，只是订阅的实体集合从「白名单实体」变成「白名单设备的全部子实体」（详情面板开着时也要能实时变）。
+实体状态加 `lastUpdated`（HA 的 `last_updated`）：窗帘位置、空调风速这类只改属性不改 state 的变化，`last_changed` 不动，面板靠它判断「回推到了」。
 
 ### 4.4 顺带要补的
 
 - `SMART_HOME_ACTIONS` 加 `script: ['activate']`（映射到 `script.turn_on`），场景行才能跑脚本；只限白名单里的脚本。
-- 次要实体永远只读，即使它本身是个 switch——要控它，就把它设成另一台「单实体设备」的主实体，或者在 HA 里拆设备。
+- ~~次要实体永远只读~~（二稿作废）：详情面板里设备的子实体按 §9 的规则可控，白名单的单位从此是「设备」，见 §8 第 7 条。
+- `SMART_HOME_DOMAINS` 加 `button`、`text`（`text` 只读显示）。
 
 ---
 
@@ -275,24 +274,27 @@ TypeORM 迁移里不该去连外部服务，HA 也可能恰好连不上。所以
 
 ### 5.2 归并规则
 
-一句话：**只重排，不新增**——归并后的设备只包含 King 原来挑过的实体，不会因为归并多出一个他没审过的可控实体。
+一句话：**只重排，不新增**——归并后的主实体和主面板项只从 King 原来挑过的实体里来，归并本身不打开任何控制。
+
+> 二稿补充：详情面板会列出设备其余子实体（§9.4），**但只有设备「允许控制」开着时才能按**。归并沿用主实体那一行的「允许控制」，
+> 而 King 现在一台都没开放，所以归并后不会多出任何能按的东西；以后他给某台设备打开控制，那台的「更多设置」才变成可按。
 
 1. 按注册表把 `legacy` 行按 `device_id` 分组；注册表里查不到、或没有归属设备的实体，各自保持单实体设备。
 2. 每组选**主实体**：可控 domain 且原行「允许控制」的 > 可控 domain > 其他非传感器 > 第一个非诊断传感器；同级取 `sortOrder` 小的。
-3. 组里其余行成为**次要实体**，按 `sortOrder` 取前 4；超出的不保留，写进归并结果。
+3. 组里其余行成为**主面板项**，按 `sortOrder` 取前 6；超出的不再是主面板项（它们仍在面板的「更多设置 / 设备信息」里，按 §9.4 归位），写进归并结果。
 4. 合并后的字段：
    - 名字、房间：取主实体那一行（主实体行没填房间就取组里第一个非空的）；
    - **允许控制、谁能控：只取主实体那一行**，绝不因为别的行更宽松而放宽；
    - 在今天页显示：组里任意一行勾了就勾；排序：取最小。
 5. 引用改写：
-   - E4 联动的目标实体归并后成了次要实体 → 这条联动**停用**（`enabled = false`）并写进结果，因为只有主实体能控；
+   - E4 联动的目标跟着实体走到新设备（二稿起联动目标可以是任何子实体，不再需要停用；一稿写的「成了次要实体就停用」作废）；
    - E3 规则的 ref 跟着实体走到新设备；
    - 审计的 `deviceId` 改指向合并后的设备。
 6. 被并掉的行删除；每家写一条家庭动态「智能家居白名单按设备整理：N 项 → M 台」；完整结果存下来，供 `merge-report` 端点和汇报用。
 
 ### 5.3 让 King 过目
 
-- 实现提交里带一个只读的 **dry-run CLI**（`node dist/smart-home/merge-cli.js --dry-run`），输入就是当前白名单 + HA 注册表，输出一张表：原来的每一行 → 归到哪台设备、做主还是做次、哪些被丢弃、哪些联动会被停用。
+- 实现提交里带一个只读的 **dry-run CLI**（`node dist/smart-home/merge-cli.js --dry-run`），输入就是当前白名单 + HA 注册表，输出一张表：原来的每一行 → 归到哪台设备、做主实体还是主面板项、哪些挤出了主面板、联动和规则的引用改到了哪里。
 - 升级演示栈**之前**先在演示栈上跑 dry-run，结果贴进那一轮汇报，King 点头再升级；升级后 `merge-report` 应与 dry-run 一致。
 - 本轮我试过只读查一下演示栈里现在的白名单来做预演，被权限拦下（生产库只读查询），**没有**绕开。按进度记录已知：E2 部署时 King 已挑 G30 U（扫地机）和空调插座两台，截至 E4 部署都还没开放控制、没配 webhook 规则、没建联动——所以真实的迁移量很可能只有十行以内的实体归并，E3 / E4 的引用改写大概率是空操作。**越早做越省事**：King 开始配联动之后，要改写的引用会变多。
 
@@ -302,36 +304,45 @@ TypeORM 迁移里不该去连外部服务，HA 也可能恰好连不上。所以
 
 | 方面 | 现在（E1～E4） | 重做后 |
 | --- | --- | --- |
-| 白名单粒度 | 一行 = 一个 HA 实体 | 一行 = 一台设备（主实体 + 至多 4 个次要实体） |
+| 白名单粒度 | 一行 = 一个 HA 实体 | 一行 = 一台设备（主实体 + 至多 6 个主面板项；其余子实体在详情里按规则现算） |
 | 目录「加进来」 | 逐个实体勾 | 一台设备一个按钮，默认搭配服务端算好、可改 |
 | 页面结构 | 左：按分组的行列表；右栏：场景 + HA 连接状态 | 场景一排 → 房间分段 → 设备卡网格；连接状态缩成标题下一行，断开时变横幅 |
 | 一行 / 一张卡里有什么 | 名字、状态文字 + 细节 + 「按上次操作显示」、**全部按钮**（窗帘 3 个、空调最多 7 个） | 图标、名字、一句状态、**至多一个主按钮** |
 | 开 / 关怎么表达 | 状态文字 + 文字颜色 | 图标块和卡底的颜色；状态句只做补充 |
-| 次要信息（剩余时间、电量、滤芯） | 各自成一行，和设备本体平级 | 详情里的 chips，最多 4 个 |
-| 空调模式 / 温度 | 行内按钮 | 只在详情 |
-| 详情 | 没有 | 手机底部 sheet、桌面居中：全部动作、chips、最近 3 条操作、今天页开关 |
+| 次要信息（剩余时间、电量、滤芯） | 各自成一行，和设备本体平级 | 详情主面板里的主面板项，按类型渲染 |
+| 空调模式 / 温度 | 行内按钮（温度只能 ±1） | 只在详情：模式分段、按 HA 步长的大号步进、风速、摆风 |
+| 详情 | 没有 | 完整控制面板（§9）：头部、按类型定制的主面板、更多设置、设备信息、最近 3 条、管理 |
+| 能控什么 | 白名单里的那个实体，且只有写死的 15 个动作 | 设备开放控制后：主实体 + 除排除名单外的全部子实体（select / number / switch / button 通用渲染） |
+| 危险操作 | 没有涉及（button 不在认的 domain 里） | 复位 / 重置 / 重启 / 恢复出厂 / 解绑一律不渲染成按钮、命令接口也拒，只在「设备信息」里写「请在厂商 App 完成」 |
 | 离线设备 | 状态写「离线」，位置不变 | 灰显、排到房间末尾 |
 | HA 断开 | 红条 + 所有状态变成「—」 | 横幅 + 卡片保留上次状态灰显 |
 | 刷新按钮 | 有（E1 遗留） | 去掉（E2 起有推送）；断开横幅里给「重试」 |
 | 最近操作 | 只有管理员在设置页看 50 条 | 设置页照旧；另外每台设备详情里全家可见 3 条 |
-| 控制接口路径 | `/devices/:entityId/command` | `/devices/:id/command`，作用于主实体 |
-| E3 规则 / E4 联动 | 存实体 id | 存 `{设备 id, 实体 id}`；联动目标必须是主实体 |
+| 控制接口 | `/devices/:entityId/command`，`{action, requestId}` | `/devices/:id/command`，`{action, requestId, entityId?, value?}` |
+| E3 规则 / E4 联动 | 存实体 id | 存 `{设备 id, 实体 id}`；校验与命令接口同一个函数 |
 | 今天页 | 没有智能家居内容 | 「家里的设备」区块（最多 4 张，同一组件）+ E5 留意规则 |
 | 脚本 | 目录能列，不能执行 | 场景行里能执行 |
 
 ---
 
-## 7. 工作量估算（三个提交）
+## 7. 工作量估算（二稿重估）
 
-建议顺序 **R1 → R2 → R3 → E5**。E5 的今天页区块直接复用 R2 的卡片和详情组件，留意规则直接用 R1 的设备引用，E5 自身会比原计划更小。
+> 一稿的 R1 / R2 / R3 三个提交。二稿详情面板变成完整控制面板后，API 多出一块，Web 的 R2 差不多翻倍，所以拆细。
+
+建议顺序：**T0 → R1 → R1b → R2a → R2b → R2c → R3 → E5**。
 
 | # | 提交 | 档 | 估计改动 | 主要内容 |
 | --- | --- | --- | --- | --- |
-| R1 | API：模型与迁移 | L | ~1,500 行（含脚本） | 迁移 `1785233000000`（§5.1 ①）；实体、契约（设备形状、ref、states、新端点）；`smart-home.service` 的目录默认搭配 / 加进来 / 改 / 移出（409）/ 按设备出状态 + 断开时给上次快照；`commands` 按设备 id 与每设备最近 3 条；`live` 订阅主 + 次实体；`links` / `webhook` 改用 ref；`script` 动作；`SmartHomeMergeService` + dry-run CLI；黑盒 `smart-home.mjs`（31 条）、`-control`（25）、`-webhook`（19）、`-links`（18）全部改为按设备，新增归并脚本（单实体、同设备多行、主实体选择、控制不放宽、丢弃、联动停用、HA 连不上时延后、幂等）。**Web 只做让类型通过的最小适配**：旧页面按主实体渲染、`data-smart-home-device` 仍取主实体 id，保证现有 e2e 不红 |
-| R2 | Web：页面 | L | ~1,200 行 | `DeviceCard`、`DeviceSheet`（手机 sheet / 桌面 Dialog 同一内容）、`SceneRow`、房间网格；`deviceStatusLine`、`primaryButton`；断开横幅与灰显；设置页白名单改为按设备一行 + 行内展开改主 / 次实体、图标；目录「加进来」按设备 + 主 / 次徽标；暗色、reduced-motion、44px 触控区 |
-| R3 | 测试 | M | ~600 行 | 四个 smart-home e2e 改为按设备（卡片主按钮执行、点卡开详情、成员无按钮、断开灰显、设置页改主 / 次实体）；`smart-home-copy` 单测补状态句与主按钮表；四张截图（手机 / 桌面 × 亮 / 暗）；本地 test:api、test:web 全绿后推 CI |
+| T0 | 测试预算（前置） | S | ~50 行 | CI 上 Playwright 已 14.5 分钟、测试令牌 15 分钟过期。R3 这次一定会**净增**用例，所以先把测试环境令牌拉长或给 Playwright 分片。单独一个提交，不混进 R3 |
+| R1 | API：模型与迁移 | L | ~1,500 行（含脚本） | 同一稿：迁移、实体、契约、目录「加进来」、按设备出状态 + 断开给上次快照、`commands` 按设备 id、`links` / `webhook` 改用 ref、`script` 动作、归并 + dry-run、四个黑盒脚本改为按设备。二稿的小改：`featuredEntityIds`（≤ 6）、`hiddenEntityIds`、状态加 `lastUpdated`、订阅设备全部子实体。Web 只做让类型通过的最小适配 |
+| **R1b** | API：详情面板（新增） | M | ~900 行 | 真机核实三件事（§9.9）；`describeEntity` 归位与控件描述（面板和命令共用）；排除名单；`GET …/panel`；命令加 `entityId` / `value` 和 10 个新动作、按 HA 属性校验值；`clean_area` 读区域对应；`GET …/history` 降采样 + 缓存；每设备最近 3 条；`fake-ha.mjs` 补 select / number / button / 区域对应 / history；新黑盒 ~30 条（每种控件放行和拒绝、排除按钮 403、值越界 409、步长对齐、成员权限、幂等） |
+| **R2a** | Web：**通用控件**（单独列） | M | ~800 行 | `EntityControl`：按控件描述渲染分段 / 下拉 / 开关 / 按钮 / 只读；新写 `Slider`（全站还没有：指针拖动、键盘、ARIA slider、松手才发）和合并连按的 `Stepper`；`usePendingCommand`（每个子实体一把锁、requestId、等 `lastUpdated` 回推或 8 秒超时、502 立即解锁）；单测覆盖渲染规则与发命令节奏。**不含任何设备类型逻辑**，后面扫地机 / 空调 / 窗帘面板都用它拼 |
+| **R2b** | Web：详情面板 | L | ~1,100 行 | `DetentSheet`（两档停靠、跟手、可打断、下拉关闭、reduced-motion）；桌面 `Dialog` 加 80vh；头部与大状态；七类主面板（扫地机含分房间、窗帘滑块、空调、开关、洗衣烘干、净水、传感器 + 趋势线）；更多设置 / 设备信息折叠；最近操作；管理块；只读 / 离线 / 断开三种呈现 |
+| R2c | Web：设备页与设置页 | L | ~1,000 行 | 一稿 R2 里除详情外的部分：设备卡、场景行、房间网格、断开横幅；设置页白名单按设备一行 + 展开改主实体、**主面板项**、**藏掉的子实体**、图标；目录按设备「加进来」 |
+| R3 | 测试 | L | ~900 行 | 四个 smart-home e2e 改为按设备；新增详情面板 e2e（分段点一下就发、滑块拖动不发松手才发、发出后锁住直到回推 / 8 秒、排除的按钮不出现、成员只读、空调步长）；文案单测；截图（手机 / 桌面 × 亮 / 暗，含四类详情）；本地全绿后推 CI |
 
-**R3 的风险要先说**：E4 时 CI 上 Playwright 已跑 14.5 分钟，测试访问令牌 15 分钟过期，再加用例会一串 401。R3 只**改写、合并**现有智能家居用例，不净增时长；要净增就得先解决令牌时长（拉长测试环境令牌，或给 Playwright 分片），这件事单列、不混在 R3 里。
+合计：API 约 2,400 行（一稿 1,500），Web 约 2,900 行（一稿 1,200），测试约 900 行（一稿 600）。
+**R2 重估**：一稿 L / ~1,200 行，二稿 R2a + R2b + R2c 共约 2,900 行，其中通用控件 R2a 约 800 行。R2a 可以和 R1b 并行做（按契约里的控件描述开发，用假数据）。
 
 每个提交照老规矩：短分支、typecheck / lint、本地隔离套件、截图、CI 绿后 merge commit 合 main、演示栈升级（R1 升级前先跑 dry-run 给 King 看）。
 
@@ -345,3 +356,176 @@ TypeORM 迁移里不该去连外部服务，HA 也可能恰好连不上。所以
 4. **场景行加上脚本（script）**的执行能力：只限白名单里的脚本，照样走权限和审计。
 5. **今天页最多 4 张设备卡**，超出看「全部」。
 6. **去掉智能家居页的「刷新」按钮**（有推送了；断开时横幅里给「重试」）。
+
+二稿（详情面板）新增：
+
+7. **白名单的单位从「实体」变成「设备」——这是对原方案 §6.1 的改动，要明确点头。** 原来是「只认管理员显式加进来的实体」；详情面板做成完整控制面板后，
+   一台设备开放控制，它除排除名单外的**全部子实体**都能在小管家里按（勿扰、音量、集尘、石头 App 里的例程按钮……）。管理员可以逐个藏掉。
+   还有一个具体情况：HA 以后给这台设备**新冒出来**的子实体（例：King 在石头 App 里新建一个例程，HA 就多一个按钮）怎么办——
+   - A：直接出现在「更多设置」里，能控的人就能按；
+   - **B（推荐）**：新冒出来的先藏着，只在设置页那一行提示「新出现 1 项」，管理员点一下才放出来。要多存一列 `knownEntityIds`，R1 里多几十行。B 更接近原来「显式加进来才算」的意思。
+8. **排除关键词加「重置」和几个英文词**（reset / reboot / restart / factory / unbind / unpair）。Roborock 的「重置主刷耗材」按钮没有 device_class，中文名用的是「重置」，只靠 device_class 和「复位」拦不住。
+9. **主面板项上限从 4 改成 6**（扫地机「水量 + 三个耗材」已经 4 个）。
+10. **分房间清扫的前提**：King 要先在 HA 里把扫地机的分区对应到区域（HA 2026.3 起的功能），小管家才会出这块。另外 G30 U 支不支持还没证实，R1b 开工时核（§9.9）。这条不用拍板，知道就行。
+
+---
+
+## 9. 详情面板（二稿，2026-09-29）
+
+> 定位：**卡片是入口，详情是这台设备的完整控制面板**。家里人在卡片上按最常用的那一下；要细调（吸力、水量、风速、位置、分房间）就点进来，
+> 不用去 HA App 或厂商 App。示意稿：`phone-detail-sheet.html` 四屏（扫地机、空调、洗衣机、客厅窗帘）。
+> 为了写得准，本节写之前核实了 HA 的相关接口，结论和出处在 §9.9。
+
+### 9.1 结构：固定顺序，空段不出现
+
+| # | 段 | 内容 | 谁能看 |
+| --- | --- | --- | --- |
+| 1 | 头部 | 图标、中文名、房间 · 厂商型号；**大状态**（卡片那句状态的完整版：卡片写「清扫中 · 62%」，这里写「清扫中 · 客厅 · 电量 87%」）；标签：离线 / 「连不上 Home Assistant，显示的是 10:32 的状态」/「按上次操作显示」 | 全家 |
+| 2 | 主面板 | 按主实体类型定制（§9.2），加上管理员挑的主面板项（§9.3） | 全家；没权限的看只读值 |
+| 3 | 更多设置（折叠） | 设备其余可控子实体，按 HA 类型自动渲染（§9.4）；`entity_category = config` 的也在这里 | 能控这台的人 |
+| 4 | 设备信息（折叠） | 只读：`diagnostic` 的子实体、其余没进主面板的传感器；被排除的操作写「此操作请在厂商 App 完成」 | 全家 |
+| 5 | 最近操作 | 审计表里这台设备最近 3 条（谁 / 做了什么 / 时间 / 成败），联动触发的写清是哪条联动 | 全家 |
+| 6 | 管理 | 「在今天页显示」开关；名称和房间；主实体、主面板项、藏掉的子实体 | 管理员 |
+
+离线或 HA 断开时：所有控件置灰、值显示上次的，头部挂标签；详情照样能打开（看信息和操作记录）。
+
+### 9.2 主面板：按主实体类型定制
+
+布局由设备的**图标类型**决定，数据**只来自 HA 通用属性 / 通用服务，或管理员挑的主面板项**——没有任何按厂商写的分支。某一块的数据 HA 没给，这一块就不出现。
+
+| 类型 | 主面板里有什么 | 数据来源（HA 通用） | 没有时 |
+| --- | --- | --- | --- |
+| **扫地机** | ① 开始 / 暂停 / 回充三键（此刻说不通的置灰）② **分房间清扫**：房间多选 +「清扫选中的 N 个房间」③ **吸力**分段 ④ 主面板项：拖地水量（select → 分段）、耗材（传感器 → 一行「剩 216 小时」） | ① `supported_features` 的 START / PAUSE / RETURN_HOME ② `CLEAN_AREA` 特性 + HA 里已对应好的区域 → `vacuum.clean_area(cleaning_area_id)`（HA 2026.3 起）③ vacuum 本体的 `fan_speed_list` → `vacuum.set_fan_speed` | ② 不支持或还没对应区域：整块不出现 ③ 没有 `fan_speed_list`：不出现 |
+| **窗帘**（cover） | 打开 / 停 / 关上；**位置滑块**（0 全关 ~ 100 全开） | `supported_features` 的 OPEN / STOP / CLOSE；有 SET_POSITION 且有 `current_position` 才出滑块 → `cover.set_cover_position(position)` | 没有位置：只有三键 |
+| **空调**（climate） | 大开关；模式分段（只列这台有的）；**目标温度大号步进**；风速分段；摆风分段；室内温度 / 湿度；「按上次操作显示」 | `turn_on` / `turn_off`；`hvac_modes`（去掉 off）→ `set_hvac_mode`；步长 = `target_temp_step`，**没给按 0.5°**（与 HA 前端一致），夹在 `min_temp` ~ `max_temp`，发绝对值 → `set_temperature(temperature)`；`fan_modes` → `set_fan_mode`；`swing_modes` → `set_swing_mode`；`current_temperature`、`current_humidity` | 没有 `fan_modes` / `swing_modes` 的那一块不出现（King 家的空调伴侣大概率没有摆风）。双设定点（`target_temp_high/low`）本期只读显示 |
+| **开关**（switch） | 大开关；主面板项：功率、今日用电（传感器 → chips）、倒计时（number → 步进 / 滑块） | `turn_on` / `turn_off`；其余全是主面板项 | 没挑主面板项就只有大开关 |
+| **洗衣机 / 烘干机** | 进度条；程序、剩余时间、门状态等 chips；若有启动 / 暂停就出两键 | 主面板项里单位是 % 的传感器 → 进度条；其余传感器 → chips；主面板项里的 button / switch → 操作键 | 没有 % 实体就不画进度条（**不**拿「总时长」去算，那要猜实体含义）；没有启停实体就写「这台只能看」 |
+| **净水器** | 每支滤芯一条进度条；TDS、累计净水量 chips；没有控制 | 主面板项里单位是 % 的 → 进度条（低于留意规则阈值变暖橙）；其余 → chips | — |
+| **以传感器为主** | 大号数值 + 最近 24 小时小趋势线 | `GET /smart-home/devices/:id/history`（服务端调 HA `/api/history/period`，`minimal_response` + `no_attributes`，降采样到 ≤ 48 点，缓存 5 分钟） | 不是数值、或 HA 历史取不到：不画趋势线 |
+| 其他 | 主实体按 §9.4 通用渲染 + 主面板项 | — | — |
+
+**耗材为什么不画百分比条**：Roborock 给的主刷 / 边刷 / 滤网寿命是**剩余时长**（秒或小时，`device_class: duration`），不是百分比。
+没有「满格」就画不出条；按厂商的额定寿命去换算属于厂商专有逻辑，不做。显示成「剩 216 小时」，低于阈值变暖橙。
+
+### 9.3 主面板项（一稿的「次要实体」）
+
+- 管理员从这台设备的子实体里挑，**至多 6 个**，顺序就是显示顺序。可以挑任何类型：传感器显示数值，select / number / switch / button 按 §9.4 渲染成控件（能不能按照样看权限）。
+- 这是把 config / diagnostic 类的东西「提到主面板」的唯一办法：扫地机的拖地水量是 config 类 select、耗材是 diagnostic 类传感器，不挑就分别待在「更多设置」和「设备信息」里。
+- 默认值（加进来时）：前 6 个非诊断 / 非配置的传感器。**扫地机要管理员挑一次**（水量、三个耗材），这是按「不写厂商逻辑」换来的代价，一次性的。
+- 上限从一稿的 4 改成 6：扫地机「水量 + 三个耗材」就 4 个，再加一个拖布模式或尘盒就不够（§8 第 9 条）。
+
+### 9.4 其余子实体：归位与通用渲染
+
+服务端每次按 HA 注册表现算，不存库。对这台设备的每个子实体（HA 里停用 / 隐藏的、门锁 / 安防、管理员藏掉的、已是主实体或主面板项的都先跳过）：
+
+| 判断（按顺序） | 归到 | 呈现 |
+| --- | --- | --- |
+| 在**排除名单**（见下） | 设备信息 | 灰字 +「此操作请在厂商 App 完成」，不渲染成按钮 |
+| `entity_category = diagnostic` | 设备信息 | 只读值 |
+| select / number / switch / input_boolean / button（`category` 为 config 或空） | 更多设置 | 通用控件（下表） |
+| 其余（sensor、binary_sensor、text…） | 设备信息 | 只读值 |
+
+通用控件：
+
+| HA 类型 | 控件 | 发什么 |
+| --- | --- | --- |
+| select | 选项 ≤ 4：分段；> 4：下拉 | `select.select_option(option)` |
+| number | `mode = slider` → 滑块；`box` → 步进；`auto` → 步数 ≤ 100 用滑块，否则步进；显示单位，按 `min` / `max` / `step` 夹值 | `number.set_value(value)` |
+| switch / input_boolean | 开关 | `turn_on` / `turn_off` |
+| button | 按钮（`device_class: identify` 或没有 class） | `button.press` |
+| text | **只读**显示 | — |
+| sensor / binary_sensor | 值 + 单位（沿用现有 `sensorLine` / binary 的人话） | — |
+
+**排除名单**（服务端判断，面板和命令接口用同一个函数）：
+
+1. domain 是 `lock`、`alarm_control_panel`：一律不列（沿用一稿）。
+2. button 的 `device_class` 是 `restart` 或 `update`。
+3. 名字（中文名或 HA 原名）含：**复位、重置、重启、恢复出厂、解绑**，英文 reset / reboot / restart / factory / unbind / unpair。
+   比你给的四个词多了「重置」和英文词：Roborock 的「重置主刷耗材」这类按钮**没有 device_class**、中文名用的是「重置」，只靠 device_class 和「复位」拦不住（见 §8 第 8 条）。这些按钮 HA 默认是停用的，停用的本来就不列；King 在 HA 里手动启用了才会走到这条规则。
+
+**一个原则：看得见的才按得动，按得动的一定看得见。** 面板端点给每一项算出控件描述（`control: {kind: 'select', options} | {kind: 'number', min, max, step, display} | {kind: 'toggle'} | {kind: 'button'} | null`），
+命令接口放行前调用同一个函数，描述里没有的动作一律 403。
+
+### 9.5 控制规则与契约
+
+仍然只有一个命令接口：`POST /smart-home/devices/:id/command`。
+
+```ts
+export const smartHomeCommandBody = z.object({
+  requestId: uuid,                       // 幂等键：每次「发出」一个，滑块拖动过程中不发
+  entityId: smartHomeEntityId.optional(), // 缺省 = 主实体
+  action: smartHomeAction,
+  value: z.union([z.string().max(100), z.number(), z.array(z.string().max(64)).max(30)]).optional(),
+}).strict();
+```
+
+| action（新增） | 适用 | value | HA 服务 | 服务端校验（按 HA 当前属性） |
+| --- | --- | --- | --- | --- |
+| `set_position` | cover | 0～100 整数 | `cover.set_cover_position` | 有 SET_POSITION |
+| `set_temperature` | climate | 数 | `climate.set_temperature` | 在 min ~ max 内，且是步长的整数倍 |
+| `set_hvac_mode` | climate | 模式 | `climate.set_hvac_mode` | 在 `hvac_modes` 里 |
+| `set_fan_mode` / `set_swing_mode` | climate | 档位 | `climate.set_fan_mode` / `set_swing_mode` | 在 `fan_modes` / `swing_modes` 里 |
+| `set_fan_speed` | vacuum | 档位 | `vacuum.set_fan_speed` | 在 `fan_speed_list` 里 |
+| `clean_area` | vacuum | 区域 id 数组 | `vacuum.clean_area` | 有 CLEAN_AREA，且每个 id 都在已对应的区域里 |
+| `select_option` | select | 选项 | `select.select_option` | 在 `options` 里 |
+| `set_value` | number | 数 | `number.set_value` | min ~ max、对齐 step |
+| `press` | button | — | `button.press` | 不在排除名单 |
+| `turn_on` / `turn_off`（扩到子实体） | switch、input_boolean | — | 同名 | — |
+
+一稿的动作全部保留（`mode_cool`、`temperature_up` 等），E4 已有的联动不用改。
+
+服务端放行顺序：设备在白名单 → 设备允许控制 + 角色达到 minRole → 子实体属于这台设备、没被藏、不在排除名单 → 控件描述里有这个动作 → 值合法 → 幂等键查重 → 调 HA（8 秒超时）→ 审计（新增记 `entityId` 和值，例：「吸力 → 强力」）。
+失败照旧 502 说原因；审计照记。
+
+### 9.6 发命令的节奏
+
+| 控件 | 什么时候发 |
+| --- | --- |
+| 分段、开关、按钮、三键 | 点一下就发 |
+| 滑块（位置、音量、number） | **拖动时只动滑块、不发**；松手发一次（绝对值）。键盘：方向键调预览，停手 0.6 秒或按回车才发 |
+| 温度步进 | 连按合并，**停手 0.6 秒发一次**，发的是最终的绝对温度（不是 ±1），天然幂等 |
+| 分房间清扫 | 选房间不发；点「清扫选中的 N 个房间」才发 |
+
+发出之后：**这一个子实体的控件**置灰 + 转圈（同一台设备的其他控件照常能按），直到 `/events` 推来这个实体 `lastUpdated` 晚于发出时刻的新状态，或者 **8 秒超时**。
+超时不回滚显示（显示永远跟 HA 走），只轻提示「没等到设备回报，过会儿看看状态」。HA 回 502 就立即解锁并提示原因。每次发出都新生成 requestId；网络重发用同一个。
+
+### 9.7 容器
+
+- **手机**：底部 sheet，打开停在约 60% 高（头部 + 主面板上半）；上滑停到全屏，内容在 sheet 里滚；下拉到底关闭。
+  拖动跟手、可中途打断、按松手速度决定停哪一档（`apple-design` 的 sheet 手势），曲线用 `index.css` 已有的 `cubic-bezier(0.32, 0.72, 0, 1)`；`prefers-reduced-motion` 时直接到位。
+  现有 `Dialog` 贴底但不能拖、没有两档停靠，要新写一个 `DetentSheet`。
+- **桌面**（≥ sm）：居中弹窗，宽 520，**最大高 80vh**，头部固定、内容滚；Esc、点遮罩关闭。用现有 `Dialog`，加一个最大高参数（现在写死 88vh）。
+- 两边内容是同一个组件；今天页的设备卡点开也是它，不跳页。
+
+### 9.8 权限与只读怎么呈现
+
+| 情况 | 主面板 | 更多设置 | 设备信息 / 最近操作 | 管理 |
+| --- | --- | --- | --- | --- |
+| 管理员，设备允许控制 | 全部可按 | 可按 | 看 | 有 |
+| 成员，设备允许控制且 minRole = 全家 | 全部可按 | 可按 | 看 | 无 |
+| 设备没开放控制，或角色不够 | 控件变成只读值（吸力显示「MAX」而不是一排分段），顶上一行「管理员还没开放控制」 | 不出现 | 看 | 管理员有 |
+| 设备离线 / HA 断开 | 置灰、上次的值 | 置灰 | 看 | 有（能改名、改今天页） |
+
+### 9.9 写这一节前核实过的 HA 事实
+
+出处：developers.home-assistant.io 的 vacuum / climate / cover / number / button 实体文档与 REST 文档、home-assistant.io 的 2026.3 发布说明与 `vacuum.clean_area` 文档、
+`home-assistant/core` dev 分支的 roborock 源码、`XiaoMi/ha_xiaomi_home` 源码、`banto6/haier` 源码。
+
+| 事实 | 对设计的影响 |
+| --- | --- |
+| HA **2026.3** 起有通用的 `VacuumEntityFeature.CLEAN_AREA` 和 `vacuum.clean_area(cleaning_area_id)`；扫地机分区要由用户在 HA 里对应到区域，**状态属性里没有房间列表**；Roborock 首批支持（Q7 系列不支持） | 分房间只走这条通用路，房间就是 HA 区域；不调 `roborock.get_maps` / `app_segment_clean` |
+| Roborock 吸力在 vacuum 本体的 `fan_speed` / `fan_speed_list` | 吸力不需要管理员挑 |
+| Roborock 拖地水量是 select（`water_box_mode`），**config 类**；拖布模式、清扫模式也是 config 类 select | 默认在「更多设置」，要提到主面板得挑成主面板项 |
+| Roborock 耗材是 **diagnostic 类、剩余时长**（主刷 / 边刷 / 滤网 / 传感器单位是秒，基站的是小时） | 不画百分比条；默认在「设备信息」 |
+| Roborock「重置耗材」按钮是 config 类、**默认停用、没有 device_class**；还会按石头 App 里的例程动态生成按钮 | 排除名单要加「重置」；例程按钮会出现在「更多设置」（§8 第 7 条） |
+| climate 步长属性 `target_temp_step` 可能不存在，HA 前端缺省摄氏 0.5；小米空调伴侣的规格是 16～30°、步长 1、风速 自动 / 低 / 中 / 高 | 步长按属性，没给按 0.5 |
+| number 有 `min` / `max` / `step` / `mode`（auto / box / slider）；button 的 `device_class` 只有 identify / restart / update | §9.4 的渲染规则 |
+| 小米官方集成的窗帘有 `current_position` | 客厅窗帘能出位置滑块 |
+| HA 历史接口 `/api/history/period/<时间>?filter_entity_id=…&minimal_response&no_attributes` 返回每个实体一组 | 趋势线 |
+
+**没证实的，R1b 开工第一步要在 King 的真 HA 上核**：
+1. 扫地机分区 ↔ 区域的对应关系怎么读出来（推测在实体注册表的 options 里）；读不出来，分房间就不出现。
+2. King 的 G30 U 支不支持 `CLEAN_AREA`。
+3. 海尔洗衣机 / 烘干机 / 净水器实际生成了哪些实体（剩余时间、门、启停、滤芯寿命、TDS、累计水量）。社区集成是按设备上报的属性通用生成的，文档里没有实例；示意稿 ③ 是按通用规则推的样子。
+
+核这三条要读 King 的真机实体目录——本轮查演示栈被权限拦过，所以需要 King 放行一次只读查询，或者他在设置页的实体目录里截个图。
