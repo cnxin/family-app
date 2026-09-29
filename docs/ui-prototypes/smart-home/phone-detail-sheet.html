@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智能家居 · 手机 · 详情 sheet</title>
+<!-- 结构示意稿：只看信息层级与布局。颜色取 apps/web/src/index.css 的近似值。
+     两屏：左 = 扫地机（管理员）；右 = 空调（climate 的模式和温度只在这里）。 -->
+<style>
+:root{--bg:#f8f4ec;--surface:#fffdf8;--muted:#f1ebe0;--border:#e4dcce;--ink:#2a241f;--soft:#857b70;--accent:#2f6b4f;--accent-soft:#e0efe5;--warm:#b8662a;--warm-soft:#f8eadb;--danger:#b93a32}
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:#d9d4ca;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);display:flex;gap:32px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+.frame-label{font-size:13px;color:#4d463e;margin:0 0 8px}
+.phone{position:relative;width:390px;height:844px;background:var(--bg);border-radius:36px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+/* 背后的设备页，只画个影子 */
+.behind{padding:60px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.behind div{height:112px;border-radius:18px;background:var(--surface);border:1px solid var(--border)}
+.scrim{position:absolute;inset:0;background:rgba(30,24,18,.32)}
+/* 底部上推的 sheet */
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:90%;overflow:auto;background:var(--surface);border-radius:24px 24px 0 0;padding:8px 20px 28px;display:flex;flex-direction:column;gap:18px}
+.grab{width:36px;height:5px;border-radius:9px;background:var(--border);margin:0 auto 4px}
+.head{display:flex;gap:14px;align-items:center}
+.ico{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:var(--accent);color:#fff;flex:none}
+.ico.off{background:var(--muted);color:var(--soft)}
+.head h2{margin:0;font-size:20px}
+.head p{margin:2px 0 0;font-size:13px;color:var(--soft)}
+.close{margin-left:auto;width:44px;height:44px;border-radius:99px;border:none;background:var(--muted);color:var(--soft);font-size:18px}
+.status{font-size:17px;font-weight:600;color:var(--accent)}
+.status small{display:block;font-size:12.5px;font-weight:400;color:var(--soft);margin-top:2px}
+h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--soft)}
+.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.act{min-height:52px;border-radius:14px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:15px;color:var(--ink)}
+.act.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.act:disabled{color:#c4bbae}
+.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.chip{display:flex;flex-direction:column;padding:8px 12px;border-radius:12px;background:var(--muted)}
+.chip b{font-size:15px}
+.chip span{font-size:11.5px;color:var(--soft)}
+.chip.warn{background:var(--warm-soft)}
+.chip.warn b{color:var(--warm)}
+.log{list-style:none;margin:0;padding:0;border:1px solid var(--border);border-radius:14px}
+.log li{display:flex;gap:10px;align-items:baseline;padding:10px 12px;font-size:13.5px;border-top:1px solid var(--border)}
+.log li:first-child{border-top:none}
+.log .who{flex:1}
+.log .t{font-size:12px;color:var(--soft)}
+.ok{color:var(--accent)}.bad{color:var(--danger)}
+.toggle{display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:0 14px;border-radius:14px;background:var(--muted);font-size:15px}
+.sw{width:50px;height:30px;border-radius:99px;background:var(--accent);position:relative}
+.sw::after{content:"";position:absolute;right:3px;top:3px;width:24px;height:24px;border-radius:99px;background:#fff}
+.admin-link{font-size:13px;color:var(--accent);text-decoration:none;text-align:center;padding:4px 0}
+/* 空调 */
+.seg{display:grid;grid-template-columns:repeat(4,1fr);background:var(--muted);border-radius:12px;padding:3px;gap:3px}
+.seg button{min-height:44px;border:none;border-radius:10px;background:transparent;font:inherit;font-size:14px;color:var(--ink)}
+.seg button.cur{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.08);font-weight:600}
+.temp{display:flex;align-items:center;justify-content:space-between;padding:6px;border-radius:16px;background:var(--muted)}
+.temp button{width:56px;height:56px;border-radius:14px;border:none;background:var(--surface);font-size:24px;color:var(--ink)}
+.temp .v{font-size:34px;font-weight:600;font-variant-numeric:tabular-nums}
+.temp .v small{font-size:13px;font-weight:400;color:var(--soft);display:block;text-align:center}
+.hint{font-size:12px;color:var(--soft);line-height:1.6;margin:-8px 0 0}
+.power{display:flex;gap:8px}
+.power .act{flex:1}
+.note{max-width:360px;font-size:12.5px;line-height:1.7;color:#4d463e;background:#fffdf8;border-radius:14px;padding:14px 16px}
+.note b{color:var(--ink)}
+.note ol{margin:6px 0 0;padding-left:18px}
+</style>
+</head>
+<body>
+
+<!-- ============ 扫地机 ============ -->
+<div>
+<p class="frame-label">① 扫地机（管理员）</p>
+<div class="phone">
+  <div class="behind"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+  <div class="scrim"></div>
+  <section class="sheet" role="dialog" aria-label="扫地机">
+    <div class="grab"></div>
+    <div class="head">
+      <span class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3"/></svg></span>
+      <div><h2>扫地机</h2><p>客厅 · Roborock G30 U</p></div>
+      <button class="close" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="status">清扫中 · 电量 62%<small>10:12 开始，已经扫了 18 分钟</small></div>
+
+    <!-- 主实体的全部动作；此刻说不通的置灰而不是隐藏，位置不跳 -->
+    <div>
+      <h3>操作</h3>
+      <div class="actions">
+        <button class="act" disabled>开始清扫</button>
+        <button class="act primary">暂停</button>
+        <button class="act">回充</button>
+      </div>
+    </div>
+
+    <!-- 次要实体 chips：最多 4 个，管理员在设置页挑 -->
+    <div>
+      <h3>更多信息</h3>
+      <div class="chips">
+        <div class="chip"><b>24 m²</b><span>本次面积</span></div>
+        <div class="chip"><b>80 小时</b><span>边刷剩余</span></div>
+        <div class="chip"><b>210 小时</b><span>主刷剩余</span></div>
+        <div class="chip warn"><b>12 小时</b><span>滤网剩余</span></div>
+      </div>
+    </div>
+
+    <!-- 最近三条操作：审计表里这台设备的，家人和联动都算 -->
+    <div>
+      <h3>最近操作</h3>
+      <ul class="log">
+        <li><span class="who">King · 开始清扫</span><span class="t">今天 10:12</span><span class="ok">✓</span></li>
+        <li><span class="who">智能家居联动 · 开始清扫<br><span class="t">家务「打扫客厅」打勾后</span></span><span class="t">昨天 19:40</span><span class="ok">✓</span></li>
+        <li><span class="who">妈妈 · 回充<br><span class="t">Home Assistant 没回应</span></span><span class="t">昨天 08:05</span><span class="bad">✕</span></li>
+      </ul>
+    </div>
+
+    <!-- 管理员才有 -->
+    <label class="toggle">在今天页显示<span class="sw" aria-hidden="true"></span></label>
+    <a class="admin-link" href="#">改名字、房间、主 / 次实体 ›</a>
+  </section>
+</div>
+</div>
+
+<!-- ============ 空调 ============ -->
+<div>
+<p class="frame-label">② 空调（成员，已开放「全家都能控」）</p>
+<div class="phone">
+  <div class="behind"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+  <div class="scrim"></div>
+  <section class="sheet" role="dialog" aria-label="空调">
+    <div class="grab"></div>
+    <div class="head">
+      <span class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="8" rx="2"/><path d="M7 17l-1 2M12 17v2M17 17l1 2"/></svg></span>
+      <div><h2>空调</h2><p>客厅 · 米家空调伴侣</p></div>
+      <button class="close" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="status">制冷 26°<small>按上次操作显示：红外遥控，空调自己开没开它不知道</small></div>
+
+    <div class="power">
+      <button class="act">关掉</button>
+    </div>
+
+    <!-- 模式和温度只在详情里，卡片上只有开/关 -->
+    <div>
+      <h3>模式</h3>
+      <div class="seg" role="radiogroup">
+        <button class="cur">制冷</button><button>制热</button><button>送风</button><button>自动</button>
+      </div>
+    </div>
+    <div>
+      <h3>设定温度</h3>
+      <div class="temp">
+        <button aria-label="调低 1 度">−</button>
+        <div class="v">26°<small>16° ~ 30°</small></div>
+        <button aria-label="调高 1 度">+</button>
+      </div>
+    </div>
+    <p class="hint">每按一下发一次，按到头就不再发。</p>
+
+    <div>
+      <h3>更多信息</h3>
+      <div class="chips">
+        <div class="chip"><b>27.5°</b><span>室内温度</span></div>
+        <div class="chip"><b>58%</b><span>湿度</span></div>
+      </div>
+    </div>
+
+    <div>
+      <h3>最近操作</h3>
+      <ul class="log">
+        <li><span class="who">妈妈 · 制冷</span><span class="t">今天 14:02</span><span class="ok">✓</span></li>
+        <li><span class="who">妈妈 · 打开</span><span class="t">今天 14:01</span><span class="ok">✓</span></li>
+        <li><span class="who">King · 关掉</span><span class="t">昨天 23:30</span><span class="ok">✓</span></li>
+      </ul>
+    </div>
+    <!-- 成员视角：没有「在今天页显示」和设置入口 -->
+  </section>
+</div>
+</div>
+
+<aside class="note">
+  <b>读图要点</b>
+  <ol>
+    <li>手机上从底部上推，可下拉关闭；桌面同一内容居中弹出（见 desktop-devices.html 的第二屏）。</li>
+    <li>从上到下：是谁（图标、名字、房间 · 型号）→ 现在怎样（状态句加一句补充）→ 能做什么（全部动作）→ 更多信息（次要实体 chips，最多 4 个）→ 最近三条操作 → 管理员开关。</li>
+    <li>动作按钮固定位置：此刻说不通的<b>置灰不隐藏</b>，免得按钮跳位；当前最该按的那个实心。</li>
+    <li>空调的模式、温度只在这里；卡片上只有一个「打开 / 关掉」。</li>
+    <li>chip 变暖橙 = 该留意（例：滤网剩 12 小时），阈值沿用留意规则那一套，不另起。</li>
+    <li>最近操作来自现有审计表，按设备过滤取 3 条，全家可见；联动触发的写清是哪条联动。</li>
+    <li>成员没权限时，操作区换成一行「管理员还没开放控制」，其余照常。</li>
+  </ol>
+</aside>
+
+</body>
+</html>

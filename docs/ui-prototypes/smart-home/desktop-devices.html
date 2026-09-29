@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智能家居 · 桌面 · 设备页</title>
+<!-- 结构示意稿：只看信息层级与布局。颜色取 apps/web/src/index.css 的近似值。
+     两屏：上 = 设备页（1280 宽，四列）；下 = 点开洗衣机后居中的详情（只读设备）。 -->
+<style>
+:root{--bg:#f8f4ec;--surface:#fffdf8;--muted:#f1ebe0;--border:#e4dcce;--ink:#2a241f;--soft:#857b70;--accent:#2f6b4f;--accent-soft:#e0efe5;--warm:#b8662a;--warm-soft:#f8eadb;--danger:#b93a32}
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:#d9d4ca;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:32px}
+.frame-label{font-size:13px;color:#4d463e;margin:0 0 8px;align-self:flex-start}
+.wrap{display:flex;flex-direction:column}
+.desk{position:relative;width:1280px;height:800px;background:var(--bg);border-radius:14px;overflow:hidden;display:flex;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+aside.nav{width:220px;flex:none;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;gap:2px}
+aside.nav b{font-size:17px;padding:4px 12px 16px}
+aside.nav a{display:block;padding:9px 12px;border-radius:10px;font-size:14px;color:var(--ink);text-decoration:none}
+aside.nav a.cur{background:var(--accent-soft);color:var(--accent);font-weight:600}
+aside.nav .grp{font-size:12px;color:var(--soft);padding:14px 12px 4px}
+main{flex:1;overflow:hidden;padding:28px 40px;display:flex;flex-direction:column;gap:22px}
+.head{display:flex;align-items:flex-end;gap:12px}
+.head h1{margin:0;font-size:28px}
+.head p{margin:4px 0 0;font-size:13px;color:var(--soft)}
+.head p .dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--accent);margin-right:6px;vertical-align:1px}
+.head .sp{flex:1}
+.btn{min-height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:14px;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center}
+.scenes{display:flex;gap:8px}
+.scene{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 16px 0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--border);font-size:14px}
+.scene svg{color:var(--accent)}
+.room h2{margin:0 0 8px 2px;font-size:13px;font-weight:600;color:var(--soft)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.card{display:flex;flex-direction:column;gap:2px;min-height:118px;padding:14px;border-radius:18px;background:var(--surface);border:1px solid var(--border);cursor:pointer}
+.card .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--muted);color:var(--soft)}
+.name{font-size:15px;font-weight:600}
+.state{font-size:13px;color:var(--soft)}
+.main{min-height:40px;min-width:60px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface);font:inherit;font-size:14px;font-weight:500;color:var(--ink)}
+.card.on{background:var(--accent-soft);border-color:transparent}
+.card.on .ico{background:var(--accent);color:#fff}
+.card.on .state{color:var(--accent)}
+.card.on .main{border-color:transparent}
+.card.warn .ico{background:var(--warm-soft);color:var(--warm)}
+.card.warn .state{color:var(--warm)}
+.card.offline{opacity:.5}
+.card:hover{box-shadow:0 2px 10px rgba(0,0,0,.06)}
+/* 居中详情 */
+.scrim{position:absolute;inset:0;background:rgba(30,24,18,.32);display:grid;place-items:center}
+.dialog{width:440px;background:var(--surface);border-radius:20px;padding:22px 24px 24px;display:flex;flex-direction:column;gap:18px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.dhead{display:flex;gap:14px;align-items:center}
+.dhead .ico{width:52px;height:52px;border-radius:16px;background:var(--accent);color:#fff}
+.dhead h2{margin:0;font-size:20px}
+.dhead p{margin:2px 0 0;font-size:13px;color:var(--soft)}
+.close{margin-left:auto;width:40px;height:40px;border-radius:99px;border:none;background:var(--muted);color:var(--soft);font-size:16px}
+.status{font-size:17px;font-weight:600;color:var(--accent)}
+.status small{display:block;font-size:12.5px;font-weight:400;color:var(--soft);margin-top:2px}
+h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--soft)}
+.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.chip{display:flex;flex-direction:column;padding:8px 12px;border-radius:12px;background:var(--muted)}
+.chip b{font-size:15px}.chip span{font-size:11.5px;color:var(--soft)}
+.ro{font-size:13px;color:var(--soft);padding:10px 12px;border-radius:12px;background:var(--muted)}
+.log{list-style:none;margin:0;padding:0;border:1px solid var(--border);border-radius:14px}
+.log li{display:flex;gap:10px;padding:10px 12px;font-size:13.5px;border-top:1px solid var(--border)}
+.log li:first-child{border-top:none}
+.log .who{flex:1}.log .t{font-size:12px;color:var(--soft)}
+.toggle{display:flex;align-items:center;justify-content:space-between;min-height:48px;padding:0 14px;border-radius:14px;background:var(--muted);font-size:15px}
+.sw{width:50px;height:30px;border-radius:99px;background:#cfc6b8;position:relative}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:99px;background:#fff}
+.note{width:1280px;font-size:12.5px;line-height:1.7;color:#4d463e;background:#fffdf8;border-radius:14px;padding:14px 16px}
+.note b{color:var(--ink)}
+.note ol{margin:6px 0 0;padding-left:18px;columns:2;column-gap:32px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-vac" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3"/></g></symbol>
+  <symbol id="i-cur" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 4h18M6 4v15c2-1 3-4 3-15M18 4v15c-2-1-3-4-3-15"/></symbol>
+  <symbol id="i-ac" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="8" rx="2"/><path d="M7 17l-1 2M12 17v2M17 17l1 2"/></g></symbol>
+  <symbol id="i-wash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.5"/><path d="M7.5 6.5h2"/></g></symbol>
+  <symbol id="i-dry" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="13" r="4.5"/><path d="M10 12c1-1 3 1 4 0"/></g></symbol>
+  <symbol id="i-water" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M4 11l8-6 8 6v8H4z"/></symbol>
+</svg>
+
+<!-- ============ 设备页 ============ -->
+<div class="wrap">
+<p class="frame-label">① 桌面 · 设备页（1280 宽，管理员）</p>
+<div class="desk">
+  <aside class="nav">
+    <b>小管家</b>
+    <a href="#">今天</a><a href="#">吃饭</a><a href="#">日程</a><a href="#">家里</a>
+    <span class="grp">家里在用的</span>
+    <a href="#">库存</a><a href="#">购物清单</a><a href="#">资产</a><a class="cur" href="#">智能家居</a>
+  </aside>
+  <main>
+    <div class="head">
+      <div>
+        <h1>智能家居</h1>
+        <p><span class="dot"></span>6 台设备 · 刚刚同步</p>
+      </div>
+      <span class="sp"></span>
+      <a class="btn" href="#">设置</a>
+    </div>
+
+    <div class="scenes" aria-label="场景">
+      <button class="scene"><svg width="18" height="18"><use href="#i-moon"/></svg>电影夜</button>
+      <button class="scene"><svg width="18" height="18"><use href="#i-home"/></svg>回家</button>
+    </div>
+
+    <section class="room">
+      <h2>客厅</h2>
+      <div class="grid">
+        <article class="card on"><div class="top"><span class="ico"><svg width="22" height="22"><use href="#i-vac"/></svg></span><button class="main">暂停</button></div><div class="name">扫地机</div><div class="state">清扫中 · 62%</div></article>
+        <article class="card on"><div class="top"><span class="ico"><svg width="22" height="22"><use href="#i-cur"/></svg></span><button class="main">关上</button></div><div class="name">客厅窗帘</div><div class="state">开着</div></article>
+        <article class="card"><div class="top"><span class="ico"><svg width="22" height="22"><use href="#i-ac"/></svg></span><button class="main">打开</button></div><div class="name">空调</div><div class="state">已关 ≈</div></article>
+      </div>
+    </section>
+
+    <section class="room">
+      <h2>阳台</h2>
+      <div class="grid">
+        <article class="card on"><div class="top"><span class="ico"><svg width="22" height="22"><use href="#i-wash"/></svg></span></div><div class="name">洗衣机</div><div class="state">剩 23 分钟</div></article>
+        <article class="card offline"><div class="top"><span class="ico"><svg width="22" height="22"><use href="#i-dry"/></svg></span></div><div class="name">烘干机</div><div class="state">离线</div></article>
+      </div>
+    </section>
+
+    <section class="room">
+      <h2>厨房</h2>
+      <div class="grid">
+        <article class="card warn"><div class="top"><span class="ico"><svg width="22" height="22"><use href="#i-water"/></svg></span></div><div class="name">厨下净水</div><div class="state">滤芯剩 8%</div></article>
+      </div>
+    </section>
+  </main>
+</div>
+</div>
+
+<!-- ============ 居中详情（只读设备） ============ -->
+<div class="wrap">
+<p class="frame-label">② 桌面 · 点开洗衣机：居中弹出（只读设备没有操作区）</p>
+<div class="desk">
+  <aside class="nav">
+    <b>小管家</b>
+    <a href="#">今天</a><a href="#">吃饭</a><a href="#">日程</a><a href="#">家里</a>
+    <span class="grp">家里在用的</span>
+    <a href="#">库存</a><a href="#">购物清单</a><a href="#">资产</a><a class="cur" href="#">智能家居</a>
+  </aside>
+  <main></main>
+  <div class="scrim">
+    <section class="dialog" role="dialog" aria-label="洗衣机">
+      <div class="dhead">
+        <span class="ico"><svg width="28" height="28"><use href="#i-wash"/></svg></span>
+        <div><h2>洗衣机</h2><p>阳台 · 卡萨帝 C1 HD10</p></div>
+        <button class="close" aria-label="关闭">✕</button>
+      </div>
+      <div class="status">洗涤中 · 剩 23 分钟<small>预计 15:40 洗好</small></div>
+      <p class="ro">这台只能看，在小管家里按不了（海尔集成没开放控制）。</p>
+      <div>
+        <h3>更多信息</h3>
+        <div class="chips">
+          <div class="chip"><b>标准洗</b><span>程序</span></div>
+          <div class="chip"><b>40°</b><span>水温</span></div>
+          <div class="chip"><b>1200 转</b><span>脱水</span></div>
+          <div class="chip"><b>还够 6 次</b><span>洗衣液</span></div>
+        </div>
+      </div>
+      <div>
+        <h3>最近操作</h3>
+        <ul class="log"><li><span class="who t">还没有人在小管家里操作过这台</span></li></ul>
+      </div>
+      <label class="toggle">在今天页显示<span class="sw" aria-hidden="true"></span></label>
+    </section>
+  </div>
+</div>
+</div>
+
+<aside class="note">
+  <b>读图要点</b>
+  <ol>
+    <li>和手机同一套三层：场景一排 → 房间分段 → 设备卡网格；桌面四列、手机两列，卡片内容一样。</li>
+    <li>原来的右栏（场景、Home Assistant 连接）拆掉：场景上移成第一层；连接状态缩成标题下一行小字，断开时变成一条横幅。</li>
+    <li>管理员的「设置」按钮放在标题右边；成员看不到。</li>
+    <li>「刷新」按钮拿掉：E2 起状态已经靠 /events 推送，页面不需要手动刷新（连接断开时横幅里给一个「重试」）。</li>
+    <li>详情在桌面居中弹出、宽 440，内容与手机 sheet 完全相同；Esc 和点遮罩关闭。</li>
+    <li>只读设备（海尔洗衣机、净水）没有操作区，改为一句「只能看」说明原因。</li>
+    <li>一个房间只有一台设备时也按网格摆，不拉伸成整行，保持节奏一致。</li>
+    <li>房间顺序：按设置页里的房间顺序；没填房间的归「其他」放最后。</li>
+  </ol>
+</aside>
+
+</body>
+</html>
