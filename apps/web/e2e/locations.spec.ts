@@ -124,14 +124,20 @@ for (const theme of ['light', 'dark'] as const) {
     });
     try {
       await page.addInitScript((mode) => localStorage.setItem('family-app.theme', mode), theme);
+      // I2 起位置管理页并进 /house/map（左树右图，手机「清单」里是树）；老路径还能打开
       await page.goto('/house/locations');
+      await expect(page).toHaveURL(/\/house\/map$/);
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      if (isMobile) await page.getByRole('tab', { name: '清单' }).click();
       const node = page.locator(`[data-location-node="${places.cabinet.id}"]`);
       await expect(node).toContainText('吊柜');
       await expect(node).toContainText('1 样');
       await expect(page.locator(`[data-location-node="${places.shelf.id}"]`)).toHaveAttribute('data-depth', '3');
       await node.locator('button[aria-pressed]').click();
-      await expect(page.locator(`[data-location-contents="${places.cabinet.id}"]`)).toContainText('大米');
+      // 有地图时桌面在地图抽屉里看，没有时在树下面看
+      await expect(
+        page.locator(`[data-location-contents="${places.cabinet.id}"], [data-map-drawer="${places.cabinet.id}"]`),
+      ).toContainText('大米');
       await page.evaluate(() => document.fonts.ready);
       await expectNoHorizontalOverflow(page);
       const dir = resolve(process.cwd(), '../../.tmp-shots');

@@ -5,7 +5,7 @@ import { ListSkeleton } from './skeleton';
 import { SoftLink } from './soft-link';
 import { EmptyState, Panel } from './ui';
 
-const ASSET_EMOJI: Record<string, string> = {
+export const ASSET_EMOJI: Record<string, string> = {
   appliance: '🔌', furniture: '🛋️', electronics: '💻', tool: '🔧', subscription: '🔁', other: '📦',
 };
 
