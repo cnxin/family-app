@@ -192,58 +192,6 @@ export function arrangeDirectory<D extends { name: string; entities: DirectoryEn
     .filter((group) => group.shown.length + group.more.length > 0);
 }
 
-const CLIMATE_MODE_BUTTONS: { action: SmartHomeAction; label: string; mode: string }[] = [
-  { action: 'mode_cool', label: '制冷', mode: 'cool' },
-  { action: 'mode_heat', label: '制热', mode: 'heat' },
-  { action: 'mode_fan_only', label: '送风', mode: 'fan_only' },
-  { action: 'mode_auto', label: '自动', mode: 'auto' },
-];
-
-export interface SmartHomeButton {
-  action: SmartHomeAction;
-  label: string;
-}
-
-/**
- * 当前状态下摆哪几个按钮。只摆此刻说得通的（在充电座上就不摆「回充」），
- * 真正能不能控由服务端每次校验。
- */
-export function smartHomeButtons(domain: SmartHomeDomain, state: SmartHomeEntityState | null): SmartHomeButton[] {
-  const value = state?.state;
-  switch (domain) {
-    case 'vacuum':
-      if (value === 'cleaning') return [{ action: 'pause', label: '暂停' }, { action: 'return_to_base', label: '回充' }];
-      if (value === 'paused') return [{ action: 'start', label: '继续清扫' }, { action: 'return_to_base', label: '回充' }];
-      if (value === 'returning') return [{ action: 'pause', label: '暂停' }];
-      return [{ action: 'start', label: '开始清扫' }];
-    case 'cover':
-      return [
-        { action: 'open', label: '打开' },
-        { action: 'stop', label: '停' },
-        { action: 'close', label: '关上' },
-      ];
-    case 'switch':
-      return value === 'on' ? [{ action: 'turn_off', label: '关掉' }] : [{ action: 'turn_on', label: '打开' }];
-    case 'scene':
-      return [{ action: 'activate', label: '执行' }];
-    case 'climate': {
-      if (!value || value === 'off') return [{ action: 'turn_on', label: '打开' }];
-      // 只摆 HA 说这台有的模式，当前模式不摆
-      const modes = CLIMATE_MODE_BUTTONS.filter(
-        (button) => button.mode !== value && (!state?.hvacModes || state.hvacModes.includes(button.mode)),
-      );
-      return [
-        { action: 'turn_off', label: '关掉' },
-        ...modes.map(({ action, label }) => ({ action, label })),
-        { action: 'temperature_down', label: '调低 1°' },
-        { action: 'temperature_up', label: '调高 1°' },
-      ];
-    }
-    default:
-      return [];
-  }
-}
-
 /** 动作的中文名（审计列表、联动规则里用）。 */
 export const SMART_HOME_ACTION_LABELS: Record<SmartHomeAction, string> = {
   start: '开始清扫',

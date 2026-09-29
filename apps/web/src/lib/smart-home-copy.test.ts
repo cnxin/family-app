@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SmartHomeEntityState } from '@family/contracts';
-import { arrangeDirectory, groupByArea, smartHomeButtons, smartHomeKind, smartHomeStateLine } from './smart-home-copy';
+import { arrangeDirectory, groupByArea, smartHomeKind, smartHomeStateLine } from './smart-home-copy';
 
 function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartHomeEntityState {
   return {
@@ -143,37 +143,3 @@ describe('arrangeDirectory', () => {
   });
 });
 
-describe('smartHomeButtons', () => {
-  const labels = (domain: Parameters<typeof smartHomeButtons>[0], value: string | null) =>
-    smartHomeButtons(domain, value === null ? null : state(value)).map((one) => one.label);
-
-  it('扫地机按当前状态只摆说得通的', () => {
-    expect(labels('vacuum', 'docked')).toEqual(['开始清扫']);
-    expect(labels('vacuum', 'cleaning')).toEqual(['暂停', '回充']);
-    expect(labels('vacuum', 'paused')).toEqual(['继续清扫', '回充']);
-    expect(labels('vacuum', 'returning')).toEqual(['暂停']);
-    expect(labels('vacuum', null)).toEqual(['开始清扫']);
-  });
-
-  it('窗帘开停关、开关按现状反着来、场景执行、传感器没有按钮', () => {
-    expect(labels('cover', 'open')).toEqual(['打开', '停', '关上']);
-    expect(labels('switch', 'on')).toEqual(['关掉']);
-    expect(labels('switch', 'off')).toEqual(['打开']);
-    expect(labels('scene', '2026-09-28T00:00:00Z')).toEqual(['执行']);
-    expect(labels('sensor', '12')).toEqual([]);
-  });
-});
-
-describe('空调按钮（试探性）', () => {
-  it('关着只给「打开」；开着给关掉、其余模式、调温', () => {
-    expect(smartHomeButtons('climate', state('off')).map((one) => one.label)).toEqual(['打开']);
-    expect(smartHomeButtons('climate', state('cool')).map((one) => one.label)).toEqual([
-      '关掉', '制热', '送风', '自动', '调低 1°', '调高 1°',
-    ]);
-  });
-
-  it('只摆 HA 说这台有的模式', () => {
-    const buttons = smartHomeButtons('climate', state('cool', { hvacModes: ['off', 'cool', 'heat'] }));
-    expect(buttons.map((one) => one.action)).toEqual(['turn_off', 'mode_heat', 'temperature_down', 'temperature_up']);
-  });
-});
