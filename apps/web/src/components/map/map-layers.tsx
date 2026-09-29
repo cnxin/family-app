@@ -49,8 +49,10 @@ export function MapLabels({
       })}
       {inner.map((item) => {
         const b = shapeBounds(shapeOf(item));
-        const size = fontFor(b, item.name, 12);
-        if ((b.maxX - b.minX) * scale < 28 || (b.maxY - b.minY) * scale < size * scale + 4) return null;
+        // 柜子常是扁的：字号按宽、高一起收（最大 12px），小于 8px 才不写（放大就出来了）
+        const px = Math.min(12, ((b.maxX - b.minX) * scale - 8) / Math.max(2, item.name.length), (b.maxY - b.minY) * scale - 4);
+        if (px < 8) return null;
+        const size = px * unit;
         return (
           <text key={item.id} x={(b.minX + b.maxX) / 2} y={(b.minY + b.maxY) / 2} textAnchor="middle" dominantBaseline="central"
             className="fill-ink-soft" style={{ fontSize: size }}>

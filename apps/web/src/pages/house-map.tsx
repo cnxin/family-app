@@ -47,7 +47,8 @@ export function HouseMapPage() {
   }, []);
 
   const hasMap = Boolean(map.data);
-  const activeTab = tab ?? (hasMap ? 'map' : 'list');
+  // 地图还在加载时先按「地图」摆（那一栏出骨架），不然每次进来先闪一下清单再翻过去
+  const activeTab = tab ?? (hasMap || map.isPending ? 'map' : 'list');
   const mode: MapMode = !manager || !editing || !hasMap ? 'view' : desktop ? 'edit-full' : 'edit-containers';
   const pickFromTree = (id: string | null) => {
     setSelectedId(id);

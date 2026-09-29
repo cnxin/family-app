@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -62,6 +62,19 @@ async function touchGesture(page: Page, fingers: { from: [number, number]; to: [
     list.forEach((finger, index) => fire(window, 'pointerup', index + 1, ...finger.to));
   }, fingers);
   await page.waitForTimeout(700);
+}
+
+/** 切模式时工具条高度会变、画布跟着挪：等这块在屏幕上两次量的位置一样再操作 */
+async function stableBox(locator: Locator) {
+  let last = '';
+  await expect.poll(async () => {
+    const box = await locator.boundingBox();
+    const now = JSON.stringify(box && [Math.round(box.x), Math.round(box.y), Math.round(box.width)]);
+    const same = now === last;
+    last = now;
+    return same;
+  }, { intervals: [120] }).toBe(true);
+  return (await locator.boundingBox())!;
 }
 
 async function shot(page: Page, name: string) {
@@ -231,8 +244,9 @@ test('编辑模式：电脑拖柜子防抖保存、改名、画新柜子；手�
       await expect(page.getByRole('tab', { name: '画房间' })).toHaveCount(0);
     }
     const cabinet = page.locator(`[data-map-container="${places.cabinet.id}"]`);
+    await stableBox(cabinet);
     await cabinet.click();
-    const box = (await cabinet.boundingBox())!;
+    const box = await stableBox(cabinet);
     const patches: number[] = [];
     page.on('response', (response) => {
       if (response.url().includes(`/locations/${places.cabinet.id}/shape`)) patches.push(response.status());
