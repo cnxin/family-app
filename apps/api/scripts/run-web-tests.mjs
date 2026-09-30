@@ -37,7 +37,8 @@ const testEnvironment = {
   API_URL,
   BOOTSTRAP_SECRET: 'family-app-web-test-bootstrap-secret',
   BOOTSTRAP_SECRET_FILE: '',
-  CORS_ORIGINS: WEB_URL,
+  // 第二个是「不安全上下文」冒烟用的来源（playwright.config.ts 的 insecure-context）
+  CORS_ORIGINS: `${WEB_URL},http://insecure.test:${WEB_PORT}`,
   DB_NAME: TEST_DATABASE,
   DB_PASSWORD_FILE: '',
   E2E_ACCOUNT_PASSWORD: TEST_PASSWORD,
