@@ -15,6 +15,8 @@ export default defineConfig({
   server: {
     port: 5180,
     host: true,
+    // Playwright 的「不安全上下文」冒烟用 insecure.test 访问（见 playwright.config.ts、教训 49）；Vite 默认拦陌生 Host
+    allowedHosts: ['insecure.test'],
     proxy: {
       '/api': {
         target: apiOrigin,

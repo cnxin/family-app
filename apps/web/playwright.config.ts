@@ -5,6 +5,10 @@ import { defineConfig, devices } from '@playwright/test';
 // 由它起隔离库 + 隔离 API，并把 FAMILY_WEB_URL / FAMILY_API_ORIGIN 指过来。
 const baseURL = process.env.FAMILY_WEB_URL ?? 'http://localhost:5180';
 const webPort = new URL(baseURL).port || '5180';
+// 不安全上下文（教训 49）：家里人用局域网 IP 打开时，浏览器不给 crypto.randomUUID、navigator.clipboard。
+// insecure.test 不在浏览器的可信名单里（只有 localhost / 127.0.0.1 / HTTPS 算安全），把它解析到本机，
+// 就能在 CI 上复现「http://192.168.x.x」那种访问方式。
+export const insecureURL = `http://insecure.test:${webPort}`;
 const authState = {
   mobile: 'e2e/.auth/mobile.json',
   desktop: 'e2e/.auth/desktop.json',
@@ -41,6 +45,7 @@ export default defineConfig({
       name: 'mobile-chrome',
       dependencies: ['setup'],
       testMatch: /.*\.spec\.ts/,
+      testIgnore: /insecure-context\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         deviceScaleFactor: 1,
@@ -54,10 +59,22 @@ export default defineConfig({
       name: 'desktop-chrome',
       dependencies: ['setup'],
       testMatch: /.*\.spec\.ts/,
+      testIgnore: /insecure-context\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         storageState: authState.desktop,
         viewport: { width: 1280, height: 800 },
+      },
+    },
+    {
+      name: 'insecure-context',
+      testMatch: /insecure-context\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: insecureURL,
+        viewport: { width: 1280, height: 800 },
+        // 直连：本机若开着系统代理（TUN），Chrome 会把 insecure.test 交给代理、拿回错误页
+        launchOptions: { args: ['--host-resolver-rules=MAP insecure.test localhost', '--proxy-server=direct://', '--proxy-bypass-list=*'] },
       },
     },
   ],
