@@ -1,15 +1,22 @@
 import { useCallback, useRef, useState } from 'react';
-import type { MapShape } from '@family/contracts';
+import type { MapDecoration, MapShape } from '@family/contracts';
 
 // 地图编辑器 v2 §4：本次编辑内的撤销 / 重做，最多 50 步，点「完成」或刷新就清空。
 // 每一步存成数据（不是闭包），执行交给编辑器的 apply；「新建」撤掉再重做会得到新 id，用 remap 把后面几步里的旧 id 换过来。
 // 拆分、合并、从图上拿掉不进这里（v2 拍板 2：操作前确认）。
 
+/** 装饰类家具整列的前后两版（拖房间时里面的装饰跟着走，和形状记成同一步） */
+export interface DecorChange {
+  before: MapDecoration[];
+  after: MapDecoration[];
+}
+
 export type UndoStep =
-  | { kind: 'shape'; label: string; changes: { id: string; before: MapShape | null; after: MapShape | null }[] }
+  | { kind: 'shape'; label: string; changes: { id: string; before: MapShape | null; after: MapShape | null }[]; decor?: DecorChange }
   | { kind: 'rename'; label: string; id: string; before: string; after: string }
+  | { kind: 'icon'; label: string; id: string; before: { icon: string | null; name: string }; after: { icon: string | null; name: string } }
   | { kind: 'create'; label: string; id: string; parentId: string | null; name: string; locationKind: 'room' | 'container'; icon?: string | null; shape: MapShape }
-  | { kind: 'decorations'; label: string; before: unknown; after: unknown };
+  | ({ kind: 'decorations'; label: string } & DecorChange);
 
 export interface UndoApply {
   /** 按方向把这一步做出来；create 撤销时返回 false 表示删不掉（里面记了东西），这一步从栈里拿掉 */

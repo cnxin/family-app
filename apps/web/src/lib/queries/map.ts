@@ -8,7 +8,7 @@ import { locationKeys } from './locations';
 
 export const mapKeys = {
   map: ['locations', 'map'] as const,
-  /** 不挂在 locations 下：底图只随 updatedAt 换，/events 推 locations 时不必重新下载图片 */
+  /** 不挂在 locations 下：底图只随 backgroundKey 换，/events 推 locations、改装饰时不必重新下载图片 */
   background: (version: string) => ['map-background', version] as const,
   find: (q: string) => ['locations', 'find', q] as const,
 };
@@ -19,10 +19,10 @@ export function useHouseholdMap(enabled = true) {
 
 /**
  * 底图的 object URL（底图要登录才能取，不能直接给 <image href>）。
- * 以 updatedAt 为版本：换了底图键就变；旧 URL 在换掉后回收。
+ * 以 backgroundKey 为版本：换了底图才变（摆家具改了 updatedAt 也不重下）；旧 URL 在换掉后回收。
  */
 export function useMapBackground(map: HouseholdMap | null | undefined) {
-  const version = map?.hasBackground ? map.updatedAt : '';
+  const version = map?.hasBackground ? map.backgroundKey ?? map.updatedAt : '';
   const blob = useQuery({
     queryKey: mapKeys.background(version),
     queryFn: () => apiBlob('/map/background'),

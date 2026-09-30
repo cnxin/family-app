@@ -250,14 +250,63 @@ try {
     '底图原样导出（base64，字节一致）',
   );
 
+  console.log('6b. 家具库（地图编辑器 v2 §3）：收纳类是带图标的柜子，装饰类整列存在地图上');
+  const wardrobe = await request('/locations', owner, 'POST', { parentId: room.id, name: `衣柜${tag}`, kind: 'container', icon: 'wardrobe' });
+  const badIcon = await request('/locations', owner, 'POST', { parentId: room.id, name: `怪柜${tag}`, kind: 'container', icon: 'sofa' });
+  assert(
+    wardrobe.status === 201 && wardrobe.body.data.icon === 'wardrobe' && badIcon.status === 400,
+    '收纳类家具 = 带 icon 的柜子；装饰类的键（sofa）不能当柜子图标（400）',
+  );
+  const turnedShape = await shape(wardrobe.body.data.id, { type: 'rect', x: 120, y: 300, w: 40, h: 60, rotation: 90 });
+  const badTurn = await shape(wardrobe.body.data.id, { type: 'rect', x: 120, y: 300, w: 40, h: 60, rotation: 45 });
+  assert(turnedShape.status === 200 && turnedShape.body.data.mapShape.rotation === 90 && badTurn.status === 400, '家具朝向只收 0 / 90 / 180 / 270');
+  const current = (await request('/map', owner)).body.data;
+  assert(Array.isArray(current.decorations) && typeof current.decorationsVersion === 'number' && current.backgroundKey, '地图带装饰列表、版本号和底图键');
+  const sofa = { id: randomUUID(), kind: 'sofa', roomId: room.id, x: 200, y: 400, w: 90, h: 200, rotation: 90 };
+  const bed = { id: randomUUID(), kind: 'bed', roomId: null, x: 600, y: 600, w: 150, h: 200 };
+  const memberDecor = await request('/map/decorations', member, 'PUT', { version: current.decorationsVersion, items: [sofa] });
+  const savedDecor = await request('/map/decorations', owner, 'PUT', { version: current.decorationsVersion, items: [sofa, bed] });
+  const stale = await request('/map/decorations', owner, 'PUT', { version: current.decorationsVersion, items: [] });
+  const offMap = await request('/map/decorations', owner, 'PUT', {
+    version: current.decorationsVersion + 1, items: [{ ...bed, y: 850, h: 100 }],
+  });
+  const dupe = await request('/map/decorations', owner, 'PUT', { version: current.decorationsVersion + 1, items: [bed, bed] });
+  const foreignRoom = await request('/map/decorations', owner, 'PUT', {
+    version: current.decorationsVersion + 1, items: [{ ...sofa, roomId: randomUUID() }],
+  });
+  const storageKind = await request('/map/decorations', owner, 'PUT', {
+    version: current.decorationsVersion + 1, items: [{ ...bed, kind: 'wardrobe' }],
+  });
+  const afterDecor = (await request('/map', member)).body.data;
+  assert(memberDecor.status === 403, '家人摆不了装饰（403）');
+  assert(
+    savedDecor.status === 200 && savedDecor.body.data.decorationsVersion === current.decorationsVersion + 1 &&
+      afterDecor.decorations.length === 2 && afterDecor.decorations[0].rotation === 90 &&
+      afterDecor.backgroundKey === current.backgroundKey,
+    '管理员整列保存装饰：版本 +1、家人能看到、底图键不变（不用重下图片）',
+  );
+  assert(stale.status === 409, '版本对不上 409（别的设备刚改过，不静默覆盖）');
+  assert(
+    [offMap, dupe, foreignRoom, storageKind].every((one) => one.status === 400),
+    '出了图、id 重复、房间不是本家的、收纳类键当装饰：都 400',
+  );
+
+  const reimport = await request('/map', owner, 'PUT', { viewBox: { w: 1000, h: 1083 }, clearShapes: true });
+  assert(
+    reimport.status === 200 && reimport.body.data.decorations.length === 0 &&
+      reimport.body.data.decorationsVersion === savedDecor.body.data.decorationsVersion + 1,
+    '重新导入（clearShapes）连装饰一起清，版本 +1',
+  );
+
   console.log('7. 跨家庭');
   const otherMap = await request('/map', fresh.token);
   const otherBackground = await fetch(`${BASE}/map/background`, { headers: { Authorization: `Bearer ${fresh.token}` } });
   const otherShape = await shape(room.id, roomShape, fresh.token);
+  const otherDecor = await request('/map/decorations', fresh.token, 'PUT', { version: 0, items: [] });
   const otherFind = (await request(`/locations/find?q=${encodeURIComponent(`电池${tag}`)}`, fresh.token)).body.data;
   assert(
-    otherMap.body.data === null && otherBackground.status === 404 && [403, 404].includes(otherShape.status) && otherFind.length === 0,
-    '另一个家庭：看不到这张地图和底图、改不了这边的形状、搜不到这边的东西',
+    otherMap.body.data === null && otherBackground.status === 404 && otherDecor.status === 404 && [403, 404].includes(otherShape.status) && otherFind.length === 0,
+    '另一个家庭：看不到这张地图和底图、改不了这边的形状和装饰、搜不到这边的东西',
   );
   console.log('\n家庭地图黑盒全部通过');
 } finally {

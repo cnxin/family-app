@@ -3,13 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { basename, join, resolve } from 'path';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import {
   MAP_VIEWBOX_WIDTH,
   type HouseholdMap as HouseholdMapView,
   type HouseholdMapExport,
+  type MapDecoration,
   type MapShape,
   type PutHouseholdMapBody,
+  type PutMapDecorationsBody,
 } from '@family/contracts';
 import { isHouseholdManager } from '@family/shared';
 import { JwtUser } from '../auth/jwt.guard';
@@ -71,6 +73,11 @@ export class MapService {
       const map =
         existing ??
         repo.create({ householdId: user.householdId, isActive: true, backgroundFile: null, viewBoxWidth: MAP_VIEWBOX_WIDTH });
+      if (body.clearShapes && map.decorations?.length) {
+        // 重新导入：装饰的坐标也对不上了，一起清
+        map.decorations = [];
+        map.decorationsVersion = (map.decorationsVersion ?? 0) + 1;
+      }
       map.viewBoxHeight = body.viewBox.h;
       if (body.title !== undefined) map.title = body.title;
       // 只清形状、比例没变也算改了地图：updatedAt 要动，客户端靠它换缓存
@@ -102,6 +109,37 @@ export class MapService {
     }
     if (previous) await unlink(backgroundPath(user.householdId, previous).path).catch(() => undefined);
     return this.present(map);
+  }
+
+  /**
+   * 装饰类家具（地图编辑器 v2 §3.2）：整列替换，带版本号——两台设备同时摆，后到的 409 重拉，不静默覆盖。
+   * 不进位置树、不起名；roomId 只认本家的房间，出了图的框直接拒。
+   */
+  async putDecorations(body: PutMapDecorationsBody, user: JwtUser): Promise<HouseholdMapView> {
+    this.assertManager(user);
+    const ids = new Set(body.items.map((one) => one.id));
+    if (ids.size !== body.items.length) throw new BadRequestException('装饰的 id 重复了');
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(HouseholdMap);
+      const map = await repo.findOne({ where: { householdId: user.householdId, isActive: true }, lock: { mode: 'pessimistic_write' } });
+      if (!map) throw new NotFoundException('还没有家庭地图');
+      if (map.decorationsVersion !== body.version) throw new ConflictException('家具刚在别的设备上改过，重新打开编辑再摆');
+      for (const one of body.items) {
+        if (one.x + one.w > MAP_VIEWBOX_WIDTH || one.y + one.h > map.viewBoxHeight) throw new BadRequestException('家具超出地图范围');
+      }
+      const roomIds = [...new Set(body.items.map((one) => one.roomId).filter((id): id is string => Boolean(id)))];
+      if (roomIds.length) {
+        const rooms = await manager
+          .getRepository(StorageLocation)
+          .find({ where: { householdId: user.householdId, id: In(roomIds), kind: 'room' }, select: { id: true } });
+        if (rooms.length !== roomIds.length) throw new BadRequestException('家具放的房间不在这个家里');
+      }
+      map.decorations = body.items as unknown as Record<string, unknown>[];
+      map.decorationsVersion += 1;
+      map.updatedAt = new Date();
+      return repo.save(map);
+    });
+    return this.present(saved);
   }
 
   async background(householdId: string) {
@@ -163,6 +201,9 @@ export class MapService {
       title: map.title,
       viewBox: { w: MAP_VIEWBOX_WIDTH, h: map.viewBoxHeight },
       hasBackground: Boolean(map.backgroundFile),
+      backgroundKey: map.backgroundFile ?? null,
+      decorations: (map.decorations ?? []) as unknown as MapDecoration[],
+      decorationsVersion: map.decorationsVersion ?? 0,
       updatedAt: map.updatedAt.toISOString(),
     };
   }

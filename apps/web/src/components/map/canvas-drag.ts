@@ -123,7 +123,8 @@ export function dragStep(
     if (d.corner.includes('n')) y1 = Math.min(py, y2 - 4);
     else y2 = Math.max(py, y1 + 4);
     const next: MapRect = { ...r, x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-    return { shapes: new Map([[d.id, d.clamp ? clampRect(next, d.clamp) : next]]), guides };
+    // clampRect 只管位置大小：朝向（rotation）要带上
+    return { shapes: new Map([[d.id, d.clamp ? { ...next, ...clampRect(next, d.clamp) } : next]]), guides };
   }
   let dx = mx - d.origin[0];
   let dy = my - d.origin[1];
