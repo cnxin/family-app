@@ -282,7 +282,9 @@ test('全屏编辑：浮动工具条不压对象、拖柜子防抖保存、原�
     await expect(editor.getByRole('button', { name: `电视柜${tag}` })).toBeVisible();
 
     if (!isMobile) {
-      await tools.getByRole('button', { name: '画柜子' }).click();
+      // 画柜子挪进了家具库（「自定义柜子」）
+      await tools.getByRole('button', { name: '家具库' }).click();
+      await page.getByRole('button', { name: /自定义柜子/ }).click();
       const bedroom = (await editor.locator(`[data-map-room="${places.bedroom.id}"]`).boundingBox())!;
       await page.mouse.move(bedroom.x + 30, bedroom.y + 20);
       await page.mouse.down();

@@ -8225,6 +8225,13 @@ export class HouseholdMap {
   @Column({ type: 'varchar', length: 80, nullable: true })
   backgroundFile: string | null;
 
+  /** 装饰类家具（地图编辑器 v2 §3）：[{ id, kind, roomId, x, y, w, h, rotation }] */
+  @Column({ type: 'jsonb', default: [] })
+  decorations: Record<string, unknown>[];
+
+  @Column({ type: 'int', default: 0 })
+  decorationsVersion: number;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

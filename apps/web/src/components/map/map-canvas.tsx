@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type Keyboa
 import type { MapRect, MapShape } from '@family/contracts';
 import { clampRect, pointInShape, shapeBounds, shapePoints, type MapBounds, type MapPoint, type MapSegment } from '@family/shared';
 import { dragStep, nearestEdge, pathOf, type Drag } from './canvas-drag';
-import { MapHandles, MapLabels } from './map-layers';
+import { MapHandles, MapInner, MapLabels } from './map-layers';
 import type { MapItem, MapMode, MapTool, ShapeChange } from './map-types';
 import { useMapViewport } from './use-map-viewport';
 
@@ -38,6 +38,8 @@ export interface MapCanvasHandle {
   focus: (bounds: MapBounds, maxZoom?: number, inset?: { right?: number; bottom?: number }) => void;
   reset: () => void;
   zoomBy: (factor: number) => void;
+  /** 屏幕中心在地图上的点（家具库没选房间时按它找房间） */
+  centre: () => MapPoint | null;
 }
 
 interface Props {
@@ -58,6 +60,8 @@ interface Props {
   selectedVertex?: number | null;
   /** 顶点编辑之外的提示（比如「柜子要画在房间里」） */
   onHint?: (message: string) => void;
+  /** 吸附开关（「更多 → 吸附墙边」）；按住 Alt 也临时不吸 */
+  snap?: boolean;
   /** 盖在画布上的按钮（缩放、工具条） */
   overlay?: ReactNode;
   /**
@@ -69,7 +73,7 @@ interface Props {
 }
 
 export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
-  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onVertexSelect, selectedVertex = null, onHint, overlay, floating, label },
+  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onVertexSelect, selectedVertex = null, onHint, snap = true, overlay, floating, label },
   ref,
 ) {
   const viewport = useMapViewport(viewBox);
@@ -83,7 +87,20 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const [guides, setGuides] = useState<MapSegment[]>([]);
   const coarse = useMemo(() => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches, []);
 
-  useImperativeHandle(ref, () => ({ focus: viewport.focus, reset: viewport.reset, zoomBy: (factor: number) => void viewport.zoomBy(factor) }), [viewport]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: viewport.focus,
+      reset: viewport.reset,
+      zoomBy: (factor: number) => void viewport.zoomBy(factor),
+      centre: () => {
+        const v = viewport.view;
+        const size = viewport.size;
+        return v && size ? [(size.w / 2 - v.x) / v.scale, (size.h / 2 - v.y) / v.scale] : null;
+      },
+    }),
+    [viewport],
+  );
 
   const live = preview.base === items ? preview.shapes : null;
   const setPreview = (shapes: Map<string, MapShape>) => {
@@ -127,7 +144,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const update = (event: globalThis.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const next = dragStep(d, viewport.toMap(event.clientX, event.clientY), viewBox, scale, !event.altKey);
+    const next = dragStep(d, viewport.toMap(event.clientX, event.clientY), viewBox, scale, snap && !event.altKey);
     if (next === 'draw' && d.type === 'draw') setDrawing({ start: d.start, end: d.end });
     else if (next && next !== 'draw') {
       setPreview(next.shapes);
@@ -288,39 +305,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
                 />
               );
             })}
-            {inner.map((item) => {
-              const shape = shapeOf(item);
-              const active = item.id === selectedId;
-              const hit = highlightIds?.has(item.id);
-              const container = item.kind === 'container';
-              return (
-                <path
-                  key={item.id}
-                  d={pathOf(shape)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={item.name}
-                  aria-pressed={active}
-                  data-map-container={item.id}
-                  data-hit={hit ? 'true' : undefined}
-                  onKeyDown={(event) => keySelect(event, item.id)}
-                  onPointerDown={(event) => pressItem(event, item)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelect(item.id);
-                  }}
-                  className={
-                    'outline-none ' +
-                    (hit ? 'fill-warm-soft stroke-warm map-hit ' : active ? 'fill-accent-soft stroke-accent ' : container ? 'fill-surface stroke-[var(--map-stroke)] ' : 'fill-transparent stroke-[var(--map-stroke)] ') +
-                    (editing ? 'cursor-move' : 'cursor-pointer')
-                  }
-                  fillOpacity={container || hit || active ? 0.92 : 0}
-                  strokeWidth={(active || hit ? 2.5 : 1) * unit}
-                  strokeDasharray={container ? undefined : `${4 * unit} ${3 * unit}`}
-                  rx={3 * unit}
-                />
-              );
-            })}
+            <MapInner inner={inner} shapeOf={shapeOf} selectedId={selectedId} highlightIds={highlightIds} editing={editing} unit={unit}
+              onPress={pressItem} onSelect={onSelect} onKey={keySelect} />
             <MapLabels rooms={rooms} inner={inner} shapeOf={shapeOf} scale={scale} />
             {/* 电脑上房间顶点、柜子四角都能拉；手机上只拉柜子 / 家具（房间形状限电脑，v2 拍板 1） */}
             {selected && selectedShape && (mode === 'edit-full' || (mode === 'edit-containers' && selected.kind !== 'room')) ? (

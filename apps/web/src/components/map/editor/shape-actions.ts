@@ -1,4 +1,4 @@
-import type { MapShape, StorageLocation } from '@family/contracts';
+import type { MapRect, MapRotation, MapShape, StorageLocation } from '@family/contracts';
 import { alignToNeighbours, rectangularize, shapeBounds, shapePoints, type MapPoint } from '@family/shared';
 
 // 编辑器里「更多」和工具条上那些一键操作的纯计算（地图编辑器 v2 §2.2）；执行、记撤销在编辑器里。
@@ -30,12 +30,13 @@ export function removalPlan(locations: StorageLocation[], location: StorageLocat
   return { body, ids: [...shapedBelow.map((one) => one.id), location.id] };
 }
 
-/** 转 90°：绕中心换宽高；转过来出了房间就返回 null */
-export function turned(shape: MapShape, parent: MapShape | null | undefined): MapShape | null {
+/** 转 90°：绕中心换宽高，朝向 +90（家具图标跟着转，v2 §3.4）；转过来出了房间就返回 null */
+export function turned(shape: MapShape, parent: MapShape | null | undefined): MapRect | null {
   if (shape.type !== 'rect') return null;
   const cx = shape.x + shape.w / 2;
   const cy = shape.y + shape.h / 2;
-  const next = { ...shape, x: Math.round(cx - shape.h / 2), y: Math.round(cy - shape.w / 2), w: shape.h, h: shape.w };
+  const rotation = (((shape.rotation ?? 0) + 90) % 360) as MapRotation;
+  const next: MapRect = { type: 'rect', x: Math.round(cx - shape.h / 2), y: Math.round(cy - shape.w / 2), w: shape.h, h: shape.w, ...(rotation ? { rotation } : {}) };
   const b = parent ? shapeBounds(parent) : null;
   if (b && (next.x < b.minX || next.y < b.minY || next.x + next.w > b.maxX || next.y + next.h > b.maxY)) return null;
   return next;

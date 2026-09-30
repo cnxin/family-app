@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { idParams, isoDateTime, nullableDateTime, removedResponse, uuid } from './common';
 import { numericString } from './dishes';
-import { mapShapeSchema } from './household-map';
+import { mapShapeSchema, mapStorageFurnitureSchema } from './household-map';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/locations/（I1 位置字典，docs/item-location-plan.md §2、§3 I1）。
@@ -57,7 +57,8 @@ export const createStorageLocationBody = z.object({
   /** 不填按层级推：房间下默认 zone，柜子（container）下默认 slot */
   kind: storageLocationKind.optional(),
   name: locationName,
-  icon: z.string().trim().max(40).nullish(),
+  /** 家具类型（地图编辑器 v2：收纳类家具就是带类型的柜子）；null = 自定义柜子 / 普通位置 */
+  icon: mapStorageFurnitureSchema.nullish(),
   note: z.string().trim().max(500).nullish(),
 }).strict();
 export type CreateStorageLocationBody = z.infer<typeof createStorageLocationBody>;
@@ -67,7 +68,8 @@ export const updateStorageLocationBody = z.object({
   parentId: uuid.nullish(),
   kind: storageLocationKind.optional(),
   name: locationName.optional(),
-  icon: z.string().trim().max(40).nullish(),
+  /** 家具类型（地图编辑器 v2：收纳类家具就是带类型的柜子）；null = 自定义柜子 / 普通位置 */
+  icon: mapStorageFurnitureSchema.nullish(),
   note: z.string().trim().max(500).nullish(),
   sortOrder: z.number().int().min(0).max(9999).optional(),
 }).strict();

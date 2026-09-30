@@ -2,7 +2,13 @@ import { BadRequestException, Controller, Get, Post, Put, Res, UploadedFile, Use
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
-import { MAP_BACKGROUND_MAX_BYTES, putHouseholdMapBody, type PutHouseholdMapBody } from '@family/contracts';
+import {
+  MAP_BACKGROUND_MAX_BYTES,
+  putHouseholdMapBody,
+  putMapDecorationsBody,
+  type PutHouseholdMapBody,
+  type PutMapDecorationsBody,
+} from '@family/contracts';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { ZodBody } from '../common/zod';
 import { MAP_BACKGROUND_TYPES, MapService } from './map.service';
@@ -20,6 +26,11 @@ export class MapController {
   @Put()
   put(@ZodBody(putHouseholdMapBody) body: PutHouseholdMapBody, @CurrentUser() user: JwtUser) {
     return this.maps.put(body, user);
+  }
+
+  @Put('decorations')
+  putDecorations(@ZodBody(putMapDecorationsBody) body: PutMapDecorationsBody, @CurrentUser() user: JwtUser) {
+    return this.maps.putDecorations(body, user);
   }
 
   @Post('background')

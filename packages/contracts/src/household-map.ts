@@ -19,8 +19,13 @@ const extent = z.number().int().min(1).max(MAP_VIEWBOX_MAX_HEIGHT);
 export const mapPolygonSchema = z
   .object({ type: z.literal('polygon'), points: z.array(z.tuple([coord, coord])).min(3).max(MAP_POLYGON_MAX_POINTS) })
   .strict();
-/** 柜子用矩形；「转 90°」就是绕中心换宽高，所以不存角度 */
-export const mapRectSchema = z.object({ type: z.literal('rect'), x: coord, y: coord, w: extent, h: extent }).strict();
+/** 家具朝向（地图编辑器 v2 §3.4）：「转 90°」照旧绕中心换宽高，再把朝向 +90，只管图标怎么画 */
+export const mapRotationSchema = z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]);
+export type MapRotation = z.infer<typeof mapRotationSchema>;
+/** 柜子 / 家具用矩形；不带 rotation 就是 0（老数据不用动） */
+export const mapRectSchema = z
+  .object({ type: z.literal('rect'), x: coord, y: coord, w: extent, h: extent, rotation: mapRotationSchema.optional() })
+  .strict();
 export const mapShapeSchema = z.discriminatedUnion('type', [mapPolygonSchema, mapRectSchema]);
 export type MapPolygon = z.infer<typeof mapPolygonSchema>;
 export type MapRect = z.infer<typeof mapRectSchema>;
@@ -31,15 +36,52 @@ export const mapViewBoxSchema = z
   .strict();
 export type MapViewBox = z.infer<typeof mapViewBoxSchema>;
 
+/**
+ * 家具库（地图编辑器 v2 §3）。收纳类是位置（container，storage_locations.icon 存类型键），进树、能放东西；
+ * 装饰类只画在图上（household_maps.decorations），不进树、不起名（v2 拍板 4）。
+ */
+export const MAP_STORAGE_FURNITURE = ['wardrobe', 'shoe', 'tv', 'wall', 'base', 'fridge', 'bookcase', 'nightstand', 'shelf', 'drawers'] as const;
+export const MAP_DECOR_FURNITURE = ['sofa', 'bed', 'dining', 'desk', 'toilet', 'bathtub', 'washer', 'stove'] as const;
+export const mapStorageFurnitureSchema = z.enum(MAP_STORAGE_FURNITURE);
+export const mapDecorFurnitureSchema = z.enum(MAP_DECOR_FURNITURE);
+export type MapStorageFurniture = z.infer<typeof mapStorageFurnitureSchema>;
+export type MapDecorFurniture = z.infer<typeof mapDecorFurnitureSchema>;
+export const MAP_DECORATIONS_MAX = 200;
+
+export const mapDecorationSchema = z
+  .object({
+    id: z.uuid(),
+    kind: mapDecorFurnitureSchema,
+    /** 画在哪间房里（挪房间时跟着走）；房间删了就是 null */
+    roomId: z.uuid().nullable(),
+    x: coord,
+    y: coord,
+    w: extent,
+    h: extent,
+    rotation: mapRotationSchema.optional(),
+  })
+  .strict();
+export type MapDecoration = z.infer<typeof mapDecorationSchema>;
+
 export const householdMapSchema = z.object({
   id: z.uuid(),
   title: z.string(),
   viewBox: mapViewBoxSchema,
   /** 有没有底图（裁剪后的截图）；图本身走 GET /map/background（要登录，不走公开 /uploads） */
   hasBackground: z.boolean(),
+  /** 底图换了这个就变（客户端拿它当缓存键；改装饰不动它，免得重下图片） */
+  backgroundKey: z.string().nullable(),
+  decorations: z.array(mapDecorationSchema),
+  /** 装饰整列替换时的版本号：对不上 409（别的设备刚改过） */
+  decorationsVersion: z.number().int().min(0),
   updatedAt: isoDateTime,
 });
 export type HouseholdMap = z.infer<typeof householdMapSchema>;
+
+export const putMapDecorationsBody = z
+  .object({ version: z.number().int().min(0), items: z.array(mapDecorationSchema).max(MAP_DECORATIONS_MAX) })
+  .strict();
+export type PutMapDecorationsBody = z.infer<typeof putMapDecorationsBody>;
 
 export const putHouseholdMapBody = z
   .object({
@@ -89,6 +131,13 @@ export const householdMap = {
     method: 'POST',
     path: '/map/background',
     summary: '上传底图（管理员；multipart 字段 file，PNG / JPEG / WebP ≤ 2 MB，存私有目录）',
+    response: householdMapSchema,
+  }),
+  putDecorations: defineEndpoint({
+    method: 'PUT',
+    path: '/map/decorations',
+    summary: '整列替换装饰类家具（管理员；版本号对不上 409）',
+    body: putMapDecorationsBody,
     response: householdMapSchema,
   }),
   export: defineEndpoint({

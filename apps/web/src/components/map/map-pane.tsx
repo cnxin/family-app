@@ -8,15 +8,10 @@ import { Button } from '../ui';
 import { MapCanvas, type MapCanvasHandle } from './map-canvas';
 import { MapDrawer } from './map-drawer';
 import { MapSearch } from './map-search';
-import type { MapItem } from './map-types';
+import { mapItems } from './map-items';
 
 // 地图这一栏的看模式（item-location-plan §3 I2b）：搜索 → 画布 → 点了什么就出抽屉。
 // 编辑是另一个全屏组件（editor/map-editor.tsx，地图编辑器 v2）。
-
-function itemOf(location: StorageLocation): MapItem | null {
-  if (!location.mapShape || location.archivedAt || location.kind === 'slot') return null;
-  return { id: location.id, parentId: location.parentId, kind: location.kind, name: location.name, shape: location.mapShape };
-}
 
 export function MapPane({
   map,
@@ -48,7 +43,8 @@ export function MapPane({
   }, [query]);
 
   const byId = useMemo(() => new Map(locations.map((one) => [one.id, one])), [locations]);
-  const items = useMemo(() => locations.map(itemOf).filter((one): one is MapItem => one !== null), [locations]);
+  // 装饰类家具只画不可点（点穿到房间上）
+  const items = useMemo(() => mapItems(locations, map.decorations), [locations, map.decorations]);
   const hasRooms = items.some((one) => one.kind === 'room');
 
   /** 往上找第一个画在图上的（层格 → 柜子 → 房间） */

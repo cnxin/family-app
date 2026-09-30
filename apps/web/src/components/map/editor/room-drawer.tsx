@@ -20,7 +20,10 @@ export function RoomDrawer({
   selectedId,
   onPick,
   background,
+  collapsed = false,
 }: {
+  /** 家具库面板开着时收起列表（两块都在左边，别叠在一起） */
+  collapsed?: boolean;
   rooms: StorageLocation[];
   locations: StorageLocation[];
   selectedId: string | null;
@@ -50,7 +53,7 @@ export function RoomDrawer({
         <span className="text-ink-soft">{rooms.length}</span>
         <span aria-hidden="true" className={'text-ink-soft transition-transform duration-150 ' + (open ? 'rotate-90' : '')}>▸</span>
       </button>
-      {open ? (
+      {open && !collapsed ? (
         <div className="flex min-h-0 w-full flex-col overflow-hidden rounded-xl border border-border bg-surface/92 shadow-lg backdrop-blur-xl motion-safe:animate-[float-in_150ms_cubic-bezier(0,0,0.2,1)]">
           <ul aria-label="房间" className="min-h-0 overflow-y-auto p-1">
             {rooms.map((room) => (

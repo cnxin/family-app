@@ -7,6 +7,7 @@ import { AddSmartHomeLinks1785232900000 } from './1785232900000-add-smart-home-l
 import { AddStorageLocations1785233200000 } from './1785233200000-add-storage-locations';
 import { AddHouseholdMaps1785233300000 } from './1785233300000-add-household-maps';
 import { AddAgentLocationTools1785233400000 } from './1785233400000-add-agent-location-tools';
+import { AddMapDecorations1785233500000 } from './1785233500000-add-map-decorations';
 import { SmartHomeDevicesByDevice1785233000000 } from './1785233000000-smart-home-devices-by-device';
 import { AddSmartHomeCommandSource1785233100000 } from './1785233100000-add-smart-home-command-source';
 import { InitialSchema1785226400000 } from './1785226400000-initial-schema';
@@ -142,4 +143,5 @@ export const ALL_MIGRATIONS = [
   AddStorageLocations1785233200000,
   AddHouseholdMaps1785233300000,
   AddAgentLocationTools1785233400000,
+  AddMapDecorations1785233500000,
 ];
