@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { shapesTouch } from '@family/shared';
@@ -6,22 +5,15 @@ import { detectRooms, suggestCrop } from '../detect-rooms';
 import { mergeRooms } from '../merge-rooms';
 import { cropImage, decodePng } from './decode-png';
 
-// 房间识别（item-location-plan §3 I2a）：两张扫地机截图（docs/ui-prototypes/ 的样图复制到 fixtures），
+// 房间识别（item-location-plan §3 I2a）：King 家的扫地机截图（docs/ui-prototypes/floorplan-robot-sample.png，复制到 fixtures），
 // 按导入向导的默认裁剪框裁好，断言 ≥ 10 个房间、每个 ≤ 16 个顶点、房间总面积占裁剪图 60%～95%。
 // 结果（房间数、顶点数、面积占比、耗时）打到输出里，汇报用。
 
-const FIXTURES = ['floorplan-robot-sample.png', 'floorplan-robot-current.png'];
-const missing = FIXTURES.filter(
-  (name) => ![resolve(__dirname, 'fixtures', name), resolve(__dirname, '../../../../../../docs/ui-prototypes', name)].some(existsSync),
-);
-if (missing.length) console.warn(`⚠ 缺样图，这几张没跑识别断言：${missing.join('、')}`);
+const FIXTURES = ['floorplan-robot-sample.png'];
 
 for (const name of FIXTURES) {
-  const path = [resolve(__dirname, 'fixtures', name), resolve(__dirname, '../../../../../../docs/ui-prototypes', name)].find(existsSync);
-  // 2026-09-30：floorplan-robot-current.png（King 家现在的地图）还没放进仓库；放到 docs/ui-prototypes/ 就自动跑
-  describe.skipIf(!path)(name, () => {
-    if (!path) return;
-
+  describe(name, () => {
+    const path = resolve(__dirname, 'fixtures', name);
     const image = decodePng(path);
     const box = suggestCrop(image);
     const cropped = cropImage(image, box.x, box.y, box.w, box.h);
