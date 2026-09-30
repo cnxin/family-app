@@ -73,7 +73,10 @@ export function MapHandles({
   onVertexDown,
   onVertexDelete,
   onResizeDown,
+  selectedVertex = null,
 }: {
+  /** 点选中的顶点：画成实心 */
+  selectedVertex?: number | null;
   item: MapItem;
   shape: MapShape;
   /** 手柄半径（地图单位；粗指针更大） */
@@ -93,7 +96,8 @@ export function MapHandles({
             cy={y}
             r={size}
             data-map-vertex={index}
-            className="cursor-grab fill-surface stroke-accent"
+            data-selected={index === selectedVertex ? 'true' : undefined}
+            className={'cursor-grab stroke-accent ' + (index === selectedVertex ? 'fill-accent' : 'fill-surface')}
             strokeWidth={2 * unit}
             onPointerDown={(event) => event.button === 0 && onVertexDown(event, index)}
             onClick={(event) => event.stopPropagation()}
