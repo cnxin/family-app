@@ -328,6 +328,70 @@ test('全屏编辑：浮动工具条不压对象、拖柜子防抖保存、原�
   }
 });
 
+test('改形状省力：点选顶点删点、撤销重做、拖顶点吸到邻居墙角、矩形化、对齐相邻', async ({ page, request, isMobile }) => {
+  test.skip(isMobile, '房间形状只在电脑上改（v2 拍板 1）');
+  const errors = watchPageErrors(page);
+  const tag = randomUUID().slice(0, 4);
+  const places = await setupMap(request, tag);
+  const admin = apiClient(request);
+  const shapeOf = async (id: string) =>
+    (await admin.get<(Location & { mapShape: { points: [number, number][] } })[]>('/locations')).find((one) => one.id === id)!.mapShape;
+  // 客厅下沿放在 y = 492，离卧室上沿（500）差 8
+  await admin.patch(`/locations/${places.living.id}/shape`, { mapShape: { type: 'polygon', points: [[80, 80], [620, 80], [620, 492], [80, 492]] } });
+  try {
+    await page.goto('/house/map?edit=1');
+    const editor = page.locator('[data-map-editor]');
+    const living = editor.locator(`[data-map-room="${places.living.id}"]`);
+    await stableBox(living);
+    const undo = page.getByRole('button', { name: '撤销' });
+    const redo = page.getByRole('button', { name: '重做' });
+    await expect(undo).toBeDisabled();
+
+    // 点选左上角顶点（只点不拖）→ 工具条变「删这个点」；按 Delete 删掉
+    await living.click();
+    const first = editor.locator('[data-map-vertex="0"]');
+    await first.click();
+    await expect(editor.locator('[data-map-vertex="0"][data-selected="true"]')).toHaveCount(1);
+    await expect(page.locator('[data-map-floating]')).toContainText('删这个点');
+    await page.keyboard.press('Delete');
+    await expect.poll(async () => (await shapeOf(places.living.id)).points.length).toBe(3);
+    // 撤销 / 重做
+    await undo.click();
+    await expect.poll(async () => (await shapeOf(places.living.id)).points.length).toBe(4);
+    await redo.click();
+    await expect.poll(async () => (await shapeOf(places.living.id)).points.length).toBe(3);
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+    await expect.poll(async () => (await shapeOf(places.living.id)).points.length).toBe(4);
+
+    // 拖右下角顶点（620, 492）往下挪一点：吸到卧室的角（620, 500），拖的时候有参考线
+    await living.click();
+    const corner = (await stableBox(editor.locator('[data-map-vertex="2"]')))!;
+    await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(corner.x + corner.width / 2 + 2, corner.y + corner.height / 2 + 5, { steps: 6 });
+    await expect(editor.locator('[data-map-guide]').first()).toBeAttached();
+    await page.mouse.up();
+    await expect.poll(async () => (await shapeOf(places.living.id)).points[2]).toEqual([620, 500]);
+
+    // 对齐相邻：左下角还在 492，把下墙整条拉到卧室的墙（500）
+    await living.click();
+    await page.locator('[data-map-floating]').getByRole('button', { name: '更多' }).click();
+    await page.getByRole('menuitem', { name: /对齐相邻/ }).click();
+    await expect.poll(async () => (await shapeOf(places.living.id)).points[3]).toEqual([80, 500]);
+
+    // 矩形化：卧室是 L 形（6 个点）→ 外接矩形；撤销回 6 个点
+    await editor.locator(`[data-map-room="${places.bedroom.id}"]`).click();
+    await page.locator('[data-map-floating]').getByRole('button', { name: '更多' }).click();
+    await page.getByRole('menuitem', { name: /矩形化/ }).click();
+    await expect.poll(async () => (await shapeOf(places.bedroom.id)).points).toEqual([[80, 500], [620, 500], [620, 920], [80, 920]]);
+    await undo.click();
+    await expect.poll(async () => (await shapeOf(places.bedroom.id)).points.length).toBe(6);
+    expect(errors).toEqual([]);
+  } finally {
+    await cleanup(request, [places.living.id, places.bedroom.id], places.item.id);
+  }
+});
+
 test('家人只有看模式：没有「编辑」和「重新导入」', async ({ page, request }) => {
   const tag = randomUUID().slice(0, 4);
   const places = await setupMap(request, tag);

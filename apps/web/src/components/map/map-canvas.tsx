@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import type { MapRect, MapShape } from '@family/contracts';
-import { clampRect, pointInShape, shapeBounds, type MapBounds, type MapPoint } from '@family/shared';
+import { clampRect, pointInShape, shapeBounds, shapePoints, type MapBounds, type MapPoint, type MapSegment } from '@family/shared';
 import { dragStep, nearestEdge, pathOf, type Drag } from './canvas-drag';
 import { MapHandles, MapLabels } from './map-layers';
 import type { MapItem, MapMode, MapTool, ShapeChange } from './map-types';
@@ -53,6 +53,9 @@ interface Props {
   onSelect: (id: string | null) => void;
   onShapesChange?: (changes: ShapeChange[]) => void;
   onDraw?: (kind: 'room' | 'container', rect: MapRect, parentId: string | null) => void;
+  /** 点选了房间的一个顶点（没拖）：编辑器出「删这个点」；null = 取消 */
+  onVertexSelect?: (index: number | null) => void;
+  selectedVertex?: number | null;
   /** 顶点编辑之外的提示（比如「柜子要画在房间里」） */
   onHint?: (message: string) => void;
   /** 盖在画布上的按钮（缩放、工具条） */
@@ -66,7 +69,7 @@ interface Props {
 }
 
 export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
-  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onHint, overlay, floating, label },
+  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onVertexSelect, selectedVertex = null, onHint, overlay, floating, label },
   ref,
 ) {
   const viewport = useMapViewport(viewBox);
@@ -77,6 +80,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const latest = useRef<Map<string, MapShape>>(new Map());
   const suppress = useRef(false);
   const [dragging, setDragging] = useState(false);
+  const [guides, setGuides] = useState<MapSegment[]>([]);
   const coarse = useMemo(() => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches, []);
 
   useImperativeHandle(ref, () => ({ focus: viewport.focus, reset: viewport.reset, zoomBy: (factor: number) => void viewport.zoomBy(factor) }), [viewport]);
@@ -95,6 +99,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const unit = 1 / scale;
   const editing = mode !== 'view';
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
+
+  /** 吸附用：柜子 → 同房间其他柜子；房间 → 其他房间（外接框） */
+  const siblingBounds = (item: MapItem) =>
+    (item.kind === 'room' ? rooms : inner.filter((one) => one.parentId === item.parentId))
+      .filter((one) => one.id !== item.id)
+      .map((one) => shapeBounds(shapeOf(one)));
 
   const roomAt = (point: MapPoint) =>
     [...rooms].reverse().find((room) => pointInShape(point, shapeOf(room))) ?? null;
@@ -117,10 +127,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const update = (event: globalThis.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const next = dragStep(d, viewport.toMap(event.clientX, event.clientY), viewBox, scale);
+    const next = dragStep(d, viewport.toMap(event.clientX, event.clientY), viewBox, scale, !event.altKey);
     if (next === 'draw' && d.type === 'draw') setDrawing({ start: d.start, end: d.end });
-    else if (next instanceof Map) {
-      setPreview(next);
+    else if (next && next !== 'draw') {
+      setPreview(next.shapes);
+      setGuides(next.guides);
       setDragging(true);
     }
   };
@@ -129,9 +140,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     const d = drag.current;
     drag.current = null;
     setDragging(false);
+    setGuides([]);
     if (!d) return;
+    if (d.type === 'vertex' && !d.started) {
+      onVertexSelect?.(d.index);
+      suppress.current = true;
+      return;
+    }
     // 这一下松手之后浏览器还会补一个 click，别让它再去选中 / 取消选中
     suppress.current = d.type !== 'move' || d.started;
+    if (d.type === 'vertex' || d.type === 'resize' || d.type === 'move') onVertexSelect?.(null);
     if (d.type === 'draw') {
       setDrawing(null);
       const rect = {
@@ -184,6 +202,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
       origin: viewport.toMap(event.clientX, event.clientY),
       shapes: new Map(ids.map((id) => [id, shapeOf(byId.get(id)!)])),
       clamp: parent ? shapeBounds(shapeOf(parent)) : null,
+      siblings: siblingBounds(item),
       started: false,
     });
   };
@@ -310,8 +329,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
                 shape={selectedShape}
                 size={handleSize(selectedShape, scale, coarse) * unit}
                 unit={unit}
+                selectedVertex={selectedVertex}
                 onVertexDown={(event, index) =>
-                  selectedShape.type === 'polygon' && begin(event, { type: 'vertex', id: selected.id, index, shape: selectedShape })
+                  selectedShape.type === 'polygon' &&
+                  begin(event, {
+                    type: 'vertex',
+                    id: selected.id,
+                    index,
+                    shape: selectedShape,
+                    neighbours: rooms.filter((one) => one.id !== selected.id).map((one) => shapePoints(shapeOf(one))),
+                    origin: viewport.toMap(event.clientX, event.clientY),
+                    started: false,
+                  })
                 }
                 onVertexDelete={(index) => {
                   if (selectedShape.type !== 'polygon') return;
@@ -324,11 +353,22 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
                 onResizeDown={(event, corner) => {
                   const parent = selected.parentId ? byId.get(selected.parentId) : null;
                   if (selectedShape.type === 'rect') {
-                    begin(event, { type: 'resize', id: selected.id, corner, shape: selectedShape, clamp: parent ? shapeBounds(shapeOf(parent)) : null });
+                    begin(event, {
+                      type: 'resize',
+                      id: selected.id,
+                      corner,
+                      shape: selectedShape,
+                      clamp: parent ? shapeBounds(shapeOf(parent)) : null,
+                      siblings: siblingBounds(selected),
+                    });
                   }
                 }}
               />
             ) : null}
+            {guides.map(([a, b], index) => (
+              <line key={index} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} data-map-guide
+                className="pointer-events-none stroke-warm" strokeWidth={1.8 * unit} strokeDasharray={`${6 * unit} ${4 * unit}`} />
+            ))}
             {drawing ? (
               <rect
                 x={Math.min(drawing.start[0], drawing.end[0])}
