@@ -280,6 +280,11 @@ export class LocationsService {
     return new Map(rows.map((row) => [row.id, Number(row.n)]));
   }
 
+  /** 一个位置（含归档的），拆分 / 合并回给客户端用 */
+  detail(householdId: string, id: string) {
+    return this.one(householdId, id);
+  }
+
   private async one(householdId: string, id: string, includeArchived = true) {
     const found = (await this.list(householdId, includeArchived)).find((one) => one.id === id);
     if (!found) throw new NotFoundException('位置不存在');

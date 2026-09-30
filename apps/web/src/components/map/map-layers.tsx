@@ -1,6 +1,6 @@
 import type { KeyboardEvent, PointerEvent } from 'react';
 import type { MapShape } from '@family/contracts';
-import { labelPoint, shapeBounds, type MapBounds } from '@family/shared';
+import { labelPoint, shapeBounds, straightenLine, type MapBounds, type MapPoint } from '@family/shared';
 import { pathOf, type Corner } from './canvas-drag';
 import { furnitureSpec } from './furniture-catalog';
 import { FurnitureGlyph } from './furniture-icons';
@@ -226,6 +226,33 @@ export function MapHandles({
           onClick={(event) => event.stopPropagation()}
         />
       ))}
+    </g>
+  );
+}
+
+/** 画的过程中的虚线：拖出来的矩形、拆分的那条线（拉正后的样子）、拆分切出来的那块 */
+export function MapDrawOverlay({
+  ghost,
+  drawing,
+  straighten,
+  unit,
+}: {
+  ghost?: MapShape | null;
+  drawing: { start: MapPoint; end: MapPoint; line: boolean } | null;
+  straighten: boolean;
+  unit: number;
+}) {
+  const dash = `${6 * unit} ${4 * unit}`;
+  const [a, b] = drawing?.line && straighten ? straightenLine(drawing.start, drawing.end) : drawing ? [drawing.start, drawing.end] : [[0, 0], [0, 0]];
+  return (
+    <g className="pointer-events-none">
+      {ghost ? <path d={pathOf(ghost)} data-map-ghost className="fill-warm-soft stroke-warm" fillOpacity={0.7} strokeWidth={2 * unit} strokeDasharray={dash} /> : null}
+      {drawing?.line ? (
+        <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} data-map-split-line className="stroke-warm" strokeWidth={2.5 * unit} strokeLinecap="round" />
+      ) : drawing ? (
+        <rect x={Math.min(a[0], b[0])} y={Math.min(a[1], b[1])} width={Math.abs(b[0] - a[0])} height={Math.abs(b[1] - a[1])}
+          className="fill-accent-soft stroke-accent" fillOpacity={0.5} strokeWidth={2 * unit} strokeDasharray={dash} />
+      ) : null}
     </g>
   );
 }

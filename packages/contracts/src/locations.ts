@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { idParams, isoDateTime, nullableDateTime, removedResponse, uuid } from './common';
 import { numericString } from './dishes';
-import { mapShapeSchema, mapStorageFurnitureSchema } from './household-map';
+import { mapPolygonSchema, mapShapeSchema, mapStorageFurnitureSchema } from './household-map';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/locations/（I1 位置字典，docs/item-location-plan.md §2、§3 I1）。
@@ -107,6 +107,39 @@ export type StorageLocationContents = z.infer<typeof storageLocationContentsSche
 export const setLocationShapeBody = z.object({ mapShape: mapShapeSchema.nullable() }).strict();
 export type SetLocationShapeBody = z.infer<typeof setLocationShapeBody>;
 
+/**
+ * 拆分房间（地图编辑器 v2 §2.3）：客户端按画的线切好两块，大的留给原房间（原名原 id），小的建成新房间。
+ * 服务端一个事务：改原形状、建新房间、中心点落在新块里的柜子 / 区域和装饰挪过去；直接记在原房间上的东西不动。
+ */
+export const splitLocationBody = z
+  .object({ shape: mapPolygonSchema, newRoom: z.object({ name: locationName, shape: mapPolygonSchema }).strict() })
+  .strict();
+export type SplitLocationBody = z.infer<typeof splitLocationBody>;
+export const splitLocationResultSchema = z.object({
+  room: storageLocationSchema,
+  created: storageLocationSchema,
+  /** 跟着新块走的柜子 / 区域有几个 */
+  movedLocations: z.number().int().min(0),
+});
+export type SplitLocationResult = z.infer<typeof splitLocationResultSchema>;
+
+/**
+ * 合并房间（§2.4，拍板 3）：这间并进 intoId，形状换成两块的并集（客户端算好）。一个事务：
+ * 子位置挪到目标下（重名加「 2」）、记在这间上的物品 / 批次 / 资产改记到目标、装饰跟着走、这间归档。
+ */
+export const mergeLocationBody = z.object({ intoId: uuid, shape: mapPolygonSchema }).strict();
+export type MergeLocationBody = z.infer<typeof mergeLocationBody>;
+export const mergeLocationResultSchema = z.object({
+  room: storageLocationSchema,
+  moved: z.object({
+    locations: z.number().int().min(0),
+    items: z.number().int().min(0),
+    batches: z.number().int().min(0),
+    assets: z.number().int().min(0),
+  }),
+});
+export type MergeLocationResult = z.infer<typeof mergeLocationResultSchema>;
+
 /** 按名字找东西放在哪（地图搜索高亮、⌘K、agent 共用）：只返回记了位置的 */
 export const itemLocationQuery = z.object({ q: z.string().trim().min(1).max(40) }).strict();
 export const itemLocationHitSchema = z.object({
@@ -191,6 +224,22 @@ export const locations = {
     params: idParams,
     body: setLocationShapeBody,
     response: storageLocationSchema,
+  }),
+  split: defineEndpoint({
+    method: 'POST',
+    path: '/locations/:id/split',
+    summary: '拆分房间（管理员；原房间留大块，小块建成新房间，柜子按中心点归属）',
+    params: idParams,
+    body: splitLocationBody,
+    response: splitLocationResultSchema,
+  }),
+  merge: defineEndpoint({
+    method: 'POST',
+    path: '/locations/:id/merge',
+    summary: '合并房间（管理员；子位置、物品、批次、资产改记到目标，这间归档）',
+    params: idParams,
+    body: mergeLocationBody,
+    response: mergeLocationResultSchema,
   }),
   contents: defineEndpoint({
     method: 'GET',

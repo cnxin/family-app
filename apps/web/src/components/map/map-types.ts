@@ -21,4 +21,5 @@ export interface ShapeChange {
 
 /** 看：点房间 / 柜子；编辑（电脑）：顶点、拖动、缩放、画新的；编辑（手机）：只拖柜子 */
 export type MapMode = 'view' | 'edit-full' | 'edit-containers';
-export type MapTool = 'select' | 'room' | 'container';
+/** split：拆分房间时从墙到墙拖一条线（v2 §2.3） */
+export type MapTool = 'select' | 'room' | 'container' | 'split';
