@@ -33,6 +33,8 @@ export function useMapViewport(box: { w: number; h: number }) {
   const gesture = useRef<Gesture | null>(null);
   const stop = useRef<() => void>(() => undefined);
   const suppressClick = useRef(false);
+  /** 手指 / 鼠标正在拖、捏：浮动工具条这时先藏起来（地图编辑器 v2 §1.3） */
+  const [panning, setPanning] = useState(false);
   const touched = useRef(false);
   const frame = useRef(0);
 
@@ -278,6 +280,7 @@ export function useMapViewport(box: { w: number; h: number }) {
         window.removeEventListener('pointercancel', up);
         gesture.current = null;
         if (!active.moved) return;
+        setPanning(false);
         suppressClick.current = true;
         const recent = active.history.filter((h) => e.timeStamp - h.t < 100);
         const first = recent[0];
@@ -306,6 +309,7 @@ export function useMapViewport(box: { w: number; h: number }) {
       const scale =
         raw > limits.max ? limits.max * (1 + rubberband(raw / limits.max - 1, 1, 0.4)) :
         raw < limits.min ? limits.min / (1 + rubberband(limits.min / raw - 1, 1, 0.4)) : raw;
+      if (!g.moved) setPanning(true);
       g.moved = true;
       touched.current = true;
       commit(soften({
@@ -319,6 +323,7 @@ export function useMapViewport(box: { w: number; h: number }) {
     const dx = p.x - g.origin.x;
     const dy = p.y - g.origin.y;
     if (!g.moved && Math.hypot(dx, dy) < SLOP) return;
+    if (!g.moved) setPanning(true);
     g.moved = true;
     touched.current = true;
     g.history.push({ x: p.x, y: p.y, t: event.timeStamp });
@@ -366,5 +371,5 @@ export function useMapViewport(box: { w: number; h: number }) {
     [size, zoomAround],
   );
 
-  return { container, view, size, fitScale, toMap, focus, reset, zoomBy, handlers: { onPointerDown, onClickCapture } };
+  return { container, view, size, fitScale, panning, toMap, focus, reset, zoomBy, handlers: { onPointerDown, onClickCapture } };
 }

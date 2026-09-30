@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { MapShape, StorageLocation } from '@family/contracts';
 import { api } from '../../lib/api';
@@ -21,6 +21,8 @@ export function useShapeSaver() {
   const committed = useRef(new Map<string, MapShape | null>());
   const timer = useRef<number | undefined>(undefined);
   const running = useRef<Promise<void>>(Promise.resolve());
+  /** 给编辑器右上角那行小字：保存中… / 已保存 / 没保存上 */
+  const [status, setStatus] = useState<'saved' | 'saving' | 'failed'>('saved');
 
   const read = useCallback(
     (id: string) => client.getQueryData<StorageLocation[]>(locationKeys.list(false))?.find((one) => one.id === id) ?? null,
@@ -42,6 +44,7 @@ export function useShapeSaver() {
     if (!batch.length) return running.current;
     const depth = (id: string) => read(id)?.depth ?? 1;
     batch.sort(([a], [b]) => depth(a) - depth(b));
+    setStatus('saving');
     running.current = running.current.then(async () => {
       let failed = 0;
       let message = '';
@@ -59,6 +62,7 @@ export function useShapeSaver() {
         }
       }
       if (failed) pushToast(`地图没保存上（${message}），已退回原来的样子`);
+      setStatus(failed ? 'failed' : pending.current.size ? 'saving' : 'saved');
     });
     return running.current;
   }, [read, write]);
@@ -71,6 +75,7 @@ export function useShapeSaver() {
         pending.current.set(id, shape);
       }
       window.clearTimeout(timer.current);
+      setStatus('saving');
       timer.current = window.setTimeout(() => void flush(), DEBOUNCE);
     },
     [flush, read, write],
@@ -87,5 +92,5 @@ export function useShapeSaver() {
     [save, flush],
   );
 
-  return { save, saveNow, flush };
+  return { save, saveNow, flush, status };
 }
