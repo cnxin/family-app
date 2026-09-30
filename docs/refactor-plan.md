@@ -438,6 +438,8 @@
 47. **Worker 里的算法，node 单测过了不算数，要在浏览器里跑一遍大图。** 房间识别单测在 node 下全绿，浏览器 Worker 里换一种裁法就「Maximum call stack size exceeded」：描轮廓时 `Math.min(...pixels)` 把十几万个像素展开成参数，node 的栈够、浏览器不够。像素级数组一律写循环，递归（Douglas–Peucker）改成显式栈；e2e 里用和单测不同的裁剪框再跑一次识别。
 48. **会改变面板高度的切换，测试要等画布坐标稳定，产品要让画布保持中心。** 手机上切到「编辑」、选中柜子，工具条多出一行，画布变矮、重新铺满，柜子挪了位置——用例在挪之前量的坐标，拖动落空成了平移；人看到的是「点一下地图跳一下」。产品侧：小幅尺寸变化保持中心、工具条第一行定高；测试侧：操作前等元素两次量的位置一致。
 49. **本地和 CI 都在 localhost，等于从来没测过家里人的真实访问方式。** 家里人用局域网 IP（`http://192.168.x.x:8088`）打开小管家，那是**不安全上下文**：`crypto.randomUUID`、`navigator.clipboard` 这类只给 HTTPS / localhost 的 API 直接是 undefined。导入地图第 2 步报「crypto.randomUUID is not a function」、手画也没反应，智能家居按按钮一样会炸；我们所有测试都走 localhost（浏览器当它是安全的），一次都没撞上。改成：生成 id 一律 `lib/ids.ts` 的 `newId()`，复制一律 `lib/clipboard.ts` 的 `copyText()`（退到 execCommand，再不行把文字选中让人手动复制），静态检查拦直接调用；Playwright 另开一个走 `http://insecure.test` 的 project 专跑不安全上下文冒烟。以后加浏览器 API 先查它是不是「Secure context only」。
+50. **上一笔的全量测试还在跑、还没提交，就别动它的文件。** 地图 v2 第 2 笔全量 Playwright 跑到一半，我已经在同一批文件（画布、编辑器、撤销）上写第 3 笔：Vite 把半成品喂给了还在跑的用例，两条地图用例红了；更麻烦的是两笔的改动混在同一批文件里，只能从会话记录里把第 2 笔的原文件捞回来才拆开提交。以后：一笔验证完、提交了，再开下一笔；非要并行就先开新分支 / worktree，或者先把上一笔 commit 掉再跑全量。
+51. **重启开发服务器要带上原来的环境变量，不然它会连到演示栈上去写数据。** `apps/web` 的 Vite 默认把 `/api` 转到 `localhost:8088`——那是本机 Docker 里的演示栈。为了清预打包缓存重启 Vite 时没带 `FAMILY_API_ORIGIN=http://localhost:3100 FAMILY_API_STRIP_PREFIX=1`，截图脚本在演示栈建了两个柜子（发现后按 id 删掉复原）。以后：重启前先看原进程的命令和环境；跑会写数据的脚本前，先用一个只有新代码才有的端点确认 `/api` 指到了哪。
 
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）
