@@ -1,6 +1,7 @@
 import type { PointerEvent } from 'react';
 import type { MapShape } from '@family/contracts';
 import { labelPoint, shapeBounds, type MapBounds } from '@family/shared';
+import type { Corner } from './canvas-drag';
 import type { MapItem } from './map-types';
 
 // 画布上的两层：名字（屏幕上大小不变，放不下就不写）和编辑手柄（房间顶点、柜子对角）。
@@ -80,7 +81,7 @@ export function MapHandles({
   unit: number;
   onVertexDown: (event: PointerEvent, index: number) => void;
   onVertexDelete: (index: number) => void;
-  onResizeDown: (event: PointerEvent, corner: 'nw' | 'se') => void;
+  onResizeDown: (event: PointerEvent, corner: Corner) => void;
 }) {
   if (shape.type === 'polygon') {
     return (
@@ -109,15 +110,15 @@ export function MapHandles({
   if (item.kind === 'room') return null;
   return (
     <g>
-      {(['nw', 'se'] as const).map((corner) => (
+      {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
         <rect
           key={corner}
-          x={(corner === 'nw' ? shape.x : shape.x + shape.w) - size}
-          y={(corner === 'nw' ? shape.y : shape.y + shape.h) - size}
+          x={(corner.includes('w') ? shape.x : shape.x + shape.w) - size}
+          y={(corner.includes('n') ? shape.y : shape.y + shape.h) - size}
           width={size * 2}
           height={size * 2}
           data-map-resize={corner}
-          className="cursor-nwse-resize fill-surface stroke-accent"
+          className={(corner === 'nw' || corner === 'se' ? 'cursor-nwse-resize' : 'cursor-nesw-resize') + ' fill-surface stroke-accent'}
           strokeWidth={2 * unit}
           onPointerDown={(event) => event.button === 0 && onResizeDown(event, corner)}
           onClick={(event) => event.stopPropagation()}

@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import type { MapRect, MapShape } from '@family/contracts';
-import { clampRect, pointInShape, shapeBounds, shapePoints, type MapBounds, type MapPoint } from '@family/shared';
+import { clampRect, pointInShape, shapeBounds, type MapBounds, type MapPoint } from '@family/shared';
+import { dragStep, nearestEdge, pathOf, type Drag } from './canvas-drag';
 import { MapHandles, MapLabels } from './map-layers';
 import type { MapItem, MapMode, MapTool, ShapeChange } from './map-types';
 import { useMapViewport } from './use-map-viewport';
@@ -9,14 +10,29 @@ import { useMapViewport } from './use-map-viewport';
 // 看：点房间、点柜子、命中高亮；编辑：拖顶点、双击边加顶点、右键删顶点、拖房间（里面的柜子跟着走）、
 // 拖 / 缩放柜子、拖一个矩形画新房间或柜子。拖动时只在本地预览，松手才交给上层（上层防抖保存）。
 
-const DRAG_SLOP = 4;
 const MIN_DRAW = 12;
 
-type Drag =
-  | { type: 'vertex'; id: string; index: number; shape: Extract<MapShape, { type: 'polygon' }> }
-  | { type: 'move'; ids: string[]; origin: MapPoint; shapes: Map<string, MapShape>; clamp: MapBounds | null; started: boolean }
-  | { type: 'resize'; id: string; corner: 'nw' | 'se'; shape: MapRect; clamp: MapBounds | null }
-  | { type: 'draw'; kind: 'room' | 'container'; parentId: string | null; start: MapPoint; end: MapPoint };
+/** 手柄半径（屏幕 px）：手指大一点，但不超过对象短边的三分之一，免得小柜子被四个角盖满 */
+function handleSize(shape: MapShape, scale: number, coarse: boolean) {
+  const b = shapeBounds(shape);
+  const short = Math.min(b.maxX - b.minX, b.maxY - b.minY) * scale;
+  return Math.max(5, Math.min(coarse ? 11 : 6, short / 3));
+}
+
+export interface ScreenRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export interface FloatingContext {
+  toScreen: (bounds: MapBounds) => ScreenRect | null;
+  /** 画布在屏幕上的大小 */
+  size: { w: number; h: number } | null;
+  /** 正在平移 / 捏合 / 拖对象：浮层先藏起来 */
+  moving: boolean;
+}
 
 export interface MapCanvasHandle {
   focus: (bounds: MapBounds, maxZoom?: number, inset?: { right?: number; bottom?: number }) => void;
@@ -41,33 +57,16 @@ interface Props {
   onHint?: (message: string) => void;
   /** 盖在画布上的按钮（缩放、工具条） */
   overlay?: ReactNode;
+  /**
+   * 跟着对象走的浮层（编辑器的浮动小工具条）：拿到「地图坐标 → 画布内屏幕坐标」的换算和「正在拖 / 捏」，
+   * 每一帧跟着画布重画，缩放平移时位置不会落后。
+   */
+  floating?: (context: FloatingContext) => ReactNode;
   label: string;
 }
 
-function translate(shape: MapShape, dx: number, dy: number): MapShape {
-  if (shape.type === 'rect') return { ...shape, x: Math.round(shape.x + dx), y: Math.round(shape.y + dy) };
-  return { type: 'polygon', points: shape.points.map(([x, y]) => [Math.round(x + dx), Math.round(y + dy)] as MapPoint) };
-}
-
-function pathOf(shape: MapShape) {
-  return `M${shapePoints(shape).map(([x, y]) => `${x},${y}`).join('L')}Z`;
-}
-
-function nearestEdge(points: MapPoint[], [px, py]: MapPoint) {
-  let best = { index: 0, distance: Infinity };
-  points.forEach(([ax, ay], i) => {
-    const [bx, by] = points[(i + 1) % points.length];
-    const dx = bx - ax;
-    const dy = by - ay;
-    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
-    const distance = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-    if (distance < best.distance) best = { index: i, distance };
-  });
-  return best.index;
-}
-
 export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
-  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onHint, overlay, label },
+  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onHint, overlay, floating, label },
   ref,
 ) {
   const viewport = useMapViewport(viewBox);
@@ -77,6 +76,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const drag = useRef<Drag | null>(null);
   const latest = useRef<Map<string, MapShape>>(new Map());
   const suppress = useRef(false);
+  const [dragging, setDragging] = useState(false);
   const coarse = useMemo(() => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches, []);
 
   useImperativeHandle(ref, () => ({ focus: viewport.focus, reset: viewport.reset, zoomBy: (factor: number) => void viewport.zoomBy(factor) }), [viewport]);
@@ -117,51 +117,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const update = (event: globalThis.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const [mx, my] = viewport.toMap(event.clientX, event.clientY);
-    const x = Math.round(Math.min(viewBox.w, Math.max(0, mx)));
-    const y = Math.round(Math.min(viewBox.h, Math.max(0, my)));
-    if (d.type === 'draw') {
-      d.end = [x, y];
-      setDrawing({ start: d.start, end: d.end });
-      return;
+    const next = dragStep(d, viewport.toMap(event.clientX, event.clientY), viewBox, scale);
+    if (next === 'draw' && d.type === 'draw') setDrawing({ start: d.start, end: d.end });
+    else if (next instanceof Map) {
+      setPreview(next);
+      setDragging(true);
     }
-    if (d.type === 'vertex') {
-      const points = d.shape.points.map((p, i) => (i === d.index ? ([x, y] as MapPoint) : p));
-      setPreview(new Map([[d.id, { type: 'polygon', points }]]));
-      return;
-    }
-    if (d.type === 'resize') {
-      const r = d.shape;
-      let x1 = r.x;
-      let y1 = r.y;
-      let x2 = r.x + r.w;
-      let y2 = r.y + r.h;
-      if (d.corner === 'nw') [x1, y1] = [Math.min(x, x2 - 4), Math.min(y, y2 - 4)];
-      else [x2, y2] = [Math.max(x, x1 + 4), Math.max(y, y1 + 4)];
-      const next = { type: 'rect' as const, x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-      setPreview(new Map([[d.id, d.clamp ? clampRect(next, d.clamp) : next]]));
-      return;
-    }
-    let dx = mx - d.origin[0];
-    let dy = my - d.origin[1];
-    if (!d.started && Math.hypot(dx, dy) * scale < DRAG_SLOP) return;
-    d.started = true;
-    const lead = d.shapes.get(d.ids[0])!;
-    if (d.clamp && lead.type === 'rect') {
-      const moved = clampRect({ ...lead, x: lead.x + dx, y: lead.y + dy }, d.clamp);
-      dx = moved.x - lead.x;
-      dy = moved.y - lead.y;
-    } else {
-      const b = shapeBounds(lead);
-      dx = Math.min(viewBox.w - b.maxX, Math.max(-b.minX, dx));
-      dy = Math.min(viewBox.h - b.maxY, Math.max(-b.minY, dy));
-    }
-    setPreview(new Map(d.ids.map((id) => [id, translate(d.shapes.get(id)!, dx, dy)])));
   };
 
   const finish = () => {
     const d = drag.current;
     drag.current = null;
+    setDragging(false);
     if (!d) return;
     // 这一下松手之后浏览器还会补一个 click，别让它再去选中 / 取消选中
     suppress.current = d.type !== 'move' || d.started;
@@ -336,11 +303,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
               );
             })}
             <MapLabels rooms={rooms} inner={inner} shapeOf={shapeOf} scale={scale} />
-            {mode === 'edit-full' && selected && selectedShape ? (
+            {/* 电脑上房间顶点、柜子四角都能拉；手机上只拉柜子 / 家具（房间形状限电脑，v2 拍板 1） */}
+            {selected && selectedShape && (mode === 'edit-full' || (mode === 'edit-containers' && selected.kind !== 'room')) ? (
               <MapHandles
                 item={selected}
                 shape={selectedShape}
-                size={(coarse ? 11 : 6) * unit}
+                size={handleSize(selectedShape, scale, coarse) * unit}
                 unit={unit}
                 onVertexDown={(event, index) =>
                   selectedShape.type === 'polygon' && begin(event, { type: 'vertex', id: selected.id, index, shape: selectedShape })
@@ -376,6 +344,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
           </g>
         </svg>
       ) : null}
+      {floating && viewport.view
+        ? floating({
+            toScreen: (b) => {
+              const v = viewport.view;
+              if (!v) return null;
+              return { left: v.x + b.minX * v.scale, top: v.y + b.minY * v.scale, right: v.x + b.maxX * v.scale, bottom: v.y + b.maxY * v.scale };
+            },
+            size: viewport.size,
+            moving: viewport.panning || dragging,
+          })
+        : null}
       {overlay}
     </div>
   );

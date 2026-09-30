@@ -1,31 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { HouseholdMap, MapShape, StorageLocation } from '@family/contracts';
-import { shapeBounds, shapePoints } from '@family/shared';
-import { useCreateLocation, useFindItemLocations, useMapBackground, useUpdateLocation } from '../../lib/queries';
+import type { HouseholdMap, StorageLocation } from '@family/contracts';
+import { shapeBounds } from '@family/shared';
+import { useFindItemLocations, useMapBackground } from '../../lib/queries';
 import { pushToast } from '../../lib/toast';
 import { DetentSheet } from '../ui/detent-sheet';
 import { Button } from '../ui';
 import { MapCanvas, type MapCanvasHandle } from './map-canvas';
 import { MapDrawer } from './map-drawer';
-import { MapEditBar } from './map-edit-bar';
-import { MapNameDialog } from './map-name-dialog';
 import { MapSearch } from './map-search';
-import type { MapItem, MapMode, MapTool } from './map-types';
-import { useShapeSaver } from './use-shape-saver';
+import type { MapItem } from './map-types';
 
-// 地图这一栏（item-location-plan §3 I2b）：搜索 → 画布 → 点了什么就出抽屉；管理员的编辑工具条也在这里。
+// 地图这一栏的看模式（item-location-plan §3 I2b）：搜索 → 画布 → 点了什么就出抽屉。
+// 编辑是另一个全屏组件（editor/map-editor.tsx，地图编辑器 v2）。
 
 function itemOf(location: StorageLocation): MapItem | null {
   if (!location.mapShape || location.archivedAt || location.kind === 'slot') return null;
   return { id: location.id, parentId: location.parentId, kind: location.kind, name: location.name, shape: location.mapShape };
 }
 
-const toPolygon = (shape: MapShape): MapShape => (shape.type === 'polygon' ? shape : { type: 'polygon', points: shapePoints(shape) });
-
 export function MapPane({
   map,
   locations,
-  mode,
   desktop,
   selectedId,
   onSelect,
@@ -34,7 +29,6 @@ export function MapPane({
 }: {
   map: HouseholdMap;
   locations: StorageLocation[];
-  mode: MapMode;
   desktop: boolean;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -44,16 +38,9 @@ export function MapPane({
 }) {
   const canvas = useRef<MapCanvasHandle>(null);
   const background = useMapBackground(map);
-  const saver = useShapeSaver();
-  const create = useCreateLocation();
-  const update = useUpdateLocation();
-  const [tool, setTool] = useState<MapTool>('select');
-  const [showBackground, setShowBackground] = useState(true);
   const [query, setQuery] = useState(initialQuery);
   const [debounced, setDebounced] = useState(initialQuery);
-  const [drawn, setDrawn] = useState<{ kind: 'room' | 'container'; shape: MapShape; parentId: string | null } | null>(null);
   const hits = useFindItemLocations(debounced);
-  const editing = mode !== 'view';
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebounced(query), 250);
@@ -85,7 +72,7 @@ export function MapPane({
   const hitNames = useMemo(() => new Set(hitList.map((hit) => hit.name)), [hitList]);
 
   /** 对准一个位置；抽屉会开着的时候（看模式）让开抽屉盖住的那块 */
-  const focusOn = (id: string, drawerOpen = !editing) => {
+  const focusOn = (id: string, drawerOpen = true) => {
     const shown = placed(id);
     if (!shown?.mapShape) return;
     const inset = !drawerOpen ? {} : desktop ? { right: 352 } : { bottom: window.innerHeight * 0.45 - 60 };
@@ -107,7 +94,7 @@ export function MapPane({
 
   const select = (id: string | null) => {
     onSelect(id);
-    if (id && !editing) {
+    if (id) {
       navigator.vibrate?.(8);
       focusOn(id);
     }
@@ -115,29 +102,13 @@ export function MapPane({
 
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
 
-  const onDraw = (kind: 'room' | 'container', rect: MapShape, parentId: string | null) => {
-    setDrawn({ kind, parentId, shape: kind === 'room' ? toPolygon(rect) : rect });
-  };
-  const siblings = drawn ? locations.filter((one) => one.parentId === drawn.parentId && !one.archivedAt && !one.systemKey) : [];
-
-  const place = async (location: StorageLocation) => {
-    if (!drawn) return;
-    const shape = drawn.shape;
-    setDrawn(null);
-    setTool('select');
-    await saver.saveNow([{ id: location.id, shape }]);
-    onSelect(location.id);
-    navigator.vibrate?.(10);
-  };
-
-  const drawer = selected && !editing ? (
+  const drawer = selected ? (
     <MapDrawer location={selected} locations={locations} hitIds={hitIds} hitNames={hitNames} onPick={(id) => { select(id); focusOn(id); }} />
   ) : null;
   const drawerTitle = selected ? (selected.kind === 'room' ? selected.name : selected.pathLabel) : '';
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col">
-      {!editing ? (
         <MapSearch
           query={query}
           onQuery={setQuery}
@@ -153,54 +124,17 @@ export function MapPane({
             focusOn(shown.id);
           }}
         />
-      ) : (
-        <MapEditBar
-          mode={mode}
-          tool={tool}
-          onTool={setTool}
-          selected={selected}
-          showBackground={showBackground}
-          onToggleBackground={map.hasBackground ? () => setShowBackground(!showBackground) : undefined}
-          onRename={(name) =>
-            selected && update.mutate({ id: selected.id, name }, { onError: (error) => pushToast(error.message) })
-          }
-          onRotate={() => {
-            const shape = selected?.mapShape;
-            if (!selected || shape?.type !== 'rect') return;
-            const cx = shape.x + shape.w / 2;
-            const cy = shape.y + shape.h / 2;
-            const turned = { type: 'rect' as const, x: Math.round(cx - shape.h / 2), y: Math.round(cy - shape.w / 2), w: shape.h, h: shape.w };
-            const parent = selected.parentId ? byId.get(selected.parentId)?.mapShape : null;
-            const b = parent ? shapeBounds(parent) : null;
-            if (b && (turned.x < b.minX || turned.y < b.minY || turned.x + turned.w > b.maxX || turned.y + turned.h > b.maxY)) {
-              pushToast('转过来会出房间，先往中间挪一挪');
-              return;
-            }
-            saver.save([{ id: selected.id, shape: turned }]);
-          }}
-          onRemove={() => {
-            if (!selected) return;
-            const kids = locations.filter((one) => one.parentId === selected.id && one.mapShape);
-            saver.save([...kids.map((one) => ({ id: one.id, shape: null })), { id: selected.id, shape: null }]);
-            onSelect(null);
-          }}
-        />
-      )}
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-card border border-border bg-muted">
         <MapCanvas
           ref={canvas}
           label="家庭地图"
           viewBox={map.viewBox}
           items={items}
-          background={editing || !hasRooms ? (showBackground ? background : null) : null}
-          backgroundOpacity={editing && hasRooms ? 0.45 : 1}
-          mode={mode}
-          tool={tool}
+          background={hasRooms ? null : background}
+          mode="view"
           selectedId={selectedId}
           highlightIds={highlightIds}
           onSelect={select}
-          onShapesChange={saver.save}
-          onDraw={onDraw}
           onHint={pushToast}
           overlay={
             <div className="absolute bottom-3 right-3 flex flex-col gap-1.5">
@@ -214,9 +148,9 @@ export function MapPane({
             </div>
           }
         />
-        {!hasRooms && !editing ? (
+        {!hasRooms ? (
           <p className="pointer-events-none absolute inset-x-0 top-3 mx-auto w-fit rounded-full bg-surface/90 px-3 py-1.5 text-[12.5px] text-ink-soft backdrop-blur">
-            房间还没画上去{mode === 'view' ? '，管理员在「编辑」里画' : ''}
+            房间还没画上去，管理员在「编辑」里画
           </p>
         ) : null}
         {drawer && desktop ? (
@@ -240,22 +174,6 @@ export function MapPane({
           header={<h2 className="truncate text-[17px] font-semibold">{drawerTitle}</h2>}>
           {drawer}
         </DetentSheet>
-      ) : null}
-      {drawn ? (
-        <MapNameDialog
-          kind={drawn.kind}
-          unplaced={siblings.filter((one) => !one.mapShape && (drawn.kind === 'room' ? one.kind === 'room' : one.kind !== 'slot'))}
-          taken={siblings.map((one) => one.name)}
-          busy={create.isPending}
-          onClose={() => setDrawn(null)}
-          onPickExisting={(location) => void place(location)}
-          onCreate={(name) =>
-            create.mutate(
-              { parentId: drawn.parentId, name, kind: drawn.kind === 'room' ? undefined : 'container' },
-              { onSuccess: (location) => void place(location), onError: (error) => pushToast(error.message) },
-            )
-          }
-        />
       ) : null}
     </div>
   );

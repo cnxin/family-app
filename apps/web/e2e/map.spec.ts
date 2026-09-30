@@ -230,45 +230,60 @@ test('手机看模式：双指张开放大、单指拖动平移、松手后停�
   }
 });
 
-test('编辑模式：电脑拖柜子防抖保存、改名、画新柜子；手机只改名拖柜子', async ({ page, request, isMobile }) => {
+test('全屏编辑：浮动工具条不压对象、拖柜子防抖保存、原地改名、拿掉要确认、完成与后退都能退出', async ({ page, request, isMobile }) => {
   const errors = watchPageErrors(page);
   const tag = randomUUID().slice(0, 4);
   const places = await setupMap(request, tag);
   const admin = apiClient(request);
   try {
     await page.goto('/house/map');
-    await page.getByRole('tab', { name: '编辑' }).click();
-    await expect(page.locator('[data-map-canvas]')).toHaveAttribute('data-map-canvas', isMobile ? 'edit-containers' : 'edit-full');
-    if (isMobile) {
-      await expect(page.getByText('手机上只能改名和拖柜子')).toBeVisible();
-      await expect(page.getByRole('tab', { name: '画房间' })).toHaveCount(0);
-    }
-    const cabinet = page.locator(`[data-map-container="${places.cabinet.id}"]`);
+    await page.getByRole('button', { name: '编辑地图' }).click();
+    const editor = page.locator('[data-map-editor]');
+    await expect(editor).toBeVisible();
+    await expect(page).toHaveURL(/edit=1/);
+    // 铺满视口，盖住标题、左树、底部导航
+    const viewport = page.viewportSize()!;
+    // 进场有 180 ms 的缩放淡入，等它停下再量
+    await expect.poll(() => editor.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+    await expect(editor.locator('[data-map-canvas]')).toHaveAttribute('data-map-canvas', isMobile ? 'edit-containers' : 'edit-full');
+    const tools = page.getByRole('toolbar', { name: '编辑工具' });
+    await expect(tools.getByRole('button', { name: '画房间' })).toHaveCount(isMobile ? 0 : 1);
+
+    // 选中柜子：浮动小工具条出现，且不压柜子本身
+    const cabinet = editor.locator(`[data-map-container="${places.cabinet.id}"]`);
     await stableBox(cabinet);
     await cabinet.click();
     const box = await stableBox(cabinet);
+    const floating = page.locator('[data-map-floating]');
+    await expect(floating).toBeVisible();
+    const bar = (await floating.boundingBox())!;
+    const overlaps = bar.x < box.x + box.width && box.x < bar.x + bar.width && bar.y < box.y + box.height && box.y < bar.y + bar.height;
+    expect(overlaps, '浮动工具条不能压住选中的对象').toBe(false);
+
+    // 拖柜子：停手 500 ms 后 PATCH 一次
     const patches: number[] = [];
     page.on('response', (response) => {
       if (response.url().includes(`/locations/${places.cabinet.id}/shape`)) patches.push(response.status());
     });
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 - 40, { steps: 6 });
+    await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 - 30, { steps: 6 });
     await page.mouse.up();
     await expect.poll(() => patches.length, { timeout: 5000 }).toBe(1);
     expect(patches).toEqual([200]);
     const moved = (await admin.get<(Location & { mapShape: { x: number; y: number } })[]>('/locations')).find((one) => one.id === places.cabinet.id)!;
     expect(moved.mapShape.x).toBeGreaterThan(120);
-    expect(moved.mapShape.y).toBeLessThan(380);
+    await expect(page.locator('[data-map-save-status="saved"]')).toHaveCount(1);
 
-    await page.locator('[data-map-edit-bar]').getByRole('button', { name: '改名' }).click();
-    await page.getByLabel('新名字').fill(`电视柜${tag}`);
-    await page.getByRole('button', { name: '好' }).click();
-    await expect(page.getByRole('button', { name: `电视柜${tag}` }).first()).toBeVisible();
+    // 原地改名：工具条变成输入框
+    await floating.getByRole('button', { name: '改名' }).click();
+    await floating.getByLabel('新名字').fill(`电视柜${tag}`);
+    await floating.getByRole('button', { name: '好' }).click();
+    await expect(editor.getByRole('button', { name: `电视柜${tag}` })).toBeVisible();
 
     if (!isMobile) {
-      await page.getByRole('tab', { name: '画柜子' }).click();
-      const bedroom = (await page.locator(`[data-map-room="${places.bedroom.id}"]`).boundingBox())!;
+      await tools.getByRole('button', { name: '画柜子' }).click();
+      const bedroom = (await editor.locator(`[data-map-room="${places.bedroom.id}"]`).boundingBox())!;
       await page.mouse.move(bedroom.x + 30, bedroom.y + 20);
       await page.mouse.down();
       await page.mouse.move(bedroom.x + 110, bedroom.y + 60, { steps: 6 });
@@ -281,12 +296,32 @@ test('编辑模式：电脑拖柜子防抖保存、改名、画新柜子；手�
           (one) => one.parentId === places.bedroom.id && one.name === '衣柜' && one.mapShape,
         ),
       ).toBe(true);
-      await page.locator(`[data-map-room="${places.bedroom.id}"]`).click();
-      await page.getByRole('tab', { name: '选择' }).click();
-      await page.locator(`[data-map-room="${places.bedroom.id}"]`).click();
-      await expect(page.locator('[data-map-vertex]')).toHaveCount(6);
+      await editor.locator(`[data-map-room="${places.bedroom.id}"]`).click();
+      await expect(editor.locator('[data-map-vertex]')).toHaveCount(6);
       await shot(page, 'map-edit-desktop.png');
+    } else {
+      await shot(page, 'map-edit-mobile.png');
     }
+
+    // 从图上拿掉：先确认，确认框写清后果
+    await editor.locator(`[data-map-container="${places.cabinet.id}"]`).click();
+    await floating.getByRole('button', { name: '删除' }).click();
+    const confirm = page.getByRole('dialog', { name: `从图上拿掉「电视柜${tag}」？` });
+    await expect(confirm).toContainText('还在清单里');
+    await confirm.getByRole('button', { name: '拿掉' }).click();
+    await expect.poll(async () =>
+      (await admin.get<(Location & { mapShape: unknown })[]>('/locations')).find((one) => one.id === places.cabinet.id)!.mapShape,
+    ).toBeNull();
+
+    // 完成：退出编辑、回到看模式；后退手势 = 完成
+    await page.getByRole('button', { name: '完成' }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(page).toHaveURL(/\/house\/map$/);
+    await page.getByRole('button', { name: '编辑地图' }).click();
+    await expect(editor).toBeVisible();
+    await page.goBack();
+    await expect(editor).toHaveCount(0);
+    await expect(page).toHaveURL(/\/house\/map$/);
     expect(errors).toEqual([]);
   } finally {
     await cleanup(request, [places.living.id, places.bedroom.id], places.item.id);
@@ -301,7 +336,7 @@ test('家人只有看模式：没有「编辑」和「重新导入」', async ({
     await page.addInitScript((value) => localStorage.setItem('family-app.session', JSON.stringify(value)), session);
     await page.goto('/house/map');
     await expect(page.locator(`[data-map-room="${places.living.id}"]`)).toBeVisible();
-    await expect(page.getByRole('tab', { name: '编辑' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '编辑地图' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: '重新导入' })).toHaveCount(0);
     await page.locator(`[data-map-room="${places.living.id}"]`).click();
     await expect(page.locator(`[data-map-drawer="${places.living.id}"]`)).toContainText('电视柜');

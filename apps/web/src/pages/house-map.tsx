@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useHouseholdMap, useLocations } from '../lib/queries';
 import { useMediaQuery } from '../lib/use-media-query';
 import { MapPane } from '../components/map/map-pane';
 import { MapTree } from '../components/map/map-tree';
-import type { MapMode } from '../components/map/map-types';
+import { MapEditor } from '../components/map/editor/map-editor';
 import { QueryFrame } from '../components/query-state';
 import { SoftLink } from '../components/soft-link';
 import { Skeleton } from '../components/skeleton';
@@ -17,7 +17,7 @@ import type { HouseholdMapExport } from '@family/contracts';
 /**
  * /house/map：家庭地图（item-location-plan §3 I2b）。位置管理页与地图合并为一页（拍板 §6 第 2 条）：
  * 桌面左树右图；手机上「地图 / 清单」二选一——家里人看地图找东西，树只在「清单」里。
- * 看模式全家可用；编辑入口只对管理员显示，手机上只能改名和拖柜子。
+ * 看模式全家可用；「编辑地图」只对管理员显示，进的是全屏编辑器（地图编辑器 v2，?edit=1：后退 = 完成）。
  * 深链：?focus=<位置 id> 对准并打开那个位置；?q=<物品名> 预填搜索并高亮（⌘K、库存 / 资产详情用）。
  */
 export function HouseMapPage() {
@@ -28,7 +28,8 @@ export function HouseMapPage() {
   const locations = useLocations(false);
   const [params, setParams] = useSearchParams();
   const [initial] = useState(() => ({ focus: params.get('focus'), q: params.get('q') ?? '' }));
-  const [editing, setEditing] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<'map' | 'list' | null>(initial.focus || initial.q ? 'map' : null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ id: string; seq: number } | null>(
@@ -49,23 +50,32 @@ export function HouseMapPage() {
   const hasMap = Boolean(map.data);
   // 地图还在加载时先按「地图」摆（那一栏出骨架），不然每次进来先闪一下清单再翻过去
   const activeTab = tab ?? (hasMap || map.isPending ? 'map' : 'list');
-  const mode: MapMode = !manager || !editing || !hasMap ? 'view' : desktop ? 'edit-full' : 'edit-containers';
+  const editing = manager && hasMap && params.get('edit') === '1';
+  // 进编辑压一条历史：手机返回手势 / 浏览器后退就等于点「完成」，不会直接离开地图页
+  const enterEdit = () => {
+    setSelectedId(null);
+    setTab('map');
+    const next = new URLSearchParams(params);
+    next.set('edit', '1');
+    setParams(next, { state: { fromMap: true } });
+  };
+  const leaveEdit = () => {
+    if ((location.state as { fromMap?: boolean } | null)?.fromMap) navigate(-1);
+    else {
+      const next = new URLSearchParams(params);
+      next.delete('edit');
+      setParams(next, { replace: true });
+    }
+  };
   const pickFromTree = (id: string | null) => {
     setSelectedId(id);
     if (id && desktop) setFocusRequest((current) => ({ id, seq: (current?.seq ?? 0) + 1 }));
   };
 
-  const modeSwitch = (
-    <Segmented
-      label="地图模式"
-      value={editing ? 'edit' : 'view'}
-      onChange={(value) => {
-        setEditing(value === 'edit');
-        setSelectedId(null);
-        setTab('map');
-      }}
-      options={[{ value: 'view', label: '看' }, { value: 'edit', label: '编辑' }]}
-    />
+  const editButton = (
+    <Button className="min-h-10" onClick={enterEdit}>
+      编辑地图
+    </Button>
   );
 
   const mapArea = (
@@ -75,7 +85,6 @@ export function HouseMapPage() {
           key={map.data.id}
           map={map.data}
           locations={locations.data ?? []}
-          mode={mode}
           desktop={desktop}
           selectedId={selectedId}
           onSelect={setSelectedId}
@@ -104,7 +113,7 @@ export function HouseMapPage() {
       actions={
         manager && desktop ? (
           <div className="flex flex-wrap items-center gap-2">
-            {hasMap ? modeSwitch : null}
+            {hasMap ? editButton : null}
             {hasMap ? (
               <SoftLink to="/house/map/import" className={buttonClass('ghost', 'min-h-10 border border-border')}>重新导入</SoftLink>
             ) : null}
@@ -126,7 +135,7 @@ export function HouseMapPage() {
               }}
               options={[{ value: 'map', label: '地图' }, { value: 'list', label: '清单' }]}
             />
-            {manager && hasMap && activeTab === 'map' ? modeSwitch : null}
+            {manager && hasMap && activeTab === 'map' ? editButton : null}
           </div>
         )
       }
@@ -143,6 +152,9 @@ export function HouseMapPage() {
       ) : (
         <MapTree manager={manager} selectedId={selectedId} onSelect={setSelectedId} withContents />
       )}
+      {editing && map.data ? (
+        <MapEditor map={map.data} locations={locations.data ?? []} desktop={desktop} onDone={leaveEdit} />
+      ) : null}
     </Page>
   );
 }
