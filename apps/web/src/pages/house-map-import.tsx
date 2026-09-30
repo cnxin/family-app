@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { MAP_VIEWBOX_MAX_HEIGHT, MAP_VIEWBOX_WIDTH, type MapPolygon, type StorageLocation } from '@family/contracts';
 import { shapePoints, shapesTouch } from '@family/shared';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
+import { newId } from '../lib/ids';
 import { useAuth } from '../lib/auth';
 import { locationKeys, useHouseholdMap, useLocations, usePutMap, useUploadMapBackground } from '../lib/queries';
 import { pushToast } from '../lib/toast';
@@ -121,7 +122,9 @@ export function HouseMapImportPage() {
       pushToast(`地图导好了：${drafts.length} 个房间`);
       navigate('/house/map');
     } catch (error) {
-      pushToast(error instanceof Error ? error.message : '导入失败');
+      console.error('导入地图失败', error);
+      // 服务端的错误本来就是给人看的中文；别的（网络断、脚本异常）只说一句能照着做的
+      pushToast(error instanceof ApiError ? error.message : '地图没导进去，检查一下网络再点「完成」');
     } finally {
       setSaving(false);
     }
@@ -236,7 +239,7 @@ export function HouseMapImportPage() {
                   }))
                 }
                 onDraw={(_kind, rect) => {
-                  const id = crypto.randomUUID();
+                  const id = newId();
                   setDrafts((list) => [...list, { id, name: '', shape: { type: 'polygon', points: shapePoints(rect) } as MapPolygon }]);
                   setSelectedId(id);
                 }}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Visit } from '@family/contracts';
 import { useCreateGuestInvitation } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { copyText, selectText } from '../lib/clipboard';
 import { Button, Checkbox, Dialog, Input } from './ui';
 
 const label = 'mb-1 block text-[12px] text-ink-soft';
@@ -37,12 +38,12 @@ export function InvitationForm({
               variant="outline"
               className="flex-1"
               onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(link);
+                if (await copyText(link)) {
                   pushToast('链接已复制');
-                } catch {
-                  setMessage('复制不了，手动选中下面那串复制吧');
+                  return;
                 }
+                selectText(document.querySelector('[data-copy-fallback="guest-link"]'));
+                setMessage('这个浏览器不让自动复制，下面那串已经全选好了，长按或 ⌘C 复制');
               }}
             >
               复制链接
@@ -92,7 +93,7 @@ export function InvitationForm({
             把这个链接发给访客。<b>只显示这一次</b>——服务端只存哈希，关掉就看不到了。
             访客打开能看到来访信息、回复参不参加，以及你勾选的那些。
           </p>
-          <code className="select-all break-all rounded-lg bg-muted px-3 py-2.5 text-[13px] leading-relaxed">
+          <code data-copy-fallback="guest-link" className="select-all break-all rounded-lg bg-muted px-3 py-2.5 text-[13px] leading-relaxed">
             {link}
           </code>
           {message ? <p className="text-[12px] text-danger">{message}</p> : null}

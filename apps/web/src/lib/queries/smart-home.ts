@@ -23,6 +23,7 @@ import type {
   UpdateSmartHomeDeviceBody,
 } from '@family/contracts';
 import { api } from '../api';
+import { newId } from '../ids';
 import { invalidateModules } from './modules';
 
 // 智能家居（H3）：状态由服务端去 HA 取（3 秒超时），这里不轮询；
@@ -143,7 +144,7 @@ export function useSmartHomeCommand() {
     mutationFn: ({ deviceId, action }: { deviceId: string; action: SmartHomeAction }) =>
       api<SmartHomeCommand>(`/smart-home/devices/${deviceId}/command`, {
         method: 'POST',
-        body: { action, requestId: crypto.randomUUID() },
+        body: { action, requestId: newId() },
       }),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: smartHomeKeys.states });
