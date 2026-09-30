@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SmartHomeAction } from '@family/contracts';
 import { useSmartHomeEntityCommand } from './queries';
+import { newId } from './ids';
 import { PENDING_TIMEOUT_MS, releasedEntities, type PendingEntry } from './smart-home-controls';
 import { pushToast } from './toast';
 
@@ -47,7 +48,7 @@ export function usePendingCommands(deviceId: string, lastUpdated: Record<string,
 
   const send = (entityId: string, action: SmartHomeAction, value?: string | number | string[]) => {
     if (isPending(entityId)) return false;
-    const entry: Entry = { requestId: crypto.randomUUID(), baseline: lastUpdated[entityId] ?? null, value };
+    const entry: Entry = { requestId: newId(), baseline: lastUpdated[entityId] ?? null, value };
     setEntries((current) => ({ ...current, [entityId]: entry }));
     const old = timers.current.get(entityId);
     if (old) clearTimeout(old);

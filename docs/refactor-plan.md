@@ -437,6 +437,7 @@
 46. **给 `packages/shared` 加了导出，开着的 Vite 要 `--force` 重启。** `@family/shared` 在 `optimizeDeps.include` 里被预打包，`build:packages` 之后开发服务器还用旧的预打包结果，页面直接白屏「does not provide an export named 'labelPoint'」。删 `apps/web/node_modules/.vite` 或 `vite --force`；CI 和 Playwright 每次新起不受影响。
 47. **Worker 里的算法，node 单测过了不算数，要在浏览器里跑一遍大图。** 房间识别单测在 node 下全绿，浏览器 Worker 里换一种裁法就「Maximum call stack size exceeded」：描轮廓时 `Math.min(...pixels)` 把十几万个像素展开成参数，node 的栈够、浏览器不够。像素级数组一律写循环，递归（Douglas–Peucker）改成显式栈；e2e 里用和单测不同的裁剪框再跑一次识别。
 48. **会改变面板高度的切换，测试要等画布坐标稳定，产品要让画布保持中心。** 手机上切到「编辑」、选中柜子，工具条多出一行，画布变矮、重新铺满，柜子挪了位置——用例在挪之前量的坐标，拖动落空成了平移；人看到的是「点一下地图跳一下」。产品侧：小幅尺寸变化保持中心、工具条第一行定高；测试侧：操作前等元素两次量的位置一致。
+49. **本地和 CI 都在 localhost，等于从来没测过家里人的真实访问方式。** 家里人用局域网 IP（`http://192.168.x.x:8088`）打开小管家，那是**不安全上下文**：`crypto.randomUUID`、`navigator.clipboard` 这类只给 HTTPS / localhost 的 API 直接是 undefined。导入地图第 2 步报「crypto.randomUUID is not a function」、手画也没反应，智能家居按按钮一样会炸；我们所有测试都走 localhost（浏览器当它是安全的），一次都没撞上。改成：生成 id 一律 `lib/ids.ts` 的 `newId()`，复制一律 `lib/clipboard.ts` 的 `copyText()`（退到 execCommand，再不行把文字选中让人手动复制），静态检查拦直接调用；Playwright 另开一个走 `http://insecure.test` 的 project 专跑不安全上下文冒烟。以后加浏览器 API 先查它是不是「Secure context only」。
 
 
 ### Phase 2 · 试点切片与换栈决策门（1～2 周 + 2 周观察）

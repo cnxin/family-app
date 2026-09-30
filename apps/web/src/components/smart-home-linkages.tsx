@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { SmartHomeEntityRef, SmartHomeRules, SmartHomeWebhookSecret, SmartHomeWebhookSettings } from '@family/contracts';
 import {
   useRotateSmartHomeWebhook,
@@ -9,6 +9,7 @@ import {
 } from '../lib/queries';
 import { homeAssistantAutomations, homeAssistantRestCommand } from '../lib/smart-home-ha-config';
 import { pushToast } from '../lib/toast';
+import { copyText, selectText } from '../lib/clipboard';
 import { Field, ResultLine, ToggleRow } from './media-settings-parts';
 import { SmartHomeLinksPanel } from './smart-home-links';
 import { QueryFrame } from './query-state';
@@ -171,6 +172,7 @@ function RulesCard({ settings }: { settings: SmartHomeWebhookSettings }) {
 }
 
 function CopyBlock({ label, text }: { label: string; text: string }) {
+  const box = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
@@ -179,17 +181,21 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
           variant="outline"
           className="min-h-9 shrink-0 whitespace-nowrap px-3"
           aria-label={`复制${label}`}
-          onClick={() =>
-            void navigator.clipboard
-              ?.writeText(text)
-              .then(() => pushToast('已复制'))
-              .catch(() => pushToast('没复制成功，手动全选复制吧'))
-          }
+          onClick={async () => {
+            if (await copyText(text)) {
+              pushToast('已复制');
+              return;
+            }
+            // 局域网 IP 打开时浏览器不给复制：把下面整段选中，长按 / ⌘C 复制
+            selectText(box.current);
+            pushToast('这个浏览器不让自动复制，下面已经全选好了，长按或 ⌘C 复制');
+          }}
         >
           复制
         </Button>
       </div>
       <textarea
+        ref={box}
         readOnly
         aria-label={label}
         value={text}

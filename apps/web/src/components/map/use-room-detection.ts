@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { MapPolygon } from '@family/contracts';
 import { detectRoomsInWorker } from '../../lib/floorplan/run-detect';
+import { newId } from '../../lib/ids';
 import type { RoomDraft } from './import-name';
 
 export type DetectState =
@@ -27,7 +28,7 @@ export function useRoomDetection(onDrafts: (drafts: RoomDraft[]) => void) {
         if (mine !== token.current) return;
         onDrafts(
           result.rooms.map((room) => ({
-            id: crypto.randomUUID(),
+            id: newId(),
             name: '',
             shape: { type: 'polygon', points: room.points } as MapPolygon,
           })),
@@ -35,7 +36,9 @@ export function useRoomDetection(onDrafts: (drafts: RoomDraft[]) => void) {
         setStatus(result.rooms.length ? { state: 'done', count: result.rooms.length, ms: result.ms } : { state: 'failed', message: '没认出房间' });
       } catch (error) {
         if (mine !== token.current) return;
-        setStatus({ state: 'failed', message: error instanceof Error ? error.message : '识别失败' });
+        // 异常原文只进控制台；给人看的是一句能照着做的话
+        console.error('房间识别失败', error);
+        setStatus({ state: 'failed', message: '自动认房间没成功' });
       }
     },
     [onDrafts],

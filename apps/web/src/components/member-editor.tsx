@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { CreatedHouseholdInvitation, ManagedMember, MemberRole } from '@family/contracts';
 import { useCreateInvitation, useUpdateManagedMember } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { copyText, selectText } from '../lib/clipboard';
 import { Button, Checkbox, Dialog, Input } from './ui';
 
 export function memberRoleLabel(role: MemberRole) {
@@ -182,13 +183,13 @@ export function InviteForm({ onClose }: { onClose: () => void }) {
 
   async function copy() {
     if (!created) return;
-    try {
-      await navigator.clipboard.writeText(joinLink);
+    if (await copyText(joinLink)) {
       setCopied(true);
       pushToast('邀请链接已复制');
-    } catch {
-      setMessage('复制不了，手动选中下面的链接复制吧');
+      return;
     }
+    selectText(document.querySelector('[data-copy-fallback="join-link"]'));
+    setMessage('这个浏览器不让自动复制，下面的链接已经全选好了，长按或 ⌘C 复制');
   }
 
   return (
@@ -224,7 +225,7 @@ export function InviteForm({ onClose }: { onClose: () => void }) {
           <div className="self-center rounded-xl bg-white p-3" data-join-qr>
             <QRCodeSVG value={joinLink} size={168} bgColor="#ffffff" fgColor="#111827" />
           </div>
-          <code className="select-all break-all rounded-lg bg-muted px-3 py-2.5 text-[12px] leading-relaxed" aria-label="邀请链接">
+          <code data-copy-fallback="join-link" className="select-all break-all rounded-lg bg-muted px-3 py-2.5 text-[12px] leading-relaxed" aria-label="邀请链接">
             {joinLink}
           </code>
           <p className="text-[12px] text-ink-soft">
