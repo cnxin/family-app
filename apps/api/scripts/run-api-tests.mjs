@@ -158,6 +158,7 @@ const BUSINESS_SCRIPTS = [
   'assets',
   'locations',
   'map',
+  'map-rooms',
 ];
 
 function parseCliOptions(argv) {

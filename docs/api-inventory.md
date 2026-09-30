@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 314 个端点（POST 122 / GET 105 / PATCH 48 / DELETE 28 / PUT 11），公开端点 28 个，已定义契约 314 个。
+共 316 个端点（POST 124 / GET 105 / PATCH 48 / DELETE 28 / PUT 11），公开端点 28 个，已定义契约 316 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -20,7 +20,7 @@
 | households | 1 | 1 |
 | inventory | 14 | 14 |
 | knowledge | 8 | 8 |
-| locations | 15 | 15 |
+| locations | 17 | 17 |
 | media | 32 | 32 |
 | memories | 8 | 8 |
 | menus | 7 | 7 |
@@ -239,7 +239,7 @@
 | GET | `/knowledge-articles/:id/revisions` | `KnowledgeController.revisions` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
 | POST | `/knowledge-articles/:id/revisions/:version/restore` | `KnowledgeController.restoreRevision` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
 
-## locations（15）
+## locations（17）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -249,7 +249,9 @@
 | DELETE | `/locations/:id` | `LocationsController.remove` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
 | POST | `/locations/:id/archive` | `LocationsController.archive` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
 | GET | `/locations/:id/contents` | `LocationsController.contents` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| POST | `/locations/:id/merge` | `LocationsController.merge` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
 | PATCH | `/locations/:id/shape` | `LocationsController.setShape` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
+| POST | `/locations/:id/split` | `LocationsController.split` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
 | GET | `/locations/find` | `LocationsController.find` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
 | GET | `/locations/search` | `LocationsController.search` | 登录 | ✓ | `apps/api/src/locations/locations.module.ts` |
 | GET | `/map` | `MapController.get` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |

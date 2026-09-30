@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button } from '../../ui';
 
 // 编辑器那条固定工具栏（地图编辑器 v2 §1.2）：桌面顶部居中浮动胶囊，手机底部一条（拇指够得着、让开安全区）。
 
@@ -64,6 +65,18 @@ export function EditorToolbar({ tools, desktop }: { tools: EditorTool[]; desktop
           {tool.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** 电脑上右下角的放大 / 缩小 / 看全图 */
+export function ZoomControls({ onZoom, onFit }: { onZoom: (factor: number) => void; onFit: () => void }) {
+  const style = 'size-11 border border-border bg-surface/90 p-0 backdrop-blur';
+  return (
+    <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-1.5">
+      <Button variant="ghost" aria-label="放大" className={style} onClick={() => onZoom(1.4)}>＋</Button>
+      <Button variant="ghost" aria-label="缩小" className={style} onClick={() => onZoom(1 / 1.4)}>－</Button>
+      <Button variant="ghost" aria-label="看全图" className={style} onClick={onFit}>⤢</Button>
     </div>
   );
 }

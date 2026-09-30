@@ -34,7 +34,7 @@ export type Drag =
       started: boolean;
     }
   | { type: 'resize'; id: string; corner: Corner; shape: MapRect; clamp: MapBounds | null; siblings: MapBounds[] }
-  | { type: 'draw'; kind: 'room' | 'container'; parentId: string | null; start: MapPoint; end: MapPoint };
+  | { type: 'draw'; kind: 'room' | 'container' | 'line'; parentId: string | null; start: MapPoint; end: MapPoint };
 
 export interface DragFrame {
   shapes: Map<string, MapShape>;

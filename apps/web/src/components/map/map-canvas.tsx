@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type Keyboa
 import type { MapRect, MapShape } from '@family/contracts';
 import { clampRect, pointInShape, shapeBounds, shapePoints, type MapBounds, type MapPoint, type MapSegment } from '@family/shared';
 import { dragStep, nearestEdge, pathOf, type Drag } from './canvas-drag';
-import { MapHandles, MapInner, MapLabels } from './map-layers';
+import { MapDrawOverlay, MapHandles, MapInner, MapLabels } from './map-layers';
 import type { MapItem, MapMode, MapTool, ShapeChange } from './map-types';
 import { useMapViewport } from './use-map-viewport';
 
@@ -55,6 +55,10 @@ interface Props {
   onSelect: (id: string | null) => void;
   onShapesChange?: (changes: ShapeChange[]) => void;
   onDraw?: (kind: 'room' | 'container', rect: MapRect, parentId: string | null) => void;
+  /** 拆分：拖完的那条线（未拉正） */
+  onLine?: (start: MapPoint, end: MapPoint) => void;
+  /** 虚线预览的一块（拆分时切出来的那块） */
+  ghost?: MapShape | null;
   /** 点选了房间的一个顶点（没拖）：编辑器出「删这个点」；null = 取消 */
   onVertexSelect?: (index: number | null) => void;
   selectedVertex?: number | null;
@@ -73,13 +77,13 @@ interface Props {
 }
 
 export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
-  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onVertexSelect, selectedVertex = null, onHint, snap = true, overlay, floating, label },
+  { viewBox, items, background, backgroundOpacity = 1, mode, tool = 'select', selectedId, highlightIds, onSelect, onShapesChange, onDraw, onLine, ghost, onVertexSelect, selectedVertex = null, onHint, snap = true, overlay, floating, label },
   ref,
 ) {
   const viewport = useMapViewport(viewBox);
   // 本地预览只对当时那份 items 有效：上层数据一变（保存回来、别处改了）预览自动作废。上层要 useMemo 住 items。
   const [preview, setPreviewState] = useState<{ base: MapItem[]; shapes: Map<string, MapShape> }>({ base: items, shapes: new Map() });
-  const [drawing, setDrawing] = useState<{ start: MapPoint; end: MapPoint } | null>(null);
+  const [drawing, setDrawing] = useState<{ start: MapPoint; end: MapPoint; line: boolean } | null>(null);
   const drag = useRef<Drag | null>(null);
   const latest = useRef<Map<string, MapShape>>(new Map());
   const suppress = useRef(false);
@@ -145,7 +149,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     const d = drag.current;
     if (!d) return;
     const next = dragStep(d, viewport.toMap(event.clientX, event.clientY), viewBox, scale, snap && !event.altKey);
-    if (next === 'draw' && d.type === 'draw') setDrawing({ start: d.start, end: d.end });
+    if (next === 'draw' && d.type === 'draw') setDrawing({ start: d.start, end: d.end, line: d.kind === 'line' });
     else if (next && next !== 'draw') {
       setPreview(next.shapes);
       setGuides(next.guides);
@@ -169,6 +173,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     if (d.type === 'vertex' || d.type === 'resize' || d.type === 'move') onVertexSelect?.(null);
     if (d.type === 'draw') {
       setDrawing(null);
+      if (d.kind === 'line') {
+        if (Math.hypot(d.end[0] - d.start[0], d.end[1] - d.start[1]) * scale >= MIN_DRAW) onLine?.(d.start, d.end);
+        return;
+      }
       const rect = {
         type: 'rect' as const,
         x: Math.min(d.start[0], d.end[0]),
@@ -178,7 +186,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
       };
       if (rect.w * scale < MIN_DRAW || rect.h * scale < MIN_DRAW) return;
       const parent = d.parentId ? byId.get(d.parentId) : null;
-      onDraw?.(d.kind, parent ? clampRect(rect, shapeBounds(shapeOf(parent))) : rect, d.parentId);
+      onDraw?.(d.kind as 'room' | 'container', parent ? clampRect(rect, shapeBounds(shapeOf(parent))) : rect, d.parentId);
       return;
     }
     const changed = latest.current;
@@ -202,8 +210,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
       }
       parentId = room.id;
     }
-    begin(event, { type: 'draw', kind: tool, parentId, start, end: start });
-    setDrawing({ start, end: start });
+    const kind = tool === 'split' ? 'line' : tool;
+    begin(event, { type: 'draw', kind, parentId, start, end: start });
+    setDrawing({ start, end: start, line: kind === 'line' });
     return true;
   };
 
@@ -355,18 +364,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
               <line key={index} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} data-map-guide
                 className="pointer-events-none stroke-warm" strokeWidth={1.8 * unit} strokeDasharray={`${6 * unit} ${4 * unit}`} />
             ))}
-            {drawing ? (
-              <rect
-                x={Math.min(drawing.start[0], drawing.end[0])}
-                y={Math.min(drawing.start[1], drawing.end[1])}
-                width={Math.abs(drawing.end[0] - drawing.start[0])}
-                height={Math.abs(drawing.end[1] - drawing.start[1])}
-                className="pointer-events-none fill-accent-soft stroke-accent"
-                fillOpacity={0.5}
-                strokeWidth={2 * unit}
-                strokeDasharray={`${6 * unit} ${4 * unit}`}
-              />
-            ) : null}
+            <MapDrawOverlay ghost={ghost} drawing={drawing} straighten={snap} unit={unit} />
           </g>
         </svg>
       ) : null}

@@ -4,14 +4,15 @@ import type { HouseholdMap, MapShape, StorageLocation } from '@family/contracts'
 import { shapeBounds } from '@family/shared';
 import { useCreateLocation, useMapBackground } from '../../../lib/queries';
 import { pushToast } from '../../../lib/toast';
-import { Button, Dialog } from '../../ui';
+import { Button } from '../../ui';
 import { MapCanvas, type MapCanvasHandle } from '../map-canvas';
 import { MapNameDialog } from '../map-name-dialog';
 import { placementRect, type FurnitureSpec } from '../furniture-catalog';
 import { mapItems } from '../map-items';
 import type { MapMode, MapTool } from '../map-types';
 import { useShapeSaver } from '../use-shape-saver';
-import { EditorToolbar, type EditorTool } from './editor-toolbar';
+import { ConfirmDialog, type ConfirmRequest } from './confirm-dialog';
+import { EditorToolbar, ZoomControls, type EditorTool } from './editor-toolbar';
 import { FloatingToolbar } from './floating-toolbar';
 import { FurniturePanel } from './furniture-panel';
 import { objectActions, type Selection } from './object-actions';
@@ -20,6 +21,8 @@ import { removalPlan, toPolygon, withoutVertex } from './shape-actions';
 import { useDecorations } from './use-decorations';
 import { useEditorHistory } from './use-editor-history';
 import { useFurniture } from './use-furniture';
+import { useRoomRestructure } from './use-room-restructure';
+import { SplitDialog } from './split-dialog';
 
 // 全屏沉浸的地图编辑器（docs/ui-prototypes/map-editor-v2.md §1）：portal 盖在整个应用之上，
 // 隐藏标题、左树、底部导航；只留一条工具栏、左上房间抽屉、右上「完成」。选中什么就在它旁边出浮动小工具条。
@@ -52,7 +55,7 @@ export function MapEditor({
   const [renaming, setRenaming] = useState(false);
   const [showBackground, setShowBackground] = useState(true);
   const [drawn, setDrawn] = useState<{ kind: 'room' | 'container'; shape: MapShape; parentId: string | null } | null>(null);
-  const [confirm, setConfirm] = useState<{ title: string; body: string; action: string; run: () => void } | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [snap, setSnap] = useState(true);
   const mode: MapMode = desktop ? 'edit-full' : 'edit-containers';
@@ -103,8 +106,10 @@ export function MapEditor({
       if (!desktop) canvas.current?.focus(shapeBounds(shape), 3.5, { bottom: 96 });
     },
   });
-  /** 「挪到别的房间…」之后点的那一下：点到房间就挪过去，点别处就算取消 */
+  const restructure = useRoomRestructure({ locations, viewBox: map.viewBox, snap, select: pick, confirm: setConfirm });
+  /** 「挪到别的房间…」「合并到…」之后点的那一下：点到房间就挪 / 并过去，点别处就算取消 */
   const select = (id: string | null) => {
+    if (restructure.merging) return restructure.pickTarget(id);
     if (furniture.relocating) {
       if (id && byId.get(id)?.kind === 'room') void furniture.relocate(id);
       else furniture.setRelocating(null);
@@ -129,7 +134,10 @@ export function MapEditor({
     const onKey = (event: KeyboardEvent) => {
       if (document.querySelector('[role="dialog"]') || (event.target as HTMLElement | null)?.closest('input, textarea')) return;
       if (event.key === 'Escape') {
-        if (furniture.relocating) furniture.setRelocating(null);
+        if (furniture.relocating || restructure.splitting || restructure.merging) {
+          furniture.setRelocating(null);
+          restructure.cancel();
+        }
         else if (renaming) setRenaming(false);
         else if (vertex !== null) setVertex(null);
         else setSelectedId(null);
@@ -237,7 +245,10 @@ export function MapEditor({
         background={showBackground ? background : null}
         backgroundOpacity={0.45}
         mode={mode}
-        tool={tool}
+        tool={restructure.splitting ? 'split' : tool}
+        onLine={restructure.onLine}
+        ghost={restructure.plan ? { type: 'polygon', points: restructure.plan.piece } : null}
+        highlightIds={restructure.mergeTargets}
         selectedId={selectedId}
         selectedVertex={vertex}
         onVertexSelect={setVertex}
@@ -247,7 +258,7 @@ export function MapEditor({
         onDraw={(kind, rect, parentId) => setDrawn({ kind, parentId, shape: kind === 'room' ? toPolygon(rect) : rect })}
         onHint={pushToast}
         floating={({ toScreen, size, moving }) => {
-          if (!selection || !selectedShape || !size || furniture.relocating) return null;
+          if (!selection || !selectedShape || !size || furniture.relocating || restructure.splitting || restructure.merging || restructure.plan) return null;
           // 点选了顶点：工具条贴着那个点，只有「删这个点」「取消」
           const point = vertex !== null && selectedShape.type === 'polygon' ? selectedShape.points[vertex] : null;
           const box = toScreen(point ? { minX: point[0], minY: point[1], maxX: point[0], maxY: point[1] } : shapeBounds(selectedShape));
@@ -267,6 +278,8 @@ export function MapEditor({
             openPanel: furniture.setPanel,
             relocate: (id) => furniture.setRelocating(id),
             deselect: () => pick(null),
+            split: restructure.startSplit,
+            merge: restructure.startMerge,
           });
           return (
             <FloatingToolbar
@@ -323,16 +336,14 @@ export function MapEditor({
           {leaving ? '保存中…' : '完成'}
         </Button>
       </div>
-      {desktop ? (
-        <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-1.5">
-          <Button variant="ghost" aria-label="放大" className="size-11 border border-border bg-surface/90 p-0 backdrop-blur" onClick={() => canvas.current?.zoomBy(1.4)}>＋</Button>
-          <Button variant="ghost" aria-label="缩小" className="size-11 border border-border bg-surface/90 p-0 backdrop-blur" onClick={() => canvas.current?.zoomBy(1 / 1.4)}>－</Button>
-          <Button variant="ghost" aria-label="看全图" className="size-11 border border-border bg-surface/90 p-0 backdrop-blur" onClick={() => canvas.current?.reset()}>⤢</Button>
-        </div>
-      ) : null}
-      {tool !== 'select' || furniture.relocating ? (
+      {desktop ? <ZoomControls onZoom={(factor) => canvas.current?.zoomBy(factor)} onFit={() => canvas.current?.reset()} /> : null}
+      {tool !== 'select' || furniture.relocating || restructure.splitting || restructure.merging ? (
         <p role="status" className="pointer-events-none absolute inset-x-0 top-[72px] z-10 mx-auto w-fit rounded-full bg-surface/90 px-3 py-1.5 text-[12.5px] text-ink-soft shadow-sm backdrop-blur">
-          {furniture.relocating ? '点一下要挪去的房间（Esc 取消）' : tool === 'room' ? '在图上拖一个矩形画房间，画完再拖顶点修形状' : '在房间里拖一个矩形画柜子'}
+          {restructure.splitting
+            ? '从一面墙拖到另一面墙，把房间切成两块（Esc 取消）'
+            : restructure.merging
+              ? '点一间高亮的房间，把选中的并进去（Esc 取消）'
+              : furniture.relocating ? '点一下要挪去的房间（Esc 取消）' : tool === 'room' ? '在图上拖一个矩形画房间，画完再拖顶点修形状' : '在房间里拖一个矩形画柜子'}
         </p>
       ) : null}
       {furniture.panel ? (
@@ -361,22 +372,16 @@ export function MapEditor({
           }
         />
       ) : null}
-      {confirm ? (
-        <Dialog
-          title={confirm.title}
-          onClose={() => setConfirm(null)}
-          maxWidth={400}
-          footer={
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConfirm(null)}>取消</Button>
-              <Button className="bg-danger hover:bg-danger" onClick={() => { confirm.run(); setConfirm(null); navigator.vibrate?.(12); }}>
-                {confirm.action}
-              </Button>
-            </div>
-          }
-        >
-          <p className="text-[14px] leading-relaxed text-ink-soft">{confirm.body}</p>
-        </Dialog>
+      {confirm ? <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} /> : null}
+      {restructure.plan ? (
+        <SplitDialog
+          roomName={restructure.plan.room.name}
+          consequence={restructure.plan.consequence}
+          taken={locations.filter((one) => one.kind === 'room' && !one.archivedAt).map((one) => one.name)}
+          busy={restructure.busy}
+          onClose={restructure.closePlan}
+          onConfirm={(name) => void restructure.confirmSplit(name)}
+        />
       ) : null}
     </div>,
     document.body,
