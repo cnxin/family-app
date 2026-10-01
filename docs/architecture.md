@@ -27,17 +27,17 @@
 | 事件域（`changed.domains`）与「路由前缀 → 域」映射表 | `packages/contracts/src/events.ts`，CI 断言全覆盖（H2） | 客户端失效、留意刷新、HA 状态推送 |
 | 留意规则 provider | `apps/api/src/today/`，每条规则一个 provider，服务端按家庭日期计算（F5、E5） | 今天页「需要留意」、家里页状态行 |
 | ⌘K 动作注册表（含深链约定） | `apps/web/src/lib/actions.ts`（F6） | ⌘K、今天页 / 家里页搜索条 |
-| agent 工具注册（21 读 + 7 `propose_*`，propose 数量待 J0 核实） | `apps/api/src/agent/agent-tools.service.ts`，1,324 行单类 | Hermes 经 MCP 调用（当前关闭） |
+| agent 工具注册（21 读 + 7 `propose_*` + 2 记忆，J0 已核实） | 名单在 `packages/contracts/src/agent.ts` 与 `apps/api/src/agent/agent.types.ts` 各一份；MCP 注册在 `agent-mcp.controller.ts`；执行在 `agent-tools.service.ts`（1,324 行单类） | Hermes 经 MCP 调用（当前关闭） |
 | 家庭设置行、用量统计 | F7 设置页、`usage-report.mjs` | 管理员、C2 三档分类 |
 
 **判断**：七处登记彼此独立、各自手写，加一个域要改七个地方（I1 加「位置」时正是如此：nav、modules、events、actions、agent 工具、设置、usage-report 各一笔）。这是插件化要解决的**唯一**问题——不是缺能力，是缺一份统一的清单。
 
 ### 1.2 智能体现状
 
-- 模块 `agent`：39 个端点、17 个文件 7,949 行，全项目耦合中心（依赖 13 个域的 Service）。
+- 模块 `agent`：39 个端点、17 个文件 7,949 行，全项目耦合中心（依赖 14 个域的 Service）。
 - 运行时：`AgentRuntime { health, chat, cancel }` 接口，两个实现 `FakeAgentRuntime` / `HermesAgentRuntime`（Hermes 镜像经 MCP 调 `/internal/agent/mcp`）。
 - 安全模型已成型且正确：读工具直接执行；写只能 `propose_*` 落提案，人确认才执行；页面上下文与检索内容标 `untrustedContent`。
-- 工具数：读工具实测 21 个；`propose_*` 源码里只直接搜到 `propose_plan`，其余疑似运行时拼名，「7 个」**待 J0 核实**（文中「28 个」随之待定）。
+- 工具数（J0 核实）：读 21 + `propose_*` 7 = 28，另有记忆工具 2 个（`recall_preferences`、`remember_preference`），MCP 共注册 30 个；名字全部手写字面量，不是拼出来的。详见 §8.2。
 - refactor-plan 已定：**Hermes 换成自研 loop**，工具注册表抽到 `packages/agent-core` 的 `ToolRegistry`，28 个工具名与参数保持不变。
 - 附属能力：个人记忆（候选 / 确认 / 共享 / 纠正 / 遗忘）、成员画像、例行任务与周报、外部渠道配对、保留期清理。
 - 生产与演示栈 `enabled=false`，从未被家里人使用。
@@ -224,11 +224,144 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 - pre-trial-plan §5 后置的「agent 工具按模块裁剪」由 manifest 自然解决（插件关掉即工具消失）。
 - Phase G（远程访问、购物清单离线）独立于本方案；第 0 档跑在 NAS 上，远程访问方案不影响它。
 
+## 8. J0 盘点结果（2026-10-02）
+
+> 只盘点，不改产品代码。产出：本节 + `packages/contracts/src/plugins/`（`types.ts` 与 shopping / tasks / smart-home 三份草稿，未从 `src/index.ts` 导出，未接线）。
+> 盘点基于 main `b6abd35`。
+
+### 8.0 先纠正两个数
+
+- **域不是 15 个，是 18 个候选插件**：点菜（menus，两段导航：点菜 / 厨房）、菜谱、购物、库存、位置、资产、日历、任务、提醒、投票、财务、积分、访客、智能家居、观影、出行、回忆、知识库。另有内核域：今天、消息（notifications）、家庭动态（activity）、成员 / 家庭 / 备份 / 模块开关；小管家（assistant）属于助理层。`SHELF_MODULE_KEYS` 的 16 个里混着 activity 和 assistant，它们不是插件。
+- **登记处不是 7 处，是 14 处**（§8.1）。文档原先只数了「主表」，漏掉的都在 web 端和 agent 内部。
+
+### 8.1 每个域要登记的地方（实测 14 处）
+
+| # | 登记处 | 文件 | key 用的是 |
+| --- | --- | --- | --- |
+| 1 | 导航分段、core 顺序、手机底栏 | `apps/web/src/lib/nav.ts`（SCENES / PINNED / CORE_KEYS / mobileTabs） | 导航 key（menus 用 order / kitchen） |
+| 2 | 模块开关与 hasData | `packages/contracts/src/system.ts` SHELF_MODULE_KEYS + `apps/api/src/system/system-modules.service.ts` | 域 key |
+| 3 | 写端点 → 域 | `packages/contracts/src/events.ts` EVENT_ROUTES（含 PROPOSAL_DOMAINS） | 域 key |
+| 4 | 域 → 前端查询 key | `apps/web/src/lib/events.ts` DOMAIN_QUERY_KEYS | 域 key |
+| 5 | 留意规则（服务端） | `apps/api/src/today/` 11 条写死在 TodayModule + DOMAIN_ORDER + OFF_KEYS；智能家居 1 个走 AttentionRegistry；`contracts/src/today.ts` domain 枚举 | 域 key |
+| 6 | 留意文案与落点（前端） | `apps/web/src/lib/attention-copy.ts`（labels / actions / kindActions / listActions）+ `routes.ts` attentionRoutes / attentionPath 特判 | 域 key + kind |
+| 7 | ⌘K 动作 | `apps/web/src/lib/actions.ts` + `command-palette.tsx` 里的财务特判 | 域 key |
+| 8 | agent 工具名单 | `contracts/src/agent.ts` 与 `apps/api/src/agent/agent.types.ts` **两份一模一样的名单** + `agent-mcp.controller.ts` 注册 | 工具名 |
+| 9 | agent 工具 → 来源模块、提案 → actionType | `agent-tools.service.ts` sourceModule 表、`agent-proposals.service.ts` 双向表 | 单复数混用（`asset`、`locations`、`agent_memory`） |
+| 10 | 设置行 | `apps/web/src/pages/settings.tsx` | 写死路径 |
+| 11 | 用量统计 | `apps/api/scripts/usage-report.mjs`（ACTIVITY_DOMAINS / TABLE_SOURCES / UNCOUNTED / 位置快照） | 流水 module → 中文名 |
+| 12 | 动态流水 module | `contracts/src/activities.ts` ACTIVITY_MODULES | 单数（task、asset…） |
+| 13 | 通知 module 与图标 | `contracts/src/notifications.ts` + `apps/web/src/lib/notification-meta.ts` | 单数 |
+| 14 | 能力（权限） | `apps/api/src/auth/capabilities.ts` ROLE_CAPABILITIES | 能力名 |
+
+另有 `routes.ts` 的旧路径表 MOVED，属于一次性迁移遗留，manifest 里用 `legacyPaths` 收纳。
+
+**同一个域最多有 6 种 key**：域 key `tasks` / 导航 key / 流水 `task` / 通知 `task` / 工具来源 `task` / 提案 `task`；点菜是 `menus` / `order`+`kitchen` / `menu`。J1 第一件事是把这些收成「一个 key + aliases」。
+
+### 8.2 现状对照表（18 个候选插件）
+
+事件栏「主 / 涉及」= 以本域为首的路由条数 / 会推本域的路由条数。依赖栏只列跨插件 import（activities、today 算内核，不列）。
+
+| 域 | 导航 | 开关 · hasData | 事件 主/涉及 | 查询 key | 留意 | ⌘K | agent 读 / 提案 | 设置行 | 用量 | 通知 | 跨插件 import |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 点菜 menus | core ×2 | — | 3/7 | 5 | — | **缺** | meal_plan、dish_plan / menu | — | 流水 + menu_events | menu | recipes（函数） |
+| 菜谱 | shelf | SQL | 4/4 | 3 | — | 1 | search_recipes / — | — | 流水 + 主表 | — | — |
+| 购物 | core | — | 3/7 | 2 | — | 1 | shopping_list / shopping_items | — | 流水；主表不可计 | — | 直读 Menu、Inventory 实体 |
+| 库存 | shelf | SQL | 3/9 | 6 | 1 | **缺** | inventory_alerts、inventory_summary / — | — | 流水 + 主表 | — | locations（函数） |
+| 位置 | shelf | SQL（含子查询） | 2/7 | 1 | — | 1（落点在库存页） | find_item、list_location_contents / — | — | 只有快照 | — | — |
+| 资产 | shelf | SQL | 6/7 | 3 | 3 | 1 | asset_detail / — | — | 流水 | — | **inventory Service**、locations（函数） |
+| 日历 | core | — | 1/9 | 1 | — | 1 | calendar / — | — | 流水 + 主表 | calendar | **tasks Service** |
+| 任务 | core | — | 1/3 | 1 | — | 1 | tasks、member_tasks / task | — | 流水 + 主表 | task | **points Service（事务内）** |
+| 提醒 | shelf | SQL | 1/6 | 2 | — | 1 | **缺** / reminder | — | 流水 + 主表 | reminder | **calendar Service**、tasks（函数） |
+| 投票 | shelf | SQL | 1/4 | 1 | 1 | 1 | **缺** / poll | — | 流水 + 主表 ×2 | poll | — |
+| 财务 | shelf（仅管理员） | SQL | 1/3 | 1 | 1 | 2（仅管理员） | finance_summary / finance_transaction | — | 流水 | — | — |
+| 积分 | shelf | SQL | 3/4 | 4 | 1 | **缺** | **缺** | — | 流水 | points | — |
+| 访客 | shelf | SQL | 9/9 | 7 | 2 | 1 | **缺** | — | 流水 | guest | — |
+| 智能家居 | shelf | 特判（读环境变量） | 2/2 | 10 | 3（注册表） | **缺** | **缺** | 有 | 主表 ×3 | — | **tasks / reminders / shopping Service**、tasks 事件 |
+| 观影 | shelf | SQL | 2/4 | 9 | — | **缺** | watch_candidates / — | 有 | 流水 | media | — |
+| 出行 | shelf | SQL | 2/2 | 3 | 1 | 1 | travel_checklist / — | — | 流水 | — | — |
+| 回忆 | shelf | SQL | 1/1 | 1 | — | 1 | recent_memories / — | — | 流水 | — | — |
+| 知识库 | shelf | SQL | 1/1 | 2 | — | 1 | search_knowledge / — | — | 流水 | — | — |
+
+不属于任何插件的 agent 工具：`get_today_summary`、`get_family_schedule`（跨日历 / 任务 / 提醒）、`get_member_profile`（成员）、`get_weather`（无域）、`propose_plan`（跨插件打包），以及记忆工具 2 个。J4 要把它们归到内核或助理层自己的工具，而不是硬塞进某个插件。
+
+**不一致**（J1 生成时必须先选定一个来源）：
+
+1. **财务权限三处不一致**：`ROLE_CAPABILITIES` 给普通成员 `view_finance` + `record_finance`（API 允许成员记账），但导航 `managerOnly`、⌘K 写死 `domain !== 'finance' || manager`。
+2. **⌘K 不看模块开关**：家庭把某个模块关掉后，它的 ⌘K 动作还在。
+3. **留意两种挂法**：11 条在 TodayModule 里写死注入，只有智能家居走 AttentionRegistry；DOMAIN_ORDER、OFF_KEYS、contracts 的 domain 枚举、web 的 4 张文案表又各写一遍。
+4. **agent 工具名单两份**：contracts 与 API 各一份，目前内容一致，但没有任何检查保证一致。
+5. **端点归属与路径前缀不符**：`POST /shopping-items/:id/confirm-stock` 写在 inventory 模块；`/maintenance-plans/:id/shopping-items` 写在 assets 模块。
+6. **内核反向依赖插件**：`system-modules.service.ts` import `smart-home/home-assistant.config`。
+7. **SHELF_MODULE_KEYS 混着非插件**：activity（永远 hasData）和 assistant（看 agent 开关）也在里面。
+
+**缺项**（不是错，J3 / J4 要补的空白）：⌘K 缺点菜、库存、积分、智能家居、观影；agent 读工具缺提醒、投票、积分、访客、智能家居；设置行只有观影和智能家居有。
+
+**跨插件 Service import（违反 §6 第 6 条）共 7 条边**：资产 → 库存、日历 → 任务、提醒 → 日历、智能家居 → 任务 / 提醒 / 购物、任务 → 积分（在打勾的同一事务里记积分）。另有 3 处纯函数 import（`usableLocationId`、`buildRecipeSnapshot`、`taskOccursOn`），以及所有域共用一个 8,352 行的 `entities/index.ts`（购物直接读 Menu、InventoryItem 实体）。agent 依赖 14 个域的 Service，属于 J4 的事。
+
+### 8.3 agent 工具（核实）
+
+- 读工具 21 个（`AGENT_READ_TOOLS`）、提案工具 7 个（`AGENT_PROPOSAL_TOOLS`），合计 28；另有记忆工具 2 个（`AGENT_MEMORY_TOOLS`），MCP 实际注册 30 个。
+- 名字**全部手写字面量**，不是拼出来的。之前只搜到 `propose_plan`，是搜索写法的问题。
+- 命名不统一：提案工具是 `propose_` + 名词，单复数随意（`propose_shopping_items` 对应 actionType `shopping`，`propose_finance_transaction` 对应 `finance`）；`propose_plan` 是跨插件打包，不对应单一 actionType。
+- 文档里「28 个旧工具名做别名」（§3.3、J4）的数没错；J4 要做别名的是 30 个。
+
+### 8.4 manifest 草稿：七处能不能表达
+
+`packages/contracts/src/plugins/types.ts` 定义 `PluginManifest`；三份草稿 `shopping.ts`、`tasks.ts`、`smart-home.ts` 用 `satisfies PluginManifest` 通过 contracts 类型检查。另用临时脚本从草稿反推现有登记，逐项对比：导航、旧路径、模块开关、事件路由（含是否漏登）、查询 key、留意文案与排序、⌘K、agent 工具名、设置行、用量、通知 module，**三域 44 项全部一致**。
+
+相对 §3.2 原草案的改动：
+
+| §3.2 原写法 | 改成 | 原因 |
+| --- | --- | --- |
+| `execute` / `answer` 是函数 | `server: '<id>'`，答复可用模板字符串 | manifest 要能被第三方写、被 web 打包，不能带代码；实现留在插件自己的服务端目录按 id 注册 |
+| `minRole` | `capability` + `managerOnly` | 系统用的是能力，不是角色等级 |
+| `hasData: 'sql:...'` | `always` / `tables[]` / `server` | 智能家居要读环境变量；位置要子查询 |
+| `attention: [ProviderClass]` | `attention.kinds[]`：server id + 文案 + 落点模板 + 能力 | 前端 4 张文案表、落点特判、排序都得从这里来 |
+| `eventRoutes: string[]` | 每条带 `domains`、`emit`，另加 `queryKeys`、`emits` | 写一处常常推多个域；webhook 要显式发；前端失效靠 queryKeys |
+| `tier` + 单个 `nav` | `nav[]`，每段带 scene / tier / mobileTab | 点菜有两段；购物路径在 house、底栏在 eat |
+| 无 | `aliases`、`requires`、`legacyPaths`、`notifications`、`capabilities`、`manifestVersion` | 6 种 key 共存；声明式依赖（§6.6）；通知图标；权限汇总；第三方版本兼容 |
+
+**表达不了、需要 J1 另做机制的**：
+
+1. **事务内的跨插件调用**：任务打勾时在同一事务里记积分；智能家居在自己的事务里建任务、提醒、购物项。manifest 只能声明 `requires`，运行时需要「带事务的跨插件门面」，或者改成事件加补偿。
+2. **不属于任何插件的东西**：上面 5 个跨域 agent 工具；今天页、动态、消息自身的登记。需要一份「内核 manifest」，或者明确由内核手写。
+3. **分段排序**：CORE_KEYS 的顺序、场景内分段顺序，草稿里还没有 `order` 字段，J1 补上。
+4. **设置行的状态文案**：现在是页面各自取数拼的，manifest 只能给 `status.server` id，需要服务端出一个汇总端点（或页面保留特判）。
+5. **位置的用量快照**：是专门写的 SQL，只能走 `server`。
+6. **实体、迁移、页面**：manifest 管不到。「独立目录」若要落到实体和页面，是 J1 之外的事。
+
+### 8.5 J1 迁移顺序与工作量
+
+硬规矩不变：J1 每个提交只改登记处，页面文件 diff 为零，Playwright 全量零改动通过。
+
+| 步 | 内容 | 量 |
+| --- | --- | --- |
+| J1.0 | 插件注册表 `plugins/index.ts`；14 处登记各写一个生成函数；CI 加「生成结果 == 手写结果」对比（先双跑，不切换）；统一 aliases | M（2～3 天） |
+| J1.1 | 知识库、回忆、出行：无跨插件依赖，登记最少 | 各 XS（合计半天） |
+| J1.2 | 投票、菜谱、积分、观影：观影有设置行和子页面 | 各 S（合计 1.5 天） |
+| J1.3 | 访客（9 条路由、显式发、2 种留意）、财务（先定权限口径） | 各 S（合计 1 天） |
+| J1.4 | 购物、任务、日历、提醒、点菜：core 层，只迁登记，Service 依赖原样保留 | 各 S（合计 2 天） |
+| J1.5 | 库存、位置、资产：交叉多，confirm-stock 先定归属 | 合计 1.5 天 |
+| J1.6 | 智能家居：hasData 改 server、去掉内核反向 import | S（半天） |
+| J1.7 | 留意 11 条改走 AttentionRegistry；删掉手写表；CI 断言「每个域有 manifest，14 处全部由它导出」 | M（1～2 天） |
+
+合计约 10～12 个工作日，与 §4 估的 L（约 1.5 周）大体相符，略多。每域一提交照旧。
+
+**不放进 J1、建议另起 J1b**：7 条跨插件 Service import 的解耦（门面或事件）。这会改服务代码，违反 J1「只改登记处」的硬规矩。J1b 排在 J1 之后、J4 之前，量 M～L（约 1 周），最难的是任务 → 积分的事务内调用。实体拆目录不在 J1 / J1b 范围。
+
+### 8.6 开 J1 前需要 King 定的
+
+1. **插件清单**：按 18 个算（点菜一个插件两段导航；菜谱、位置各自独立），还是合并其中几个？
+2. **跨插件解耦**：按上面建议另起 J1b，还是并进 J1（并进就要放宽「只改登记处」）？
+3. **财务权限口径**：普通成员能不能看账、记账？生成要求只有一个来源。
+4. **confirm-stock 归属**：算购物插件，还是库存插件？
+5. **⌘K 是否跟随模块开关**：模块关掉后它的动作是否隐藏？（J1 生成时顺手就能做到，但会改变现有行为）
+
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
-| J0 盘点与 manifest 草稿 | ☐ | | |
+| J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；开 J1 前待定 §8.6 五项 |
 | J1 插件注册表（15 域） | ☐ | | |
 | J2 助理数据与开关 | ☐ | | |
 | J3 第 0 档引擎 | ☐ | | 等试用原话 |
