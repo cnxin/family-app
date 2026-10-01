@@ -27,16 +27,17 @@
 | 事件域（`changed.domains`）与「路由前缀 → 域」映射表 | `packages/contracts/src/events.ts`，CI 断言全覆盖（H2） | 客户端失效、留意刷新、HA 状态推送 |
 | 留意规则 provider | `apps/api/src/today/`，每条规则一个 provider，服务端按家庭日期计算（F5、E5） | 今天页「需要留意」、家里页状态行 |
 | ⌘K 动作注册表（含深链约定） | `apps/web/src/lib/actions.ts`（F6） | ⌘K、今天页 / 家里页搜索条 |
-| agent 工具注册（28 个：21 读 + 7 `propose_*`） | `apps/api/src/agent/agent-tools.service.ts`，1,328 行单类 | Hermes 经 MCP 调用（当前关闭） |
+| agent 工具注册（21 读 + 7 `propose_*`，propose 数量待 J0 核实） | `apps/api/src/agent/agent-tools.service.ts`，1,324 行单类 | Hermes 经 MCP 调用（当前关闭） |
 | 家庭设置行、用量统计 | F7 设置页、`usage-report.mjs` | 管理员、C2 三档分类 |
 
 **判断**：七处登记彼此独立、各自手写，加一个域要改七个地方（I1 加「位置」时正是如此：nav、modules、events、actions、agent 工具、设置、usage-report 各一笔）。这是插件化要解决的**唯一**问题——不是缺能力，是缺一份统一的清单。
 
 ### 1.2 智能体现状
 
-- 模块 `agent`：40 个端点、17 个文件 8,110 行，全项目耦合中心（依赖 13 个域的 Service）。
+- 模块 `agent`：39 个端点、17 个文件 7,949 行，全项目耦合中心（依赖 13 个域的 Service）。
 - 运行时：`AgentRuntime { health, chat, cancel }` 接口，两个实现 `FakeAgentRuntime` / `HermesAgentRuntime`（Hermes 镜像经 MCP 调 `/internal/agent/mcp`）。
 - 安全模型已成型且正确：读工具直接执行；写只能 `propose_*` 落提案，人确认才执行；页面上下文与检索内容标 `untrustedContent`。
+- 工具数：读工具实测 21 个；`propose_*` 源码里只直接搜到 `propose_plan`，其余疑似运行时拼名，「7 个」**待 J0 核实**（文中「28 个」随之待定）。
 - refactor-plan 已定：**Hermes 换成自研 loop**，工具注册表抽到 `packages/agent-core` 的 `ToolRegistry`，28 个工具名与参数保持不变。
 - 附属能力：个人记忆（候选 / 确认 / 共享 / 纠正 / 遗忘）、成员画像、例行任务与周报、外部渠道配对、保留期清理。
 - 生产与演示栈 `enabled=false`，从未被家里人使用。
