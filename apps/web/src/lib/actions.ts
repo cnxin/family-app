@@ -1,3 +1,5 @@
+import { pluginActions, type PluginKey } from '@family/contracts';
+
 /** ⌘K 能直接做的事。`to` 带深链，页面读完就把参数抹掉。 */
 export interface Action {
   id: string;
@@ -5,6 +7,17 @@ export interface Action {
   keywords: string[];
   domain: string;
   to: string;
+}
+
+/** 已迁插件的动作从 manifest 取（J1），放在原来的位置，顺序不变。 */
+function fromPlugin(key: PluginKey): Action[] {
+  return pluginActions(key).map((action) => ({
+    id: action.id,
+    label: action.label,
+    keywords: [...action.keywords],
+    domain: key,
+    to: action.deepLink,
+  }));
 }
 
 export const ACTIONS: Action[] = [
@@ -16,7 +29,7 @@ export const ACTIONS: Action[] = [
   { id: 'asset', label: '登记一件资产', keywords: ['家电'], domain: 'assets', to: '/house/assets?create=1' },
   { id: 'poll', label: '发起投票', keywords: ['表决'], domain: 'polls', to: '/schedule/polls?create=1' },
   { id: 'memory', label: '记一条回忆', keywords: ['值得记住'], domain: 'memories', to: '/life/memories?create=1' },
-  { id: 'knowledge', label: '写一篇说明', keywords: ['经验'], domain: 'knowledge', to: '/life/knowledge?create=1' },
+  ...fromPlugin('knowledge'),
   { id: 'reminder', label: '加一条提醒', keywords: ['别忘了'], domain: 'reminders', to: '/schedule/reminders?create=1' },
   { id: 'calendar', label: '加日程', keywords: ['事件'], domain: 'calendar', to: '/schedule/calendar?create=1' },
   { id: 'task', label: '加任务', keywords: ['待办'], domain: 'tasks', to: '/schedule/tasks?create=1' },

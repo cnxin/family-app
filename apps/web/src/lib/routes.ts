@@ -1,9 +1,16 @@
+import { pluginLegacyPaths, type PluginKey } from '@family/contracts';
+
 /**
  * 旧客户端的路径 → 新客户端的路径。后端在通知、日历条目、提醒来源里写的 targetPath
  * 还是旧的一层路径（比如 `/polls?pollId=…`），搬完一页就在这里补一行，查询串原样带过去。
  * 换不出来返回 null：调用方提示一句 MISSING_TARGET，不跳走（旧客户端已在 H1 删除）。
  */
 export const MISSING_TARGET = '没找到这条记录对应的页面';
+
+/** 已迁插件的旧路径从 manifest 取（J1），放在原来的位置：前缀匹配取第一条，顺序有意义。 */
+function legacyPaths(key: PluginKey): [string, string][] {
+  return pluginLegacyPaths(key).map(([from, to]) => [from, to]);
+}
 
 const MOVED: [string, string][] = [
   ['/order', '/eat/order'],
@@ -21,7 +28,7 @@ const MOVED: [string, string][] = [
   ['/guests', '/house/guests'],
   ['/assets', '/house/assets'],
   ['/finance', '/house/finance'],
-  ['/knowledge', '/life/knowledge'],
+  ...legacyPaths('knowledge'),
   ['/memories', '/life/memories'],
   ['/travel', '/life/travel'],
   ['/system-backups', '/house/backups'],

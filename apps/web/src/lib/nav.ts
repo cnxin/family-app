@@ -1,4 +1,4 @@
-import { shelfModuleKey, type AuthSession, type ShelfModuleKey } from '@family/contracts';
+import { pluginNav, shelfModuleKey, type AuthSession, type PluginKey, type ShelfModuleKey } from '@family/contracts';
 
 /** 场景保留规范路径；导航层级和手机菜单独立组织，不再由 URL 决定功能权重。 */
 export type NavTier = 'core' | 'shelf' | 'settings';
@@ -22,6 +22,19 @@ export interface NavScene {
   path: string;
   /** 场景本身就是一页时没有分段（比如「今天」） */
   segments: NavSegment[];
+}
+
+/** 已迁插件的分段从 manifest 取（J1），放在原来的位置，顺序不变。 */
+function pluginSegments(key: PluginKey): NavSegment[] {
+  return pluginNav(key).map(({ key: segmentKey, label, glyph, path, tier, managerOnly }) => ({
+    key: segmentKey,
+    label,
+    tier,
+    glyph,
+    path,
+    ready: true,
+    ...(managerOnly ? { managerOnly } : {}),
+  }));
 }
 
 export const SCENES: NavScene[] = [
@@ -84,7 +97,7 @@ export const SCENES: NavScene[] = [
       { key: shelfModuleKey.enum.media, tier: 'shelf', glyph: '影', label: '观影', path: '/life/media', ready: true },
       { key: shelfModuleKey.enum.travel, tier: 'shelf', glyph: '行', label: '出行', path: '/life/travel', ready: true },
       { key: shelfModuleKey.enum.memories, tier: 'shelf', glyph: '忆', label: '回忆', path: '/life/memories', ready: true },
-      { key: shelfModuleKey.enum.knowledge, tier: 'shelf', glyph: '知', label: '知识库', path: '/life/knowledge', ready: true },
+      ...pluginSegments('knowledge'),
       { key: shelfModuleKey.enum.activity, tier: 'shelf', glyph: '动', label: '家庭动态', path: '/life/activity', ready: true },
     ],
   },

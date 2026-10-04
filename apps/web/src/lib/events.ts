@@ -36,7 +36,6 @@ const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   ],
   travel: ['travel-plans', 'travel-plan', 'travel-templates'],
   memories: ['memories'],
-  knowledge: ['knowledge', 'knowledge-revisions'],
   activity: ['activities'],
   assistant: [
     'agent-conversation', 'agent-conversations', 'agent-status', 'agent-settings', 'agent-routines',
