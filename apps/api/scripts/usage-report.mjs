@@ -20,7 +20,11 @@
  * 与 API 相同。库里没有只读角色，脚本用现有账号，但整个会话设为只读事务，只发 SELECT。
  */
 import { readFileSync } from 'node:fs';
+import contracts from '@family/contracts';
 import pg from 'pg';
+
+// 已迁到插件 manifest 的域，流水名、主表来源、未计入说明都由 manifest 生成（J1）；下面只手写还没迁的。
+const generated = contracts.pluginUsage();
 
 const args = process.argv.slice(2);
 function option(name, fallback) {
@@ -39,7 +43,7 @@ function password() {
 }
 
 // 流水 module → 域名。成员与邀请并成一个域。
-const ACTIVITY_DOMAINS = {
+const HANDWRITTEN_ACTIVITY_DOMAINS = {
   member: '成员',
   invitation: '成员',
   menu: '点菜（智能菜单）',
@@ -60,9 +64,10 @@ const ACTIVITY_DOMAINS = {
   inventory: '库存',
   recipe: '菜谱',
 };
+const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activityDomains };
 
 // 不写流水的域：主表最近 N 天新增的行。timestamp（无时区）列按数据库会话时区比较。
-const TABLE_SOURCES = [
+const HANDWRITTEN_TABLE_SOURCES = [
   { domain: '日历', source: '主表新增 calendar_events', sql: `SELECT "householdId" AS household, "createdById" AS member FROM calendar_events WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '任务', source: '主表新增 household_tasks', sql: `SELECT "householdId" AS household, "createdById" AS member FROM household_tasks WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '提醒', source: '主表新增 reminders', sql: `SELECT "householdId" AS household, "createdById" AS member FROM reminders WHERE "createdAt" >= now() - make_interval(days => $1)` },
@@ -75,6 +80,7 @@ const TABLE_SOURCES = [
   { domain: '智能家居（联动控制）', source: '主表新增 smart_home_commands（source = link，记在家庭主人名下）', sql: `SELECT "householdId" AS household, "memberId" AS member FROM smart_home_commands WHERE source = 'link' AND "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '智能家居（HA 回报）', source: '主表新增 smart_home_events（HA 打来的，没有成员）', sql: `SELECT "householdId" AS household, NULL::uuid AS member FROM smart_home_events WHERE event <> 'ping' AND "receivedAt" >= now() - make_interval(days => $1)` },
 ];
+const TABLE_SOURCES = [...HANDWRITTEN_TABLE_SOURCES, ...generated.tables];
 
 // 位置（I1）：不是写操作次数，是现状快照——各处有多少条记着位置。位置的改动没有操作人列，按成员数不了。
 const LOCATION_SNAPSHOT = `
@@ -92,12 +98,13 @@ const LOCATION_SNAPSHOT = `
     (SELECT count(*) FROM home_assets a WHERE a."householdId" = h.id AND a.status = 'active' AND a."locationId" IS NULL AND a.location IS NOT NULL)::int AS assets_text
   FROM households h`;
 
-const UNCOUNTED = [
+const HANDWRITTEN_UNCOUNTED = [
   '购物：shopping_items 没有创建时间和创建人列，无法按成员计数',
   '任务完成：只数新建任务；完成 / 认领（household_task_instances.resolvedById）不是新增行，未计入',
   '菜谱做法：dish_recipe_variants 没有创建人列，未计入',
   '位置：storage_locations 与库存 / 批次 / 资产的位置列都没有操作人，只给现状快照（见各家庭「位置」一段），不按成员计数',
 ];
+const UNCOUNTED = [...HANDWRITTEN_UNCOUNTED, ...generated.uncounted];
 
 const client = new pg.Client({
   host: process.env.DB_HOST || '127.0.0.1',

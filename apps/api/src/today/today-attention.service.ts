@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { addDays, householdToday, monthRange } from '@family/shared';
-import type { AttentionItem } from '@family/contracts';
+import { findPlugin, pluginAttention, type AttentionItem } from '@family/contracts';
 import { hasCapability, type Capability } from '../auth/capabilities';
 import type { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
@@ -24,20 +24,29 @@ import {
   type AttentionRuleContext,
 } from './today-attention.rules';
 
-const DOMAIN_ORDER: AttentionItem['domain'][] = [
-  'assets',
-  'guests',
-  'travel',
-  'inventory',
-  'polls',
-  'points',
-  'finance',
-  'backups',
-  'smart-home',
-];
+/** 今天页里各域的排序位次（越小越靠前）。已迁插件取 manifest 的 attention.order。 */
+const HANDWRITTEN_ORDER: Partial<Record<AttentionItem['domain'], number>> = {
+  assets: 1,
+  guests: 2,
+  travel: 3,
+  inventory: 4,
+  polls: 5,
+  points: 6,
+  finance: 7,
+  backups: 8,
+  'smart-home': 9,
+};
+const DOMAIN_ORDER: Partial<Record<AttentionItem['domain'], number>> = {
+  ...HANDWRITTEN_ORDER,
+  ...Object.fromEntries(pluginAttention().map(({ key, attention }) => [key, attention.order])),
+};
+const orderOf = (domain: AttentionItem['domain']) => DOMAIN_ORDER[domain] ?? Number.MAX_SAFE_INTEGER;
 
-/** F3 shelf key 来自 contracts/src/system.ts；settings 域不参与 override。 */
-const OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
+/**
+ * 留意跟着哪个模块开关走（F3 shelf key 来自 contracts/src/system.ts）；settings 域不参与 override。
+ * 已迁插件：manifest 里模块可开关的，就跟自己的 key 走。
+ */
+const HANDWRITTEN_OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: 'assets',
   guests: 'guests',
   travel: 'travel',
@@ -46,6 +55,14 @@ const OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
   points: 'points',
   finance: 'finance',
   'smart-home': 'smart-home',
+};
+const OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
+  ...HANDWRITTEN_OFF_KEYS,
+  ...Object.fromEntries(
+    pluginAttention()
+      .filter(({ key }) => findPlugin(key)?.module.overridable)
+      .map(({ key }) => [key, key]),
+  ),
 };
 
 @Injectable()
@@ -158,7 +175,7 @@ export class TodayAttentionService {
       .sort(
         (a, b) => Number(b.overdue) - Number(a.overdue)
           || (a.dueOn ?? '9999-99-99').localeCompare(b.dueOn ?? '9999-99-99')
-          || DOMAIN_ORDER.indexOf(a.domain) - DOMAIN_ORDER.indexOf(b.domain),
+          || orderOf(a.domain) - orderOf(b.domain),
       );
   }
 }

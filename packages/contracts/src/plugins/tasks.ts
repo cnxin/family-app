@@ -7,11 +7,6 @@ export const tasksManifest = {
   glyph: '待',
   manifestVersion: 1,
   tier: 'core',
-  aliases: {
-    activity: ['task'],
-    notification: ['task'],
-    proposalActionType: ['task'],
-  },
   requires: [
     // tasks.module.ts 在打勾的同一个事务里调 PointsService.awardTaskCompletion / reverseTaskAward。
     // 事务内同步调用，不能直接改成异步事件；J1 需要「带事务的跨插件门面」，或积分改为订阅 tasks.completed 并自己补偿。

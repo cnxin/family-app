@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
+  pluginHasDataSql,
   SHELF_MODULE_KEYS,
   type ModuleOverride,
   type ShelfModuleKey,
@@ -12,9 +13,9 @@ import { homeAssistantServerDefaultConfigured } from '../smart-home/home-assista
 
 // 静态 SQL 注册表：标识符不来自请求，只有家庭 ID / 默认启用值通过参数传入。
 // 同域多表 UNION 后只取存在性；每个分支都必须带当前家庭边界。
-const sources: Record<
-  Exclude<ShelfModuleKey, 'activity' | 'assistant' | 'smart-home'>,
-  string
+// 已迁到 manifest 的插件由 pluginHasDataSql 生成（同样只有 $1），这里只留还没迁的。
+const sources: Partial<
+  Record<Exclude<ShelfModuleKey, 'activity' | 'assistant' | 'smart-home'>, string>
 > = {
   recipes: 'SELECT 1 FROM dishes WHERE "householdId" = $1',
   reminders: `SELECT 1 FROM reminders WHERE "householdId" = $1
@@ -68,7 +69,8 @@ export class SystemModulesService {
            AND NOT EXISTS (SELECT 1 FROM agent_settings WHERE "householdId" = $1 LIMIT 1)`
         : key === 'smart-home'
           ? smartHomeSource
-          : sources[key];
+          : (pluginHasDataSql(key) ?? sources[key]);
+    if (!query) throw new Error(`模块 ${key} 没有 hasData 判定`);
     const parameters =
       key === 'assistant'
         ? [householdId, agentDataKey() != null]

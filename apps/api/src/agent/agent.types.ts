@@ -1,51 +1,15 @@
-export const AGENT_READ_TOOLS = [
-  'get_today_summary',
-  'get_calendar',
-  'get_tasks',
-  'get_shopping_list',
-  'get_meal_plan',
-  'get_inventory_alerts',
-  'search_knowledge',
-  'get_travel_checklist',
-  'get_watch_candidates',
-  'get_recent_memories',
-  'get_member_tasks',
-  'get_family_schedule',
-  'get_inventory_summary',
-  'search_recipes',
-  'get_dish_plan',
-  'get_weather',
-  'get_member_profile',
-  'get_asset_detail',
-  'get_finance_summary',
-  'find_item',
-  'list_location_contents',
-] as const;
+import { AGENT_MEMORY_TOOLS, type AgentMemoryToolName } from '@family/contracts';
 
-export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];
-
-export const AGENT_PROPOSAL_TOOLS = [
-  'propose_task',
-  'propose_reminder',
-  'propose_poll',
-  'propose_menu',
-  'propose_shopping_items',
-  'propose_plan',
-  'propose_finance_transaction',
-] as const;
-
-export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];
-
-export const AGENT_MEMORY_TOOLS = [
-  'recall_preferences',
-  'remember_preference',
-] as const;
-
-export type AgentMemoryToolName = (typeof AGENT_MEMORY_TOOLS)[number];
-export type AgentToolName =
-  | AgentReadToolName
-  | AgentProposalToolName
-  | AgentMemoryToolName;
+// 工具名单只此一份，在 packages/contracts/src/agent.ts（J1.0）。
+export {
+  AGENT_MEMORY_TOOLS,
+  AGENT_PROPOSAL_TOOLS,
+  AGENT_READ_TOOLS,
+  type AgentMemoryToolName,
+  type AgentProposalToolName,
+  type AgentReadToolName,
+  type AgentToolName,
+} from '@family/contracts';
 
 export const AGENT_HERMES_CHAT_TIMEOUT_MS = 6 * 60_000;
 export const AGENT_HERMES_STOP_WAIT_MS = 45_000;

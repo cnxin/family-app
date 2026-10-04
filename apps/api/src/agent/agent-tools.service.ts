@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { pluginToolSources } from '@family/contracts';
 import { AssetsService } from '../assets/assets.module';
 import { JwtUser } from '../auth/jwt.guard';
 import { CalendarService } from '../calendar/calendar.module';
@@ -1241,7 +1242,9 @@ export class AgentToolsService {
     output: unknown,
     startedAt: Date,
   ) {
+    // 已迁插件认领的工具，来源模块取 keys.ts 别名表（pluginToolSources）；其余手写
     const sourceModule: Record<string, string> = {
+      ...pluginToolSources(),
       get_today_summary: 'calendar',
       get_calendar: 'calendar',
       get_tasks: 'task',

@@ -1,0 +1,189 @@
+#!/usr/bin/env node
+// J1：插件 manifest 与各处登记一致（docs/architecture.md §8.1 的 14 处）。
+//
+// 逐域放开：只对已迁进 PLUGINS 的插件断言「它在各处的条目全部来自 manifest、没有手写残留」；
+// 还没迁的域照旧手写，这里只做全局检查（key、别名表、agent 工具归属）。
+// web 端登记的运行时结果另由 apps/web/src/lib/plugins-registry.test.ts 断言。
+// 依赖已构建的 packages/contracts（corepack pnpm build:packages；install 的 postinstall 会构建）。
+
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(join(ROOT, 'packages/contracts/package.json'));
+const c = require('./dist/index.js');
+
+const errors = [];
+const fail = (message) => errors.push(message);
+const read = (path) => readFileSync(join(ROOT, path), 'utf8');
+const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** 从 marker 所在行起，取到与它同缩进的第一个 `]` / `}`（可带 `;` `,` `)`）为止的一段。 */
+function block(path, marker) {
+  const source = read(path);
+  const start = source.indexOf(marker);
+  if (start < 0) {
+    fail(`${path}：找不到「${marker}」，登记处改名了？同步改 scripts/check-plugins.mjs`);
+    return '';
+  }
+  const lineStart = source.lastIndexOf('\n', start) + 1;
+  const indent = source.slice(lineStart, start).match(/^\s*/)[0];
+  const lines = source.slice(lineStart).split('\n');
+  const end = lines.findIndex((line, index) => index > 0 && new RegExp(`^${indent}[\\]}][;,)]*$`).test(line));
+  return (end < 0 ? lines : lines.slice(0, end + 1)).join('\n');
+}
+
+/** 对象字面量里有没有这个 key（`key:` 或 `'key':`）。 */
+const hasKey = (text, key) => new RegExp(`(^|[\\s{,])'?${escape(key)}'?\\s*:`, 'm').test(text);
+
+const PLUGINS = c.PLUGINS;
+const migrated = new Set(PLUGINS.map((plugin) => plugin.key));
+
+// ---- 1. key 与 manifest 本身 ----------------------------------------------------------------------
+
+const domainKeys = new Set(c.DOMAIN_KEYS);
+for (const key of [...c.PLUGIN_KEYS, ...c.KERNEL_DOMAIN_KEYS]) {
+  if (!domainKeys.has(key)) fail(`DOMAIN_KEYS 缺 ${key}`);
+}
+if (domainKeys.size !== c.PLUGIN_KEYS.length + c.KERNEL_DOMAIN_KEYS.length) fail('DOMAIN_KEYS 与插件 + 内核 key 不一一对应');
+for (const key of c.SHELF_MODULE_KEYS) if (!domainKeys.has(key)) fail(`SHELF_MODULE_KEYS 里的 ${key} 不是域 key`);
+
+const seen = new Set();
+for (const plugin of PLUGINS) {
+  if (!c.PLUGIN_KEYS.includes(plugin.key)) fail(`manifest ${plugin.key} 不在 PLUGIN_KEYS`);
+  if (seen.has(plugin.key)) fail(`manifest ${plugin.key} 重复`);
+  seen.add(plugin.key);
+  if (plugin.manifestVersion !== 1) fail(`${plugin.key}：manifestVersion 必须为 1`);
+}
+
+// ---- 2. 别名表：各 key 空间的每个值都有唯一归属，别名表里没有死值 -------------------------------------------
+
+const spaces = [
+  ['activity', c.ACTIVITY_MODULES, 'ACTIVITY_MODULES'],
+  ['notification', c.NOTIFICATION_MODULES, 'NOTIFICATION_MODULES'],
+  ['proposal', c.AGENT_ACTION_TYPES, 'AGENT_ACTION_TYPES'],
+];
+for (const [space, values, name] of spaces) {
+  for (const value of values) {
+    const owners = [
+      ...c.PLUGIN_KEYS.filter((key) => c.PLUGIN_ALIASES[key][space]?.includes(value)),
+      ...(c.KERNEL_ALIASES[space].includes(value) ? ['kernel'] : []),
+    ];
+    if (owners.length !== 1) fail(`${name} 的「${value}」归属 ${owners.length === 0 ? '没登记' : `不唯一：${owners.join('、')}`}（plugins/keys.ts）`);
+  }
+  for (const key of c.PLUGIN_KEYS) {
+    for (const alias of c.PLUGIN_ALIASES[key][space] ?? []) {
+      if (!values.includes(alias)) fail(`别名表 ${key}.${space} 的「${alias}」在 ${name} 里不存在`);
+    }
+  }
+}
+
+// ---- 3. agent 工具：名单唯一，每个工具至多一个归属；全部迁完后不许有无主工具 ------------------------------------
+
+const tools = [...c.AGENT_READ_TOOLS, ...c.AGENT_PROPOSAL_TOOLS, ...c.AGENT_MEMORY_TOOLS];
+if (new Set(tools).size !== tools.length) fail('agent 工具名单有重复');
+const owners = new Map();
+const claim = (tool, owner) => {
+  if (!tools.includes(tool)) fail(`${owner} 认领的工具 ${tool} 不在 agent 工具名单里`);
+  if (owners.has(tool)) fail(`工具 ${tool} 被 ${owners.get(tool)} 和 ${owner} 重复认领`);
+  owners.set(tool, owner);
+};
+for (const tool of c.KERNEL_AGENT_TOOLS) claim(tool, 'kernel');
+for (const plugin of PLUGINS) {
+  for (const query of plugin.queries ?? []) if (query.legacyTool) claim(query.legacyTool, plugin.key);
+  for (const action of plugin.actions ?? []) if (action.propose?.legacyTool) claim(action.propose.legacyTool, plugin.key);
+}
+const unowned = tools.filter((tool) => !owners.has(tool));
+if (migrated.size === c.PLUGIN_KEYS.length && unowned.length) fail(`18 个插件都迁完了，还有无主工具：${unowned.join('、')}`);
+
+// ---- 4. contracts 内的登记（dist 运行时结果） ---------------------------------------------------------
+
+const prefixes = c.EVENT_ROUTES.map((route) => route.prefix);
+for (const prefix of new Set(prefixes)) {
+  if (prefixes.filter((one) => one === prefix).length > 1) fail(`EVENT_ROUTES 里 ${prefix} 登记了两次（manifest 与手写重复？）`);
+}
+for (const route of c.EVENT_ROUTES) {
+  for (const domain of route.domains) if (!domainKeys.has(domain)) fail(`EVENT_ROUTES ${route.prefix} 的域 ${domain} 不存在`);
+}
+const attentionDomains = c.attentionItemSchema.shape.domain.options;
+const handwrittenEvents = block('packages/contracts/src/events.ts', 'const HANDWRITTEN_EVENT_ROUTES');
+
+for (const plugin of PLUGINS) {
+  const { key } = plugin;
+  const where = `[${key}]`;
+  if (c.SHELF_MODULE_KEYS.includes(key) !== plugin.module.overridable) {
+    fail(`${where} module.overridable 与 SHELF_MODULE_KEYS 不一致`);
+  }
+  if (attentionDomains.includes(key) !== Boolean(plugin.attention)) {
+    fail(`${where} 有无留意与 contracts/today.ts 的 domain 枚举不一致`);
+  }
+  for (const route of plugin.events.routes) {
+    if (new RegExp(`prefix: '${escape(route.prefix)}'`).test(handwrittenEvents)) {
+      fail(`${where} 事件路由 ${route.prefix} 还在 events.ts 手写表里`);
+    }
+  }
+  // 手写表里以本域打头的路由应该已经搬进 manifest
+  for (const line of handwrittenEvents.split('\n')) {
+    if (new RegExp(`domains: \\['${escape(key)}'[,\\]]`).test(line)) fail(`${where} events.ts 手写表还有本域路由：${line.trim()}`);
+  }
+
+  // ---- 5. web / api 里其余登记处不许有本域的手写条目 ------------------------------------------------------
+
+  const navKeys = [key, ...(c.PLUGIN_ALIASES[key].nav ?? [])];
+  const nav = read('apps/web/src/lib/nav.ts');
+  for (const navKey of navKeys) {
+    const literal = new RegExp(`key: '${escape(navKey)}'|shelfModuleKey\\.enum(\\.${escape(navKey)}\\b|\\['${escape(navKey)}'\\])`);
+    if (literal.test(nav)) fail(`${where} nav.ts 还手写着分段 ${navKey}`);
+  }
+  if (new RegExp(`domain: '${escape(key)}'`).test(block('apps/web/src/lib/actions.ts', 'export const ACTIONS'))) {
+    fail(`${where} actions.ts 还手写着本域动作`);
+  }
+  if (hasKey(block('apps/web/src/lib/events.ts', 'const HANDWRITTEN_QUERY_KEYS'), key)) fail(`${where} web events.ts 还手写着查询 key`);
+  if (hasKey(block('apps/api/src/system/system-modules.service.ts', 'const sources:'), key)) fail(`${where} system-modules.service.ts 还手写着 hasData`);
+  for (const marker of ['const HANDWRITTEN_ORDER', 'const HANDWRITTEN_OFF_KEYS']) {
+    if (hasKey(block('apps/api/src/today/today-attention.service.ts', marker), key)) fail(`${where} today-attention.service.ts ${marker} 还有本域`);
+  }
+  const toolSources = block('apps/api/src/agent/agent-tools.service.ts', 'const sourceModule: Record<string, string>');
+  for (const [tool, owner] of owners) {
+    if (owner === key && hasKey(toolSources, tool)) fail(`${where} agent-tools.service.ts sourceModule 还手写着 ${tool}`);
+  }
+  const usage = plugin.usage;
+  const activity = block('apps/api/scripts/usage-report.mjs', 'const HANDWRITTEN_ACTIVITY_DOMAINS');
+  for (const module of usage?.activityModules ?? []) if (hasKey(activity, module)) fail(`${where} usage-report.mjs 还手写着流水 ${module}`);
+  const tables = block('apps/api/scripts/usage-report.mjs', 'const HANDWRITTEN_TABLE_SOURCES');
+  for (const table of usage?.tables ?? []) {
+    if (new RegExp(`domain: '${escape(table.label)}'`).test(tables)) fail(`${where} usage-report.mjs 还手写着主表 ${table.label}`);
+  }
+  const uncounted = block('apps/api/scripts/usage-report.mjs', 'const HANDWRITTEN_UNCOUNTED');
+  for (const line of usage?.uncounted ?? []) if (uncounted.includes(line)) fail(`${where} usage-report.mjs 还手写着未计入说明`);
+  // 流水 module 必须挂在 manifest 上：别名表里有的流水值，manifest 里也要声明
+  for (const module of c.PLUGIN_ALIASES[key].activity ?? []) {
+    if (!(usage?.activityModules ?? []).includes(module)) fail(`${where} 别名表里的流水 ${module} 没写进 manifest.usage.activityModules`);
+  }
+
+  // ---- 6. 页面文件里的登记（J1 不改页面，只断言一致）：家庭设置行 ------------------------------------------
+
+  const settings = read('apps/web/src/pages/settings.tsx');
+  for (const row of plugin.settingsRows ?? []) {
+    if (!settings.includes(`to="${row.path}"`) || !settings.includes(row.title) || !settings.includes(row.hint)) {
+      fail(`${where} 设置行「${row.title}」与 settings.tsx 不一致`);
+    }
+  }
+  const paths = plugin.nav.map((segment) => segment.path);
+  for (const [, to] of settings.matchAll(/to="([^"]+)"/g)) {
+    const mine = paths.some((path) => to === path || to.startsWith(`${path}/`) || to.startsWith(`${path}?`));
+    if (mine && !(plugin.settingsRows ?? []).some((row) => row.path === to)) fail(`${where} settings.tsx 有本域的设置行 ${to}，manifest 没写`);
+  }
+}
+
+if (errors.length) {
+  console.error(`插件 manifest 与登记不一致（${errors.length} 处）：`);
+  for (const message of errors) console.error(`  - ${message}`);
+  process.exit(1);
+}
+console.log(
+  `插件登记一致：已迁 ${migrated.size} / ${c.PLUGIN_KEYS.length} 个插件` +
+    `（${[...migrated].join('、') || '—'}）；agent 工具 ${tools.length} 个，已认领 ${owners.size}，待迁 ${unowned.length}`,
+);

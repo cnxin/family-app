@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { subscribeEvents } from '@family/api-client';
-import type { DomainKey } from '@family/contracts';
+import { pluginQueryKeys, type DomainKey } from '@family/contracts';
 import { getAccessToken, refreshAccessToken } from './api';
 import { invalidateModules } from './queries/modules';
 
@@ -9,7 +9,7 @@ import { invalidateModules } from './queries/modules';
  * 域 → 这个域的查询 key 前缀（queryKey[0]）。/events 只说「哪个域变了」，收到后让这些查询失效、
  * 自己重取。新加查询时把它的前缀登记到对应的域里，否则别人改了这边不会跟着变。
  */
-export const DOMAIN_QUERY_KEYS: Record<DomainKey, readonly string[]> = {
+const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   menus: ['menus-of-date', 'menu', 'menu-dates', 'menu-events', 'menu-inventory-preview'],
   shopping: ['shopping', 'shopping-inventory-preview'],
   calendar: ['calendar'],
@@ -52,6 +52,12 @@ export const DOMAIN_QUERY_KEYS: Record<DomainKey, readonly string[]> = {
     'smart-home-panel', 'smart-home-merge-report',
   ],
 };
+
+/** 已迁插件的查询 key 由 manifest 的 events.queryKeys 生成（J1）；每个域都有一条由 plugins-registry 单测保证。 */
+export const DOMAIN_QUERY_KEYS = {
+  ...HANDWRITTEN_QUERY_KEYS,
+  ...pluginQueryKeys(),
+} as Record<DomainKey, readonly string[]>;
 
 /**
  * 几乎任何写入都可能改变的：家庭动态、站内通知（划掉别人点的菜、访客回复等都会顺带给人发通知，
