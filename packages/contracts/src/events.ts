@@ -111,7 +111,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/tasks', domains: ['tasks', 'calendar', 'points'] },
   { prefix: '/calendar-events', domains: ['calendar'] },
   { prefix: '/reminders', domains: ['reminders', 'calendar'] },
-  { prefix: '/polls', domains: ['polls', 'media'] },
   { prefix: '/points', domains: ['points'] },
   { prefix: '/rewards', domains: ['points'] },
   { prefix: '/reward-redemptions', domains: ['points'] },

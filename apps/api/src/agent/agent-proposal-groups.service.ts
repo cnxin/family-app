@@ -21,7 +21,9 @@ import {
 } from '../entities';
 import {
   AgentProposalsService,
+  GROUPABLE_ACTION_TYPES,
   GroupedAgentProposalToolName,
+  TOOL_BY_TYPE,
 } from './agent-proposals.service';
 
 const groupInputSchema = z
@@ -32,7 +34,7 @@ const groupInputSchema = z
       .array(
         z
           .object({
-            type: z.enum(['task', 'reminder', 'poll', 'menu', 'shopping']),
+            type: z.enum(GROUPABLE_ACTION_TYPES as [GroupAgentActionType, ...GroupAgentActionType[]]),
           })
           .passthrough(),
       )
@@ -43,13 +45,6 @@ const groupInputSchema = z
 
 type GroupAgentActionType = Exclude<AgentActionType, 'finance'>;
 
-const TOOL_BY_TYPE: Record<GroupAgentActionType, GroupedAgentProposalToolName> = {
-  task: 'propose_task',
-  reminder: 'propose_reminder',
-  poll: 'propose_poll',
-  menu: 'propose_menu',
-  shopping: 'propose_shopping_items',
-};
 
 function untrustedText(value: unknown) {
   return typeof value === 'string'
@@ -129,7 +124,7 @@ export class AgentProposalGroupsService {
         } = rawStep;
         steps.push(
           await this.proposals.createGroupedWithinTransaction(
-            TOOL_BY_TYPE[type as GroupAgentActionType],
+            TOOL_BY_TYPE[type as GroupAgentActionType] as GroupedAgentProposalToolName,
             payload,
             run,
             user,

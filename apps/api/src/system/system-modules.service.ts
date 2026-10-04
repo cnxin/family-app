@@ -20,7 +20,6 @@ const sources: Partial<
   recipes: 'SELECT 1 FROM dishes WHERE "householdId" = $1',
   reminders: `SELECT 1 FROM reminders WHERE "householdId" = $1
     AND status <> 'cancelled' AND (status = 'scheduled' OR "remindAt" > now())`,
-  polls: 'SELECT 1 FROM polls WHERE "householdId" = $1',
   inventory: 'SELECT 1 FROM inventory_items WHERE "householdId" = $1',
   assets: 'SELECT 1 FROM home_assets WHERE "householdId" = $1',
   finance: `SELECT 1 FROM finance_accounts WHERE "householdId" = $1

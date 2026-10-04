@@ -36,7 +36,7 @@ export const shoppingManifest = {
       deepLink: '/house/shopping?create=1',
       slots: { item: 'item', quantity: 'quantity?', unit: 'unit?' },
       templates: ['把{item}加进清单', '要买{item}', '买{quantity}{unit}{item}'],
-      propose: { legacyTool: 'propose_shopping_items', actionType: 'shopping' },
+      propose: { legacyTool: 'propose_shopping_items', actionType: 'shopping', label: '购物清单' },
       capability: 'manage_shopping',
     },
   ],

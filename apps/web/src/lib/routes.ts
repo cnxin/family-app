@@ -29,7 +29,7 @@ const MOVED: [string, string][] = [
   ['/calendar', '/schedule/calendar'],
   ['/tasks', '/schedule/tasks'],
   ['/reminders', '/schedule/reminders'],
-  ['/polls', '/schedule/polls'],
+  ...legacyPaths('polls'),
   ['/points', '/house/points'],
   ['/members', '/house/members'],
   ['/guests', '/house/guests'],
@@ -72,7 +72,7 @@ export const pluginAttentionOf: ReadonlyMap<string, PluginAttention> = new Map(
 );
 
 const HANDWRITTEN_ATTENTION_ROUTES: Partial<Record<AttentionItem['domain'], string>> = {
-  assets: '/house/assets', guests: '/house/guests', inventory: '/house/inventory', polls: '/schedule/polls', points: '/house/points', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
+  assets: '/house/assets', guests: '/house/guests', inventory: '/house/inventory', points: '/house/points', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
 };
 
 export const attentionRoutes = {
@@ -106,7 +106,6 @@ export function attentionPath(item: {
   if (plugin) return pluginAttentionPath(plugin, item);
   if ((item.kinds?.length ?? 0) > 1) return attentionRoutes[item.domain];
   if (item.domain === 'assets' && item.entity) return `${attentionRoutes.assets}/${encodeURIComponent(item.entity.id)}`;
-  if (item.domain === 'polls' && item.entity) return `${attentionRoutes.polls}?pollId=${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'points' && item.entity) return `${attentionRoutes.points}?redemptionId=${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'smart-home') {
     if (item.kind === 'filter' && item.entity) return `${attentionRoutes['smart-home']}?device=${encodeURIComponent(item.entity.id)}`;

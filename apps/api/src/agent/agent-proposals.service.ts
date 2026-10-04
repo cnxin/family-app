@@ -23,7 +23,12 @@ import {
 } from '../entities';
 import { AddItemsDto, MenusService } from '../menus/menus.module';
 import { PollsService } from '../polls/polls.module';
-import type { CreatePollBody, CreateTaskBody } from '@family/contracts';
+import {
+  AGENT_ACTION_TYPES,
+  pluginProposals,
+  type CreatePollBody,
+  type CreateTaskBody,
+} from '@family/contracts';
 import {
   CreateReminderDto,
   RemindersService,
@@ -170,32 +175,50 @@ export type GroupedAgentProposalToolName = Exclude<
   'propose_finance_transaction'
 >;
 
-const TYPE_BY_TOOL: Record<SingleAgentProposalToolName, AgentActionType> = {
+// 提案工具 ↔ actionType ↔ 提案卡类型名：已迁插件由 manifest 的 actions[].propose 生成（J1），这里只手写还没迁的。
+const PLUGIN_PROPOSALS = pluginProposals();
+
+const HANDWRITTEN_TYPE_BY_TOOL: Partial<Record<SingleAgentProposalToolName, AgentActionType>> = {
   propose_task: 'task',
   propose_reminder: 'reminder',
-  propose_poll: 'poll',
   propose_menu: 'menu',
   propose_shopping_items: 'shopping',
   propose_finance_transaction: 'finance',
 };
 
-const TOOL_BY_TYPE: Record<AgentActionType, AgentProposalToolName> = {
-  task: 'propose_task',
-  reminder: 'propose_reminder',
-  poll: 'propose_poll',
-  menu: 'propose_menu',
-  shopping: 'propose_shopping_items',
-  finance: 'propose_finance_transaction',
-};
+const TYPE_BY_TOOL = {
+  ...HANDWRITTEN_TYPE_BY_TOOL,
+  ...Object.fromEntries(PLUGIN_PROPOSALS.map((proposal) => [proposal.tool, proposal.actionType])),
+} as Record<SingleAgentProposalToolName, AgentActionType>;
 
-const ACTION_LABELS: Record<AgentActionType, string> = {
+/** 反查表由 TYPE_BY_TOOL 推出，不再另写一份。 */
+export const TOOL_BY_TYPE = Object.fromEntries(
+  Object.entries(TYPE_BY_TOOL).map(([tool, type]) => [type, tool]),
+) as Record<AgentActionType, SingleAgentProposalToolName>;
+
+const HANDWRITTEN_ACTION_LABELS: Partial<Record<AgentActionType, string>> = {
   task: '家庭任务',
   reminder: '家庭提醒',
-  poll: '家庭投票',
   menu: '菜单点菜',
   shopping: '购物清单',
   finance: '家庭记账',
 };
+
+const ACTION_LABELS = {
+  ...HANDWRITTEN_ACTION_LABELS,
+  ...Object.fromEntries(PLUGIN_PROPOSALS.map((proposal) => [proposal.actionType, proposal.label])),
+} as Record<AgentActionType, string>;
+
+/** 不能放进 propose_plan 一组、必须单独确认的类型（财务）。已迁插件看 manifest 的 grouped。 */
+const HANDWRITTEN_UNGROUPED: readonly AgentActionType[] = ['finance'];
+const UNGROUPED = new Set<string>([
+  ...HANDWRITTEN_UNGROUPED,
+  ...PLUGIN_PROPOSALS.filter((proposal) => !proposal.grouped).map((proposal) => proposal.actionType),
+]);
+export const GROUPABLE_ACTION_TYPES = AGENT_ACTION_TYPES.filter((type) => !UNGROUPED.has(type)) as Exclude<
+  AgentActionType,
+  'finance'
+>[];
 
 const MEAL_LABELS = {
   breakfast: '早餐',

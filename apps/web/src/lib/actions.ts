@@ -27,7 +27,7 @@ export const ACTIONS: Action[] = [
   ...fromPlugin('travel'),
   { id: 'locate', label: '记一下东西放哪', keywords: ['位置', '放在哪', '柜子'], domain: 'locations', to: '/house/inventory?locate=1' },
   { id: 'asset', label: '登记一件资产', keywords: ['家电'], domain: 'assets', to: '/house/assets?create=1' },
-  { id: 'poll', label: '发起投票', keywords: ['表决'], domain: 'polls', to: '/schedule/polls?create=1' },
+  ...fromPlugin('polls'),
   ...fromPlugin('memories'),
   ...fromPlugin('knowledge'),
   { id: 'reminder', label: '加一条提醒', keywords: ['别忘了'], domain: 'reminders', to: '/schedule/reminders?create=1' },

@@ -55,7 +55,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   system: '家庭设置与备份',
   calendar: '日历',
   task: '任务',
-  poll: '投票',
   reminder: '提醒',
   shopping: '购物',
   inventory: '库存',
@@ -68,8 +67,6 @@ const HANDWRITTEN_TABLE_SOURCES = [
   { domain: '日历', source: '主表新增 calendar_events', sql: `SELECT "householdId" AS household, "createdById" AS member FROM calendar_events WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '任务', source: '主表新增 household_tasks', sql: `SELECT "householdId" AS household, "createdById" AS member FROM household_tasks WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '提醒', source: '主表新增 reminders', sql: `SELECT "householdId" AS household, "createdById" AS member FROM reminders WHERE "createdAt" >= now() - make_interval(days => $1)` },
-  { domain: '投票', source: '主表新增 polls（观影投票除外，已在流水）', sql: `SELECT "householdId" AS household, "createdById" AS member FROM polls WHERE "sourceModule" IS DISTINCT FROM 'media' AND "createdAt" >= now() - make_interval(days => $1)` },
-  { domain: '投票（投票人）', source: '主表新增 poll_votes', sql: `SELECT "householdId" AS household, "memberId" AS member FROM poll_votes WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '菜谱', source: '主表新增 dishes', sql: `SELECT "householdId" AS household, "createdBy" AS member FROM dishes WHERE "createdAt" >= LOCALTIMESTAMP - make_interval(days => $1)` },
   { domain: '库存', source: '主表新增 inventory_transactions', sql: `SELECT "householdId" AS household, "actorId" AS member FROM inventory_transactions WHERE "createdAt" >= now() - make_interval(days => $1)` },
   // 智能家居控制按来源分开：联动按的记在家庭主人名下（联动以他的名义执行），不是他本人按的

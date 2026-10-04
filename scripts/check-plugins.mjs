@@ -163,6 +163,49 @@ for (const plugin of PLUGINS) {
     if (!(usage?.activityModules ?? []).includes(module)) fail(`${where} 别名表里的流水 ${module} 没写进 manifest.usage.activityModules`);
   }
 
+  // 留意文案与落点（web）
+  if (plugin.attention) {
+    for (const marker of ['const HANDWRITTEN_LABELS', 'const HANDWRITTEN_ACTIONS', 'const HANDWRITTEN_LIST_ACTIONS']) {
+      if (hasKey(block('apps/web/src/lib/attention-copy.ts', marker), key)) fail(`${where} attention-copy.ts ${marker} 还有本域`);
+    }
+    const kindActions = block('apps/web/src/lib/attention-copy.ts', 'const kindActions');
+    const copy = read('apps/web/src/lib/attention-copy.ts');
+    for (const kind of plugin.attention.kinds) {
+      if (hasKey(kindActions, kind.kind)) fail(`${where} attention-copy.ts kindActions 还手写着 ${kind.kind}`);
+      if (copy.includes(`case '${kind.kind}':`)) fail(`${where} attention-copy.ts 单条标题还手写着 ${kind.kind}`);
+    }
+    if (copy.includes(`case '${key}':`)) fail(`${where} attention-copy.ts 合并标题还手写着本域`);
+    if (hasKey(block('apps/web/src/lib/routes.ts', 'const HANDWRITTEN_ATTENTION_ROUTES'), key)) fail(`${where} routes.ts 留意落点还手写着本域`);
+    if (read('apps/web/src/lib/routes.ts').includes(`item.domain === '${key}'`)) fail(`${where} routes.ts attentionPath 还有本域特判`);
+  }
+  // 旧路径
+  const moved = block('apps/web/src/lib/routes.ts', 'const MOVED');
+  for (const [from] of plugin.legacyPaths ?? []) {
+    if (moved.includes(`['${from}', `)) fail(`${where} routes.ts MOVED 还手写着 ${from}`);
+  }
+  // 通知 module：别名表与 manifest 一一对应；web 名字 / 图标不手写
+  const notificationAliases = c.PLUGIN_ALIASES[key].notification ?? [];
+  const declared = (plugin.notifications ?? []).map((one) => one.key);
+  if (JSON.stringify([...declared].sort()) !== JSON.stringify([...notificationAliases].sort())) {
+    fail(`${where} manifest.notifications（${declared.join('、') || '—'}）与别名表 notification（${notificationAliases.join('、') || '—'}）不一致`);
+  }
+  for (const marker of ['const HANDWRITTEN_MODULE_LABEL', 'const HANDWRITTEN_MODULE_ICON']) {
+    const text = block('apps/web/src/lib/notification-meta.ts', marker);
+    for (const module of declared) if (hasKey(text, module)) fail(`${where} notification-meta.ts ${marker} 还手写着 ${module}`);
+  }
+  // 写提案：actionType 与别名表一致；agent 里的手写映射不再有本域
+  const proposals = c.pluginProposals().filter((one) => one.plugin === key);
+  const proposalAliases = c.PLUGIN_ALIASES[key].proposal ?? [];
+  if (JSON.stringify(proposals.map((one) => one.actionType).sort()) !== JSON.stringify([...proposalAliases].sort())) {
+    fail(`${where} manifest 的提案 actionType 与别名表 proposal 不一致`);
+  }
+  for (const proposal of proposals) {
+    const service = 'apps/api/src/agent/agent-proposals.service.ts';
+    if (hasKey(block(service, 'const HANDWRITTEN_TYPE_BY_TOOL'), proposal.tool)) fail(`${where} TYPE_BY_TOOL 还手写着 ${proposal.tool}`);
+    if (hasKey(block(service, 'const HANDWRITTEN_ACTION_LABELS'), proposal.actionType)) fail(`${where} ACTION_LABELS 还手写着 ${proposal.actionType}`);
+    if (block(service, 'const HANDWRITTEN_UNGROUPED').includes(`'${proposal.actionType}'`)) fail(`${where} HANDWRITTEN_UNGROUPED 还手写着 ${proposal.actionType}`);
+  }
+
   // ---- 6. 页面文件里的登记（J1 不改页面，只断言一致）：家庭设置行 ------------------------------------------
 
   const settings = read('apps/web/src/pages/settings.tsx');
