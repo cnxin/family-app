@@ -65,7 +65,7 @@ export const SCENES: NavScene[] = [
       { key: 'calendar', tier: 'core', glyph: '历', label: '日历', path: '/schedule/calendar', ready: true },
       { key: 'tasks', tier: 'core', glyph: '待', label: '任务', path: '/schedule/tasks', ready: true },
       { key: shelfModuleKey.enum.reminders, tier: 'shelf', glyph: '醒', label: '提醒', path: '/schedule/reminders', ready: true },
-      { key: shelfModuleKey.enum.polls, tier: 'shelf', glyph: '票', label: '投票', path: '/schedule/polls', ready: true },
+      ...pluginSegments('polls'),
       { key: 'notifications', tier: 'core', glyph: '信', label: '消息', path: '/schedule/notifications', ready: true },
     ],
   },

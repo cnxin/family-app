@@ -152,9 +152,10 @@ export interface PluginAction {
   templates?: readonly string[];
   /**
    * 生成 agent 的写提案工具。`legacyTool` 是现有工具名（J4 保留为别名），
-   * `actionType` 是 agent_action_proposals.actionType 的现值。
+   * `actionType` 是 agent_action_proposals.actionType 的现值，`label` 是提案卡上的类型名；
+   * `grouped: false` 表示不能放进 propose_plan 的一组里，必须单独确认（财务）。
    */
-  propose?: { legacyTool?: string; actionType: string };
+  propose?: { legacyTool?: string; actionType: string; label: string; grouped?: boolean };
   /** 执行或看到这个动作需要的能力；缺省为任何成员。 */
   capability?: string;
   managerOnly?: boolean;

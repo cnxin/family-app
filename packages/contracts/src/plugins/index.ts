@@ -11,13 +11,14 @@ import type {
 import { PLUGIN_ALIASES, PLUGIN_KEYS, type PluginKey } from './keys';
 import { knowledgeManifest } from './knowledge';
 import { memoriesManifest } from './memories';
+import { pollsManifest } from './polls';
 import { travelManifest } from './travel';
 
 export * from './keys';
 export * from './types';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest];
+export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest];
 
 export function findPlugin(key: string): PluginManifest | undefined {
   return PLUGINS.find((plugin) => plugin.key === key);
@@ -116,6 +117,23 @@ export function pluginToolSources(): Readonly<Record<string, string>> {
       const source = PLUGIN_ALIASES[key as PluginKey].agentSource?.[0];
       return source ? [[tool, source]] : [];
     }),
+  );
+}
+
+/** 已迁插件的写提案：工具名、actionType、提案卡类型名、能否打包进 propose_plan。 */
+export function pluginProposals(): readonly { plugin: string; tool: string; actionType: string; label: string; grouped: boolean }[] {
+  return PLUGINS.flatMap((plugin) =>
+    (plugin.actions ?? []).flatMap((action) =>
+      action.propose?.legacyTool
+        ? [{
+            plugin: plugin.key,
+            tool: action.propose.legacyTool,
+            actionType: action.propose.actionType,
+            label: action.propose.label,
+            grouped: action.propose.grouped ?? true,
+          }]
+        : [],
+    ),
   );
 }
 

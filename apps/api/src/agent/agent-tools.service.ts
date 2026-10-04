@@ -1266,7 +1266,6 @@ export class AgentToolsService {
       remember_preference: 'agent_memory',
       propose_task: 'task',
       propose_reminder: 'reminder',
-      propose_poll: 'poll',
       propose_menu: 'menu',
       propose_shopping_items: 'shopping',
       propose_plan: 'agent_plan',

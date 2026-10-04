@@ -29,7 +29,7 @@ export const tasksManifest = {
       deepLink: '/schedule/tasks?create=1',
       slots: { title: 'text', date: 'date?', assignee: 'member?' },
       templates: ['{date}{assignee}{title}', '加个任务{title}', '提醒{assignee}{date}{title}'],
-      propose: { legacyTool: 'propose_task', actionType: 'task' },
+      propose: { legacyTool: 'propose_task', actionType: 'task', label: '家庭任务' },
     },
   ],
   queries: [
