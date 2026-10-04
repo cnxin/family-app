@@ -1255,7 +1255,6 @@ export class AgentToolsService {
       get_member_tasks: 'task',
       get_family_schedule: 'calendar',
       get_inventory_summary: 'inventory',
-      search_recipes: 'recipe',
       get_dish_plan: 'menu',
       get_weather: 'weather',
       get_member_profile: 'member',

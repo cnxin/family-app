@@ -15,7 +15,6 @@ const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   calendar: ['calendar'],
   tasks: ['tasks'],
   notifications: ['notifications', 'notification-deliveries', 'notification-channels'],
-  recipes: ['recipes', 'recipe', 'dishes'],
   reminders: ['reminders', 'reminder-sources'],
   inventory: [
     'inventory', 'inventory-batches', 'inventory-transactions',

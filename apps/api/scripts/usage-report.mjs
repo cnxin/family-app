@@ -58,7 +58,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   reminder: '提醒',
   shopping: '购物',
   inventory: '库存',
-  recipe: '菜谱',
 };
 const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activityDomains };
 
@@ -67,7 +66,6 @@ const HANDWRITTEN_TABLE_SOURCES = [
   { domain: '日历', source: '主表新增 calendar_events', sql: `SELECT "householdId" AS household, "createdById" AS member FROM calendar_events WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '任务', source: '主表新增 household_tasks', sql: `SELECT "householdId" AS household, "createdById" AS member FROM household_tasks WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '提醒', source: '主表新增 reminders', sql: `SELECT "householdId" AS household, "createdById" AS member FROM reminders WHERE "createdAt" >= now() - make_interval(days => $1)` },
-  { domain: '菜谱', source: '主表新增 dishes', sql: `SELECT "householdId" AS household, "createdBy" AS member FROM dishes WHERE "createdAt" >= LOCALTIMESTAMP - make_interval(days => $1)` },
   { domain: '库存', source: '主表新增 inventory_transactions', sql: `SELECT "householdId" AS household, "actorId" AS member FROM inventory_transactions WHERE "createdAt" >= now() - make_interval(days => $1)` },
   // 智能家居控制按来源分开：联动按的记在家庭主人名下（联动以他的名义执行），不是他本人按的
   { domain: '智能家居（手动控制）', source: '主表新增 smart_home_commands（source = manual）', sql: `SELECT "householdId" AS household, "memberId" AS member FROM smart_home_commands WHERE source = 'manual' AND "createdAt" >= now() - make_interval(days => $1)` },
@@ -95,7 +93,6 @@ const LOCATION_SNAPSHOT = `
 const HANDWRITTEN_UNCOUNTED = [
   '购物：shopping_items 没有创建时间和创建人列，无法按成员计数',
   '任务完成：只数新建任务；完成 / 认领（household_task_instances.resolvedById）不是新增行，未计入',
-  '菜谱做法：dish_recipe_variants 没有创建人列，未计入',
   '位置：storage_locations 与库存 / 批次 / 资产的位置列都没有操作人，只给现状快照（见各家庭「位置」一段），不按成员计数',
 ];
 const UNCOUNTED = [...HANDWRITTEN_UNCOUNTED, ...generated.uncounted];

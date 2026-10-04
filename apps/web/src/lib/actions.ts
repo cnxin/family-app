@@ -34,5 +34,5 @@ export const ACTIONS: Action[] = [
   { id: 'calendar', label: '加日程', keywords: ['事件'], domain: 'calendar', to: '/schedule/calendar?create=1' },
   { id: 'task', label: '加任务', keywords: ['待办'], domain: 'tasks', to: '/schedule/tasks?create=1' },
   { id: 'shopping', label: '加到购物清单', keywords: ['要买'], domain: 'shopping', to: '/house/shopping?create=1' },
-  { id: 'dish', label: '新建菜品', keywords: ['菜'], domain: 'recipes', to: '/eat/recipes?create=1' },
+  ...fromPlugin('recipes'),
 ];
