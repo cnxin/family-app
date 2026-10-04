@@ -1,6 +1,6 @@
-import type { AttentionItem } from '@family/contracts';
+import { renderTemplate, type AttentionItem } from '@family/contracts';
 import { daysBetween } from '@family/shared';
-import { attentionPath } from './routes';
+import { attentionPath, pluginAttentionOf } from './routes';
 
 export type AttentionCopy = {
   domainLabel: string;
@@ -10,10 +10,9 @@ export type AttentionCopy = {
   path: string;
 };
 
-const labels: Record<AttentionItem['domain'], string> = {
+const HANDWRITTEN_LABELS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '资产',
   guests: '访客',
-  travel: '出行',
   inventory: '库存',
   polls: '投票',
   points: '积分',
@@ -22,10 +21,9 @@ const labels: Record<AttentionItem['domain'], string> = {
   'smart-home': '智能家居',
 };
 
-const actions: Record<AttentionItem['domain'], string> = {
+const HANDWRITTEN_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '看这件资产',
   guests: '去点菜',
-  travel: '看清单',
   inventory: '看库存',
   polls: '去投票',
   points: '去审批',
@@ -37,7 +35,6 @@ const actions: Record<AttentionItem['domain'], string> = {
 const kindActions: Partial<Record<string, string>> = {
   'meal-request': '去处理',
   menu: '去点菜',
-  checklist: '看清单',
   vote: '去投票',
   redemption: '去审批',
   budget: '看预算',
@@ -47,10 +44,9 @@ const kindActions: Partial<Record<string, string>> = {
   offline: '看连接',
 };
 
-const listActions: Record<AttentionItem['domain'], string> = {
+const HANDWRITTEN_LIST_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '看资产',
   guests: '去处理',
-  travel: '看行程',
   inventory: '看库存',
   polls: '去投票',
   points: '去审批',
@@ -58,6 +54,13 @@ const listActions: Record<AttentionItem['domain'], string> = {
   backups: '看备份',
   'smart-home': '去看看',
 };
+
+// 已迁插件的域名、默认按钮、列表按钮由 manifest 生成（J1）
+const fromPlugins = (pick: (attention: NonNullable<ReturnType<typeof pluginAttentionOf.get>>) => string) =>
+  Object.fromEntries([...pluginAttentionOf].map(([key, attention]) => [key, pick(attention)]));
+const labels = { ...HANDWRITTEN_LABELS, ...fromPlugins((one) => one.label) } as Record<AttentionItem['domain'], string>;
+const actions = { ...HANDWRITTEN_ACTIONS, ...fromPlugins((one) => one.actionLabel) } as Record<AttentionItem['domain'], string>;
+const listActions = { ...HANDWRITTEN_LIST_ACTIONS, ...fromPlugins((one) => one.listActionLabel) } as Record<AttentionItem['domain'], string>;
 
 function timePhrase(item: AttentionItem, today: string) {
   if (item.overdue) {
@@ -78,6 +81,8 @@ function singleTitle(item: AttentionItem, today: string) {
   const when = timePhrase(item, today);
   if (item.overdue) return `${name}${when}`;
   const soon = item.dueOn ? `${when}` : '';
+  const kind = pluginAttentionOf.get(item.domain)?.kinds.find((one) => one.kind === item.kind);
+  if (kind) return renderTemplate(item.dueOn ? kind.title : (kind.titleNoDue ?? kind.title), { name, soon });
   switch (item.kind) {
     case 'maintenance':
       return `${name} ${soon}该换了`;
@@ -89,8 +94,6 @@ function singleTitle(item: AttentionItem, today: string) {
       return `${name}（${soon || '快到了'}）还没定菜`;
     case 'meal-request':
       return `${name}的点菜请求等你处理`;
-    case 'checklist':
-      return `${name} ${soon}出发，清单还没准备好`;
     case 'expiry':
       return `${name} ${soon}过期`;
     case 'vote':
@@ -117,6 +120,16 @@ function singleTitle(item: AttentionItem, today: string) {
 function mergedTitle(item: AttentionItem): string {
   const n = item.count;
   const mixed = item.kinds.length > 1;
+  const plugin = pluginAttentionOf.get(item.domain);
+  if (plugin) {
+    const kind = plugin.kinds.find((one) => one.kind === item.kind);
+    const template = mixed
+      ? (plugin.mixedTitle ?? plugin.mergedTitle)
+      : item.overdue && plugin.mergedOverdueTitle
+        ? plugin.mergedOverdueTitle
+        : (kind?.mergedTitle ?? plugin.mergedTitle);
+    return renderTemplate(template, { n });
+  }
   switch (item.domain) {
     case 'assets':
       if (mixed) return `${n} 件资产要处理`;
@@ -126,8 +139,6 @@ function mergedTitle(item: AttentionItem): string {
     case 'guests':
       if (mixed) return `${n} 件访客的事要处理`;
       return item.kind === 'meal-request' ? `${n} 条访客点菜等你处理` : `本周有 ${n} 场来访要准备`;
-    case 'travel':
-      return `${n} 个行程还没准备好`;
     case 'inventory':
       return item.overdue ? `${n} 样快过期，有的已经过期了` : `${n} 样快过期`;
     case 'polls':
@@ -140,10 +151,8 @@ function mergedTitle(item: AttentionItem): string {
       return `备份有 ${n} 件事要看一下`;
     case 'smart-home':
       return `智能家居有 ${n} 件事要看一下`;
-    default: {
-      const unknown: never = item.domain;
-      return `${n} 件${String(unknown)}要处理`;
-    }
+    default:
+      return `${n} 件${labels[item.domain] ?? String(item.domain)}要处理`;
   }
 }
 
@@ -153,7 +162,11 @@ export function attentionCopy(item: AttentionItem, today = item.dueOn ?? ''): At
     domainLabel: labels[item.domain],
     title: item.count > 1 ? mergedTitle(item) : singleTitle(item, today),
     timeText: timePhrase(item, today),
-    actionLabel: mixed ? listActions[item.domain] : (kindActions[item.kind] ?? actions[item.domain]),
+    actionLabel: mixed
+      ? listActions[item.domain]
+      : (pluginAttentionOf.get(item.domain)?.kinds.find((one) => one.kind === item.kind)?.actionLabel
+        ?? kindActions[item.kind]
+        ?? actions[item.domain]),
     path: attentionPath(item),
   };
 }

@@ -28,7 +28,6 @@ import {
 const HANDWRITTEN_ORDER: Partial<Record<AttentionItem['domain'], number>> = {
   assets: 1,
   guests: 2,
-  travel: 3,
   inventory: 4,
   polls: 5,
   points: 6,
@@ -49,7 +48,6 @@ const orderOf = (domain: AttentionItem['domain']) => DOMAIN_ORDER[domain] ?? Num
 const HANDWRITTEN_OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: 'assets',
   guests: 'guests',
-  travel: 'travel',
   inventory: 'inventory',
   polls: 'polls',
   points: 'points',

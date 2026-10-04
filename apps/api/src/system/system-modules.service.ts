@@ -35,7 +35,6 @@ const sources: Partial<
       AND kind IN ('plex', 'emby', 'moviepilot') AND NULLIF("baseUrl", '') IS NOT NULL
     UNION ALL SELECT 1 FROM household_media_source_configs WHERE "householdId" = $1
       AND (NULLIF("baseUrl", '') IS NOT NULL OR NULLIF("credentialHint", '') IS NOT NULL)`,
-  travel: 'SELECT 1 FROM travel_plans WHERE "householdId" = $1',
   // I1：「未整理」和家人挂在它下面的之外，家里有任何一个没归档的位置（管理员整理过才算这个域有数据）
   locations: `SELECT 1 FROM storage_locations l WHERE l."householdId" = $1
     AND l."systemKey" IS NULL AND l."archivedAt" IS NULL
