@@ -182,6 +182,17 @@ export const AGENT_PROPOSAL_TOOLS = [
   'propose_finance_transaction',
 ] as const;
 
+/** 记忆工具：个人偏好的回顾与候选。J1 起 agent 工具名单只此一份，apps/api 从这里取。 */
+export const AGENT_MEMORY_TOOLS = [
+  'recall_preferences',
+  'remember_preference',
+] as const;
+
+export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];
+export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];
+export type AgentMemoryToolName = (typeof AGENT_MEMORY_TOOLS)[number];
+export type AgentToolName = AgentReadToolName | AgentProposalToolName | AgentMemoryToolName;
+
 const expectedVersion = z.number().int().min(1);
 const clientRequestId = z.string().min(1).max(180);
 

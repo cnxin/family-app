@@ -33,6 +33,7 @@ export * from './events';
 export * from './smart-home';
 export * from './locations';
 export * from './household-map';
+export * from './plugins';
 
 import { buildContractIndex } from './registry';
 import { activities } from './activities';

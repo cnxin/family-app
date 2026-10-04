@@ -361,6 +361,41 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 4. **「买到后入库」**（`POST /shopping-items/:id/confirm-stock`）归库存插件。
 5. **⌘K 不随模块开关隐藏**。规则：模块收起 / 隐身只影响家里页、侧栏、留意；搜索与深链始终可达。§8.2「不一致」第 2 条据此关闭。
 
+### 8.7 J1 执行记录
+
+**做法**：各登记处改成「手写表 + 从 manifest 生成的条目」两段合并。迁一个域，就加一份 `packages/contracts/src/plugins/<key>.ts`、放进 `PLUGINS`、删掉各处的手写条目。顺序有意义的登记（导航分段、⌘K、旧路径）不在 manifest 里放 order，而是在原位置用 `pluginNav(key)` / `pluginActions(key)` / `pluginLegacyPaths(key)` 占位，现有顺序原样保留。
+
+**两道检查**（CI 静态检查 job，J1.0 新加）：
+- `scripts/check-plugins.mjs`：
+  - 全局：key 表、别名表（流水 / 通知 / 提案 actionType 每个值归属唯一、没有死别名）、agent 工具归属；
+  - 已迁域：contracts 里的登记结果，以及 web / api / 用量脚本里不许残留本域的手写条目；
+  - 页面文件里的家庭设置行，只断言与 manifest 一致。
+- `apps/web/src/lib/plugins-registry.test.ts`：已迁域的导航、⌘K、查询失效、旧路径、留意文案与落点、通知，运行结果与 manifest 一致。CI 原来不跑 web 单测，J1.0 起跑。
+
+**14 处的落法**：
+
+| # | 登记处 | J1 的落法 |
+| --- | --- | --- |
+| 1 | 导航 | 原位 `pluginNav(key)` |
+| 2 | 模块开关 / hasData | `SHELF_MODULE_KEYS` 是 key 表，保留手写并断言；hasData SQL 由 `module.hasData.tables` 生成 |
+| 3 | 写端点 → 域 | `EVENT_ROUTES` = 手写 + manifest |
+| 4 | 查询失效 | 手写 + manifest |
+| 5 | 留意（服务端） | 排序、开关归属由 manifest 生成；规则本身 J1.7 再挂注册表 |
+| 6 | 留意文案与落点 | 按 kind 的标题模板、合并标题、落点模板生成 |
+| 7 | ⌘K | 原位 `pluginActions(key)` |
+| 8 | agent 工具名单 | **J1.0 已收成一份**（contracts）；API 的 `agent.types.ts` 只转出；`hermes-config-contract.mjs` 改读 contracts |
+| 9 | 工具来源 / 提案 actionType | 来源由别名表生成；actionType 映射在首个有提案的域迁移时接 |
+| 10 | 设置行 | **页面文件，J1 不生成**，只断言一致 |
+| 11 | 用量统计 | `pluginUsage()` 生成，脚本 import `@family/contracts`（生产镜像里可解析） |
+| 12 | 动态流水 module | 数据库约束里的值，保留手写，别名表断言归属 |
+| 13 | 通知 module | 枚举保留，名字与图标在首个有通知的域迁移时接 |
+| 14 | 能力 | 在首个声明能力的域迁移时接 |
+
+**新增「表达不了」**（接 §8.4 的 6 条）：
+
+7. **页面文件里的登记**：家庭设置行写在 `pages/settings.tsx`。J1 的规矩是页面文件 diff 为零，所以设置行在 J1 只做一致性断言，不从 manifest 生成。
+8. **业务数据里的来源模块**：提醒、日历、回忆的 `sourceModule`（如 `'travel'`），以及 propose_plan 的步骤类型，是写进数据库约束的引用关系，不是登记处，J1 不动。J1b 做跨插件解耦时一并看。
+
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |

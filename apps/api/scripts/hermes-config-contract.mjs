@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const apiRoot = resolve(scriptDir, '..');
 const repoRoot = resolve(apiRoot, '../..');
-const agentTypesPath = resolve(apiRoot, 'src/agent/agent.types.ts');
+// 工具名单只此一份，在 contracts（J1.0）
+const agentTypesPath = resolve(repoRoot, 'packages/contracts/src/agent.ts');
 const configPaths = [
   resolve(repoRoot, 'deploy/hermes/config.yaml'),
   resolve(repoRoot, 'deploy/hermes/config.local.yaml'),

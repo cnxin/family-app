@@ -7,10 +7,6 @@ export const shoppingManifest = {
   glyph: '购',
   manifestVersion: 1,
   tier: 'core',
-  aliases: {
-    activity: ['shopping'], // household_activity_logs.module
-    proposalActionType: ['shopping'], // agent-proposals.service.ts
-  },
   requires: [
     // shopping.module.ts 现在直接读 Menu / InventoryItem / InventoryTransaction 实体（共用 entities/index.ts）
     { plugin: 'menus', via: 'contract', uses: ['GET /menus'], reason: '按菜单生成购物清单（POST /shopping-list/generate）' },

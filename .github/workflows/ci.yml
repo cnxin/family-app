@@ -41,6 +41,10 @@ jobs:
         run: node scripts/api-inventory.mjs --check
       - name: 写端点都登记了事件域（/events）
         run: node scripts/check-event-routes.mjs
+      - name: 插件 manifest 与各处登记一致（J1）
+        run: node scripts/check-plugins.mjs
+      - name: 客户端单元测试（含插件注册表）
+        run: corepack pnpm --filter web test:unit
       - name: 备份脚本语法
         run: corepack pnpm backup:worker:check
       - name: Compose 配置

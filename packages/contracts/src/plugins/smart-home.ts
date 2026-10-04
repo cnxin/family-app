@@ -47,33 +47,14 @@ export const smartHomeManifest = {
     path: '/house/smart-home',
     order: 9,
     kinds: [
-      { kind: 'filter', server: 'smart-home.filter', actionLabel: '看滤芯', path: '/house/smart-home?device={id}' },
+      { kind: 'filter', server: 'smart-home.filter', actionLabel: '看滤芯', path: '/house/smart-home?device={id}', title: '{name}的滤芯快用完了' },
       // 指向别的插件的页面：留意的落点可以跨插件，但只是深链，不构成代码依赖
-      { kind: 'laundry', server: 'smart-home.laundry', actionLabel: '去晾衣服', path: '/schedule/tasks?task={id}' },
-      { kind: 'offline', server: 'smart-home.offline', actionLabel: '看连接', path: '/house/smart-home/settings', capability: 'manage_integrations' },
+      { kind: 'laundry', server: 'smart-home.laundry', actionLabel: '去晾衣服', path: '/schedule/tasks?task={id}', title: '衣服好了两个多小时，还没晾' },
+      { kind: 'offline', server: 'smart-home.offline', actionLabel: '看连接', path: '/house/smart-home/settings', capability: 'manage_integrations', title: 'Home Assistant 连不上一个多小时了' },
     ],
+    mergedTitle: '智能家居有 {n} 件事要看一下',
   },
-  // 现在 ⌘K 没有智能家居动作，agent 也没有智能家居工具；以下是 J3 首批要补的，示意 device / room 槽位
-  actions: [
-    {
-      id: 'smart-home.control',
-      label: '控制设备',
-      keywords: ['开', '关', '启动'],
-      deepLink: '/house/smart-home?device={device}',
-      slots: { device: 'device', room: 'room?' },
-      templates: ['{device}开始', '打开{room}{device}', '关掉{room}{device}'],
-    },
-  ],
-  queries: [
-    {
-      id: 'smart-home.device-state',
-      label: '设备状态',
-      templates: ['{device}还能用多久', '{device}现在什么状态', '{room}{device}开着吗'],
-      slots: { device: 'device', room: 'room?' },
-      server: 'smart-home.deviceState',
-      answer: { server: 'smart-home.deviceStateAnswer' },
-    },
-  ],
+  // ⌘K 与 agent 现在都没有智能家居的动作 / 查询；J3 再补（device / room 槽位），J1 不加，免得改变现有行为
   settingsRows: [
     {
       title: '智能家居',

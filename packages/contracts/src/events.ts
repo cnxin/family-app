@@ -1,18 +1,16 @@
 import { z } from 'zod';
 import { isoDateTime, uuid } from './common';
+import { KERNEL_DOMAIN_KEYS, PLUGIN_KEYS, pluginEventExempt, pluginEventRoutes } from './plugins';
 import { defineEndpoint } from './registry';
-import { SHELF_MODULE_KEYS } from './system';
 
 // 对应 apps/api/src/events/（H2a）。/events 只推「哪个域变了」，不推数据；客户端收到后让
 // 对应查询失效、自己重取。
 
 /**
- * 域 key 的唯一来源：家里页 shelf 的 16 个（system.ts）+ 常驻域 + 设置类。
- * 新增业务域先在这里加 key，再在下面的路由映射表里登记它的写端点。
+ * 域 key 的唯一来源在 plugins/keys.ts：18 个插件 + 内核域。
+ * 已迁到 manifest 的插件，写端点映射由 manifest 生成（见 EVENT_ROUTES 末尾）；还没迁的在下面手写。
  */
-export const CORE_DOMAIN_KEYS = ['menus', 'shopping', 'calendar', 'tasks', 'notifications'] as const;
-export const SETTINGS_DOMAIN_KEYS = ['members', 'household', 'backups', 'modules'] as const;
-export const DOMAIN_KEYS = [...SHELF_MODULE_KEYS, ...CORE_DOMAIN_KEYS, ...SETTINGS_DOMAIN_KEYS] as const;
+export const DOMAIN_KEYS = [...PLUGIN_KEYS, ...KERNEL_DOMAIN_KEYS] as const;
 export const domainKey = z.enum(DOMAIN_KEYS);
 export type DomainKey = z.infer<typeof domainKey>;
 
@@ -61,7 +59,7 @@ const PROPOSAL_DOMAINS: readonly DomainKey[] = [
   'assistant', 'tasks', 'reminders', 'polls', 'shopping', 'menus', 'finance', 'calendar',
 ];
 
-export const EVENT_ROUTES: readonly EventRoute[] = [
+const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/agent', domains: ['assistant'] },
   { prefix: '/agent/proposals', domains: PROPOSAL_DOMAINS },
   { prefix: '/agent/proposal-groups', domains: PROPOSAL_DOMAINS },
@@ -135,8 +133,14 @@ export const EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/system/modules', domains: ['modules'] },
 ];
 
+/** 手写的 + 已迁插件 manifest 生成的。域名是否合法由 scripts/check-plugins.mjs 断言。 */
+export const EVENT_ROUTES: readonly EventRoute[] = [
+  ...HANDWRITTEN_EVENT_ROUTES,
+  ...(pluginEventRoutes() as readonly EventRoute[]),
+];
+
 /** 显式豁免：写入不改变任何家庭共享的数据，或事件由别处统一发。每条都要写原因。 */
-export const EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
+const HANDWRITTEN_EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
   { prefix: '/auth/login', reason: '登录只建本人会话' },
   { prefix: '/auth/refresh', reason: '续期只换令牌' },
   { prefix: '/auth/logout', reason: '退出只吊销本人会话' },
@@ -145,6 +149,11 @@ export const EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] =
   { prefix: '/accounts/me/password', reason: '只改本人密码' },
   { prefix: '/internal/agent/channels/pair', reason: '渠道配对只影响绑定，管理员设置弹窗打开时重读' },
   { prefix: '/upload', reason: '只存文件，挂到哪条记录由后续写入决定并发事件' },
+];
+
+export const EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
+  ...HANDWRITTEN_EVENT_ROUTE_EXEMPT,
+  ...pluginEventExempt(),
 ];
 
 function segments(path: string) {

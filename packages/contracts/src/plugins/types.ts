@@ -1,6 +1,5 @@
-// J0 草案：插件 manifest 的类型。只定义，不接线——nav / modules / events / attention / ⌘K / agent 工具 /
-// 设置行 / usage 目前仍各自手写，J1 才改成从 manifest 生成。本目录不从 src/index.ts 导出。
-// 依据 docs/architecture.md §3.2 与「J0 盘点」；三份草稿见同目录 shopping.ts / tasks.ts / smart-home.ts。
+// 插件 manifest 的类型（docs/architecture.md §3.2、§8.4）。J1 起各处登记从 PLUGINS（index.ts）里的
+// manifest 生成；还没迁的域仍手写，scripts/check-plugins.mjs 逐域断言两边一致。
 //
 // 按第三方可写的标准设计（§6 第 6 条）：
 //   - manifest 只放可序列化的声明。需要代码的地方（hasData 特判、留意规则、查询执行）写 `server` id，
@@ -8,7 +7,8 @@
 //   - 依赖写在 `requires` 里，说清楚依赖谁、走什么通道（契约端点 / 进程内事件 / 内核扩展点）；
 //     不允许 import 别的插件的 Service。
 //   - 一个插件一个 key，事件域、模块开关、导航、⌘K 动作的 domain 都用它；历史上并存的其他 key
-//     （动态流水 module、通知 module、导航分段 key、提案 actionType）放在 `aliases`，J1 迁完再逐个收掉。
+//     （动态流水 module、通知 module、导航分段 key、提案 actionType）是内核的迁移包袱，统一登记在
+//     keys.ts 的别名表里，不进 manifest——第三方插件没有历史 key。
 
 /** 角色。与 apps/api 的 MemberRole 一致。 */
 export type PluginRole = 'owner' | 'admin' | 'member';
@@ -37,7 +37,7 @@ export interface PluginDependency {
 // ---- 导航 -------------------------------------------------------------------------------------
 
 export interface PluginNavSegment {
-  /** 导航分段 key。与插件 key 不同时（如 menus 的 order / kitchen）必须在 aliases.nav 里登记。 */
+  /** 导航分段 key。与插件 key 不同时（如 menus 的 order / kitchen）必须在 keys.ts 的 PLUGIN_ALIASES.nav 里登记。 */
   key: string;
   label: string;
   glyph: string;
@@ -102,6 +102,15 @@ export interface PluginAttentionKind {
   path?: string;
   /** 只有拥有这个能力的成员看得到。 */
   capability?: string;
+  /**
+   * 单条卡片的标题。`{name}` 是实体名（没有时用域名），`{soon}` 是「今天 / 3 天后」，没有截止日时为空。
+   * 逾期的统一写成「{name}已逾期 N 天」，不走模板。
+   */
+  title: string;
+  /** 没有截止日时的标题；缺省用 title。 */
+  titleNoDue?: string;
+  /** 同一种事合并成一张卡时的标题，`{n}` 是条数；缺省用 attention.mergedTitle。 */
+  mergedTitle?: string;
 }
 
 export interface PluginAttention {
@@ -113,6 +122,12 @@ export interface PluginAttention {
   path: string;
   /** 今天页里的排序位次，越小越靠前（现 today-attention.service.ts DOMAIN_ORDER）。 */
   order: number;
+  /** 合并卡的默认标题，`{n}` 是条数。 */
+  mergedTitle: string;
+  /** 合并卡里混着几种事时的标题；缺省用 mergedTitle。 */
+  mixedTitle?: string;
+  /** 合并卡里有逾期的时的标题；缺省按 kind 取。 */
+  mergedOverdueTitle?: string;
   kinds: readonly PluginAttentionKind[];
 }
 
@@ -179,6 +194,8 @@ export interface PluginUsageTable {
   /** createdColumn 是 timestamp（无时区）时为 false，按会话时区比较。 */
   createdTz?: boolean;
   where?: string;
+  /** 计数来源一栏的补充说明，输出成「主表新增 <table>（<note>）」。 */
+  note?: string;
 }
 
 export interface PluginUsage {
@@ -213,14 +230,7 @@ export interface PluginManifest {
   /** manifest 契约版本；第三方插件按版本兼容。 */
   manifestVersion: 1;
   tier: PluginTier;
-  /** 历史上同一个域的其他 key。J1 生成各登记处时用它对上旧值。 */
-  aliases?: {
-    nav?: readonly string[];
-    activity?: readonly string[];
-    notification?: readonly string[];
-    proposalActionType?: readonly string[];
-  };
-  requires?: readonly PluginDependency[];
+    requires?: readonly PluginDependency[];
   nav: readonly PluginNavSegment[];
   /** 旧路径 → 新路径（现 apps/web/src/lib/routes.ts MOVED）。 */
   legacyPaths?: readonly (readonly [string, string])[];
