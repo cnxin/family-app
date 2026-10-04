@@ -1253,7 +1253,6 @@ export class AgentToolsService {
       get_inventory_alerts: 'inventory',
       get_travel_checklist: 'travel',
       get_watch_candidates: 'media',
-      get_recent_memories: 'memory',
       get_member_tasks: 'task',
       get_family_schedule: 'calendar',
       get_inventory_summary: 'inventory',
