@@ -206,6 +206,20 @@ for (const plugin of PLUGINS) {
     if (block(service, 'const HANDWRITTEN_UNGROUPED').includes(`'${proposal.actionType}'`)) fail(`${where} HANDWRITTEN_UNGROUPED 还手写着 ${proposal.actionType}`);
   }
 
+  // 能力：名字必须在 Capability 清单里，授予关系不再手写
+  const capabilities = read('apps/api/src/auth/capabilities.ts');
+  const capabilityUnion = capabilities.match(/export type Capability =([^;]*);/)?.[1] ?? '';
+  if (!capabilityUnion) fail('capabilities.ts 找不到 Capability 清单');
+  const handwrittenRoles = block('apps/api/src/auth/capabilities.ts', 'const HANDWRITTEN_ROLE_CAPABILITIES');
+  if (!capabilities.includes('const HANDWRITTEN_ROLE_CAPABILITIES')) fail('capabilities.ts 找不到 HANDWRITTEN_ROLE_CAPABILITIES');
+  for (const capability of plugin.capabilities ?? []) {
+    if (!capabilityUnion.includes(`'${capability.key}'`)) fail(`${where} 能力 ${capability.key} 不在 Capability 清单里`);
+    if (handwrittenRoles.includes(`'${capability.key}'`)) fail(`${where} 能力 ${capability.key} 还在 HANDWRITTEN_ROLE_CAPABILITIES 里手写授予`);
+  }
+  for (const action of plugin.actions ?? []) {
+    if (action.capability && !capabilityUnion.includes(`'${action.capability}'`)) fail(`${where} 动作 ${action.id} 的能力 ${action.capability} 不存在`);
+  }
+
   // ---- 6. 页面文件里的登记（J1 不改页面，只断言一致）：家庭设置行 ------------------------------------------
 
   const settings = read('apps/web/src/pages/settings.tsx');

@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { pluginCapabilities } from '@family/contracts';
 import { Request } from 'express';
 import { MemberRole } from '../entities';
 import { JwtUser } from './jwt.guard';
@@ -28,11 +29,14 @@ export type Capability =
   | 'use_agent'
   | 'manage_agent';
 
-const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
-  owner: new Set([
+/**
+ * 角色 → 能力。能力名清单（上面的 Capability）仍是手写的 key 表；已迁插件在 manifest 里声明自己的能力
+ * 和授予哪些角色（J1），这里只手写内核与还没迁的。
+ */
+const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> = {
+  owner: [
     'place_meal_order',
     'update_meal_status',
-    'manage_recipes',
     'manage_shopping',
     'manage_inventory',
     'manage_assets',
@@ -45,11 +49,10 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_integrations',
     'use_agent',
     'manage_agent',
-  ]),
-  admin: new Set([
+  ],
+  admin: [
     'place_meal_order',
     'update_meal_status',
-    'manage_recipes',
     'manage_shopping',
     'manage_inventory',
     'manage_assets',
@@ -62,19 +65,28 @@ const ROLE_CAPABILITIES: Record<MemberRole, ReadonlySet<Capability>> = {
     'manage_integrations',
     'use_agent',
     'manage_agent',
-  ]),
-  member: new Set([
+  ],
+  member: [
     'place_meal_order',
     'update_meal_status',
-    'manage_recipes',
     'manage_shopping',
     'manage_inventory',
     'manage_assets',
     'view_finance',
     'record_finance',
     'use_agent',
-  ]),
+  ],
 };
+
+const ROLE_CAPABILITIES = {} as Record<MemberRole, ReadonlySet<Capability>>;
+for (const role of Object.keys(HANDWRITTEN_ROLE_CAPABILITIES) as MemberRole[]) {
+  ROLE_CAPABILITIES[role] = new Set<Capability>([
+    ...HANDWRITTEN_ROLE_CAPABILITIES[role],
+    ...pluginCapabilities()
+      .filter((capability) => capability.roles.includes(role))
+      .map((capability) => capability.key as Capability),
+  ]);
+}
 
 const REQUIRED_CAPABILITIES = 'requiredCapabilities';
 

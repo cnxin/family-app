@@ -17,7 +17,6 @@ import { homeAssistantServerDefaultConfigured } from '../smart-home/home-assista
 const sources: Partial<
   Record<Exclude<ShelfModuleKey, 'activity' | 'assistant' | 'smart-home'>, string>
 > = {
-  recipes: 'SELECT 1 FROM dishes WHERE "householdId" = $1',
   reminders: `SELECT 1 FROM reminders WHERE "householdId" = $1
     AND status <> 'cancelled' AND (status = 'scheduled' OR "remindAt" > now())`,
   inventory: 'SELECT 1 FROM inventory_items WHERE "householdId" = $1',

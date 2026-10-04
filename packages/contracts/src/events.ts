@@ -78,8 +78,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/auth/invitations/redeem', domains: ['members'], emit: 'explicit' },
   { prefix: '/household', domains: ['members'] },
   { prefix: '/members/me/preferences', domains: ['members'] },
-  { prefix: '/members/:memberId/dish-skills', domains: ['recipes'] },
-  { prefix: '/member-dish-skills', domains: ['recipes'] },
   { prefix: '/households/me', domains: ['household'] },
 
   { prefix: '/guests', domains: ['guests'] },
@@ -101,8 +99,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/shopping-list', domains: ['shopping'] },
   { prefix: '/shopping-items', domains: ['shopping', 'inventory'] },
   { prefix: '/shopping-items/:id/confirm-stock', domains: ['shopping', 'inventory', 'locations'] },
-  { prefix: '/dishes', domains: ['recipes'] },
-  { prefix: '/recipe-variants', domains: ['recipes'] },
 
   { prefix: '/notifications', domains: ['notifications'] },
   { prefix: '/notification-channels', domains: ['notifications'] },
