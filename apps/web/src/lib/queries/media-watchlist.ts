@@ -1,5 +1,5 @@
 import { invalidateModules } from './modules';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type {
   HouseholdMedia,
   HouseholdMediaStatus,
@@ -95,14 +95,35 @@ export function useMediaSearch(query: string, type: MediaType, enabled: boolean)
   });
 }
 
+/**
+ * 先把服务端回来的这一行写进各个片单列表的缓存，再让大家重新拉（教训 44：失效不等于更新）。
+ * 光靠失效的话，重新拉取回来之前卡片一直是改之前的样子；重新拉取被取消或者慢，就一直不变。
+ * 按状态筛的列表里，状态已经不符合的这一行直接拿掉。
+ */
+function saveMediaRow(client: QueryClient, saved: HouseholdMedia) {
+  for (const [key] of client.getQueriesData<HouseholdMedia[]>({ queryKey: ['media'] })) {
+    const status = typeof key[1] === 'string' ? new URLSearchParams(key[1]).get('status') : null;
+    const fits = !status || status === 'all' || status === saved.status;
+    client.setQueryData<HouseholdMedia[]>(key, (list) =>
+      fits
+        ? list?.map((one) => (one.id === saved.id ? saved : one))
+        : list?.filter((one) => one.id !== saved.id),
+    );
+  }
+}
+
 function useWatchlistMutation<TInput, TResult>(
   run: (input: TInput) => Promise<TResult>,
   keys: string[],
+  save?: (client: QueryClient, result: TResult) => void,
 ) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: run,
-    onSuccess: () => { void invalidateModules(client); },
+    onSuccess: (result) => {
+      save?.(client, result);
+      void invalidateModules(client);
+    },
     onSettled: () => {
       for (const key of keys) void client.invalidateQueries({ queryKey: [key] });
     },
@@ -137,6 +158,7 @@ export function useUpdateMedia() {
   >(
     ({ id, ...body }) => api<HouseholdMedia>(`/media/${id}`, { method: 'PATCH', body }),
     ['media', 'calendar', 'activities'],
+    saveMediaRow,
   );
 }
 
@@ -156,6 +178,7 @@ export function useAddMediaExternalRefs() {
     ({ id, externalRefs }) =>
       api<HouseholdMedia>(`/media/${id}/external-refs`, { method: 'POST', body: { externalRefs } }),
     ['media', 'media-library-availability', 'activities'],
+    saveMediaRow,
   );
 }
 

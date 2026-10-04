@@ -145,6 +145,10 @@ const HANDWRITTEN_EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string 
   { prefix: '/accounts/me/password', reason: '只改本人密码' },
   { prefix: '/internal/agent/channels/pair', reason: '渠道配对只影响绑定，管理员设置弹窗打开时重读' },
   { prefix: '/upload', reason: '只存文件，挂到哪条记录由后续写入决定并发事件' },
+  {
+    prefix: '/media/library-availability',
+    reason: '只读查询（POST 只为带 id 列表）；发 media 会让片单页失效重查、再发事件，自己转起来',
+  },
 ];
 
 export const EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
