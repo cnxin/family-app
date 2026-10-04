@@ -121,8 +121,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/inventory-batches', domains: ['inventory', 'locations'] },
   { prefix: '/inventory-transactions', domains: ['inventory'] },
 
-  { prefix: '/travel-plans', domains: ['travel', 'calendar', 'reminders'] },
-  { prefix: '/travel-templates', domains: ['travel'] },
 
   { prefix: '/smart-home', domains: ['smart-home'] },
   { prefix: '/smart-home/webhook', domains: ['smart-home'], emit: 'explicit' },

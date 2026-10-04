@@ -51,7 +51,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   guest: '访客',
   asset: '资产',
   points: '积分',
-  travel: '出行',
   finance: '财务',
   system: '家庭设置与备份',
   calendar: '日历',

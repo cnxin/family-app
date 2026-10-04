@@ -34,7 +34,6 @@ const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
     'media', 'media-requests', 'media-library', 'media-library-availability', 'media-connectors',
     'media-connector-settings', 'media-metadata-sources', 'media-playback-users', 'viewing-sessions',
   ],
-  travel: ['travel-plans', 'travel-plan', 'travel-templates'],
   activity: ['activities'],
   assistant: [
     'agent-conversation', 'agent-conversations', 'agent-status', 'agent-settings', 'agent-routines',

@@ -1,4 +1,11 @@
-import { pluginLegacyPaths, type PluginKey } from '@family/contracts';
+import {
+  pluginAttention,
+  pluginLegacyPaths,
+  renderTemplate,
+  type AttentionItem,
+  type PluginAttention,
+  type PluginKey,
+} from '@family/contracts';
 
 /**
  * 旧客户端的路径 → 新客户端的路径。后端在通知、日历条目、提醒来源里写的 targetPath
@@ -30,7 +37,7 @@ const MOVED: [string, string][] = [
   ['/finance', '/house/finance'],
   ...legacyPaths('knowledge'),
   ...legacyPaths('memories'),
-  ['/travel', '/life/travel'],
+  ...legacyPaths('travel'),
   ['/system-backups', '/house/backups'],
   ['/activity', '/life/activity'],
   ['/media/library', '/life/media/library'],
@@ -59,22 +66,46 @@ export function toNewRoute(targetPath: string | null | undefined): string | null
   return `${hit[1]}${rest}${search ? `?${search}` : ''}`;
 }
 
+/** 已迁插件的留意配置（J1），按域取。 */
+export const pluginAttentionOf: ReadonlyMap<string, PluginAttention> = new Map(
+  pluginAttention().map(({ key, attention }) => [key, attention]),
+);
+
+const HANDWRITTEN_ATTENTION_ROUTES: Partial<Record<AttentionItem['domain'], string>> = {
+  assets: '/house/assets', guests: '/house/guests', inventory: '/house/inventory', polls: '/schedule/polls', points: '/house/points', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
+};
+
 export const attentionRoutes = {
-  assets: '/house/assets', guests: '/house/guests', travel: '/life/travel', inventory: '/house/inventory', polls: '/schedule/polls', points: '/house/points', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
-} as const;
+  ...HANDWRITTEN_ATTENTION_ROUTES,
+  ...Object.fromEntries([...pluginAttentionOf].map(([key, attention]) => [key, attention.path])),
+} as Record<AttentionItem['domain'], string>;
+
+/** manifest 的落点模板：占位（`{id}` 实体、`{dueOn}` 日期）都有值才用，否则回到域的默认落点。 */
+function pluginAttentionPath(attention: PluginAttention, item: { kind: string; kinds?: string[]; dueOn?: string; entity?: { id: string } }) {
+  if ((item.kinds?.length ?? 0) > 1) return attention.path;
+  const template = attention.kinds.find((kind) => kind.kind === item.kind)?.path;
+  if (!template) return attention.path;
+  const values: Record<string, string | undefined> = {
+    id: item.entity && encodeURIComponent(item.entity.id),
+    dueOn: item.dueOn && encodeURIComponent(item.dueOn),
+  };
+  const names = [...template.matchAll(/\{(\w+)\}/g)].map((match) => match[1]);
+  return names.every((name) => values[name]) ? renderTemplate(template, values) : attention.path;
+}
 
 
 /** F5「需要留意」卡片的单步直达路径，所有文案层路径都集中从这里生成。 */
 export function attentionPath(item: {
-  domain: keyof typeof attentionRoutes;
+  domain: AttentionItem['domain'];
   kind: string;
   kinds?: string[];
   dueOn?: string;
   entity?: { id: string };
 }): string {
+  const plugin = pluginAttentionOf.get(item.domain);
+  if (plugin) return pluginAttentionPath(plugin, item);
   if ((item.kinds?.length ?? 0) > 1) return attentionRoutes[item.domain];
   if (item.domain === 'assets' && item.entity) return `${attentionRoutes.assets}/${encodeURIComponent(item.entity.id)}`;
-  if (item.domain === 'travel' && item.entity) return `${attentionRoutes.travel}/${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'polls' && item.entity) return `${attentionRoutes.polls}?pollId=${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'points' && item.entity) return `${attentionRoutes.points}?redemptionId=${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'smart-home') {
