@@ -1251,7 +1251,6 @@ export class AgentToolsService {
       get_shopping_list: 'shopping',
       get_meal_plan: 'menu',
       get_inventory_alerts: 'inventory',
-      search_knowledge: 'knowledge',
       get_travel_checklist: 'travel',
       get_watch_candidates: 'media',
       get_recent_memories: 'memory',
