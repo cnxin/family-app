@@ -29,7 +29,7 @@ const MOVED: [string, string][] = [
   ['/assets', '/house/assets'],
   ['/finance', '/house/finance'],
   ...legacyPaths('knowledge'),
-  ['/memories', '/life/memories'],
+  ...legacyPaths('memories'),
   ['/travel', '/life/travel'],
   ['/system-backups', '/house/backups'],
   ['/activity', '/life/activity'],

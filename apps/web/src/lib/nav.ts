@@ -96,7 +96,7 @@ export const SCENES: NavScene[] = [
     segments: [
       { key: shelfModuleKey.enum.media, tier: 'shelf', glyph: '影', label: '观影', path: '/life/media', ready: true },
       { key: shelfModuleKey.enum.travel, tier: 'shelf', glyph: '行', label: '出行', path: '/life/travel', ready: true },
-      { key: shelfModuleKey.enum.memories, tier: 'shelf', glyph: '忆', label: '回忆', path: '/life/memories', ready: true },
+      ...pluginSegments('memories'),
       ...pluginSegments('knowledge'),
       { key: shelfModuleKey.enum.activity, tier: 'shelf', glyph: '动', label: '家庭动态', path: '/life/activity', ready: true },
     ],
