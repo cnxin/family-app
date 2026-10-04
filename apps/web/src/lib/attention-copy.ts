@@ -14,7 +14,6 @@ const HANDWRITTEN_LABELS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '资产',
   guests: '访客',
   inventory: '库存',
-  points: '积分',
   finance: '财务',
   backups: '备份',
   'smart-home': '智能家居',
@@ -24,7 +23,6 @@ const HANDWRITTEN_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '看这件资产',
   guests: '去点菜',
   inventory: '看库存',
-  points: '去审批',
   finance: '看预算',
   backups: '看备份',
   'smart-home': '去看看',
@@ -33,7 +31,6 @@ const HANDWRITTEN_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
 const kindActions: Partial<Record<string, string>> = {
   'meal-request': '去处理',
   menu: '去点菜',
-  redemption: '去审批',
   budget: '看预算',
   backup: '看备份',
   filter: '看滤芯',
@@ -45,7 +42,6 @@ const HANDWRITTEN_LIST_ACTIONS: Partial<Record<AttentionItem['domain'], string>>
   assets: '看资产',
   guests: '去处理',
   inventory: '看库存',
-  points: '去审批',
   finance: '看预算',
   backups: '看备份',
   'smart-home': '去看看',
@@ -92,8 +88,6 @@ function singleTitle(item: AttentionItem, today: string) {
       return `${name}的点菜请求等你处理`;
     case 'expiry':
       return `${name} ${soon}过期`;
-    case 'redemption':
-      return `${name}的兑换等你审批`;
     case 'budget':
       return `${name}本月预算超了`;
     case 'backup':
@@ -135,8 +129,6 @@ function mergedTitle(item: AttentionItem): string {
       return item.kind === 'meal-request' ? `${n} 条访客点菜等你处理` : `本周有 ${n} 场来访要准备`;
     case 'inventory':
       return item.overdue ? `${n} 样快过期，有的已经过期了` : `${n} 样快过期`;
-    case 'points':
-      return `${n} 个兑换等你审批`;
     case 'finance':
       return `${n} 个分类超预算了`;
     case 'backups':

@@ -29,7 +29,6 @@ const HANDWRITTEN_ORDER: Partial<Record<AttentionItem['domain'], number>> = {
   assets: 1,
   guests: 2,
   inventory: 4,
-  points: 6,
   finance: 7,
   backups: 8,
   'smart-home': 9,
@@ -48,7 +47,6 @@ const HANDWRITTEN_OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: 'assets',
   guests: 'guests',
   inventory: 'inventory',
-  points: 'points',
   finance: 'finance',
   'smart-home': 'smart-home',
 };
