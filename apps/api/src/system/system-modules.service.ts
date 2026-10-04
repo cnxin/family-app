@@ -24,8 +24,6 @@ const sources: Partial<
   finance: `SELECT 1 FROM finance_accounts WHERE "householdId" = $1
     UNION ALL SELECT 1 FROM finance_transactions WHERE "householdId" = $1
     UNION ALL SELECT 1 FROM finance_budgets WHERE "householdId" = $1`,
-  points: `SELECT 1 FROM points_ledger WHERE "householdId" = $1
-    UNION ALL SELECT 1 FROM rewards WHERE "householdId" = $1`,
   guests: `SELECT 1 FROM guests WHERE "householdId" = $1
     UNION ALL SELECT 1 FROM visits WHERE "householdId" = $1`,
   media: `SELECT 1 FROM household_media WHERE "householdId" = $1
