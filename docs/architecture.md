@@ -286,7 +286,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 
 **不一致**（J1 生成时必须先选定一个来源）：
 
-1. **财务权限三处不一致**：`ROLE_CAPABILITIES` 给普通成员 `view_finance` + `record_finance`（API 允许成员记账），但导航 `managerOnly`、⌘K 写死 `domain !== 'finance' || manager`。
+1. ~~**财务权限三处不一致**：`ROLE_CAPABILITIES` 给普通成员 `view_finance` + `record_finance`（API 允许成员记账），但导航 `managerOnly`、⌘K 写死 `domain !== 'finance' || manager`。~~ **已关闭**（J1.3 财务权限 fix，§8.7）。
 2. ~~**⌘K 不看模块开关**：家庭把某个模块关掉后，它的 ⌘K 动作还在。~~ **已关闭**（§8.6 第 5 条：搜索与深链始终可达，这是规则不是缺陷）。
 3. **留意两种挂法**：11 条在 TodayModule 里写死注入，只有智能家居走 AttentionRegistry；DOMAIN_ORDER、OFF_KEYS、contracts 的 domain 枚举、web 的 4 张文案表又各写一遍。
 4. **agent 工具名单两份**：contracts 与 API 各一份，目前内容一致，但没有任何检查保证一致。
@@ -407,13 +407,16 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | J1.2 | 投票 | `a68a26e` | `9ed0fec` | **重跑 1 次** | 首个带写提案、带通知的域：agent 提案的工具 ↔ actionType ↔ 类型名 ↔ 能否打包，原来四份手写（反查表、提案组各一份），改为 manifest 生成、反查表推导。首跑手机视口「设置页联动：收到的事件列在下面」失败（智能家居，本笔未碰；同一份代码在叠在其上的菜谱、积分分支里通过），重跑全绿 |
 | J1.2 | 菜谱 | `c6b0afd` | `61a91eb` | 一次过 | 首个声明能力的域：ROLE_CAPABILITIES 改为手写内核能力 + manifest 插件能力；Capability 名字清单仍手写并断言 |
 | J1.2 | 积分 | `7cacd89` | `8f38265` | 一次过 | |
+| J1.3 | 访客 | `99a3f71` | `196eee3` | 一次过（#37320763876） | 9 条事件路由：访客公开页 4 条服务端显式发（调用不动），其余 5 条走拦截器——指令里「9 条全部显式发」与代码不符，按代码登记。留意两种（来访没定菜、访客点菜限 `manage_guests`）的标题模板、按钮、「去点菜」落点特判由 manifest 生成；`kindActions` 里的 `menu` / `meal-request` 一并删掉（只有访客用）。⌘K 实有 1 条「加个来访」（§8.2 表对，指令写「没有」），一并迁。`manage_guests` 的授予关系挪进 manifest |
+| J1.3 | 财务 | `2cd3397` | `bcbf71a` | 一次过（#37321059096） | 事件路由实为一条 `/finance` 前缀，覆盖全部 8 个写端点、都走拦截器；§8.2 的「1/3」是「主 / 涉及」条数（另两条是 `/agent/proposals`、`/agent/proposal-groups`），不是「三分之一发事件」，无需补发。三个能力挪进 manifest、成员能力集不变；写提案按投票做法由 manifest 生成（`grouped: false`）。别名表去掉财务的 `agentSource`：`get_finance_summary` / `propose_finance_transaction` 的调用记录 `sourceModule` 现状落 `'agent'`（手写来源表从未登记），J1 不改值 |
+| J1.3 | 财务权限 fix | `d19b715` | `dcb3f7f` | 一次过（#37322250756） | §8.6 第 3 条：导航去掉 `managerOnly`、删掉 ⌘K 写死特判（check-plugins 加断言防回退）；API 守卫本来就是这个口径，未改，`docs/api-inventory.md` 无变化，黑盒补成员读 200 / 管理写 403；财务页对成员不渲染「预算」「账户」分段（冲销按钮原本就不渲染）。新增 e2e `finance-member`（双视口）；`actions` / `nav` / `home` 三条原断言「成员看不到财务」的用例改为新口径。`GET /finance/budgets` 仍是 `view_finance`，概览页的「本月预算」进度对成员照常只读展示 |
 
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
 | J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；§8.6 五项已拍板 |
-| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 6 / 18（知识库、回忆、出行、投票、菜谱、积分） |
+| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 8 / 18（知识库、回忆、出行、投票、菜谱、积分、访客、财务）；财务权限口径已对齐，演示栈随 J1.4 一起升 |
 | J2 助理数据与开关 | ☐ | | |
 | J3 第 0 档引擎 | ☐ | | 等试用原话 |
 | J4 agent 重建 | ☐ | | |
