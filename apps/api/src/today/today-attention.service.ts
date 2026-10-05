@@ -27,7 +27,6 @@ import {
 /** 今天页里各域的排序位次（越小越靠前）。已迁插件取 manifest 的 attention.order。 */
 const HANDWRITTEN_ORDER: Partial<Record<AttentionItem['domain'], number>> = {
   assets: 1,
-  guests: 2,
   inventory: 4,
   finance: 7,
   backups: 8,
@@ -45,7 +44,6 @@ const orderOf = (domain: AttentionItem['domain']) => DOMAIN_ORDER[domain] ?? Num
  */
 const HANDWRITTEN_OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: 'assets',
-  guests: 'guests',
   inventory: 'inventory',
   finance: 'finance',
   'smart-home': 'smart-home',

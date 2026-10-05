@@ -9,6 +9,7 @@ import type {
   PluginUsageTable,
 } from './types';
 import { PLUGIN_ALIASES, PLUGIN_KEYS, type PluginKey } from './keys';
+import { guestsManifest } from './guests';
 import { knowledgeManifest } from './knowledge';
 import { memoriesManifest } from './memories';
 import { pointsManifest } from './points';
@@ -20,7 +21,7 @@ export * from './keys';
 export * from './types';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest];
+export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest];
 
 export function findPlugin(key: string): PluginManifest | undefined {
   return PLUGINS.find((plugin) => plugin.key === key);
