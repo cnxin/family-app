@@ -7,7 +7,6 @@ const HANDWRITTEN_MODULE_LABEL: Partial<Record<NotificationModule, string>> = {
   calendar: '日历',
   reminder: '提醒',
   media: '观影',
-  guest: '访客',
   agent: '小管家',
   system: '系统',
 };
@@ -18,7 +17,6 @@ const HANDWRITTEN_MODULE_ICON: Partial<Record<NotificationModule, string>> = {
   calendar: '📅',
   reminder: '🔔',
   media: '🎬',
-  guest: '👋',
   agent: '🤖',
   system: '⚙️',
 };

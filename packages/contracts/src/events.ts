@@ -80,16 +80,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/members/me/preferences', domains: ['members'] },
   { prefix: '/households/me', domains: ['household'] },
 
-  { prefix: '/guests', domains: ['guests'] },
-  { prefix: '/visits', domains: ['guests', 'calendar', 'menus'] },
-  { prefix: '/guest-wifi-profiles', domains: ['guests'] },
-  { prefix: '/guest-meal-requests', domains: ['guests', 'menus'] },
-  { prefix: '/guest-invitations', domains: ['guests'] },
-  { prefix: '/guest-invitations/:token/response', domains: ['guests'], emit: 'explicit' },
-  { prefix: '/guest-invitations/:token/meal-requests', domains: ['guests'], emit: 'explicit' },
-  { prefix: '/guest-invitations/:token/meal-options', domains: ['guests'], emit: 'explicit' },
-  { prefix: '/guest-invitations/:token/movie-polls', domains: ['guests', 'media', 'polls'], emit: 'explicit' },
-
   { prefix: '/media', domains: ['media'] },
   { prefix: '/media/webhooks', domains: ['media'], emit: 'explicit' },
 

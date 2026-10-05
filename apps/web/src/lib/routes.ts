@@ -32,7 +32,7 @@ const MOVED: [string, string][] = [
   ...legacyPaths('polls'),
   ...legacyPaths('points'),
   ['/members', '/house/members'],
-  ['/guests', '/house/guests'],
+  ...legacyPaths('guests'),
   ['/assets', '/house/assets'],
   ['/finance', '/house/finance'],
   ...legacyPaths('knowledge'),
@@ -72,7 +72,7 @@ export const pluginAttentionOf: ReadonlyMap<string, PluginAttention> = new Map(
 );
 
 const HANDWRITTEN_ATTENTION_ROUTES: Partial<Record<AttentionItem['domain'], string>> = {
-  assets: '/house/assets', guests: '/house/guests', inventory: '/house/inventory', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
+  assets: '/house/assets', inventory: '/house/inventory', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
 };
 
 export const attentionRoutes = {
@@ -110,10 +110,6 @@ export function attentionPath(item: {
     if (item.kind === 'filter' && item.entity) return `${attentionRoutes['smart-home']}?device=${encodeURIComponent(item.entity.id)}`;
     if (item.kind === 'laundry' && item.entity) return `/schedule/tasks?task=${encodeURIComponent(item.entity.id)}`;
     if (item.kind === 'offline') return `${attentionRoutes['smart-home']}/settings`;
-  }
-  // 来访记录没有餐次，默认晚餐；点菜页读到 date 后会把参数抹掉。
-  if (item.domain === 'guests' && item.kind === 'menu' && item.dueOn) {
-    return `/eat/order?date=${encodeURIComponent(item.dueOn)}&mealType=dinner`;
   }
   return attentionRoutes[item.domain];
 }

@@ -48,7 +48,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   invitation: '成员',
   menu: '点菜（智能菜单）',
   media: '观影',
-  guest: '访客',
   asset: '资产',
   finance: '财务',
   system: '家庭设置与备份',

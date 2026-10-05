@@ -23,10 +23,6 @@ const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   assets: ['assets', 'asset', 'maintenance-consumables-preview'],
   locations: ['locations'],
   finance: ['finance'],
-  guests: [
-    'guests', 'visits', 'guest-wifi-profiles', 'guest-meal-requests',
-    'guest-invitation', 'guest-meal-options', 'guest-movie-polls',
-  ],
   media: [
     'media', 'media-requests', 'media-library', 'media-library-availability', 'media-connectors',
     'media-connector-settings', 'media-metadata-sources', 'media-playback-users', 'viewing-sessions',
