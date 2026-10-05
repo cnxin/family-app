@@ -62,7 +62,7 @@ export const SCENES: NavScene[] = [
     icon: '📅',
     path: '/schedule',
     segments: [
-      { key: 'calendar', tier: 'core', glyph: '历', label: '日历', path: '/schedule/calendar', ready: true },
+      ...pluginSegments('calendar'),
       ...pluginSegments('tasks'),
       { key: shelfModuleKey.enum.reminders, tier: 'shelf', glyph: '醒', label: '提醒', path: '/schedule/reminders', ready: true },
       ...pluginSegments('polls'),

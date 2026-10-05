@@ -1246,7 +1246,6 @@ export class AgentToolsService {
     const sourceModule: Record<string, string> = {
       ...pluginToolSources(),
       get_today_summary: 'calendar',
-      get_calendar: 'calendar',
       get_meal_plan: 'menu',
       get_inventory_alerts: 'inventory',
       get_watch_candidates: 'media',
