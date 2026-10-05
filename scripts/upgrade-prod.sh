@@ -10,6 +10,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 COMPOSE_FILE="$REPO_ROOT/docker-compose.prod.yml"
+BACKUP_ROOT=${FAMILY_APP_PROD_BACKUP_ROOT:-"$REPO_ROOT/backups-production"}
 ENV_FILE=${FAMILY_APP_PROD_ENV:-"$REPO_ROOT/deploy/.env.production"}
 HEALTH_TIMEOUT_SECONDS=${FAMILY_APP_HEALTH_TIMEOUT:-300}
 
@@ -47,12 +48,9 @@ STEP='准备'
 STAMP=$(date +%Y%m%d-%H%M%S)
 ROLLBACK_TAG="prod-before-$STAMP"
 BACKUP_DIR=''
-if [ "$PULL" -eq 1 ]; then
-  OLD_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
-else
-  # --no-pull：代码已由手动 git pull 更新，升级前的提交只能取 ORIG_HEAD。
-  OLD_COMMIT="$(git -C "$REPO_ROOT" rev-parse ORIG_HEAD 2>/dev/null || printf unknown)（取自 ORIG_HEAD，以 git reflog 为准）"
-fi
+# 升级前提交 = 正在运行的版本，在确认服务都在运行之后再取（running_commit）。
+# 不用仓库的 HEAD / ORIG_HEAD：代码常常早已拉到新提交（--no-pull，或检出被别处快进过），它们说明不了跑的是哪一版。
+OLD_COMMIT='未知（还没读到正在运行的版本）'
 
 on_exit() {
   status=$?
@@ -73,6 +71,30 @@ step() {
   printf '\n==> %s\n' "$STEP"
 }
 
+# 正在运行的版本：优先读 api 容器的镜像标签 org.opencontainers.image.revision（本脚本构建时写入）；
+# 镜像是加标签之前建的、或手动 build 没带提交号时，退回最近一份完整备份的 manifest.txt 里的 git_commit。
+running_commit() {
+  container=$(compose ps -q api)
+  revision=$("$DOCKER_BIN" inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$container" 2>/dev/null || true)
+  case "$revision" in
+    ''|unknown|'<no value>') ;;
+    *)
+      printf '%s（取自运行中 api 镜像的 revision 标签）' "$revision"
+      return
+      ;;
+  esac
+  latest=''
+  for dir in "$BACKUP_ROOT"/*/; do
+    [ -f "${dir}manifest.txt" ] && [ ! -e "${dir}.incomplete" ] && latest=$dir
+  done
+  if [ -n "$latest" ]; then
+    commit=$(sed -n 's/^git_commit=//p' "${latest}manifest.txt")
+    printf '%s（镜像没有 revision 标签，取自最近一份备份 %s 的清单：那次备份时仓库的 HEAD，以 git reflog 核对）' "${commit:-unknown}" "$latest"
+    return
+  fi
+  printf 'unknown（镜像没有 revision 标签，也没有找到备份清单，以 git reflog 为准）'
+}
+
 step '检查工作区与运行状态'
 if [ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)" ]; then
   printf '仓库里有未提交的改动，先处理干净再升级。\n' >&2
@@ -84,6 +106,8 @@ for service in db api web backup-worker; do
     exit 1
   fi
 done
+OLD_COMMIT=$(running_commit)
+printf '正在运行的版本：%s\n' "$OLD_COMMIT"
 
 step "给当前镜像打回滚标签 $ROLLBACK_TAG"
 for service in api web backup-worker; do
@@ -110,6 +134,8 @@ NEW_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
 printf '提交：%s -> %s\n' "$OLD_COMMIT" "$NEW_COMMIT"
 
 step '构建镜像'
+FAMILY_APP_COMMIT=$NEW_COMMIT
+export FAMILY_APP_COMMIT
 compose build
 
 step '启动（API 启动时自动执行新迁移）'
