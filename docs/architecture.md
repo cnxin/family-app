@@ -184,7 +184,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | **J0 盘点**（不改代码） | 列出 15 个域在七处登记的现状差异；起草 `PluginManifest` 类型；选 3 个域（购物、任务、智能家居）做 manifest 草稿看是否表达得下 | S | — |
 | **J1 插件注册表** | `packages/contracts/src/plugins/`；nav / modules / events 映射 / attention 挂载 / settings 行 / usage 表改为从 manifest 生成；CI 断言全覆盖；15 个域逐个迁（每域一提交，页面不动） | L（约 1.5 周） | J0 |
 | **J2 助理数据与开关** | `assistant_utterances` 表；助理三档的家庭级开关与配置页（第 0 档默认开、1/2 默认关）；⌘K 输入原话落表（试用期就开始攒句子） | M | J1 |
-| **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认 | L（约 2 周） | J1；**模板需要试用期攒的原话** |
+| **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认。**补 ⌘K 动作时**：给点菜补一条动作，把 `propose_menu` 从 manifest 顶层 `proposals` 挪回 `actions[].propose`，然后删掉 `proposals` 字段（J1.4 加的过渡结构，2026-10-06 King 认定） | L（约 2 周） | J1；**模板需要试用期攒的原话** |
 | **J4 agent 重建为 manifest 消费者** | refactor-plan 3.2 的自研 loop 落到 `packages/agent-core`；工具由 manifest 生成；28 个旧工具名做别名；`/events` 推运行状态（H2 已备）；第 2 档路由接入；脱敏与每日上限 | XL（约 3 周） | J1、J3 |
 | **J5 第 1 档本地模型** | OpenAI 兼容适配；Ollama 探测；仅做意图 + 槽位；评测集（用 J2 攒的原话）；默认关 | M | J3 |
 | **J6 收口** | 删 Hermes 相关（compose、配置）；文档；开源版的「写一个插件」指南 | S | J4 |
@@ -418,9 +418,16 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 
 **每笔都做的等价比对**：迁移前后各导一份快照比对——web 端的事件路由、查询失效表、导航分段、core 顺序、手机底栏、⌘K（除动作 id）、旧路径换算、通知名与图标、留意落点；再在本地开发库上跑 `usage-report.mjs`，排序后逐行比。五笔全部一致。
 
-**J1.5 待收**：`POST /shopping-items/:id/confirm-stock`（§8.6 第 4 条已定归库存）与 `POST /menus/:id/confirm-consumption`（同样写在 inventory.module.ts，归属待 J1.5 一并确认）仍在 `contracts/src/events.ts` 的手写表里，`scripts/check-plugins.mjs` 的 `PENDING_ROUTES` 暂时放过；J1.5 迁库存时收进 inventory manifest，并删掉这两条白名单。
+**J1.5 待收**：`POST /shopping-items/:id/confirm-stock` 与 `POST /menus/:id/confirm-consumption` **都归库存插件**（前者 §8.6 第 4 条，后者 2026-10-06 King 拍板），仍在 `contracts/src/events.ts` 的手写表里，`scripts/check-plugins.mjs` 的 `PENDING_ROUTES` 暂时放过；J1.5 迁库存时收进 inventory manifest，并删掉 `PENDING_ROUTES` 里这两条白名单。
 
 **演示栈升级（2026-10-06，J1.4 合完后）**：`b5c4e7c` → `442cd83`（脚本打印的「升级前提交」取自 ORIG_HEAD，是 `db108c4`，不准；实际运行版本以 9-30 的备份清单与 reflog 为准）。`upgrade-prod.sh --no-pull`，无新迁移（仍 72 个）。回滚标签 `prod-before-20261006-003241`，升级前备份 `backups-production/20261005-163242Z`。升级后：14 张业务表行数与迁移数前后一致；四个服务与 API Node 时区均为上海；`/api/health/ready` ok，今天 / 家里 / 点菜 / 厨房 / 购物 / 日历 / 任务 / 提醒 / 财务 / 访客 / 智能家居 / 位置 12 个页面 200，新 bundle 含 J1.3 / J1.4 的 manifest；智能家居 `smart_home_live mode=push`，API 容器到 HA 401（网络通）；API 日志无 error。事件流的 `hello` / `heartbeat` 要成员令牌，没测（不登录家里人的账号），无令牌 401。J1.3 的财务权限变化随这次一起上线。
+
+**J1.4 收尾（2026-10-06，King 拍板后）**：
+- 第四批进度文档 `de3c657` / 合并 `344fb56`，main CI #37345262025 一次过。
+- 片单偶发的修复 `fix/media-scheduled-cache` rebase 到 main（`ca0f018`，以 `refactor/media-scheduled-cache` 跑 CI——`fix/` 前缀不触发 CI），#37346314793 一次过，合并 `855252e`；随后在同一提交上全量 CI 连跑 3 次，该用例双视口全过，已从已知偶发表移除（`docs/execution-plan.md` §3.1）。
+- `upgrade-prod.sh` 的「升级前提交」改取正在运行的版本（镜像 revision 标签，退回最近备份清单），不用 ORIG_HEAD：`4cbd904` / 合并 `729cb4a`，#37346699307 一次过。标签要等下次升级构建出的镜像才有，下次升级时脚本会退回备份清单（现为 `442cd83`，与实际一致）。
+- `agent-proposal-groups` 黑盒可单跑（先 GET /agent/routines 补建 nightly_digest）：`e29b6d3` / 合并 `e481e51`，#37346861982 一次过。
+- 重跑规矩修订写进 `docs/execution-plan.md` §3.1 第 6 条。事件流 `hello` / `heartbeat` 由 King 本人登录验证。
 
 ## 进度表
 
@@ -429,7 +436,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；§8.6 五项已拍板 |
 | J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 13 / 18（知识库、回忆、出行、投票、菜谱、积分、访客、财务、购物、任务、日历、提醒、点菜）；演示栈 2026-10-06 升到 `442cd83`（含 J1.3 财务权限）；J1.5 待收 confirm-stock / confirm-consumption 两条手写路由 |
 | J2 助理数据与开关 | ☐ | | |
-| J3 第 0 档引擎 | ☐ | | 等试用原话 |
+| J3 第 0 档引擎 | ☐ | | 等试用原话；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | ☐ | | |
 | J5 本地模型档 | ☐ | | |
 | J6 收口 | ☐ | | |
