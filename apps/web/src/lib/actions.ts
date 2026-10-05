@@ -21,8 +21,7 @@ function fromPlugin(key: PluginKey): Action[] {
 }
 
 export const ACTIONS: Action[] = [
-  { id: 'finance-expense', label: '记一笔支出', keywords: ['记账', '花钱'], domain: 'finance', to: '/house/finance?create=1&kind=expense' },
-  { id: 'finance-income', label: '记一笔收入', keywords: ['进账'], domain: 'finance', to: '/house/finance?create=1&kind=income' },
+  ...fromPlugin('finance'),
   ...fromPlugin('guests'),
   ...fromPlugin('travel'),
   { id: 'locate', label: '记一下东西放哪', keywords: ['位置', '放在哪', '柜子'], domain: 'locations', to: '/house/inventory?locate=1' },

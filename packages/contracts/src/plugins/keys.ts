@@ -36,7 +36,8 @@ export const PLUGIN_ALIASES: Readonly<Record<PluginKey, AliasTable>> = {
   tasks: { activity: ['task'], notification: ['task'], proposal: ['task'], agentSource: ['task'] },
   reminders: { activity: ['reminder'], notification: ['reminder'], proposal: ['reminder'], agentSource: ['reminder'] },
   polls: { activity: ['poll'], notification: ['poll'], proposal: ['poll'], agentSource: ['poll'] },
-  finance: { activity: ['finance'], proposal: ['finance'], agentSource: ['finance'] },
+  // 财务的两个 agent 工具现在的调用记录 sourceModule 落 'agent'（手写来源表从来没登记），J1 不改值
+  finance: { activity: ['finance'], proposal: ['finance'] },
   points: { activity: ['points'], notification: ['points'] },
   guests: { activity: ['guest'], notification: ['guest'] },
   'smart-home': {},

@@ -183,7 +183,6 @@ const HANDWRITTEN_TYPE_BY_TOOL: Partial<Record<SingleAgentProposalToolName, Agen
   propose_reminder: 'reminder',
   propose_menu: 'menu',
   propose_shopping_items: 'shopping',
-  propose_finance_transaction: 'finance',
 };
 
 const TYPE_BY_TOOL = {
@@ -201,7 +200,6 @@ const HANDWRITTEN_ACTION_LABELS: Partial<Record<AgentActionType, string>> = {
   reminder: '家庭提醒',
   menu: '菜单点菜',
   shopping: '购物清单',
-  finance: '家庭记账',
 };
 
 const ACTION_LABELS = {
@@ -210,7 +208,7 @@ const ACTION_LABELS = {
 } as Record<AgentActionType, string>;
 
 /** 不能放进 propose_plan 一组、必须单独确认的类型（财务）。已迁插件看 manifest 的 grouped。 */
-const HANDWRITTEN_UNGROUPED: readonly AgentActionType[] = ['finance'];
+const HANDWRITTEN_UNGROUPED: readonly AgentActionType[] = [];
 const UNGROUPED = new Set<string>([
   ...HANDWRITTEN_UNGROUPED,
   ...PLUGIN_PROPOSALS.filter((proposal) => !proposal.grouped).map((proposal) => proposal.actionType),

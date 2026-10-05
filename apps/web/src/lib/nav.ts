@@ -80,7 +80,7 @@ export const SCENES: NavScene[] = [
       { key: 'shopping', tier: 'core', glyph: '购', label: '购物', path: '/house/shopping', ready: true },
       { key: shelfModuleKey.enum.assets, tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
       { key: shelfModuleKey.enum.locations, tier: 'shelf', glyph: '图', label: '地图', path: '/house/map', ready: true },
-      { key: shelfModuleKey.enum.finance, tier: 'shelf', glyph: '账', label: '财务', path: '/house/finance', ready: true, managerOnly: true },
+      ...pluginSegments('finance'),
       ...pluginSegments('points'),
       ...pluginSegments('guests'),
       { key: shelfModuleKey.enum['smart-home'], tier: 'shelf', glyph: '智', label: '智能家居', path: '/house/smart-home', ready: true },
