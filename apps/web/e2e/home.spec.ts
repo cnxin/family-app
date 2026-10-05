@@ -107,8 +107,9 @@ for (const ordinary of [false, true]) {
     await page.waitForLoadState('networkidle');
     expect(paths).toEqual(['/api/today/attention']);
     const main = page.locator('main');
-    await expect(main.locator('[data-home-grid] a')).toHaveCount(ordinary ? 15 : 16);
-    await expect(main.getByRole('link', { name: '财务', exact: true })).toHaveCount(ordinary ? 0 : 1);
+    // 财务对成员也可见（architecture §8.6 第 3 条），两种角色的格子一样多
+    await expect(main.locator('[data-home-grid] a')).toHaveCount(16);
+    await expect(main.getByRole('link', { name: '财务', exact: true })).toHaveCount(1);
     if (ordinary) {
       await expect(main.getByRole('link', { name: '家庭设置', exact: true })).toHaveCount(0);
       await main.getByRole('link', { name: '个人', exact: true }).click();

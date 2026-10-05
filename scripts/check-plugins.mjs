@@ -98,6 +98,11 @@ for (const plugin of PLUGINS) {
 const unowned = tools.filter((tool) => !owners.has(tool));
 if (migrated.size === c.PLUGIN_KEYS.length && unowned.length) fail(`18 个插件都迁完了，还有无主工具：${unowned.join('、')}`);
 
+// ⌘K 动作对谁可见只看 manifest，不在面板里按域写死权限特判（§8.6 第 3、5 条）
+if (/action\.domain\s*[!=]==/.test(read('apps/web/src/components/command-palette.tsx'))) {
+  fail('command-palette.tsx 按域写死了动作可见性，改在 manifest 里声明');
+}
+
 // ---- 4. contracts 内的登记（dist 运行时结果） ---------------------------------------------------------
 
 const prefixes = c.EVENT_ROUTES.map((route) => route.prefix);

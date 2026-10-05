@@ -1,4 +1,5 @@
 // 财务（J1.3）。流水只能冲销不能改；记账提案必须单独确认，不能打包进 propose_plan。
+// 权限口径（architecture §8.6 第 3 条）：成员能看流水、记账；账户、分类、预算、冲销只有管理员（manage_finance）。
 import type { PluginManifest } from './types';
 
 export const financeManifest = {
@@ -7,7 +8,7 @@ export const financeManifest = {
   glyph: '账',
   manifestVersion: 1,
   tier: 'shelf',
-  nav: [{ key: 'finance', label: '财务', glyph: '账', scene: 'house', path: '/house/finance', managerOnly: true }],
+  nav: [{ key: 'finance', label: '财务', glyph: '账', scene: 'house', path: '/house/finance' }],
   legacyPaths: [['/finance', '/house/finance']],
   module: {
     overridable: true,
@@ -46,7 +47,6 @@ export const financeManifest = {
       // 一个提案工具同时管收入和支出
       propose: { legacyTool: 'propose_finance_transaction', actionType: 'finance', label: '家庭记账', grouped: false },
       capability: 'record_finance',
-      managerOnly: true,
     },
     {
       id: 'finance.record-income',
@@ -54,7 +54,6 @@ export const financeManifest = {
       keywords: ['进账'],
       deepLink: '/house/finance?create=1&kind=income',
       capability: 'record_finance',
-      managerOnly: true,
     },
   ],
   queries: [

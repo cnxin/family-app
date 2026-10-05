@@ -146,7 +146,7 @@ test('普通成员：保留本人设置与小管家，导航/搜索不暴露管�
   await expect(page.locator('main h1')).toContainText('妈妈');
   await expect(page.getByRole('navigation', { name: '家庭与设置' }).getByRole('link', { name: '家庭设置', exact: true })).toHaveCount(0);
   const input = await search(page, isMobile);
-  for (const name of ['财务', '成员', '备份']) {
+  for (const name of ['成员', '备份']) {
     await input.fill(name);
     await expect(page.getByRole('dialog', { name: '快速跳转' }).getByRole('button', { name: new RegExp(name) })).toHaveCount(0);
   }

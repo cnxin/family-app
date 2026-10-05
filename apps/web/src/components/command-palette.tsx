@@ -115,16 +115,14 @@ export function CommandPalette() {
     const pages = entries.filter((entry) => entry.kind === 'page');
     const dishesOnly = entries.filter((entry) => entry.kind === 'dish');
     if (!keyword) return pages;
-    const manager = session?.member.role === 'owner' || session?.member.role === 'admin';
-    const actions = ACTIONS.filter((action) => action.domain !== 'finance' || manager);
-    const named = actions.filter((action) => includes(action.label, keyword)).map((action) => ({
+    const named = ACTIONS.filter((action) => includes(action.label, keyword)).map((action) => ({
       id: action.id,
       label: action.label,
       hint: '动作',
       kind: 'action' as const,
       go: () => navigate(action.to),
     }));
-    const aliased = actions.filter(
+    const aliased = ACTIONS.filter(
       (action) => !includes(action.label, keyword) && action.keywords.some((item) => includes(item, keyword)),
     ).map((action) => ({
       id: action.id,
@@ -160,7 +158,7 @@ export function CommandPalette() {
       : [];
     // 顺序和下面分组显示的顺序一致，上下键和回车才对得上
     return [...named, ...aliased, ...pageHits, ...dishHits, ...itemHits, ...ask].slice(0, 20);
-  }, [agent.data?.enabled, entries, found.data, itemQuery, map.data, navigate, query, session?.member.role]);
+  }, [agent.data?.enabled, entries, found.data, itemQuery, map.data, navigate, query]);
 
   if (!open) return null;
 
