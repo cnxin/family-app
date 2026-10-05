@@ -1259,7 +1259,6 @@ export class AgentToolsService {
       list_location_contents: 'locations',
       recall_preferences: 'agent_memory',
       remember_preference: 'agent_memory',
-      propose_reminder: 'reminder',
       propose_menu: 'menu',
       propose_plan: 'agent_plan',
     };
