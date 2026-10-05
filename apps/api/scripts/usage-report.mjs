@@ -51,7 +51,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   asset: '资产',
   system: '家庭设置与备份',
   calendar: '日历',
-  task: '任务',
   reminder: '提醒',
   inventory: '库存',
 };
@@ -60,7 +59,6 @@ const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activit
 // 不写流水的域：主表最近 N 天新增的行。timestamp（无时区）列按数据库会话时区比较。
 const HANDWRITTEN_TABLE_SOURCES = [
   { domain: '日历', source: '主表新增 calendar_events', sql: `SELECT "householdId" AS household, "createdById" AS member FROM calendar_events WHERE "createdAt" >= now() - make_interval(days => $1)` },
-  { domain: '任务', source: '主表新增 household_tasks', sql: `SELECT "householdId" AS household, "createdById" AS member FROM household_tasks WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '提醒', source: '主表新增 reminders', sql: `SELECT "householdId" AS household, "createdById" AS member FROM reminders WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '库存', source: '主表新增 inventory_transactions', sql: `SELECT "householdId" AS household, "actorId" AS member FROM inventory_transactions WHERE "createdAt" >= now() - make_interval(days => $1)` },
   // 智能家居控制按来源分开：联动按的记在家庭主人名下（联动以他的名义执行），不是他本人按的
@@ -87,7 +85,6 @@ const LOCATION_SNAPSHOT = `
   FROM households h`;
 
 const HANDWRITTEN_UNCOUNTED = [
-  '任务完成：只数新建任务；完成 / 认领（household_task_instances.resolvedById）不是新增行，未计入',
   '位置：storage_locations 与库存 / 批次 / 资产的位置列都没有操作人，只给现状快照（见各家庭「位置」一段），不按成员计数',
 ];
 const UNCOUNTED = [...HANDWRITTEN_UNCOUNTED, ...generated.uncounted];

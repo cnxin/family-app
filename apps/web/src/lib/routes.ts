@@ -26,7 +26,7 @@ const MOVED: [string, string][] = [
   ...legacyPaths('shopping'),
   ['/inventory', '/house/inventory'],
   ['/calendar', '/schedule/calendar'],
-  ['/tasks', '/schedule/tasks'],
+  ...legacyPaths('tasks'),
   ['/reminders', '/schedule/reminders'],
   ...legacyPaths('polls'),
   ...legacyPaths('points'),

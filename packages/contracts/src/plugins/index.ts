@@ -18,12 +18,13 @@ import { pollsManifest } from './polls';
 import { recipesManifest } from './recipes';
 import { travelManifest } from './travel';
 import { shoppingManifest } from './shopping';
+import { tasksManifest } from './tasks';
 
 export * from './keys';
 export * from './types';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest];
+export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest];
 
 export function findPlugin(key: string): PluginManifest | undefined {
   return PLUGINS.find((plugin) => plugin.key === key);
