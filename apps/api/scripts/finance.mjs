@@ -293,6 +293,24 @@ try {
     '只有管理员可通过幂等反向流水撤销，原流水保留且统计恢复',
   );
 
+  // 权限口径（architecture §8.6 第 3 条）：成员能看、能记；账户、分类、预算、冲销只有管理员
+  const memberReads = await Promise.all([
+    request(`/finance/summary?month=${MONTH}`, member.accessToken),
+    request('/finance/accounts', member.accessToken),
+    request('/finance/categories', member.accessToken),
+    request(`/finance/transactions?month=${MONTH}`, member.accessToken),
+  ]);
+  const memberWrites = await Promise.all([
+    request(`/finance/accounts/${cash.data.id}`, member.accessToken, 'PATCH', { name: '成员不应改名', expectedVersion: cash.data.version }),
+    request('/finance/categories', member.accessToken, 'POST', { name: '成员不应建分类', kind: 'expense' }),
+    request(`/finance/categories/${food.id}`, member.accessToken, 'PATCH', { name: '成员不应改分类', expectedVersion: food.version }),
+    request(`/finance/budgets/${budget.data.id}?expectedVersion=${budget.data.version}`, member.accessToken, 'DELETE'),
+  ]);
+  assert(
+    memberReads.every((one) => one.status === 200) && memberWrites.every((one) => one.status === 403),
+    '普通成员可读摘要、账户、分类、流水；改账户、建改分类、删预算一律 403',
+  );
+
   let transactionUpdateBlocked = false;
   let postingDeleteBlocked = false;
   try {

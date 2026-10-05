@@ -57,16 +57,20 @@ test('空库搜索回忆并记下一条后，家里页出现回忆', async ({ pa
   await expect(page.locator('[data-home-available="memories"]')).toHaveCount(0);
 });
 
-test('普通成员搜不到管理员动作', async ({ page, isMobile }) => {
+// 财务权限口径（architecture §8.6 第 3 条）：成员能记账，⌘K 的记账动作和财务页对成员可用
+test('普通成员能搜到记账动作，搜不到管理员入口', async ({ page, isMobile }) => {
   test.setTimeout(120_000);
   const session = JSON.parse(readFileSync(authFiles.sessions, 'utf8'))['妈妈'];
   await page.addInitScript((value) => localStorage.setItem('family-app.session', JSON.stringify(value)), session);
   await page.goto('/');
   const input = await openSearch(page, isMobile);
+  const palette = page.getByRole('dialog', { name: '快速跳转' });
   await input.fill('记一笔支出');
-  await expect(page.getByRole('dialog', { name: '快速跳转' }).getByRole('button', { name: /记一笔支出/ })).toHaveCount(0);
+  await expect(palette.getByRole('button', { name: /记一笔支出/ })).toBeVisible();
   await input.fill('财务');
-  await expect(page.getByRole('dialog', { name: '快速跳转' }).getByRole('button', { name: /财务/ })).toHaveCount(0);
+  await expect(palette.getByRole('button', { name: /财务/ }).first()).toBeVisible();
+  await input.fill('备份');
+  await expect(palette.getByRole('button', { name: /备份/ })).toHaveCount(0);
 });
 
 test('小管家未启用时无交给小管家', async ({ page, isMobile }) => {

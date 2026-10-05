@@ -96,8 +96,13 @@ export function FinancePage() {
             options={[
               { value: 'overview' as const, label: '概览' },
               { value: 'ledger' as const, label: '流水' },
-              { value: 'budgets' as const, label: '预算' },
-              { value: 'accounts' as const, label: '账户' },
+              // 预算、账户与分类只有管理员能管，成员不出这两个分段
+              ...(canManage
+                ? [
+                    { value: 'budgets' as const, label: '预算' },
+                    { value: 'accounts' as const, label: '账户' },
+                  ]
+                : []),
             ]}
           />
         </div>
