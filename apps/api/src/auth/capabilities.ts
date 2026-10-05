@@ -37,7 +37,6 @@ const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> =
   owner: [
     'place_meal_order',
     'update_meal_status',
-    'manage_shopping',
     'manage_inventory',
     'manage_assets',
     'manage_members',
@@ -48,7 +47,6 @@ const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> =
   admin: [
     'place_meal_order',
     'update_meal_status',
-    'manage_shopping',
     'manage_inventory',
     'manage_assets',
     'manage_members',
@@ -59,7 +57,6 @@ const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> =
   member: [
     'place_meal_order',
     'update_meal_status',
-    'manage_shopping',
     'manage_inventory',
     'manage_assets',
     'use_agent',

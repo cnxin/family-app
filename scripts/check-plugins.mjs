@@ -113,6 +113,11 @@ for (const route of c.EVENT_ROUTES) {
   for (const domain of route.domains) if (!domainKeys.has(domain)) fail(`EVENT_ROUTES ${route.prefix} 的域 ${domain} 不存在`);
 }
 const attentionDomains = c.attentionItemSchema.shape.domain.options;
+/**
+ * 路径挂在某域下、但归属另一个还没迁的插件的手写路由，暂时放过「手写表还有本域路由」的检查。
+ * confirm-stock 写在 inventory.module.ts、归库存插件（§8.6 第 4 条）：J1.5 迁库存时收进 inventory manifest，届时删掉这一条。
+ */
+const PENDING_ROUTES = { shopping: ['/shopping-items/:id/confirm-stock'] };
 const handwrittenEvents = block('packages/contracts/src/events.ts', 'const HANDWRITTEN_EVENT_ROUTES');
 
 for (const plugin of PLUGINS) {
@@ -131,6 +136,7 @@ for (const plugin of PLUGINS) {
   }
   // 手写表里以本域打头的路由应该已经搬进 manifest
   for (const line of handwrittenEvents.split('\n')) {
+    if ((PENDING_ROUTES[key] ?? []).some((prefix) => line.includes(`prefix: '${prefix}'`))) continue;
     if (new RegExp(`domains: \\['${escape(key)}'[,\\]]`).test(line)) fail(`${where} events.ts 手写表还有本域路由：${line.trim()}`);
   }
 
@@ -141,6 +147,19 @@ for (const plugin of PLUGINS) {
   for (const navKey of navKeys) {
     const literal = new RegExp(`key: '${escape(navKey)}'|shelfModuleKey\\.enum(\\.${escape(navKey)}\\b|\\['${escape(navKey)}'\\])`);
     if (literal.test(nav)) fail(`${where} nav.ts 还手写着分段 ${navKey}`);
+  }
+  // core 段的顺序（CORE_KEYS）和手机底栏（mobileTabs 的 pick）只按 key 排，仍手写；与 manifest 的 tier / mobileTab 一致
+  const coreKeys = nav.match(/const CORE_KEYS = \[([^\]]*)\]/)?.[1];
+  if (coreKeys === undefined) fail('nav.ts 找不到 CORE_KEYS');
+  const tabs = [...nav.matchAll(/sceneByKey\('([\w-]+)'\), segments: pick\(\[([^\]]*)\]\)/g)].map(([, tab, keys]) => [tab, keys]);
+  if (!tabs.length) fail('nav.ts 找不到 mobileTabs 的 pick');
+  for (const segment of plugin.nav) {
+    const core = (segment.tier ?? plugin.tier) === 'core';
+    if (core !== (coreKeys ?? '').includes(`'${segment.key}'`)) fail(`${where} 分段 ${segment.key} 的 tier 与 nav.ts CORE_KEYS 不一致`);
+    const inTabs = tabs.filter(([, keys]) => keys.includes(`'${segment.key}'`)).map(([tab]) => tab);
+    if (JSON.stringify(inTabs) !== JSON.stringify(segment.mobileTab ? [segment.mobileTab] : [])) {
+      fail(`${where} 分段 ${segment.key} 的 mobileTab（${segment.mobileTab ?? '—'}）与 nav.ts mobileTabs（${inTabs.join('、') || '—'}）不一致`);
+    }
   }
   if (new RegExp(`domain: '${escape(key)}'`).test(block('apps/web/src/lib/actions.ts', 'export const ACTIONS'))) {
     fail(`${where} actions.ts 还手写着本域动作`);

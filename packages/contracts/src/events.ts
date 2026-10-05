@@ -86,8 +86,7 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/menus', domains: ['menus'] },
   { prefix: '/menus/:id/confirm-consumption', domains: ['menus', 'inventory'] },
   { prefix: '/menu-items', domains: ['menus'] },
-  { prefix: '/shopping-list', domains: ['shopping'] },
-  { prefix: '/shopping-items', domains: ['shopping', 'inventory'] },
+  // 买到后入库：写在 inventory.module.ts、归库存插件（§8.6 第 4 条），J1.5 迁库存时收进 inventory manifest
   { prefix: '/shopping-items/:id/confirm-stock', domains: ['shopping', 'inventory', 'locations'] },
 
   { prefix: '/notifications', domains: ['notifications'] },
