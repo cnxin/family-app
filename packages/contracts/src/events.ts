@@ -93,7 +93,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/notification-channels', domains: ['notifications'] },
   { prefix: '/notification-deliveries', domains: ['notifications'] },
 
-  { prefix: '/tasks', domains: ['tasks', 'calendar', 'points'] },
   { prefix: '/calendar-events', domains: ['calendar'] },
   { prefix: '/reminders', domains: ['reminders', 'calendar'] },
 

@@ -31,7 +31,7 @@ export const ACTIONS: Action[] = [
   ...fromPlugin('knowledge'),
   { id: 'reminder', label: '加一条提醒', keywords: ['别忘了'], domain: 'reminders', to: '/schedule/reminders?create=1' },
   { id: 'calendar', label: '加日程', keywords: ['事件'], domain: 'calendar', to: '/schedule/calendar?create=1' },
-  { id: 'task', label: '加任务', keywords: ['待办'], domain: 'tasks', to: '/schedule/tasks?create=1' },
+  ...fromPlugin('tasks'),
   ...fromPlugin('shopping'),
   ...fromPlugin('recipes'),
 ];

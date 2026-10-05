@@ -3,7 +3,6 @@ import { pluginNotificationModules, type NotificationDelivery, type Notification
 /** 十个通知模块的中文名和图标。消息列表、渠道偏好、投递记录都用这一份。 */
 const HANDWRITTEN_MODULE_LABEL: Partial<Record<NotificationModule, string>> = {
   menu: '菜单',
-  task: '任务',
   calendar: '日历',
   reminder: '提醒',
   media: '观影',
@@ -13,7 +12,6 @@ const HANDWRITTEN_MODULE_LABEL: Partial<Record<NotificationModule, string>> = {
 
 const HANDWRITTEN_MODULE_ICON: Partial<Record<NotificationModule, string>> = {
   menu: '🍲',
-  task: '✅',
   calendar: '📅',
   reminder: '🔔',
   media: '🎬',
