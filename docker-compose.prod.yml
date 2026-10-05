@@ -40,6 +40,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+      # 构建自哪个提交；upgrade-prod.sh 构建前设好，下次升级从运行中的容器读出来当「升级前提交」
+      labels:
+        org.opencontainers.image.revision: ${FAMILY_APP_COMMIT:-unknown}
     image: family-app-api:${APP_VERSION:-latest}
     restart: unless-stopped
     init: true
@@ -139,6 +142,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      labels:
+        org.opencontainers.image.revision: ${FAMILY_APP_COMMIT:-unknown}
     image: family-app-web:${APP_VERSION:-latest}
     restart: unless-stopped
     read_only: true
@@ -179,6 +184,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backup-worker
+      labels:
+        org.opencontainers.image.revision: ${FAMILY_APP_COMMIT:-unknown}
     image: family-app-backup-worker:${APP_VERSION:-latest}
     restart: unless-stopped
     environment:

@@ -78,15 +78,15 @@ git pull --ff-only
 
 脚本按顺序做下面几步，**任一步失败立即停下，不自动回滚**，并打印失败的步骤、升级前提交、回滚镜像标签和备份目录：
 
-1. 检查工作区干净、db / api / web / backup-worker 都在运行；
+1. 检查工作区干净、db / api / web / backup-worker 都在运行，读出正在运行的版本（见下）；
 2. 给正在运行的三个镜像打回滚标签 `family-app-<服务>:prod-before-<日期-时间>`；
 3. `backup-prod.sh` 备份数据库和附件；
 4. `git pull --ff-only`（`--no-pull` 时跳过）；
-5. `compose build`；
+5. `compose build`（带上 `FAMILY_APP_COMMIT=<新提交>`，写进镜像的 revision 标签）；
 6. `compose up -d --wait`（API 启动时执行迁移；起不来会在超时后报错并打出 API 日志）；
 7. 逐个等 db / api / web 变成 healthy，确认 backup-worker 在运行，打印最近三个迁移。
 
-**把脚本最后打印的「回滚镜像标签」和「升级前备份」记下来**，回滚要用。`--no-pull` 时备份清单里的 `git_commit` 已经是新代码的提交（备份在手动拉代码之后做），升级前的提交以脚本打印的值（取自 `ORIG_HEAD`）或 `git reflog` 为准。
+**把脚本最后打印的「回滚镜像标签」和「升级前备份」记下来**，回滚要用。脚本打印的「升级前提交」是**正在运行的版本**：优先读运行中 api 容器的镜像标签 `org.opencontainers.image.revision`（脚本构建时用 `FAMILY_APP_COMMIT` 写进三个镜像）；镜像是加这个标签之前建的、或手动 `compose build` 没带提交号（标签为 `unknown`）时，退回最近一份完整备份 `manifest.txt` 里的 `git_commit`——那是那次备份时仓库的 HEAD，仓库若在备份后又被拉新过就不准，输出里会注明来源，以 `git reflog` 核对。不再用 `ORIG_HEAD`：代码常常早已拉到新提交，它说明不了跑的是哪一版（2026-10-06 演示栈升级时它打印了 `db108c4`，实际运行的是 `b5c4e7c`）。`--no-pull` 时本次备份清单里的 `git_commit` 已经是新代码的提交（备份在手动拉代码之后做）。
 
 ## 3. 回滚
 
