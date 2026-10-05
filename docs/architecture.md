@@ -410,13 +410,24 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | J1.3 | 访客 | `99a3f71` | `196eee3` | 一次过（#37320763876） | 9 条事件路由：访客公开页 4 条服务端显式发（调用不动），其余 5 条走拦截器——指令里「9 条全部显式发」与代码不符，按代码登记。留意两种（来访没定菜、访客点菜限 `manage_guests`）的标题模板、按钮、「去点菜」落点特判由 manifest 生成；`kindActions` 里的 `menu` / `meal-request` 一并删掉（只有访客用）。⌘K 实有 1 条「加个来访」（§8.2 表对，指令写「没有」），一并迁。`manage_guests` 的授予关系挪进 manifest |
 | J1.3 | 财务 | `2cd3397` | `bcbf71a` | 一次过（#37321059096） | 事件路由实为一条 `/finance` 前缀，覆盖全部 8 个写端点、都走拦截器；§8.2 的「1/3」是「主 / 涉及」条数（另两条是 `/agent/proposals`、`/agent/proposal-groups`），不是「三分之一发事件」，无需补发。三个能力挪进 manifest、成员能力集不变；写提案按投票做法由 manifest 生成（`grouped: false`）。别名表去掉财务的 `agentSource`：`get_finance_summary` / `propose_finance_transaction` 的调用记录 `sourceModule` 现状落 `'agent'`（手写来源表从未登记），J1 不改值 |
 | J1.3 | 财务权限 fix | `d19b715` | `dcb3f7f` | 一次过（#37322250756） | §8.6 第 3 条：导航去掉 `managerOnly`、删掉 ⌘K 写死特判（check-plugins 加断言防回退）；API 守卫本来就是这个口径，未改，`docs/api-inventory.md` 无变化，黑盒补成员读 200 / 管理写 403；财务页对成员不渲染「预算」「账户」分段（冲销按钮原本就不渲染）。新增 e2e `finance-member`（双视口）；`actions` / `nav` / `home` 三条原断言「成员看不到财务」的用例改为新口径。`GET /finance/budgets` 仍是 `view_finance`，概览页的「本月预算」进度对成员照常只读展示 |
+| J1.4 | 购物 | `c431940` | `b623ce5` | 一次过（#37332178144） | 草稿转正，去掉第 0 档模板。`POST /shopping-items/:id/confirm-stock` 写在 inventory.module.ts、归库存（§8.6 第 4 条），**不收**，留在手写表并注释，check-plugins 用 `PENDING_ROUTES` 白名单放过。check-plugins 补 core 段检查：manifest 的 `tier` / `mobileTab` 与 nav.ts 的 `CORE_KEYS`、`mobileTabs` 一致（反证过：去掉 `mobileTab` 会报错） |
+| J1.4 | 任务 | `7f037d1` | `58aa46f` | 一次过（#37332375652） | 别名 `task` 本已在表里。打勾时事务内调积分 Service 原样保留 |
+| J1.4 | 日历 | `704c187` | `4db858d` | **重跑 1 次**（#37332584424） | 以日历为主的写路由只有 `/calendar-events`；另 8 条推日历的路由是小管家提案 ×2、资产、维护计划、提醒、任务、出行、来访，留在各自的域。`get_today_summary` / `get_family_schedule` 跨域、归内核，不认领。首跑桌面视口「片单：改成已排期」失败（观影，本笔未碰），重跑全绿 |
+| J1.4 | 提醒 | `8e33db1` | `db108c4` | 一次过（#37332864835） | 本批唯一 shelf 域。hasData 由 `tables[].where` 生成，与手写 SQL 只差空白，system-modules 黑盒「提醒边界」通过。读工具仍缺，不补 |
+| J1.4 | 点菜 | `14f7e79` | `442cd83` | **重跑 2 次**（#37333503940，第 3 次全绿） | 两段导航本来就能用 `nav[]` 表达，类型不用补（指令写的 `nav.segments` 不存在）。**manifest 类型补了两处**：①顶层 `proposals`——点菜没有 ⌘K 动作，而 `actions` 里的每条都会进 ⌘K（注册表单测按此断言），提案无处挂，先放这里，J3 补动作时挪进 `actions[].propose`；② `PluginUsageTable.log`——`menu_events` 每行就是一次操作，来源输出「流水 menu_events」，用量脚本里单独查它的那段删掉。`POST /menus/:id/confirm-consumption` 同样写在 inventory.module.ts（扣库存），与 confirm-stock 同类，**不收**、白名单，归属随 J1.5 定。首跑与第一次重跑都是手机视口「片单：改成已排期」失败；本地该用例双视口各连跑 5 次全过，点菜分支没碰观影，判定为同一偶发，**超出「重跑一次」的规矩多重跑了一次**，第 3 次全绿。该偶发已有未合并的修复分支 `fix/media-scheduled-cache`（`92a8d55`） |
+
+**每笔都做的等价比对**：迁移前后各导一份快照比对——web 端的事件路由、查询失效表、导航分段、core 顺序、手机底栏、⌘K（除动作 id）、旧路径换算、通知名与图标、留意落点；再在本地开发库上跑 `usage-report.mjs`，排序后逐行比。五笔全部一致。
+
+**J1.5 待收**：`POST /shopping-items/:id/confirm-stock`（§8.6 第 4 条已定归库存）与 `POST /menus/:id/confirm-consumption`（同样写在 inventory.module.ts，归属待 J1.5 一并确认）仍在 `contracts/src/events.ts` 的手写表里，`scripts/check-plugins.mjs` 的 `PENDING_ROUTES` 暂时放过；J1.5 迁库存时收进 inventory manifest，并删掉这两条白名单。
+
+**演示栈升级（2026-10-06，J1.4 合完后）**：`b5c4e7c` → `442cd83`（脚本打印的「升级前提交」取自 ORIG_HEAD，是 `db108c4`，不准；实际运行版本以 9-30 的备份清单与 reflog 为准）。`upgrade-prod.sh --no-pull`，无新迁移（仍 72 个）。回滚标签 `prod-before-20261006-003241`，升级前备份 `backups-production/20261005-163242Z`。升级后：14 张业务表行数与迁移数前后一致；四个服务与 API Node 时区均为上海；`/api/health/ready` ok，今天 / 家里 / 点菜 / 厨房 / 购物 / 日历 / 任务 / 提醒 / 财务 / 访客 / 智能家居 / 位置 12 个页面 200，新 bundle 含 J1.3 / J1.4 的 manifest；智能家居 `smart_home_live mode=push`，API 容器到 HA 401（网络通）；API 日志无 error。事件流的 `hello` / `heartbeat` 要成员令牌，没测（不登录家里人的账号），无令牌 401。J1.3 的财务权限变化随这次一起上线。
 
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
 | J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；§8.6 五项已拍板 |
-| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 8 / 18（知识库、回忆、出行、投票、菜谱、积分、访客、财务）；财务权限口径已对齐，演示栈随 J1.4 一起升 |
+| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 13 / 18（知识库、回忆、出行、投票、菜谱、积分、访客、财务、购物、任务、日历、提醒、点菜）；演示栈 2026-10-06 升到 `442cd83`（含 J1.3 财务权限）；J1.5 待收 confirm-stock / confirm-consumption 两条手写路由 |
 | J2 助理数据与开关 | ☐ | | |
 | J3 第 0 档引擎 | ☐ | | 等试用原话 |
 | J4 agent 重建 | ☐ | | |
