@@ -50,7 +50,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   media: '观影',
   asset: '资产',
   system: '家庭设置与备份',
-  calendar: '日历',
   reminder: '提醒',
   inventory: '库存',
 };
@@ -58,7 +57,6 @@ const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activit
 
 // 不写流水的域：主表最近 N 天新增的行。timestamp（无时区）列按数据库会话时区比较。
 const HANDWRITTEN_TABLE_SOURCES = [
-  { domain: '日历', source: '主表新增 calendar_events', sql: `SELECT "householdId" AS household, "createdById" AS member FROM calendar_events WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '提醒', source: '主表新增 reminders', sql: `SELECT "householdId" AS household, "createdById" AS member FROM reminders WHERE "createdAt" >= now() - make_interval(days => $1)` },
   { domain: '库存', source: '主表新增 inventory_transactions', sql: `SELECT "householdId" AS household, "actorId" AS member FROM inventory_transactions WHERE "createdAt" >= now() - make_interval(days => $1)` },
   // 智能家居控制按来源分开：联动按的记在家庭主人名下（联动以他的名义执行），不是他本人按的
