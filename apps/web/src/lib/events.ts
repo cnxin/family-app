@@ -11,7 +11,6 @@ import { invalidateModules } from './queries/modules';
  */
 const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   menus: ['menus-of-date', 'menu', 'menu-dates', 'menu-events', 'menu-inventory-preview'],
-  shopping: ['shopping', 'shopping-inventory-preview'],
   calendar: ['calendar'],
   tasks: ['tasks'],
   notifications: ['notifications', 'notification-deliveries', 'notification-channels'],

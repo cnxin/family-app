@@ -53,7 +53,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   calendar: '日历',
   task: '任务',
   reminder: '提醒',
-  shopping: '购物',
   inventory: '库存',
 };
 const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activityDomains };
@@ -88,7 +87,6 @@ const LOCATION_SNAPSHOT = `
   FROM households h`;
 
 const HANDWRITTEN_UNCOUNTED = [
-  '购物：shopping_items 没有创建时间和创建人列，无法按成员计数',
   '任务完成：只数新建任务；完成 / 认领（household_task_instances.resolvedById）不是新增行，未计入',
   '位置：storage_locations 与库存 / 批次 / 资产的位置列都没有操作人，只给现状快照（见各家庭「位置」一段），不按成员计数',
 ];

@@ -1248,7 +1248,6 @@ export class AgentToolsService {
       get_today_summary: 'calendar',
       get_calendar: 'calendar',
       get_tasks: 'task',
-      get_shopping_list: 'shopping',
       get_meal_plan: 'menu',
       get_inventory_alerts: 'inventory',
       get_watch_candidates: 'media',
@@ -1266,7 +1265,6 @@ export class AgentToolsService {
       propose_task: 'task',
       propose_reminder: 'reminder',
       propose_menu: 'menu',
-      propose_shopping_items: 'shopping',
       propose_plan: 'agent_plan',
     };
     const presentation =

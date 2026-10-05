@@ -182,7 +182,6 @@ const HANDWRITTEN_TYPE_BY_TOOL: Partial<Record<SingleAgentProposalToolName, Agen
   propose_task: 'task',
   propose_reminder: 'reminder',
   propose_menu: 'menu',
-  propose_shopping_items: 'shopping',
 };
 
 const TYPE_BY_TOOL = {
@@ -199,7 +198,6 @@ const HANDWRITTEN_ACTION_LABELS: Partial<Record<AgentActionType, string>> = {
   task: '家庭任务',
   reminder: '家庭提醒',
   menu: '菜单点菜',
-  shopping: '购物清单',
 };
 
 const ACTION_LABELS = {

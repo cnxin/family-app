@@ -77,7 +77,7 @@ export const SCENES: NavScene[] = [
     // 保留已有路径分组；购物在 core 与手机「吃饭」里呈现，不搬 URL。
     segments: [
       { key: shelfModuleKey.enum.inventory, tier: 'shelf', glyph: '库', label: '库存', path: '/house/inventory', ready: true },
-      { key: 'shopping', tier: 'core', glyph: '购', label: '购物', path: '/house/shopping', ready: true },
+      ...pluginSegments('shopping'),
       { key: shelfModuleKey.enum.assets, tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
       { key: shelfModuleKey.enum.locations, tier: 'shelf', glyph: '图', label: '地图', path: '/house/map', ready: true },
       ...pluginSegments('finance'),
