@@ -83,9 +83,8 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/media', domains: ['media'] },
   { prefix: '/media/webhooks', domains: ['media'], emit: 'explicit' },
 
-  { prefix: '/menus', domains: ['menus'] },
+  // 确认用料（扣库存）：写在 inventory.module.ts，路径挂在点菜下，与 confirm-stock 同类，归属随 J1.5 一起定
   { prefix: '/menus/:id/confirm-consumption', domains: ['menus', 'inventory'] },
-  { prefix: '/menu-items', domains: ['menus'] },
   // 买到后入库：写在 inventory.module.ts、归库存插件（§8.6 第 4 条），J1.5 迁库存时收进 inventory manifest
   { prefix: '/shopping-items/:id/confirm-stock', domains: ['shopping', 'inventory', 'locations'] },
 

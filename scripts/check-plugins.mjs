@@ -93,7 +93,7 @@ const claim = (tool, owner) => {
 for (const tool of c.KERNEL_AGENT_TOOLS) claim(tool, 'kernel');
 for (const plugin of PLUGINS) {
   for (const query of plugin.queries ?? []) if (query.legacyTool) claim(query.legacyTool, plugin.key);
-  for (const action of plugin.actions ?? []) if (action.propose?.legacyTool) claim(action.propose.legacyTool, plugin.key);
+  for (const proposal of c.proposalsOf(plugin)) if (proposal.legacyTool) claim(proposal.legacyTool, plugin.key);
 }
 const unowned = tools.filter((tool) => !owners.has(tool));
 if (migrated.size === c.PLUGIN_KEYS.length && unowned.length) fail(`18 个插件都迁完了，还有无主工具：${unowned.join('、')}`);
@@ -117,7 +117,11 @@ const attentionDomains = c.attentionItemSchema.shape.domain.options;
  * 路径挂在某域下、但归属另一个还没迁的插件的手写路由，暂时放过「手写表还有本域路由」的检查。
  * confirm-stock 写在 inventory.module.ts、归库存插件（§8.6 第 4 条）：J1.5 迁库存时收进 inventory manifest，届时删掉这一条。
  */
-const PENDING_ROUTES = { shopping: ['/shopping-items/:id/confirm-stock'] };
+const PENDING_ROUTES = {
+  shopping: ['/shopping-items/:id/confirm-stock'],
+  // 确认用料（扣库存）同样写在 inventory.module.ts，路径挂在点菜下；归属随 J1.5 一起定
+  menus: ['/menus/:id/confirm-consumption'],
+};
 const handwrittenEvents = block('packages/contracts/src/events.ts', 'const HANDWRITTEN_EVENT_ROUTES');
 
 for (const plugin of PLUGINS) {

@@ -20,8 +20,7 @@ function legacyPaths(key: PluginKey): [string, string][] {
 }
 
 const MOVED: [string, string][] = [
-  ['/order', '/eat/order'],
-  ['/kitchen', '/eat/kitchen'],
+  ...legacyPaths('menus'),
   ...legacyPaths('recipes'),
   ...legacyPaths('shopping'),
   ['/inventory', '/house/inventory'],

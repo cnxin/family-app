@@ -46,7 +46,6 @@ function password() {
 const HANDWRITTEN_ACTIVITY_DOMAINS = {
   member: '成员',
   invitation: '成员',
-  menu: '点菜（智能菜单）',
   media: '观影',
   asset: '资产',
   system: '家庭设置与备份',
@@ -119,16 +118,6 @@ try {
       member: row.member,
       count: row.count,
     });
-  }
-  const menuEvents = await client.query(
-    `SELECT "householdId" AS household, "actorId" AS member, COUNT(*)::int AS count
-       FROM menu_events
-      WHERE "createdAt" >= LOCALTIMESTAMP - make_interval(days => $1)
-      GROUP BY 1, 2`,
-    [DAYS],
-  );
-  for (const row of menuEvents.rows) {
-    rows.push({ household: row.household, domain: '点菜 / 厨房', source: '流水 menu_events', member: row.member, count: row.count });
   }
   for (const table of TABLE_SOURCES) {
     const result = await client.query(

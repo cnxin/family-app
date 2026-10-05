@@ -1246,12 +1246,10 @@ export class AgentToolsService {
     const sourceModule: Record<string, string> = {
       ...pluginToolSources(),
       get_today_summary: 'calendar',
-      get_meal_plan: 'menu',
       get_inventory_alerts: 'inventory',
       get_watch_candidates: 'media',
       get_family_schedule: 'calendar',
       get_inventory_summary: 'inventory',
-      get_dish_plan: 'menu',
       get_weather: 'weather',
       get_member_profile: 'member',
       get_asset_detail: 'asset',
@@ -1259,7 +1257,6 @@ export class AgentToolsService {
       list_location_contents: 'locations',
       recall_preferences: 'agent_memory',
       remember_preference: 'agent_memory',
-      propose_menu: 'menu',
       propose_plan: 'agent_plan',
     };
     const presentation =
