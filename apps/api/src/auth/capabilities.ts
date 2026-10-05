@@ -35,8 +35,6 @@ export type Capability =
  */
 const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> = {
   owner: [
-    'place_meal_order',
-    'update_meal_status',
     'manage_inventory',
     'manage_assets',
     'manage_members',
@@ -45,8 +43,6 @@ const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> =
     'manage_agent',
   ],
   admin: [
-    'place_meal_order',
-    'update_meal_status',
     'manage_inventory',
     'manage_assets',
     'manage_members',
@@ -55,8 +51,6 @@ const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> =
     'manage_agent',
   ],
   member: [
-    'place_meal_order',
-    'update_meal_status',
     'manage_inventory',
     'manage_assets',
     'use_agent',

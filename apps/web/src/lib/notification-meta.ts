@@ -2,14 +2,12 @@ import { pluginNotificationModules, type NotificationDelivery, type Notification
 
 /** 十个通知模块的中文名和图标。消息列表、渠道偏好、投递记录都用这一份。 */
 const HANDWRITTEN_MODULE_LABEL: Partial<Record<NotificationModule, string>> = {
-  menu: '菜单',
   media: '观影',
   agent: '小管家',
   system: '系统',
 };
 
 const HANDWRITTEN_MODULE_ICON: Partial<Record<NotificationModule, string>> = {
-  menu: '🍲',
   media: '🎬',
   agent: '🤖',
   system: '⚙️',

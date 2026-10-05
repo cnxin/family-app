@@ -10,7 +10,6 @@ import { invalidateModules } from './queries/modules';
  * 自己重取。新加查询时把它的前缀登记到对应的域里，否则别人改了这边不会跟着变。
  */
 const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
-  menus: ['menus-of-date', 'menu', 'menu-dates', 'menu-events', 'menu-inventory-preview'],
   notifications: ['notifications', 'notification-deliveries', 'notification-channels'],
   inventory: [
     'inventory', 'inventory-batches', 'inventory-transactions',

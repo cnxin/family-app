@@ -139,6 +139,14 @@ export type PluginSlotType =
   | 'member' | 'location' | 'device' | 'item' | 'dish' | 'room';
 export type PluginSlot = PluginSlotType | `${PluginSlotType}?`;
 
+/** agent 写提案：现有工具名、agent_action_proposals.actionType 现值、提案卡上的类型名、能否放进 propose_plan。 */
+export interface PluginProposal {
+  legacyTool?: string;
+  actionType: string;
+  label: string;
+  grouped?: boolean;
+}
+
 export interface PluginAction {
   /** `<plugin>.<verb>`，全局唯一。 */
   id: string;
@@ -155,7 +163,7 @@ export interface PluginAction {
    * `actionType` 是 agent_action_proposals.actionType 的现值，`label` 是提案卡上的类型名；
    * `grouped: false` 表示不能放进 propose_plan 的一组里，必须单独确认（财务）。
    */
-  propose?: { legacyTool?: string; actionType: string; label: string; grouped?: boolean };
+  propose?: PluginProposal;
   /** 执行或看到这个动作需要的能力；缺省为任何成员。 */
   capability?: string;
   managerOnly?: boolean;
@@ -197,6 +205,8 @@ export interface PluginUsageTable {
   where?: string;
   /** 计数来源一栏的补充说明，输出成「主表新增 <table>（<note>）」。 */
   note?: string;
+  /** 这张表本身就是操作流水（每行一次操作，如 menu_events），来源写成「流水 <table>」而不是「主表新增」。 */
+  log?: boolean;
 }
 
 export interface PluginUsage {
@@ -239,6 +249,11 @@ export interface PluginManifest {
   events: PluginEvents;
   attention?: PluginAttention;
   actions?: readonly PluginAction[];
+  /**
+   * 还没有对应 ⌘K 动作的写提案（点菜：⌘K 是缺项，J3 补动作时挪进 actions[].propose）。
+   * actions 里的每一条都会出现在 ⌘K，所以不能为了挂提案凭空加一条动作。
+   */
+  proposals?: readonly PluginProposal[];
   queries?: readonly PluginQuery[];
   settingsRows?: readonly PluginSettingsRow[];
   usage?: PluginUsage;

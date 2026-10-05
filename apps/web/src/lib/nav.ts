@@ -51,8 +51,7 @@ export const SCENES: NavScene[] = [
     icon: '🍚',
     path: '/eat',
     segments: [
-      { key: 'order', tier: 'core', glyph: '点', label: '点菜', path: '/eat/order', ready: true },
-      { key: 'kitchen', tier: 'core', glyph: '厨', label: '厨房', path: '/eat/kitchen', ready: true },
+      ...pluginSegments('menus'),
       ...pluginSegments('recipes'),
     ],
   },

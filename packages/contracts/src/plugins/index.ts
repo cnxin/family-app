@@ -6,6 +6,7 @@ import type {
   PluginAttention,
   PluginManifest,
   PluginNavSegment,
+  PluginProposal,
   PluginUsageTable,
 } from './types';
 import { PLUGIN_ALIASES, PLUGIN_KEYS, type PluginKey } from './keys';
@@ -21,12 +22,13 @@ import { shoppingManifest } from './shopping';
 import { tasksManifest } from './tasks';
 import { calendarManifest } from './calendar';
 import { remindersManifest } from './reminders';
+import { menusManifest } from './menus';
 
 export * from './keys';
 export * from './types';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest];
+export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest];
 
 export function findPlugin(key: string): PluginManifest | undefined {
   return PLUGINS.find((plugin) => plugin.key === key);
@@ -108,12 +110,20 @@ export function renderTemplate(template: string, values: Readonly<Record<string,
 
 // ---- agent 工具、通知、能力 ------------------------------------------------------------------------
 
+/** 插件的全部写提案：挂在动作上的，加上还没有动作的（manifest.proposals）。 */
+export function proposalsOf(plugin: PluginManifest): readonly PluginProposal[] {
+  return [
+    ...(plugin.actions ?? []).flatMap((action) => (action.propose ? [action.propose] : [])),
+    ...(plugin.proposals ?? []),
+  ];
+}
+
 /** 工具名 → 认领它的插件（只含已迁移插件）。 */
 export function pluginToolOwners(): ReadonlyMap<string, string> {
   const owners = new Map<string, string>();
   for (const plugin of PLUGINS) {
     for (const query of plugin.queries ?? []) if (query.legacyTool) owners.set(query.legacyTool, plugin.key);
-    for (const action of plugin.actions ?? []) if (action.propose?.legacyTool) owners.set(action.propose.legacyTool, plugin.key);
+    for (const proposal of proposalsOf(plugin)) if (proposal.legacyTool) owners.set(proposal.legacyTool, plugin.key);
   }
   return owners;
 }
@@ -131,14 +141,14 @@ export function pluginToolSources(): Readonly<Record<string, string>> {
 /** 已迁插件的写提案：工具名、actionType、提案卡类型名、能否打包进 propose_plan。 */
 export function pluginProposals(): readonly { plugin: string; tool: string; actionType: string; label: string; grouped: boolean }[] {
   return PLUGINS.flatMap((plugin) =>
-    (plugin.actions ?? []).flatMap((action) =>
-      action.propose?.legacyTool
+    proposalsOf(plugin).flatMap((proposal) =>
+      proposal.legacyTool
         ? [{
             plugin: plugin.key,
-            tool: action.propose.legacyTool,
-            actionType: action.propose.actionType,
-            label: action.propose.label,
-            grouped: action.propose.grouped ?? true,
+            tool: proposal.legacyTool,
+            actionType: proposal.actionType,
+            label: proposal.label,
+            grouped: proposal.grouped ?? true,
           }]
         : [],
     ),
@@ -183,7 +193,7 @@ export function pluginUsage(): {
     for (const table of usage.tables ?? []) {
       tables.push({
         domain: table.label,
-        source: `主表新增 ${table.table}${table.note ? `（${table.note}）` : ''}`,
+        source: table.log ? `流水 ${table.table}` : `主表新增 ${table.table}${table.note ? `（${table.note}）` : ''}`,
         sql: usageSql(table),
       });
     }

@@ -179,7 +179,6 @@ export type GroupedAgentProposalToolName = Exclude<
 const PLUGIN_PROPOSALS = pluginProposals();
 
 const HANDWRITTEN_TYPE_BY_TOOL: Partial<Record<SingleAgentProposalToolName, AgentActionType>> = {
-  propose_menu: 'menu',
 };
 
 const TYPE_BY_TOOL = {
@@ -193,7 +192,6 @@ export const TOOL_BY_TYPE = Object.fromEntries(
 ) as Record<AgentActionType, SingleAgentProposalToolName>;
 
 const HANDWRITTEN_ACTION_LABELS: Partial<Record<AgentActionType, string>> = {
-  menu: '菜单点菜',
 };
 
 const ACTION_LABELS = {
