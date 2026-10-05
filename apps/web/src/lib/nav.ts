@@ -64,7 +64,7 @@ export const SCENES: NavScene[] = [
     segments: [
       ...pluginSegments('calendar'),
       ...pluginSegments('tasks'),
-      { key: shelfModuleKey.enum.reminders, tier: 'shelf', glyph: '醒', label: '提醒', path: '/schedule/reminders', ready: true },
+      ...pluginSegments('reminders'),
       ...pluginSegments('polls'),
       { key: 'notifications', tier: 'core', glyph: '信', label: '消息', path: '/schedule/notifications', ready: true },
     ],

@@ -29,7 +29,7 @@ export const ACTIONS: Action[] = [
   ...fromPlugin('polls'),
   ...fromPlugin('memories'),
   ...fromPlugin('knowledge'),
-  { id: 'reminder', label: '加一条提醒', keywords: ['别忘了'], domain: 'reminders', to: '/schedule/reminders?create=1' },
+  ...fromPlugin('reminders'),
   ...fromPlugin('calendar'),
   ...fromPlugin('tasks'),
   ...fromPlugin('shopping'),
