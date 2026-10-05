@@ -620,6 +620,10 @@ async function runApiPhase() {
       'POST',
       { expectedVersion: 1 },
     );
+    // GET /agent/routines 会补建家里还没有的例行任务（幂等）。全量跑时 agent-routines 已经建好；
+    // --only 单跑时库里还没有 nightly_digest 这一行，不先读一次下面就取不到。
+    const routineList = await request('/agent/routines', owner.accessToken);
+    assert(routineList.status === 200, '例行任务列表可读（顺带补建 nightly_digest）');
     const routine = await db.query(
       `SELECT id, enabled, "nextRunAt", version FROM agent_routines
        WHERE "householdId" = $1 AND kind = 'nightly_digest' LIMIT 1`,
