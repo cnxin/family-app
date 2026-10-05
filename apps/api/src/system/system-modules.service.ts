@@ -21,9 +21,6 @@ const sources: Partial<
     AND status <> 'cancelled' AND (status = 'scheduled' OR "remindAt" > now())`,
   inventory: 'SELECT 1 FROM inventory_items WHERE "householdId" = $1',
   assets: 'SELECT 1 FROM home_assets WHERE "householdId" = $1',
-  finance: `SELECT 1 FROM finance_accounts WHERE "householdId" = $1
-    UNION ALL SELECT 1 FROM finance_transactions WHERE "householdId" = $1
-    UNION ALL SELECT 1 FROM finance_budgets WHERE "householdId" = $1`,
   media: `SELECT 1 FROM household_media WHERE "householdId" = $1
     UNION ALL SELECT 1 FROM integrations WHERE "householdId" = $1
       AND kind IN ('plex', 'emby', 'moviepilot') AND NULLIF("baseUrl", '') IS NOT NULL

@@ -13,7 +13,6 @@ export type AttentionCopy = {
 const HANDWRITTEN_LABELS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '资产',
   inventory: '库存',
-  finance: '财务',
   backups: '备份',
   'smart-home': '智能家居',
 };
@@ -21,13 +20,11 @@ const HANDWRITTEN_LABELS: Partial<Record<AttentionItem['domain'], string>> = {
 const HANDWRITTEN_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '看这件资产',
   inventory: '看库存',
-  finance: '看预算',
   backups: '看备份',
   'smart-home': '去看看',
 };
 
 const kindActions: Partial<Record<string, string>> = {
-  budget: '看预算',
   backup: '看备份',
   filter: '看滤芯',
   laundry: '去晾衣服',
@@ -37,7 +34,6 @@ const kindActions: Partial<Record<string, string>> = {
 const HANDWRITTEN_LIST_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '看资产',
   inventory: '看库存',
-  finance: '看预算',
   backups: '看备份',
   'smart-home': '去看看',
 };
@@ -79,8 +75,6 @@ function singleTitle(item: AttentionItem, today: string) {
       return `${name} ${soon}保修到期`;
     case 'expiry':
       return `${name} ${soon}过期`;
-    case 'budget':
-      return `${name}本月预算超了`;
     case 'backup':
       return '备份需要看一下';
     // 智能家居（H3 E5）：滤芯的 entity 是设备，晾衣服的是家务，连不上的是 Home Assistant 本身
@@ -117,8 +111,6 @@ function mergedTitle(item: AttentionItem): string {
       return `${n} 件资产该保养了`;
     case 'inventory':
       return item.overdue ? `${n} 样快过期，有的已经过期了` : `${n} 样快过期`;
-    case 'finance':
-      return `${n} 个分类超预算了`;
     case 'backups':
       return `备份有 ${n} 件事要看一下`;
     case 'smart-home':

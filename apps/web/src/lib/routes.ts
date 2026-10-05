@@ -34,7 +34,7 @@ const MOVED: [string, string][] = [
   ['/members', '/house/members'],
   ...legacyPaths('guests'),
   ['/assets', '/house/assets'],
-  ['/finance', '/house/finance'],
+  ...legacyPaths('finance'),
   ...legacyPaths('knowledge'),
   ...legacyPaths('memories'),
   ...legacyPaths('travel'),
@@ -72,7 +72,7 @@ export const pluginAttentionOf: ReadonlyMap<string, PluginAttention> = new Map(
 );
 
 const HANDWRITTEN_ATTENTION_ROUTES: Partial<Record<AttentionItem['domain'], string>> = {
-  assets: '/house/assets', inventory: '/house/inventory', finance: '/house/finance', backups: '/house/backups', 'smart-home': '/house/smart-home',
+  assets: '/house/assets', inventory: '/house/inventory', backups: '/house/backups', 'smart-home': '/house/smart-home',
 };
 
 export const attentionRoutes = {

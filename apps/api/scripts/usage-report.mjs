@@ -49,7 +49,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   menu: '点菜（智能菜单）',
   media: '观影',
   asset: '资产',
-  finance: '财务',
   system: '家庭设置与备份',
   calendar: '日历',
   task: '任务',
