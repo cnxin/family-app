@@ -11,13 +11,11 @@ export type AttentionCopy = {
 };
 
 const HANDWRITTEN_LABELS: Partial<Record<AttentionItem['domain'], string>> = {
-  assets: '资产',
   backups: '备份',
   'smart-home': '智能家居',
 };
 
 const HANDWRITTEN_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
-  assets: '看这件资产',
   backups: '看备份',
   'smart-home': '去看看',
 };
@@ -30,7 +28,6 @@ const kindActions: Partial<Record<string, string>> = {
 };
 
 const HANDWRITTEN_LIST_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
-  assets: '看资产',
   backups: '看备份',
   'smart-home': '去看看',
 };
@@ -64,12 +61,6 @@ function singleTitle(item: AttentionItem, today: string) {
   const kind = pluginAttentionOf.get(item.domain)?.kinds.find((one) => one.kind === item.kind);
   if (kind) return renderTemplate(item.dueOn ? kind.title : (kind.titleNoDue ?? kind.title), { name, soon });
   switch (item.kind) {
-    case 'maintenance':
-      return `${name} ${soon}该换了`;
-    case 'renewal':
-      return `${name} ${soon}该续费了`;
-    case 'warranty':
-      return `${name} ${soon}保修到期`;
     case 'backup':
       return '备份需要看一下';
     // 智能家居（H3 E5）：滤芯的 entity 是设备，晾衣服的是家务，连不上的是 Home Assistant 本身
@@ -99,11 +90,6 @@ function mergedTitle(item: AttentionItem): string {
     return renderTemplate(template, { n });
   }
   switch (item.domain) {
-    case 'assets':
-      if (mixed) return `${n} 件资产要处理`;
-      if (item.kind === 'renewal') return `${n} 项订阅该续费了`;
-      if (item.kind === 'warranty') return `${n} 件资产保修快到期`;
-      return `${n} 件资产该保养了`;
     case 'backups':
       return `备份有 ${n} 件事要看一下`;
     case 'smart-home':

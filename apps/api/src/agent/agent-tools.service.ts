@@ -1250,7 +1250,6 @@ export class AgentToolsService {
       get_family_schedule: 'calendar',
       get_weather: 'weather',
       get_member_profile: 'member',
-      get_asset_detail: 'asset',
       recall_preferences: 'agent_memory',
       remember_preference: 'agent_memory',
       propose_plan: 'agent_plan',

@@ -47,7 +47,6 @@ const HANDWRITTEN_ACTIVITY_DOMAINS = {
   member: '成员',
   invitation: '成员',
   media: '观影',
-  asset: '资产',
   system: '家庭设置与备份',
 };
 const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activityDomains };
