@@ -16,6 +16,7 @@ const CORE_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   assistant: [
     'agent-conversation', 'agent-conversations', 'agent-status', 'agent-settings', 'agent-routines',
     'agent-proposal-groups', 'agent-memories', 'agent-channels', 'agent-channel-pairings', 'agent-profile',
+    'assistant-utterances',
   ],
   members: ['members', 'household-members', 'household-invitations'],
   household: ['members'],

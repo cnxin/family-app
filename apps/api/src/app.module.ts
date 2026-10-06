@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ActivitiesModule } from './activities/activities.module';
 import { AgentModule } from './agent/agent.module';
+import { AssistantUtterancesModule } from './assistant/assistant-utterances.module';
 import { AssetsModule } from './assets/assets.module';
 import { AuthModule } from './auth/auth.module';
 import { CalendarModule } from './calendar/calendar.module';
@@ -38,6 +39,7 @@ import { UploadModule } from './upload/upload.module';
     ClockModule,
     ActivitiesModule,
     AgentModule,
+    AssistantUtterancesModule,
     AssetsModule,
     AuthModule,
     CalendarModule,

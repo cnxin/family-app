@@ -94,6 +94,7 @@ const CORE_EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
   { prefix: '/accounts/me/password', reason: '只改本人密码' },
   { prefix: '/internal/agent/channels/pair', reason: '渠道配对只影响绑定，管理员设置弹窗打开时重读' },
   { prefix: '/upload', reason: '只存文件，挂到哪条记录由后续写入决定并发事件' },
+  { prefix: '/assistant/utterances', reason: '助理原话只是本地日志（J2），不改家庭共享数据；设置页「原话记录」自己重读' },
 ];
 
 export const EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
