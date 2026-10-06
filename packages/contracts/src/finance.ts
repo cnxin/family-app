@@ -174,6 +174,39 @@ export const financeBudgetRecordSchema = financeBudgetSchema
   .omit({ spent: true, remaining: true, ratio: true })
   .extend({ category: financeCategoryRecordSchema });
 
+export const FINANCE_RECURRING_CADENCES = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
+export const financeRecurringCadence = z.enum(FINANCE_RECURRING_CADENCES);
+export type FinanceRecurringCadence = z.infer<typeof financeRecurringCadence>;
+
+/** K3 周期账单（docs/finance-plan.md §2.4）。金额与月均都是元的 number。 */
+export const financeRecurringSchema = z.object({
+  id: uuid,
+  householdId: uuid,
+  title: z.string(),
+  type: financeCategoryKind,
+  amount: z.number(),
+  /** 折成每月：周付 × 52 ÷ 12，季付 ÷ 3，年付 ÷ 12 */
+  monthlyAmount: z.number(),
+  accountId: uuid,
+  account: z.object({ id: uuid, name: z.string(), type: financeAccountType, isActive: z.boolean() }),
+  categoryId: uuid,
+  category: z.object({ id: uuid, name: z.string(), color: z.string(), isActive: z.boolean() }),
+  cadence: financeRecurringCadence,
+  anchorOn: dateOnly,
+  nextDueOn: dateOnly,
+  autoPost: z.boolean(),
+  lastPostedOn: dateOnly.nullable(),
+  isActive: z.boolean(),
+  /** 现在能不能点「已付」：在用、不是自动记账、下一期在 3 天内到期或已经过了 */
+  payable: z.boolean(),
+  version: z.number().int(),
+  createdById: uuid,
+  updatedById: uuid,
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+});
+export type FinanceRecurring = z.infer<typeof financeRecurringSchema>;
+
 export const financeSummarySchema = z
   .object({
     month: monthString,
@@ -256,6 +289,28 @@ export const upsertFinanceBudgetBody = z.object({
 export const deleteFinanceBudgetQuery = z.object({
   expectedVersion: z.coerce.number().int().min(1),
 });
+export const createFinanceRecurringBody = z.object({
+  title: z.string().trim().min(1).max(120),
+  type: financeCategoryKind,
+  amount: z.number().min(0.01).max(MAX_AMOUNT),
+  accountId: uuid,
+  categoryId: uuid,
+  cadence: financeRecurringCadence,
+  anchorOn: dateOnly,
+  autoPost: z.boolean().optional(),
+});
+export type CreateFinanceRecurringBody = z.infer<typeof createFinanceRecurringBody>;
+export const updateFinanceRecurringBody = createFinanceRecurringBody.partial().extend({
+  isActive: z.boolean().optional(),
+  expectedVersion: z.number().int().min(1),
+});
+export type UpdateFinanceRecurringBody = z.infer<typeof updateFinanceRecurringBody>;
+export const deleteFinanceRecurringQuery = z.object({
+  expectedVersion: z.coerce.number().int().min(1),
+});
+/** 「已付」：带上看到的那一期，重复点同一期返回同一笔流水，那一期已经推过去了就 409。 */
+export const payFinanceRecurringBody = z.object({ dueOn: dateOnly });
+export type PayFinanceRecurringBody = z.infer<typeof payFinanceRecurringBody>;
 
 export const finance = {
   summary: defineEndpoint({
@@ -352,5 +407,42 @@ export const finance = {
     params: idParams,
     query: deleteFinanceBudgetQuery,
     response: z.object({ deleted: z.literal(true), id: uuid }),
+  }),
+  recurring: defineEndpoint({
+    method: 'GET',
+    path: '/finance/recurring',
+    summary: '周期账单（含停用的；在用的按下一期排前）',
+    response: z.array(financeRecurringSchema),
+  }),
+  createRecurring: defineEndpoint({
+    method: 'POST',
+    path: '/finance/recurring',
+    summary: '新建周期账单（下一期 = 不早于今天的第一期）',
+    body: createFinanceRecurringBody,
+    response: financeRecurringSchema,
+  }),
+  updateRecurring: defineEndpoint({
+    method: 'PATCH',
+    path: '/finance/recurring/:id',
+    summary: '修改周期账单、开关自动记账、停用（乐观锁）',
+    params: idParams,
+    body: updateFinanceRecurringBody,
+    response: financeRecurringSchema,
+  }),
+  deleteRecurring: defineEndpoint({
+    method: 'DELETE',
+    path: '/finance/recurring/:id',
+    summary: '删除周期账单（已落的流水不动，乐观锁）',
+    params: idParams,
+    query: deleteFinanceRecurringQuery,
+    response: z.object({ deleted: z.literal(true), id: uuid }),
+  }),
+  payRecurring: defineEndpoint({
+    method: 'POST',
+    path: '/finance/recurring/:id/pay',
+    summary: '「已付」：给这一期落一笔流水并推到下一期（成员可用，幂等）',
+    params: idParams,
+    body: payFinanceRecurringBody,
+    response: z.object({ recurring: financeRecurringSchema, transaction: financeTransactionSchema }),
   }),
 };

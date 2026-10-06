@@ -92,7 +92,11 @@ export type FinanceTransactionSourceType =
   | 'shopping_item'
   | 'asset'
   | 'media_subscription'
-  | 'finance_transaction';
+  | 'finance_transaction'
+  | 'import'
+  | 'recurring'
+  | 'screenshot';
+export type FinanceRecurringCadence = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 export type RewardRedemptionStatus =
   | 'pending'
   | 'approved'
@@ -4781,7 +4785,7 @@ export class FinanceCategory {
 )
 @Check(
   'CHK_finance_transactions_source_type',
-  `"sourceType" IN ('manual', 'agent', 'shopping_item', 'asset', 'media_subscription', 'finance_transaction')`,
+  `"sourceType" IN ('manual', 'agent', 'shopping_item', 'asset', 'media_subscription', 'finance_transaction', 'import', 'recurring', 'screenshot')`,
 )
 @Check('CHK_finance_transactions_amount', `"amount" > 0`)
 @Check('CHK_finance_transactions_currency', `"currency" = 'CNY'`)
@@ -4802,6 +4806,11 @@ export class FinanceCategory {
   unique: true,
   where: '"reversalOfId" IS NOT NULL',
 })
+@Index(
+  'UQ_finance_transactions_household_external',
+  ['householdId', 'sourceType', 'externalId'],
+  { unique: true, where: '"externalId" IS NOT NULL' },
+)
 @Index('IDX_finance_transactions_household_occurred', [
   'householdId',
   'occurredOn',
@@ -4867,6 +4876,18 @@ export class FinanceTransaction {
 
   @Column({ type: 'varchar', length: 180 })
   sourceId: string;
+
+  /** K1 导入的交易单号（支付宝 / 微信）；非空时按家庭 + 来源唯一。 */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  externalId: string | null;
+
+  /** 交易对方（导入、截图识别时填）。 */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  merchant: string | null;
+
+  /** K2 截图记账的截图文件名。 */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  attachmentPath: string | null;
 
   @Column({ type: 'varchar', length: 180 })
   idempotencyKey: string;
@@ -4990,6 +5011,109 @@ export class FinanceBudget {
   @JoinColumn({
     name: 'updatedById',
     foreignKeyConstraintName: 'FK_finance_budgets_updated_by',
+  })
+  updatedBy: Member;
+
+  @Column('uuid')
+  updatedById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
+/** K3 周期账单（docs/finance-plan.md §2.4）。 */
+@Entity('finance_recurring')
+@Check('CHK_finance_recurring_type', `"type" IN ('expense', 'income')`)
+@Check('CHK_finance_recurring_amount', `"amount" > 0`)
+@Check(
+  'CHK_finance_recurring_cadence',
+  `"cadence" IN ('weekly', 'monthly', 'quarterly', 'yearly')`,
+)
+@Check('CHK_finance_recurring_next_due', `"nextDueOn" >= "anchorOn"`)
+@Check('CHK_finance_recurring_version', `"version" >= 1`)
+@Index('IDX_finance_recurring_household_due', ['householdId', 'isActive', 'nextDueOn'])
+export class FinanceRecurring {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'householdId',
+    foreignKeyConstraintName: 'FK_finance_recurring_household',
+  })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  title: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  type: FinanceCategoryKind;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2 })
+  amount: string;
+
+  @ManyToOne(() => FinanceAccount, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'accountId',
+    foreignKeyConstraintName: 'FK_finance_recurring_account',
+  })
+  account: FinanceAccount;
+
+  @Column('uuid')
+  accountId: string;
+
+  @ManyToOne(() => FinanceCategory, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'categoryId',
+    foreignKeyConstraintName: 'FK_finance_recurring_category',
+  })
+  category: FinanceCategory;
+
+  @Column('uuid')
+  categoryId: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  cadence: FinanceRecurringCadence;
+
+  /** 第一次应付日；monthly / quarterly / yearly 取它的「日」，29～31 日在短月按月末算。 */
+  @Column({ type: 'date' })
+  anchorOn: string;
+
+  @Column({ type: 'date' })
+  nextDueOn: string;
+
+  @Column({ default: false })
+  autoPost: boolean;
+
+  @Column({ type: 'date', nullable: true })
+  lastPostedOn: string | null;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'createdById',
+    foreignKeyConstraintName: 'FK_finance_recurring_created_by',
+  })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'updatedById',
+    foreignKeyConstraintName: 'FK_finance_recurring_updated_by',
   })
   updatedBy: Member;
 
@@ -8413,6 +8537,7 @@ export const ALL_ENTITIES = [
   FinanceTransaction,
   FinancePosting,
   FinanceBudget,
+  FinanceRecurring,
   Reward,
   RewardRedemption,
   TravelPlan,

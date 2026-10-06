@@ -766,6 +766,62 @@ try {
     '事件通道只推本家庭：本家庭收到 shopping，其他家庭的连接收不到任何 changed',
   );
 
+  // K3 周期账单：其他家庭的规则列不出、改不动、删不掉、「已付」不了；自家规则也不能挂到别人家的账户上
+  const foreignFinance = { account: randomUUID(), category: randomUUID(), recurring: randomUUID() };
+  await db.query(
+    `INSERT INTO finance_accounts (id, "householdId", name, type, "openingBalance", "createdById") VALUES ($1, $2, '隔离家庭账户', 'cash', 0, $3)`,
+    [foreignFinance.account, ids.household, ids.member],
+  );
+  await db.query(
+    `INSERT INTO finance_categories (id, "householdId", name, kind, "createdById") VALUES ($1, $2, '隔离家庭分类', 'expense', $3)`,
+    [foreignFinance.category, ids.household, ids.member],
+  );
+  await db.query(
+    `INSERT INTO finance_recurring (id, "householdId", title, type, amount, "accountId", "categoryId", cadence, "anchorOn", "nextDueOn", "createdById", "updatedById")
+     VALUES ($1, $2, '隔离家庭房租', 'expense', 100, $3, $4, 'monthly', $5, $5, $6, $6)`,
+    [foreignFinance.recurring, ids.household, foreignFinance.account, foreignFinance.category, TEST_DATE, ids.member],
+  );
+  const ownCategories = await request('/finance/categories', defaultToken);
+  const ownExpense = ownCategories.body.data.find((one) => one.kind === 'expense');
+  const ownAccount = await request('/finance/accounts', defaultToken, 'POST', {
+    name: `隔离测试账户-${randomUUID().slice(0, 6)}`,
+    type: 'cash',
+  });
+  const ownRecurring = await request('/finance/recurring', defaultToken, 'POST', {
+    title: '默认家庭物业费',
+    type: 'expense',
+    amount: 50,
+    accountId: ownAccount.body.data.id,
+    categoryId: ownExpense.id,
+    cadence: 'monthly',
+    anchorOn: TEST_DATE,
+  });
+  const ownRecurringList = await request('/finance/recurring', defaultToken);
+  const foreignRecurringList = await request('/finance/recurring', foreignToken);
+  const crossRecurring = await Promise.all([
+    request(`/finance/recurring/${foreignFinance.recurring}`, defaultToken, 'PATCH', { amount: 1, expectedVersion: 1 }),
+    request(`/finance/recurring/${foreignFinance.recurring}?expectedVersion=1`, defaultToken, 'DELETE'),
+    request(`/finance/recurring/${foreignFinance.recurring}/pay`, defaultToken, 'POST', { dueOn: TEST_DATE }),
+    request(`/finance/recurring/${ownRecurring.body.data.id}/pay`, foreignToken, 'POST', { dueOn: TEST_DATE }),
+    request('/finance/recurring', defaultToken, 'POST', {
+      title: '挂到别人家账户', type: 'expense', amount: 1, accountId: foreignFinance.account,
+      categoryId: ownExpense.id, cadence: 'monthly', anchorOn: TEST_DATE,
+    }),
+  ]);
+  await request(`/finance/recurring/${ownRecurring.body.data.id}?expectedVersion=${ownRecurring.body.data.version}`, defaultToken, 'DELETE');
+  await request(`/finance/accounts/${ownAccount.body.data.id}`, defaultToken, 'PATCH', {
+    isActive: false,
+    expectedVersion: ownAccount.body.data.version,
+  });
+  assert(
+    ownRecurring.status === 201 && ownRecurringList.status === 200 && foreignRecurringList.status === 200 &&
+      !ownRecurringList.body.data.some((one) => one.id === foreignFinance.recurring) &&
+      !foreignRecurringList.body.data.some((one) => one.id === ownRecurring.body.data.id) &&
+      foreignRecurringList.body.data.some((one) => one.id === foreignFinance.recurring) &&
+      crossRecurring.every((response) => response.status === 404),
+    '周期账单只在本家庭：互相列不出；改、删、「已付」别人家的都是 404，也不能挂到别人家的账户上',
+  );
+
   // J2 助理原话：两边各记一条，互相列不出、删不掉
   const foreignUtterance = await request('/assistant/utterances', foreignToken, 'POST', {
     clientId: randomUUID(), text: '隔离家庭的原话', source: 'command_palette', outcome: 'no_match',
@@ -812,6 +868,9 @@ try {
   await db.query('DELETE FROM dish_ingredients WHERE "dishId" = $1', [ids.dish]);
   await db.query('DELETE FROM dishes WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM ingredients WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM finance_recurring WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM finance_categories WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM finance_accounts WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM auth_sessions WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM members WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM households WHERE id = $1', [ids.household]);
