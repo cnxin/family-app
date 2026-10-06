@@ -21,13 +21,17 @@ export const financeManifest = {
     routes: [{ prefix: '/finance' }],
     queryKeys: ['finance'],
   },
+  // K3：汇总页「固定支出」里的资产续费月均从资产门面读（docs/architecture.md §9）
+  dependsOn: ['assets'],
   attention: {
     label: '财务',
     actionLabel: '看预算',
-    listActionLabel: '看预算',
+    // 只有一张卡里混着超预算和要付的周期账单时才用这两项
+    listActionLabel: '去财务看看',
     path: '/house/finance',
     order: 7,
     mergedTitle: '{n} 个分类超预算了',
+    mixedTitle: '{n} 件财务的事要看',
     kinds: [
       {
         kind: 'budget',
@@ -35,6 +39,15 @@ export const financeManifest = {
         actionLabel: '看预算',
         capability: 'manage_finance',
         title: '{name}本月预算超了',
+      },
+      {
+        // K3：没开自动记账的周期账单，到期前 3 天起出现；成员也能点「已付」，不设能力门槛
+        kind: 'recurring',
+        server: 'finance.recurring',
+        actionLabel: '去看看',
+        path: '/house/finance?view=recurring',
+        title: '{name} {soon}该付了',
+        mergedTitle: '{n} 笔固定支出该付了',
       },
     ],
   },

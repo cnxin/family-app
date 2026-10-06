@@ -1,4 +1,4 @@
-import { FinanceBudgetAttentionRule, FinanceAttention } from './finance-attention';
+import { FinanceAttention, FinanceBudgetAttentionRule, FinanceRecurringDueProvider } from './finance-attention';
 import { TodayModule } from '../today/today.module';
 import {
   Body,
@@ -55,6 +55,7 @@ const TRANSACTION_TYPES: Exclude<FinanceTransactionType, 'reversal'>[] = [
   'transfer',
 ];
 import { FinanceService, MAX_AMOUNT } from './finance.service';
+import { FinanceRecurringScheduler } from './finance-recurring.scheduler';
 import { FinanceRecurringController, FinanceRecurringService } from './finance-recurring.service';
 
 export { FinanceService } from './finance.service';
@@ -352,7 +353,14 @@ export class FinanceController {
     ]),
   ],
   controllers: [FinanceController, FinanceRecurringController],
-  providers: [FinanceService, FinanceRecurringService, FinanceBudgetAttentionRule, FinanceAttention],
+  providers: [
+    FinanceService,
+    FinanceRecurringService,
+    FinanceRecurringScheduler,
+    FinanceBudgetAttentionRule,
+    FinanceRecurringDueProvider,
+    FinanceAttention,
+  ],
   exports: [FinanceService],
 })
 export class FinanceModule {}

@@ -21,7 +21,7 @@ import {
   type UpdateFinanceRecurringBody,
 } from '@family/contracts';
 import { addDays, householdToday } from '@family/shared';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
@@ -33,6 +33,7 @@ import {
   FinanceRecurring,
   FinanceTransaction,
   Household,
+  Member,
 } from '../entities';
 import { FinanceService } from './finance.service';
 import {
@@ -46,6 +47,12 @@ import {
 function money(value: number | string) {
   return Math.round(Number(value) * 100) / 100;
 }
+
+/** 自动记账没有登录用户：以最早的在用家庭主人的名义落流水，显示名标明是自动记的。 */
+export const RECURRING_ACTOR_SID = 'finance-recurring';
+export const RECURRING_ACTOR_NAME = '自动记账';
+/** 一次补跑最多补多少期（周付停了好几年也不会一口气卡住调度），剩下的下一轮接着补。 */
+const MAX_CATCH_UP = 400;
 
 /**
  * K3 周期账单（docs/finance-plan.md §2.4、§3-K3）。增删改与自动记账开关只有管理员（manage_finance）；
@@ -212,6 +219,58 @@ export class FinanceRecurringService {
     );
     this.advance(rule, dueOn);
     return transaction;
+  }
+
+  /**
+   * 调度用：把一条自动记账规则在 cutoff（含）之前到期的每一期都落下来，每期一条，按期推进。
+   * 某一期的流水已经在了（上次落完没来得及推进、或者有人手点过）就只推进不重落。返回落了几期；规则被别的事务锁着时跳过。
+   */
+  async postDue(id: string, cutoff: string): Promise<number> {
+    return this.dataSource.transaction(async (manager) => {
+      const rule = await manager
+        .getRepository(FinanceRecurring)
+        .createQueryBuilder('rule')
+        .where('rule.id = :id', { id })
+        .setLock('pessimistic_write')
+        .setOnLocked('skip_locked')
+        .getOne();
+      if (!rule || !rule.isActive || !rule.autoPost || rule.nextDueOn > cutoff) return 0;
+      const actor = await this.automationActor(manager, rule.householdId);
+      if (!actor) throw new Error('家里没有在用的家庭主人');
+      let posted = 0;
+      for (let step = 0; step < MAX_CATCH_UP && rule.nextDueOn <= cutoff; step += 1) {
+        const dueOn = rule.nextDueOn;
+        const exists = await manager.getRepository(FinanceTransaction).exists({
+          where: { householdId: rule.householdId, idempotencyKey: recurringIdempotencyKey(rule.id, dueOn) },
+        });
+        if (exists) {
+          this.advance(rule, dueOn);
+          continue;
+        }
+        // 自动落的记账日就是那一期的应付日
+        await this.post(manager, rule, dueOn, dueOn, actor);
+        posted += 1;
+      }
+      await manager.getRepository(FinanceRecurring).save(rule);
+      return posted;
+    });
+  }
+
+  private async automationActor(manager: EntityManager, householdId: string): Promise<JwtUser | null> {
+    const owner = await manager.getRepository(Member).findOne({
+      where: { householdId, role: 'owner', disabledAt: IsNull() },
+      order: { createdAt: 'ASC' },
+    });
+    if (!owner) return null;
+    return {
+      sub: '',
+      accountId: '',
+      memberId: owner.id,
+      householdId,
+      sid: RECURRING_ACTOR_SID,
+      name: RECURRING_ACTOR_NAME,
+      role: 'owner',
+    };
   }
 
   /** 这一期已落：记下 lastPostedOn，推到严格晚于它的下一期。版本号随之加一（管理员手里的旧页面要刷新）。 */

@@ -41,6 +41,7 @@ export * from './tasks.hooks';
 export * from './tasks.events';
 export * from './smart-home.hooks';
 export * from './shopping.facade';
+export * from './assets.facade';
 export * from './keys';
 export * from './core-assistant';
 export * from './types';

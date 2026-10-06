@@ -6,6 +6,7 @@ import {
   type AttentionRuleContext,
   type AttentionSource,
 } from '../today/today-attention.rules';
+import { RECURRING_NOTICE_DAYS } from './finance-recurring.schedule';
 
 // 财务的留意规则（J1.7 从 today/today-attention.rules.ts 原样搬来，规则体不动）。
 // 排序、模块开关归属、能力门槛、文案与落点都在 manifest 的 attention 里声明，今天页按声明统一判。
@@ -48,6 +49,32 @@ export class FinanceBudgetAttentionRule implements AttentionSource {
 }
 
 /**
+ * K3：没开自动记账的周期账单，到期前 3 天到当天进留意，过了还没点「已付」的标逾期（和资产续费一样）。
+ * 不设能力门槛：成员也能点「已付」。
+ */
+@Injectable()
+export class FinanceRecurringDueProvider implements AttentionSource {
+  readonly domain = 'finance' as const;
+  readonly kinds = ['recurring'] as const;
+
+  constructor(private readonly db: DataSource) {}
+
+  run({ householdId, today }: AttentionRuleContext) {
+    return this.db.query<AttentionCandidate[]>(`
+      SELECT 'finance' AS domain, 'recurring' AS kind,
+             r.id, r.title AS name,
+             r."nextDueOn"::text AS "dueOn", r."nextDueOn" < $2::date AS overdue
+        FROM finance_recurring r
+       WHERE r."householdId" = $1
+         AND r."isActive"
+         AND NOT r."autoPost"
+         AND r."nextDueOn" <= $2::date + $3::int`,
+      [householdId, today, RECURRING_NOTICE_DAYS],
+    );
+  }
+}
+
+/**
  * 把本域的留意规则挂到今天页的 AttentionRegistry。
  */
 @Injectable()
@@ -55,9 +82,11 @@ export class FinanceAttention implements OnModuleInit {
   constructor(
     private readonly registry: AttentionRegistry,
     private readonly financeBudget: FinanceBudgetAttentionRule,
+    private readonly financeRecurring: FinanceRecurringDueProvider,
   ) {}
 
   onModuleInit() {
     this.registry.register(this.financeBudget);
+    this.registry.register(this.financeRecurring);
   }
 }

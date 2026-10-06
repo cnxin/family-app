@@ -58,6 +58,15 @@ function firstMonthlyOnOrAfter(anchor, date) {
   return addMonthsClamped(anchor, index);
 }
 
+async function waitFor(check, timeoutMs = 8000) {
+  const started = Date.now();
+  for (;;) {
+    const value = await check();
+    if (value || Date.now() - started > timeoutMs) return value;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 const db = new Client({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
@@ -260,6 +269,115 @@ try {
       activities.data.some((one) => one.module === 'finance' && one.summary.includes(`删除了周期账单「房租-${suffix}」`)),
     '新增、删除周期账单进家庭动态',
   );
+
+  console.log('4. 自动记账调度：到期落一条、再跑不重复、漏跑几期逐期补、非自动的不落');
+  // 调度按真实时钟跑（和助理例行任务一样）：把「下一期」拨回已经过去的日子，等它自己落。用昨天而不是今天，
+  // 免得撞上当地 06:00 之前（那时今天的还不该落）
+  const yesterday = addDays(today, -1);
+  const create = async (body) =>
+    (await request('/finance/recurring', owner.accessToken, 'POST', {
+      type: 'expense', accountId: bank.data.id, categoryId: housing.id, cadence: 'monthly', ...body,
+    })).data;
+  const ruleRow = async (id) =>
+    (await db.query(
+      `SELECT "nextDueOn"::text AS "nextDueOn", "lastPostedOn"::text AS "lastPostedOn", version FROM finance_recurring WHERE id = $1`,
+      [id],
+    )).rows[0];
+  const postedFor = async (id) =>
+    (await db.query(
+      `SELECT "occurredOn"::text AS "occurredOn", "actorName", "sourceType", amount FROM finance_transactions
+        WHERE "sourceId" = $1 ORDER BY "occurredOn"`,
+      [id],
+    )).rows;
+  const autoRent = await create({ title: `自动房租-${suffix}`, amount: 2000, anchorOn: yesterday, autoPost: true });
+  const autoBalance = await balanceOf(bank.data.id);
+  assert(autoRent.nextDueOn === addMonthsClamped(yesterday, 1) && (await postedFor(autoRent.id)).length === 0, '昨天起的自动记账月付，建的时候不往回补');
+  await db.query('UPDATE finance_recurring SET "nextDueOn" = "anchorOn" WHERE id = $1', [autoRent.id]);
+  const firstRun = await waitFor(async () => ((await ruleRow(autoRent.id)).lastPostedOn === yesterday ? ruleRow(autoRent.id) : null));
+  const firstPosts = await postedFor(autoRent.id);
+  assert(
+    firstRun && firstRun.nextDueOn === addMonthsClamped(yesterday, 1) && firstPosts.length === 1 &&
+      firstPosts[0].occurredOn === yesterday && firstPosts[0].actorName === '自动记账' && firstPosts[0].sourceType === 'recurring' &&
+      (await balanceOf(bank.data.id)) === autoBalance - 2000,
+    '到期后调度落一条（记账日是那一期、记在「自动记账」名下、余额扣一次），推到下一期',
+  );
+  await db.query('UPDATE finance_recurring SET "nextDueOn" = "anchorOn", "lastPostedOn" = NULL WHERE id = $1', [autoRent.id]);
+  const rerun = await waitFor(async () => ((await ruleRow(autoRent.id)).lastPostedOn === yesterday ? ruleRow(autoRent.id) : null));
+  assert(
+    rerun && rerun.nextDueOn === addMonthsClamped(yesterday, 1) && (await postedFor(autoRent.id)).length === 1 &&
+      (await balanceOf(bank.data.id)) === autoBalance - 2000,
+    '同一期再被调度一次（比如上次落完没来得及推进）：只推进，不重复落',
+  );
+  const missedAnchor = addMonthsClamped(yesterday, -2);
+  const autoFee = await create({ title: `自动物业-${suffix}`, amount: 150, anchorOn: missedAnchor, autoPost: true });
+  await db.query('UPDATE finance_recurring SET "nextDueOn" = "anchorOn" WHERE id = $1', [autoFee.id]);
+  const caughtUp = await waitFor(async () => {
+    const row = await ruleRow(autoFee.id);
+    return row.nextDueOn === addMonthsClamped(missedAnchor, 3) ? row : null;
+  });
+  const feePosts = await postedFor(autoFee.id);
+  assert(
+    caughtUp && feePosts.length === 3 &&
+      JSON.stringify(feePosts.map((row) => row.occurredOn)) ===
+        JSON.stringify([0, 1, 2].map((index) => addMonthsClamped(missedAnchor, index))),
+    '漏跑三期（NAS 关机）：下一轮逐期补三条，每期一条，推到第四期',
+  );
+  const manualWater = await create({ title: `手动水费-${suffix}`, amount: 80, anchorOn: yesterday });
+  await db.query('UPDATE finance_recurring SET "nextDueOn" = "anchorOn" WHERE id = $1', [manualWater.id]);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const manualListed = (await request('/finance/recurring', member.accessToken)).data.find((one) => one.id === manualWater.id);
+  assert(
+    (await postedFor(manualWater.id)).length === 0 && manualListed.payable === true && manualListed.nextDueOn === yesterday,
+    '没开自动记账的到期了调度不落，等人点「已付」',
+  );
+
+  console.log('5. 留意：没开自动记账的到期前 3 天起出现，成员也看得到，点了「已付」就消失');
+  const attentionItems = async () => (await request('/today/attention', member.accessToken)).data.items.filter((one) => one.domain === 'finance');
+  const overdueItems = await attentionItems();
+  assert(
+    overdueItems.length === 1 && overdueItems[0].kind === 'recurring' && overdueItems[0].count === 1 &&
+      overdueItems[0].entity?.id === manualWater.id && overdueItems[0].dueOn === yesterday && overdueItems[0].overdue === true,
+    '昨天到期、没点「已付」的手动水费：成员的留意里出现，标逾期；自动记账的不进留意',
+  );
+  const soon = await create({ title: `手动网费-${suffix}`, amount: 120, anchorOn: addDays(today, 3) });
+  const later = await create({ title: `手动燃气-${suffix}`, amount: 60, anchorOn: addDays(today, 4) });
+  const withSoon = await attentionItems();
+  assert(
+    soon.payable === true && later.payable === false && withSoon.length === 1 && withSoon[0].count === 2 &&
+      JSON.stringify(withSoon[0].kinds) === JSON.stringify(['recurring']),
+    '3 天后到期的也出现（两条合成一张卡），4 天后的还不出现、也还不能点「已付」',
+  );
+  await request(`/finance/recurring/${manualWater.id}/pay`, member.accessToken, 'POST', { dueOn: yesterday });
+  await request(`/finance/recurring/${soon.id}/pay`, member.accessToken, 'POST', { dueOn: addDays(today, 3) });
+  assert((await attentionItems()).length === 0, '两条都点了「已付」之后留意里没有财务的事了');
+
+  console.log('6. 汇总页「固定支出」= 周期账单月均 + 资产续费月均（资产经门面读）');
+  const subscription = await request('/assets', owner.accessToken, 'POST', {
+    name: `视频会员-${suffix}`,
+    category: 'subscription',
+    purchaseDate: addDays(today, -30),
+    purchasePrice: 90,
+    renewsOn: addDays(today, 60),
+    renewalIntervalMonths: 3,
+  });
+  const summary = await request('/finance/summary', owner.accessToken);
+  const activeExpense = (await request('/finance/recurring', owner.accessToken)).data.filter((one) => one.isActive && one.type === 'expense');
+  const expectedRecurring = Math.round(activeExpense.reduce((sum, one) => sum + one.monthlyAmount, 0) * 100) / 100;
+  const [{ monthly }] = (await db.query(
+    `SELECT COALESCE(SUM("purchasePrice" / "renewalIntervalMonths"), 0) AS monthly FROM home_assets
+      WHERE "householdId" = $1 AND category = 'subscription' AND status = 'active'
+        AND "renewalIntervalMonths" IS NOT NULL AND "purchasePrice" IS NOT NULL`,
+    [householdId],
+  )).rows;
+  const expectedAssets = Math.round(Number(monthly) * 100) / 100;
+  assert(
+    subscription.status === 201 && summary.status === 200 && expectedAssets >= 30 &&
+      summary.data.fixedCosts.recurring === expectedRecurring && summary.data.fixedCosts.assets === expectedAssets &&
+      summary.data.fixedCosts.total === Math.round((expectedRecurring + expectedAssets) * 100) / 100 &&
+      !activeExpense.some((one) => one.type === 'income'),
+    '固定支出三项合计正确：周期账单只算在用的支出（季付 90 元的视频会员折每月 30 元算进资产续费）',
+  );
+  await request(`/assets/${subscription.data.id}`, owner.accessToken, 'PATCH', { status: 'retired' });
 
   // 收尾：停掉本脚本建的，免得后面的调度把自动记账的那几条落下来
   for (const row of (await request('/finance/recurring', owner.accessToken)).data.filter((one) => one.title.endsWith(suffix))) {

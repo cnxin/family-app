@@ -22,6 +22,7 @@ const testEnvironment = {
   JWT_SECRET: 'family-app-api-test-secret',
   AGENT_PURGE_POLL_INTERVAL_MS: '100',
   AGENT_ROUTINE_POLL_INTERVAL_MS: '100',
+  FINANCE_RECURRING_POLL_INTERVAL_MS: '200',
   AGENT_RUNTIME_KEY: 'family-app-api-test-runtime-key',
   AGENT_RUNTIME_URL: 'http://127.0.0.1:3200',
   REFRESH_TOKEN_EXPIRES_SECONDS: '2592000',
@@ -393,6 +394,7 @@ try {
     ]);
     // J1b：内核注册表与共享纯函数的单测
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/kernel-units.check.ts']);
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-recurring.check.ts']);
   } else {
     // --only：跳过契约、初始化演练与旧 PIN 迁移，只灌种子后直接跑选中的业务脚本
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
