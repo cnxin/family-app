@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // J1：插件 manifest 与各处登记一致（docs/architecture.md §8.1 的 14 处）。
 //
-// 逐域放开：只对已迁进 PLUGINS 的插件断言「它在各处的条目全部来自 manifest、没有手写残留」；
-// 还没迁的域照旧手写，这里只做全局检查（key、别名表、agent 工具归属）。
-// web 端登记的运行时结果另由 apps/web/src/lib/plugins-registry.test.ts 断言。
+// J1.7 起全量：18 个插件都有 manifest，各处登记里插件的条目全部由 manifest 导出；
+// 还手写的只有下面 KNOWN_HANDWRITTEN 列的几处（只做一致性断言），以及内核 / 助理层的 CORE_* 表（不许出现插件 key 或别名）。
+// 其余任何手写的插件条目都报错。web 端登记的运行时结果另由 apps/web/src/lib/plugins-registry.test.ts 断言。
 // 依赖已构建的 packages/contracts（corepack pnpm build:packages；install 的 postinstall 会构建）。
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -20,7 +20,7 @@ const fail = (message) => errors.push(message);
 const read = (path) => readFileSync(join(ROOT, path), 'utf8');
 const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** 从 marker 所在行起，取到与它同缩进的第一个 `]` / `}`（可带 `;` `,` `)`）为止的一段。 */
+/** 从 marker 所在行起，取到与它同缩进的第一个 `]` / `}`（可带 `;` `,` `)` 或 ` satisfies …;`）为止的一段。 */
 function block(path, marker) {
   const source = read(path);
   const start = source.indexOf(marker);
@@ -31,7 +31,7 @@ function block(path, marker) {
   const lineStart = source.lastIndexOf('\n', start) + 1;
   const indent = source.slice(lineStart, start).match(/^\s*/)[0];
   const lines = source.slice(lineStart).split('\n');
-  const end = lines.findIndex((line, index) => index > 0 && new RegExp(`^${indent}[\\]}][;,)]*$`).test(line));
+  const end = lines.findIndex((line, index) => index > 0 && new RegExp(`^${indent}[\\]}]([;,)]*| satisfies .*;)$`).test(line));
   return (end < 0 ? lines : lines.slice(0, end + 1)).join('\n');
 }
 
@@ -39,7 +39,42 @@ function block(path, marker) {
 const hasKey = (text, key) => new RegExp(`(^|[\\s{,])'?${escape(key)}'?\\s*:`, 'm').test(text);
 
 const PLUGINS = c.PLUGINS;
-const migrated = new Set(PLUGINS.map((plugin) => plugin.key));
+
+/**
+ * J1 收口后仍手写、且里面有插件 key 的登记（§8.1 编号）。它们是 key 表、顺序表、数据库枚举或页面文件，
+ * 不由 manifest 生成；脚本只断言它们与 manifest 一致。新增一处手写插件登记，要么改成从 manifest 生成，要么登记到这里并写明原因。
+ */
+const KNOWN_HANDWRITTEN = [
+  { no: '①', file: 'apps/web/src/lib/nav.ts', what: 'CORE_KEYS、mobileTabs 的 pick', reason: '只按 key 排的顺序表；断言与 manifest 的 tier / mobileTab 一致' },
+  { no: '②', file: 'packages/contracts/src/system.ts', what: 'SHELF_MODULE_KEYS', reason: '模块开关 key 表（含内核的 activity / assistant）；断言与 module.overridable 一致' },
+  { no: '⑤', file: 'packages/contracts/src/today.ts', what: '留意 domain 枚举', reason: 'zod 枚举；断言与 manifest + CORE_ATTENTION 的留意域一致' },
+  { no: '⑧', file: 'packages/contracts/src/agent.ts', what: 'AGENT_READ_TOOLS / AGENT_PROPOSAL_TOOLS / AGENT_MEMORY_TOOLS', reason: 'MCP 注册与 Hermes 配置契约按字面量名单走；断言每个工具恰好被一个插件或 KERNEL_AGENT_TOOLS 认领' },
+  { no: '⑩', file: 'apps/web/src/pages/settings.tsx', what: '家庭设置行', reason: '页面文件，J1 不改页面；断言与 manifest.settingsRows 一致' },
+  { no: '⑫', file: 'packages/contracts/src/activities.ts', what: 'ACTIVITY_MODULES', reason: '数据库约束里的值；断言别名表归属唯一' },
+  { no: '⑬', file: 'packages/contracts/src/notifications.ts', what: 'NOTIFICATION_MODULES', reason: '数据库约束里的值；断言别名表归属唯一、与 manifest.notifications 一一对应' },
+  { no: '⑭', file: 'apps/api/src/auth/capabilities.ts', what: 'Capability 名字清单', reason: '能力名 key 表；断言 manifest 声明的能力、动作能力、留意能力都在里面' },
+];
+
+/** 内核 / 助理层的表（J1.7 由 HANDWRITTEN_* 改名）：只许放内核条目，不许出现 18 个插件的 key 或别名。 */
+const CORE_TABLES = [
+  ['packages/contracts/src/events.ts', 'const CORE_EVENT_ROUTES'],
+  ['packages/contracts/src/events.ts', 'const CORE_EVENT_ROUTE_EXEMPT'],
+  // 留意声明的对象 key 是字段名（order、label…），只查字符串值
+  ['packages/contracts/src/plugins/core.ts', 'export const CORE_ATTENTION', { values: true }],
+  ['apps/web/src/lib/events.ts', 'const CORE_QUERY_KEYS'],
+  ['apps/web/src/lib/notification-meta.ts', 'const CORE_MODULE_LABEL'],
+  ['apps/web/src/lib/notification-meta.ts', 'const CORE_MODULE_ICON'],
+  ['apps/web/src/lib/nav.ts', 'const CORE_NAV'],
+  ['apps/web/src/lib/routes.ts', 'const CORE_LEGACY_PATHS'],
+  ['apps/api/src/auth/capabilities.ts', 'const CORE_ROLE_CAPABILITIES'],
+  ['apps/api/src/agent/agent-tools.service.ts', 'const CORE_TOOL_SOURCES'],
+  ['apps/api/scripts/usage-report.mjs', 'const CORE_ACTIVITY_DOMAINS'],
+];
+/** CORE_* 里允许出现的插件写法（逐行原文）。都是写进数据库的值，J1 不改。 */
+const CORE_EXCEPTIONS = [
+  { table: 'const CORE_TOOL_SOURCES', line: "get_today_summary: 'calendar',", reason: '跨域内核工具，调用记录历来记在 calendar 名下；J1b 定 assistant 内核清单时一并定' },
+  { table: 'const CORE_TOOL_SOURCES', line: "get_family_schedule: 'calendar',", reason: '同上' },
+];
 
 // ---- 1. key 与 manifest 本身 ----------------------------------------------------------------------
 
@@ -49,6 +84,12 @@ for (const key of [...c.PLUGIN_KEYS, ...c.KERNEL_DOMAIN_KEYS]) {
 }
 if (domainKeys.size !== c.PLUGIN_KEYS.length + c.KERNEL_DOMAIN_KEYS.length) fail('DOMAIN_KEYS 与插件 + 内核 key 不一一对应');
 for (const key of c.SHELF_MODULE_KEYS) if (!domainKeys.has(key)) fail(`SHELF_MODULE_KEYS 里的 ${key} 不是域 key`);
+
+// 18 个插件每个都有 manifest 文件并在 PLUGINS 里（J1.7 起全量）
+for (const key of c.PLUGIN_KEYS) {
+  if (!existsSync(join(ROOT, `packages/contracts/src/plugins/${key}.ts`))) fail(`插件 ${key} 没有 manifest 文件 packages/contracts/src/plugins/${key}.ts`);
+  if (!PLUGINS.some((plugin) => plugin.key === key)) fail(`插件 ${key} 不在 PLUGINS 里`);
+}
 
 const seen = new Set();
 for (const plugin of PLUGINS) {
@@ -80,7 +121,7 @@ for (const [space, values, name] of spaces) {
   }
 }
 
-// ---- 3. agent 工具：名单唯一，每个工具至多一个归属；全部迁完后不许有无主工具 ------------------------------------
+// ---- 3. agent 工具：名单唯一，每个工具恰好一个归属（插件或 KERNEL_AGENT_TOOLS） --------------------------------
 
 const tools = [...c.AGENT_READ_TOOLS, ...c.AGENT_PROPOSAL_TOOLS, ...c.AGENT_MEMORY_TOOLS];
 if (new Set(tools).size !== tools.length) fail('agent 工具名单有重复');
@@ -115,6 +156,70 @@ for (const kernelDir of ['system', 'today', 'activities', 'notifications', 'even
         fail(`内核 apps/api/src/${kernelDir}/${file} import 了插件 ${key} 的代码`);
       }
     }
+  }
+}
+
+// ---- 1b. 内核表：CORE_* 只放内核条目；新加 CORE_* 表要登记进 CORE_TABLES -------------------------------------
+
+{
+  const pluginWords = new Set([
+    ...c.PLUGIN_KEYS,
+    ...c.PLUGIN_KEYS.flatMap((key) => Object.values(c.PLUGIN_ALIASES[key]).flat()),
+  ]);
+  for (const [path, marker, options] of CORE_TABLES) {
+    let text = block(path, marker);
+    for (const exception of CORE_EXCEPTIONS.filter((one) => one.table === marker)) text = text.replace(exception.line, '');
+    for (const word of pluginWords) {
+      if (text.includes(`'${word}'`) || (!options?.values && hasKey(text, word))) {
+        fail(`${path} ${marker} 里出现了插件 key / 别名「${word}」：插件条目要写进 manifest`);
+      }
+    }
+  }
+  const declaredTables = new Set(CORE_TABLES.map(([path, marker]) => `${path}|${marker.replace(/^(export )?const /, '')}`));
+  for (const path of [...new Set(CORE_TABLES.map(([path]) => path))]) {
+    for (const [, name] of read(path).matchAll(/^(?:export )?const (CORE_[A-Z_]+)\b/gm)) {
+      // nav.ts 的 CORE_KEYS 是 core 层（今天 / 点菜 / 购物…）的顺序表，不是内核表，见 KNOWN_HANDWRITTEN ①
+      if (path === 'apps/web/src/lib/nav.ts' && name === 'CORE_KEYS') continue;
+      if (!declaredTables.has(`${path}|${name}`)) fail(`${path} 新加了 ${name}：先登记进 check-plugins 的 CORE_TABLES`);
+    }
+  }
+}
+
+// ---- 1c. 留意：注册到 AttentionRegistry 的种类 == manifest + CORE_ATTENTION 声明的种类 --------------------------
+
+{
+  const declaredKinds = new Set(c.allAttention().flatMap(({ key, attention }) => attention.kinds.map((kind) => `${key}:${kind.kind}`)));
+  const registeredKinds = new Set();
+  const walk = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? walk(`${dir}/${entry.name}`) : entry.name.endsWith('.ts') ? [`${dir}/${entry.name}`] : []);
+  for (const file of walk('apps/api/src')) {
+    const text = read(file);
+    if (!text.includes('implements AttentionSource')) continue;
+    const pattern = /export class (\w+) implements AttentionSource[^{]*\{\s*readonly domain = '([\w-]+)' as const;\s*readonly kinds = \[([^\]]*)\] as const;/g;
+    let found = 0;
+    for (const [, name, domain, kinds] of text.matchAll(pattern)) {
+      found += 1;
+      // 每个来源都要真的注册：注册类里 register(this.<注入它的字段>)，或者来源自己 register(this)
+      const field = text.match(new RegExp(`private readonly (\\w+): ${name}\\b`))?.[1];
+      const ownBody = text.slice(text.indexOf(`export class ${name} `)).split(/\nexport class /)[0];
+      if (!(field && text.includes(`registry.register(this.${field})`)) && !ownBody.includes('registry.register(this)')) {
+        fail(`${file}：留意来源 ${name} 没有注册到 AttentionRegistry`);
+      }
+      for (const [, kind] of kinds.matchAll(/'([\w-]+)'/g)) {
+        const id = `${domain}:${kind}`;
+        if (registeredKinds.has(id)) fail(`留意 ${id} 被两个来源注册（${name}）`);
+        registeredKinds.add(id);
+      }
+    }
+    const classes = (text.match(/implements AttentionSource/g) ?? []).length;
+    if (found !== classes) fail(`${file}：留意来源要紧跟着写 readonly domain / readonly kinds（check-plugins 按这个读种类）`);
+  }
+  for (const id of declaredKinds) if (!registeredKinds.has(id)) fail(`留意 ${id} 有声明，没有来源注册`);
+  for (const id of registeredKinds) if (!declaredKinds.has(id)) fail(`留意 ${id} 有来源注册，没有声明（manifest 的 attention 或 CORE_ATTENTION）`);
+  const enumDomains = [...c.attentionItemSchema.shape.domain.options].sort();
+  const attentionKeys = c.allAttention().map(({ key }) => key).sort();
+  if (JSON.stringify(enumDomains) !== JSON.stringify(attentionKeys)) {
+    fail(`contracts/today.ts 的留意 domain 枚举（${enumDomains.join('、')}）与声明了留意的域（${attentionKeys.join('、')}）不一致`);
   }
 }
 
@@ -159,7 +264,7 @@ for (const plugin of PLUGINS) {
     if (new RegExp(`domains: \\['${escape(key)}'[,\\]]`).test(line)) fail(`${where} events.ts 手写表还有本域路由：${line.trim()}`);
   }
 
-  // ---- 5. web / api 里其余登记处不许有本域的手写条目 ------------------------------------------------------
+  // ---- 5. web / api 里其余登记处不许有本域的手写条目（18 个插件全量） ------------------------------------------
 
   const navKeys = [key, ...(c.PLUGIN_ALIASES[key].nav ?? [])];
   const nav = read('apps/web/src/lib/nav.ts');
@@ -284,6 +389,6 @@ if (errors.length) {
   process.exit(1);
 }
 console.log(
-  `插件登记一致：已迁 ${migrated.size} / ${c.PLUGIN_KEYS.length} 个插件` +
-    `（${[...migrated].join('、') || '—'}）；agent 工具 ${tools.length} 个，已认领 ${owners.size}，待迁 ${unowned.length}`,
+  `插件登记一致：${PLUGINS.length} / ${c.PLUGIN_KEYS.length} 个插件都有 manifest；agent 工具 ${tools.length} 个全部有归属（插件 ${owners.size - c.KERNEL_AGENT_TOOLS.length}、内核 ${c.KERNEL_AGENT_TOOLS.length}）；` +
+    `仍手写并断言一致的 ${KNOWN_HANDWRITTEN.length} 处（${KNOWN_HANDWRITTEN.map((one) => one.no).join('')}），内核表 ${CORE_TABLES.length} 张`,
 );
