@@ -289,9 +289,9 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 1. ~~**财务权限三处不一致**：`ROLE_CAPABILITIES` 给普通成员 `view_finance` + `record_finance`（API 允许成员记账），但导航 `managerOnly`、⌘K 写死 `domain !== 'finance' || manager`。~~ **已关闭**（J1.3 财务权限 fix，§8.7）。
 2. ~~**⌘K 不看模块开关**：家庭把某个模块关掉后，它的 ⌘K 动作还在。~~ **已关闭**（§8.6 第 5 条：搜索与深链始终可达，这是规则不是缺陷）。
 3. **留意两种挂法**：11 条在 TodayModule 里写死注入，只有智能家居走 AttentionRegistry；DOMAIN_ORDER、OFF_KEYS、contracts 的 domain 枚举、web 的 4 张文案表又各写一遍。
-4. **agent 工具名单两份**：contracts 与 API 各一份，目前内容一致，但没有任何检查保证一致。
-5. **端点归属与路径前缀不符**：`POST /shopping-items/:id/confirm-stock` 写在 inventory 模块；`/maintenance-plans/:id/shopping-items` 写在 assets 模块。
-6. **内核反向依赖插件**：`system-modules.service.ts` import `smart-home/home-assistant.config`。
+4. ~~**agent 工具名单两份**：contracts 与 API 各一份，目前内容一致，但没有任何检查保证一致。~~ **已关闭**（J1.0 收成 contracts 一份，API 只转出）。
+5. ~~**端点归属与路径前缀不符**：`POST /shopping-items/:id/confirm-stock` 写在 inventory 模块；`/maintenance-plans/:id/shopping-items` 写在 assets 模块。~~ **已关闭**（按写在哪个模块登记：confirm-stock、confirm-consumption 进库存 manifest（J1.5），`/maintenance-plans/:id/shopping-items` 进资产 manifest（J1.5）；推送的域照旧带上路径所在的域）。
+6. ~~**内核反向依赖插件**：`system-modules.service.ts` import `smart-home/home-assistant.config`。~~ **已关闭**（J1.6：hasData 改走 `ModuleHasDataRegistry`，check-plugins 断言内核目录不 import 插件目录）。
 7. **SHELF_MODULE_KEYS 混着非插件**：activity（永远 hasData）和 assistant（看 agent 开关）也在里面。
 
 **缺项**（不是错，J3 / J4 要补的空白）：⌘K 缺点菜、库存、积分、智能家居、观影；agent 读工具缺提醒、投票、积分、访客、智能家居；设置行只有观影和智能家居有。
@@ -418,6 +418,28 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | J1.5 | 位置 | `d61018e` | `8285055` | 一次过（#37418223045） | hasData 含子查询：子查询按外层表名 `storage_locations."parentId"` 关联父位置，现有 `tables[].where` 就能表达，**不补类型**；新旧 SQL 在本地开发库两个家庭上结果一致（22 / 0），system-modules 黑盒通过。⌘K「记一下东西放哪」归位置、落点在库存页，照原样。事件以位置为主 2 条（`/locations`、`/map`），另 5 条推位置的（库存物品、批次、买到后入库、资产、资产位置）留在各自的域。**补类型**：`PluginUsage.snapshots`（server id + 名字）——位置只有现状快照，SQL 与每行文案按 id 留在 usage-report.mjs 的 `SNAPSHOT_SOURCES`（§8.4 第 5 条的 server 模式），check-plugins 断言声明的快照有实现 |
 | J1.5 | 库存 | `d7ecc89` | `2799e3a` | 一次过（#37418498319） | **收白名单**：`confirm-stock`（推 shopping / inventory / locations）、`confirm-consumption`（推 menus / inventory）进库存 manifest，推送的域集合与原来逐条一致；手写表里删掉，`PENDING_ROUTES` 空了，整个机制从 check-plugins 删掉；购物、点菜 manifest 的注释改成现状。查询失效 6 个 key 逐条一致。留意「快过期」的合并标题用 `mergedOverdueTitle` 表达「有的已经过期了」 |
 | J1.5 | 资产 | `ada4071` | `0da1e3b` | 一次过（#37418772528） | 事件以资产为主 6 条，第 7 条推资产的是 `/locations`（位置）。留意三种由 manifest 生成，`attentionPath` 的资产特判删掉；服务端三条规则的顺序（保养 → 续费 → 保修）与开关归属不变。三条旧路径原本在 `MOVED` 里分两处（`/assets` 一处，`/home-assets`、`/asset` 在观影之后），`pluginLegacyPaths` 只能整组放回，放在 `/assets` 原位：三条互不为前缀，也不和中间条目重叠，换算结果不变。§8.2 写的「库存 Service」实际是 `InventoryTransactionsService`（维护记出库） |
+| J1.6 | 观影 | `aabcaac` | `b98cbbf` | 一次过（#37425163279） | 9 个查询 key、五条旧路径（子页面在 `/media` 之前，顺序不变）、事件 `/media` + MoviePilot 回调 `/media/webhooks`（显式发）、事件豁免 `/media/library-availability` 一并进 manifest（`events.exempt`，J0 类型就有）。设置行「观影连接」只断言。hasData 三张表由 `tables[].where` 生成；本地两个家庭新旧都是 0（证明力弱），有数据的情况由 system-modules 黑盒覆盖（household_media、source_configs）并通过。`get_watch_candidates` 归位后 30 个 agent 工具全部有归属，check-plugins「无主工具」从「18 个迁完才查」改为**无条件断言** |
+| J1.6 | 智能家居 | `df8f01a` | `4afdab4` | 一次过（#37425814822；已知偶发「设置页联动」双视口都过） | J0 草稿转正。**hasData 改 server**：manifest `{ kind: 'server', id: 'smart-home.hasData' }`（类型 J0 就有，用 `id` 不另起 `provider`）；内核新增 `apps/api/src/system/module-has-data.registry.ts`（SystemModule 导出），智能家居在 `smart-home/smart-home-has-data.ts` 注册判定，SQL 与 `homeAssistantServerDefaultConfigured()` 逐字搬过去；`system-modules.service.ts` 删掉对 `smart-home/home-assistant.config` 的 import、按 key 的特判和已空的手写 `sources` 表，改为按 manifest 的 server id 取判定。新旧判定 SQL 文本逐字一致，本地两个家庭 × 服务器默认 true / false 四种结果一致（都为 false，本地没有设备）；smart-home 黑盒的三条 hasData 断言（白名单空 false / 配好 true / 退回服务器默认 false）通过。check-plugins 加：server 判定必须在插件自己目录注册、system-modules 不许按 key 特判、内核目录（system / today / activities / notifications / events）不许 import 插件目录（反证过）。留意三种由 manifest 生成文案与落点，`attentionPath` 的智能家居特判删掉，顺带删掉一行与下一行重复的判断。用量三项用 `note` 照原样输出来源说明。订阅任务打勾事件、调任务 / 提醒 / 购物 Service 原样保留，记入 J1b |
+
+**J1.6 等价比对**：沿用 J1.5 的快照工具（事件路由、查询失效、导航 / core 顺序 / 手机底栏、⌘K、旧路径换算、通知名与图标、留意落点、73 条留意文案样例），本地开发库上 usage-report 逐行比，两笔全部一致；事件豁免条数（9）前后一致。
+
+**J1.7 的输入清单**（J1.6 合完时，main `4afdab4`）：
+
+1. **手写表还剩的**（全部是内核 / 助理层的条目，或已经空了）：
+   - `packages/contracts/src/events.ts:62` `HANDWRITTEN_EVENT_ROUTES`：14 条，首域全是内核（assistant、members、household、notifications、backups、modules），含 `PROPOSAL_DOMAINS`（`:58`，按提案类型写的插件域列表也是手写）；`:95` `HANDWRITTEN_EVENT_ROUTE_EXEMPT`：8 条（auth、upload、渠道配对）。
+   - `apps/web/src/lib/events.ts:12` `HANDWRITTEN_QUERY_KEYS`：notifications、activity、assistant、members、household、backups、modules。
+   - `apps/web/src/lib/attention-copy.ts:13 / :17 / :25`（域名 / 按钮 / 列表按钮）与 `apps/web/src/lib/routes.ts:66`（落点）：只剩 backups；`attention-copy.ts` 的 `kindActions`、`singleTitle` / `mergedTitle` 里还留着 backups 的分支和 default。
+   - `apps/api/src/today/today-attention.service.ts:28` `HANDWRITTEN_ORDER`：只剩 `backups: 8`；`:41` `HANDWRITTEN_OFF_KEYS`：**已空**。
+   - `apps/web/src/lib/notification-meta.ts:4 / :9`：agent、system。
+   - `apps/api/src/auth/capabilities.ts:36` `HANDWRITTEN_ROLE_CAPABILITIES`：manage_members、manage_integrations、use_agent、manage_agent；`Capability` 名字清单（`:15` 起）仍手写、check-plugins 断言。
+   - `apps/api/src/agent/agent-proposals.service.ts:181 / :194 / :203`（`TYPE_BY_TOOL` / `ACTION_LABELS` / `UNGROUPED`）：**都已空**；`agent-proposal-groups.service.ts` 的 `GroupAgentActionType = Exclude<AgentActionType, 'finance'>` 仍写死财务。
+   - `apps/api/src/agent/agent-tools.service.ts:1246` `sourceModule`：只剩 7 个内核工具（`get_today_summary` / `get_family_schedule` 记成 `calendar`、`get_weather`、`get_member_profile`、两个记忆工具、`propose_plan`）。
+   - `apps/api/scripts/usage-report.mjs:46` `HANDWRITTEN_ACTIVITY_DOMAINS`：member、invitation、system；`:54` `HANDWRITTEN_TABLE_SOURCES`、`:92` `HANDWRITTEN_UNCOUNTED`：**都已空**；`SNAPSHOT_SOURCES`（位置快照实现）按设计留在脚本里。
+   - `apps/web/src/lib/nav.ts`：内核分段（`:68` 消息、`:86` 成员、`:87` 备份、`:100` 家庭动态、`:112` 问问小管家、`:113` 个人设置）；`:119` `CORE_KEYS` 与 `:153-154` `mobileTabs` 的 pick 是只按 key 排的顺序表（check-plugins 断言与 manifest 的 tier / mobileTab 一致）。
+   - `apps/web/src/lib/routes.ts` `MOVED`：内核旧路径 7 条（`:32` 成员、`:39` 备份、`:40` 动态、`:42-45` 个人 / 小管家 / 记忆 / 消息）。`apps/web/src/lib/actions.ts`：**已无手写动作**。
+2. **留意 11 条还没走 AttentionRegistry**：全部写死在 `TodayAttentionService`（构造注入 + `today-attention.service.ts:111-123` 按模块开关与能力拼规则），类在 `today-attention.rules.ts`：资产保养 `:47`、续费 `:67`、保修 `:85`、来访没定菜 `:104`、访客点菜 `:129`（另判 `manage_guests`）、出行清单 `:145`、库存快过期 `:172`、投票 `:193`、积分兑换 `:218`（`manage_points`）、超预算 `:234`（`manage_finance`）、备份 `:268`（`manage_integrations`，内核）。只有智能家居三条走 `AttentionRegistry`。manifest 里 kind 的 `capability` 目前只是声明，规则里的能力判断仍各写一遍；`contracts/src/today.ts:7` 的 domain 枚举手写（check-plugins 断言与有无留意一致）。
+3. **check-plugins 目前断言到**：key 表与 manifest 合法性；别名表（流水 / 通知 / 提案 actionType 值归属唯一、无死别名）；agent 工具名单唯一且**每个工具都有归属**（J1.6 起无条件）；已迁域在 contracts / web / api / 用量脚本里没有手写残留（事件、查询失效、导航字面量、⌘K、hasData 特判、留意排序与开关、留意文案 / 落点、旧路径、通知、提案、能力授予、工具来源、用量三类）；core 段 tier / mobileTab 与 `CORE_KEYS` / `mobileTabs` 一致；用量快照有实现；server hasData 在插件目录注册；内核目录不 import 插件目录；设置行与 `settings.tsx` 一致。web 端运行结果另由 `plugins-registry.test.ts` 逐域比对。**还没有**：「18 个插件都有 manifest」的显式失败断言（现在只在输出里报 18 / 18）；内核条目的来源（内核 manifest / 手写）本身不受检查。
+4. **「14 处全部由 manifest 导出」还差**（§8.1 编号）：⑤ 留意规则本身（11 条写死，见上；排序与开关已生成）；⑧ agent 工具**名单**（`contracts/src/agent.ts` 的 `AGENT_READ_TOOLS` / `AGENT_PROPOSAL_TOOLS` 仍是手写字面量，归属已全量断言）；⑩ 设置行（页面文件，按 J1 规矩只断言）；⑫ 流水 module、⑬ 通知 module 的枚举（数据库约束里的值，保留手写、别名表断言归属）；② `SHELF_MODULE_KEYS` 与 ⑭ `Capability` 名字清单（key 表，保留手写并断言）；以及上面第 1 条列的内核 / 助理层条目——要么照 §8.6 第 2 条起一份 assistant / 内核清单，要么明确由内核手写。
 
 **J1.5 等价比对**：每笔前后各导一份快照比——事件路由、查询失效表、导航分段 / core 顺序 / 手机底栏、⌘K（除动作 id）、旧路径换算（样例加了 `/home-assets/…`、`/asset/…?…`、`/map`、`/locations`）、通知名与图标、留意落点，以及**本批新加的留意文案样例**（九个有留意的域 × 每种事 × 有 / 无截止日、逾期、合并、合并含逾期、混合，共 73 条 `attentionCopy` 输出）；再在本地开发库上跑 `usage-report.mjs`（含「位置」快照一段）排序后逐行比。三笔全部一致。agent 工具只剩 `get_watch_candidates`（观影）无主。
 
@@ -439,7 +461,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
 | J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；§8.6 五项已拍板 |
-| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 16 / 18（知识库、回忆、出行、投票、菜谱、积分、访客、财务、购物、任务、日历、提醒、点菜、位置、库存、资产）；演示栈在 `442cd83`，J1.6 + J1.7 做完一起升 |
+| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | **已迁 18 / 18**（J1.6 观影、智能家居合完）；剩 J1.7 收尾（留意挂注册表、删空表、显式断言，输入清单见 §8.7 末尾）；演示栈在 `442cd83`，J1.7 做完一起升 |
 | J2 助理数据与开关 | ☐ | | |
 | J3 第 0 档引擎 | ☐ | | 等试用原话；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | ☐ | | |
