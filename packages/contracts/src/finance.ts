@@ -21,7 +21,8 @@ import { defineEndpoint } from './registry';
 //   POST 回传的 findTransaction 用 find({ relations }) → 一层 eager 会带出。
 //   所以嵌套里的 createdBy 一律可选。
 
-export const FINANCE_ACCOUNT_TYPES = ['cash', 'bank', 'alipay', 'wechat', 'other'] as const;
+/** credit（K4）：信用卡，余额为负 = 欠款。 */
+export const FINANCE_ACCOUNT_TYPES = ['cash', 'bank', 'alipay', 'wechat', 'other', 'credit'] as const;
 export const financeAccountType = z.enum(FINANCE_ACCOUNT_TYPES);
 export type FinanceAccountType = z.infer<typeof financeAccountType>;
 
@@ -40,6 +41,10 @@ export const FINANCE_TRANSACTION_SOURCE_TYPES = [
   'asset',
   'media_subscription',
   'finance_transaction',
+  // Phase K（docs/finance-plan.md §2.1）：账单导入（K1）、周期账单自动 / 已付（K3）、截图记账（K2）
+  'import',
+  'recurring',
+  'screenshot',
 ] as const;
 export const financeTransactionSourceType = z.enum(FINANCE_TRANSACTION_SOURCE_TYPES);
 
@@ -132,6 +137,10 @@ export const financeTransactionSchema = z
     actorName: z.string(),
     sourceType: financeTransactionSourceType,
     sourceId: z.string(),
+    // Phase K 加的列（K3 的迁移里加，之前的库里没有这三列）：交易对方、导入的交易单号、截图文件名
+    merchant: z.string().nullable().optional(),
+    externalId: z.string().nullable().optional(),
+    attachmentPath: z.string().nullable().optional(),
     reversalOfId: uuid.nullable(),
     postings: z.array(financePostingSchema),
     reversed: z.boolean(),
