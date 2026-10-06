@@ -97,12 +97,16 @@ function RecurringRow({
         {canManage ? (
           <>
             {row.isActive ? (
-              <Switch
-                label={`自动记账${row.title}`}
-                checked={row.autoPost}
-                pending={save.isPending}
-                onChange={(next) => patch({ autoPost: next }, next ? `「${row.title}」到期会自动记账` : `「${row.title}」改成到期提醒`)}
-              />
+              // 开关旁边写明是什么，不然和「已付」挨着看不出是自动记账
+              <span className="flex items-center gap-1.5 pr-1 text-[12px] text-ink-soft">
+                自动记账
+                <Switch
+                  label={`自动记账${row.title}`}
+                  checked={row.autoPost}
+                  pending={save.isPending}
+                  onChange={(next) => patch({ autoPost: next }, next ? `「${row.title}」到期会自动记账` : `「${row.title}」改成到期提醒`)}
+                />
+              </span>
             ) : null}
             <Button variant="ghost" className="h-8 px-2 text-[13px]" aria-label={`编辑${row.title}`} onClick={onEdit}>
               编辑
