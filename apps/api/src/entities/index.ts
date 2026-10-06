@@ -6470,6 +6470,7 @@ export class AgentChannelPairing {
   'CHK_agent_settings_daily_routine_notification_limit',
   `"dailyRoutineNotificationLimit" BETWEEN 0 AND 50`,
 )
+@Check('CHK_agent_settings_tier2_daily_limit', `"tier2DailyLimit" BETWEEN 1 AND 1000`)
 export class AgentSetting {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -6504,6 +6505,31 @@ export class AgentSetting {
 
   @Column({ default: false })
   routineNotificationsEnabled: boolean;
+
+  /** J2 助理三档（architecture §2）：第 0 档规则引擎。J3 实现，这里只存。 */
+  @Column({ type: 'boolean', default: true })
+  tier0Enabled: boolean;
+
+  /** 第 1 档本地模型（OpenAI 兼容，如家里的 Ollama）。J5 实现，这里只存、不连。 */
+  @Column({ type: 'boolean', default: false })
+  tier1Enabled: boolean;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  tier1BaseUrl: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  tier1Model: string | null;
+
+  /** 第 2 档（云端）的开关就是上面的 enabled；每家每日调用上限与脱敏由 J4 执行。 */
+  @Column({ type: 'int', default: 50 })
+  tier2DailyLimit: number;
+
+  @Column({ type: 'boolean', default: true })
+  tier2Redact: boolean;
+
+  /** 是否记录助理原话（assistant_utterances）；关掉后 ⌘K 不再落表。 */
+  @Column({ type: 'boolean', default: true })
+  captureUtterances: boolean;
 
   @Column({
     type: 'jsonb',

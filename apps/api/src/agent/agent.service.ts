@@ -45,7 +45,20 @@ interface UpdateAgentSettingsInput {
   routineNotificationsEnabled?: boolean;
   readToolsEnabled?: string[];
   proposalToolsEnabled?: string[];
+  tier0Enabled?: boolean;
+  tier1Enabled?: boolean;
+  tier1BaseUrl?: string | null;
+  tier1Model?: string | null;
+  tier2DailyLimit?: number;
+  tier2Redact?: boolean;
+  captureUtterances?: boolean;
   expectedVersion: number;
+}
+
+/** 可清空的文本设置：没传保留原值，传 null 或空白清空。 */
+function optionalSetting(value: string | null | undefined, current: string | null) {
+  if (value === undefined) return current;
+  return value?.trim() || null;
 }
 
 interface UpdateAgentProfileInput {
@@ -109,6 +122,8 @@ export class AgentService {
       ) != null,
       readToolsEnabled: setting.readToolsEnabled,
       proposalToolsEnabled: setting.proposalToolsEnabled,
+      // ⌘K 打开时会读 status：家里关了「记录原话」就不往 assistant_utterances 里记
+      captureUtterances: setting.captureUtterances,
     };
   }
 
@@ -169,6 +184,13 @@ export class AgentService {
           current.routineNotificationsEnabled,
         readToolsEnabled: tools,
         proposalToolsEnabled: proposalTools,
+        tier0Enabled: input.tier0Enabled ?? current.tier0Enabled,
+        tier1Enabled: input.tier1Enabled ?? current.tier1Enabled,
+        tier1BaseUrl: optionalSetting(input.tier1BaseUrl, current.tier1BaseUrl),
+        tier1Model: optionalSetting(input.tier1Model, current.tier1Model),
+        tier2DailyLimit: input.tier2DailyLimit ?? current.tier2DailyLimit,
+        tier2Redact: input.tier2Redact ?? current.tier2Redact,
+        captureUtterances: input.captureUtterances ?? current.captureUtterances,
         updatedByMemberId: user.memberId,
         version: current.version + 1,
       },
@@ -1137,6 +1159,13 @@ export class AgentService {
       routineNotificationsEnabled: setting.routineNotificationsEnabled,
       readToolsEnabled: setting.readToolsEnabled,
       proposalToolsEnabled: setting.proposalToolsEnabled,
+      tier0Enabled: setting.tier0Enabled,
+      tier1Enabled: setting.tier1Enabled,
+      tier1BaseUrl: setting.tier1BaseUrl,
+      tier1Model: setting.tier1Model,
+      tier2DailyLimit: setting.tier2DailyLimit,
+      tier2Redact: setting.tier2Redact,
+      captureUtterances: setting.captureUtterances,
       version: setting.version,
       updatedAt: setting.updatedAt,
     };

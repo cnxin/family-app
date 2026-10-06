@@ -15,6 +15,7 @@ export * from './channels';
 export * from './agent';
 export * from './agent-memory';
 export * from './agent-settings';
+export * from './assistant';
 export * from './guests';
 export * from './guest-invitation';
 export * from './assets';
