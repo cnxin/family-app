@@ -39,6 +39,7 @@ import {
   Repository,
 } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
+import { ModuleHasDataRegistry } from './module-has-data.registry';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import {
   BackupPolicy,
@@ -867,6 +868,7 @@ class HealthController {
 @Module({
   imports: [TypeOrmModule.forFeature([BackupPolicy, BackupRun, Member, Notification])],
   controllers: [HealthController, SystemBackupController, SystemModulesController],
-  providers: [SystemBackupService, SystemModulesService],
+  providers: [SystemBackupService, SystemModulesService, ModuleHasDataRegistry],
+  exports: [ModuleHasDataRegistry],
 })
 export class SystemModule {}

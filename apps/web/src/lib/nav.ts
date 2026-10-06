@@ -82,7 +82,7 @@ export const SCENES: NavScene[] = [
       ...pluginSegments('finance'),
       ...pluginSegments('points'),
       ...pluginSegments('guests'),
-      { key: shelfModuleKey.enum['smart-home'], tier: 'shelf', glyph: '智', label: '智能家居', path: '/house/smart-home', ready: true },
+      ...pluginSegments('smart-home'),
       { key: 'members', tier: 'settings', glyph: '员', label: '成员', path: '/house/members', ready: true, managerOnly: true },
       { key: 'backups', tier: 'settings', glyph: '备', label: '备份', path: '/house/backups', ready: true, managerOnly: true },
     ],

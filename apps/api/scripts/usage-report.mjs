@@ -52,10 +52,6 @@ const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activit
 
 // 不写流水的域：主表最近 N 天新增的行。timestamp（无时区）列按数据库会话时区比较。
 const HANDWRITTEN_TABLE_SOURCES = [
-  // 智能家居控制按来源分开：联动按的记在家庭主人名下（联动以他的名义执行），不是他本人按的
-  { domain: '智能家居（手动控制）', source: '主表新增 smart_home_commands（source = manual）', sql: `SELECT "householdId" AS household, "memberId" AS member FROM smart_home_commands WHERE source = 'manual' AND "createdAt" >= now() - make_interval(days => $1)` },
-  { domain: '智能家居（联动控制）', source: '主表新增 smart_home_commands（source = link，记在家庭主人名下）', sql: `SELECT "householdId" AS household, "memberId" AS member FROM smart_home_commands WHERE source = 'link' AND "createdAt" >= now() - make_interval(days => $1)` },
-  { domain: '智能家居（HA 回报）', source: '主表新增 smart_home_events（HA 打来的，没有成员）', sql: `SELECT "householdId" AS household, NULL::uuid AS member FROM smart_home_events WHERE event <> 'ping' AND "receivedAt" >= now() - make_interval(days => $1)` },
 ];
 const TABLE_SOURCES = [...HANDWRITTEN_TABLE_SOURCES, ...generated.tables];
 

@@ -43,7 +43,9 @@ import { RemindersModule } from '../reminders/reminders.module';
 import { ShoppingModule } from '../shopping/shopping.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { TodayModule } from '../today/today.module';
+import { SystemModule } from '../system/system.module';
 import { SmartHomeAttentionSource } from './smart-home-attention';
+import { SmartHomeHasDataProvider } from './smart-home-has-data';
 import { SmartHomeLinkagesService } from './smart-home-linkages.service';
 import { SmartHomeWebhookService } from './smart-home-webhook.service';
 import { SmartHomeCommandsService } from './smart-home-commands.service';
@@ -280,6 +282,7 @@ export class SmartHomeLinksController {
     ShoppingModule,
     RemindersModule,
     TodayModule,
+    SystemModule,
   ],
   controllers: [SmartHomeController, SmartHomeWebhookController, SmartHomeLinksController],
   providers: [
@@ -294,6 +297,7 @@ export class SmartHomeLinksController {
     SmartHomeLinkagesService,
     SmartHomeLinksService,
     SmartHomeAttentionSource,
+    SmartHomeHasDataProvider,
   ],
 })
 export class SmartHomeModule {}
