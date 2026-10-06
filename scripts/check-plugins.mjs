@@ -233,6 +233,20 @@ for (const kernelDir of ['system', 'today', 'activities', 'notifications', 'even
   }
 }
 
+// propose_plan 能打包的步骤类型：MCP 入参的判别联合是手写的（agent-mcp.controller.ts），必须与 manifest 里
+// grouped 不为 false 的提案类型一致；服务端 GROUPABLE_ACTION_TYPES 由 manifest 推出，两道闸口不许不同步
+{
+  const mcp = read('apps/api/src/agent/agent-mcp.controller.ts');
+  const start = mcp.indexOf("'propose_plan',");
+  const union = start < 0 ? '' : mcp.slice(start, mcp.indexOf("'propose_", start + 20));
+  const mcpTypes = [...union.matchAll(/type: z\.literal\('([\w-]+)'\)/g)].map(([, type]) => type).sort();
+  const groupable = c.pluginProposals().filter((one) => one.grouped).map((one) => one.actionType).sort();
+  if (!mcpTypes.length) fail('agent-mcp.controller.ts 找不到 propose_plan 的步骤类型（type: z.literal）');
+  if (JSON.stringify(mcpTypes) !== JSON.stringify(groupable)) {
+    fail(`MCP propose_plan 能打包的步骤类型（${mcpTypes.join('、')}）与 manifest 里可打包的提案类型（${groupable.join('、')}）不一致`);
+  }
+}
+
 // ---- 4. contracts 内的登记（dist 运行时结果） ---------------------------------------------------------
 
 const prefixes = c.EVENT_ROUTES.map((route) => route.prefix);
