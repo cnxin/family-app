@@ -42,6 +42,7 @@ export * from './tasks.events';
 export * from './smart-home.hooks';
 export * from './shopping.facade';
 export * from './keys';
+export * from './core-assistant';
 export * from './types';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */

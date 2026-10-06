@@ -56,15 +56,6 @@ export const KERNEL_ALIASES: Readonly<Record<AliasSpace, readonly string[]>> = {
   agentSource: ['weather', 'member', 'agent_memory', 'agent_plan', 'agent'],
 };
 
-/**
- * 不属于任何插件的 agent 工具（§8.6 第 2 条：J1b 起归 manifest 里的 assistant 内核清单）。
- * 其余工具必须恰好被一个插件 manifest 的 queries / actions 认领。
- */
-export const KERNEL_AGENT_TOOLS = [
-  'get_today_summary', 'get_family_schedule', 'get_member_profile', 'get_weather',
-  'propose_plan', 'recall_preferences', 'remember_preference',
-] as const;
-
 /** 某个 key 空间里的值属于哪个插件；内核值返回 'kernel'，没登记返回 null。 */
 export function aliasOwner(space: AliasSpace, value: string): PluginKey | 'kernel' | null {
   if (space === 'nav' && (PLUGIN_KEYS as readonly string[]).includes(value)) return value as PluginKey;

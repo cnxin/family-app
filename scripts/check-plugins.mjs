@@ -67,13 +67,15 @@ const CORE_TABLES = [
   ['apps/web/src/lib/nav.ts', 'const CORE_NAV'],
   ['apps/web/src/lib/routes.ts', 'const CORE_LEGACY_PATHS'],
   ['apps/api/src/auth/capabilities.ts', 'const CORE_ROLE_CAPABILITIES'],
-  ['apps/api/src/agent/agent-tools.service.ts', 'const CORE_TOOL_SOURCES'],
+  // assistant 内核工具清单（J1b.5）：对象 key 是工具名，只查字符串值；CORE_TOOL_SOURCES 由它派生
+  ['packages/contracts/src/plugins/core-assistant.ts', 'export const CORE_ASSISTANT_TOOLS', { values: true }],
+  ['packages/contracts/src/plugins/core-assistant.ts', 'export const CORE_TOOL_SOURCES', { values: true }],
   ['apps/api/scripts/usage-report.mjs', 'const CORE_ACTIVITY_DOMAINS'],
 ];
 /** CORE_* 里允许出现的插件写法（逐行原文）。都是写进数据库的值，J1 不改。 */
 const CORE_EXCEPTIONS = [
-  { table: 'const CORE_TOOL_SOURCES', line: "get_today_summary: 'calendar',", reason: '跨域内核工具，调用记录历来记在 calendar 名下；J1b 定 assistant 内核清单时一并定' },
-  { table: 'const CORE_TOOL_SOURCES', line: "get_family_schedule: 'calendar',", reason: '同上' },
+  { table: 'export const CORE_ASSISTANT_TOOLS', line: "get_today_summary: { label: '今日摘要', sourceModule: 'calendar' },", reason: '跨域内核工具，调用记录历来记在 calendar 名下（数据库里的值，J1b 不改）' },
+  { table: 'export const CORE_ASSISTANT_TOOLS', line: "get_family_schedule: { label: '家庭日程', sourceModule: 'calendar' },", reason: '同上' },
 ];
 
 // ---- 1. key 与 manifest 本身 ----------------------------------------------------------------------
@@ -147,6 +149,16 @@ for (const plugin of PLUGINS) {
   for (const proposal of c.proposalsOf(plugin)) if (proposal.legacyTool) claim(proposal.legacyTool, plugin.key);
 }
 const unowned = tools.filter((tool) => !owners.has(tool));
+// 内核清单（core-assistant.ts）：每个内核工具都有标签与调用记录来源；服务端不再另写一份来源表
+for (const tool of c.KERNEL_AGENT_TOOLS) {
+  const entry = c.CORE_ASSISTANT_TOOLS[tool];
+  if (!entry?.label || !entry?.sourceModule) fail(`内核工具 ${tool} 在 CORE_ASSISTANT_TOOLS 里缺标签或 sourceModule`);
+  if (c.CORE_TOOL_SOURCES[tool] !== entry?.sourceModule) fail(`CORE_TOOL_SOURCES.${tool} 与 CORE_ASSISTANT_TOOLS 不一致`);
+}
+if (Object.keys(c.CORE_ASSISTANT_TOOLS).length !== c.KERNEL_AGENT_TOOLS.length) fail('CORE_ASSISTANT_TOOLS 与 KERNEL_AGENT_TOOLS 条目不一致');
+if (/const CORE_TOOL_SOURCES\b/.test(read('apps/api/src/agent/agent-tools.service.ts'))) {
+  fail('agent-tools.service.ts 又手写了内核工具来源表：从 @family/contracts 的 CORE_TOOL_SOURCES 取');
+}
 // J1.6 起每个 agent 工具都有归属（插件 manifest 或内核清单 KERNEL_AGENT_TOOLS），新加工具必须登记
 if (unowned.length) fail(`有无主的 agent 工具：${unowned.join('、')}（登记进某个插件 manifest 的 queries / actions / proposals，或 KERNEL_AGENT_TOOLS）`);
 
@@ -322,7 +334,7 @@ for (const plugin of PLUGINS) {
       fail(`${where} hasData 判定 ${plugin.module.hasData.id} 没有在 apps/api/src/${key}/ 里注册到 ModuleHasDataRegistry`);
     }
   }
-  const toolSources = block('apps/api/src/agent/agent-tools.service.ts', 'const CORE_TOOL_SOURCES');
+  const toolSources = block('packages/contracts/src/plugins/core-assistant.ts', 'export const CORE_ASSISTANT_TOOLS');
   for (const [tool, owner] of owners) {
     if (owner === key && hasKey(toolSources, tool)) fail(`${where} agent-tools.service.ts sourceModule 还手写着 ${tool}`);
   }
