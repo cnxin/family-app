@@ -300,6 +300,27 @@ try {
   assert.ok(mixedItem && mixedItem.count === 2 && mixedItem.kinds.includes('budget') && mixedItem.kinds.includes('recurring'), '超预算与周期账单合成一张财务卡');
   console.log('  ✓ 周期账单留意：阈值、逾期、停用、自动记账、成员可见、与预算合卡');
 
+  // K4 信用卡：还款日（每月几号，短月按月末）前 3 天到当天、还欠着钱才出现；名字带欠多少；过了还款日看下个月
+  const creditFixture = await fixture('member');
+  const cardId = await insertScoped(db, creditFixture, 'finance_accounts', {
+    name: '招行信用卡', type: 'credit', openingBalance: -1234.5, billingDay: 5, dueDay: 25, createdById: creditFixture.memberId,
+  });
+  assertAbsent(await attention(creditFixture), 'finance', '还款日 4 天后不出现');
+  await db.query('UPDATE finance_accounts SET "dueDay"=24 WHERE id=$1', [cardId]);
+  assertItem(await attention(creditFixture), 'finance', { kind: 'credit', dueOn: '2026-09-24', overdue: false }, '还款日 3 天后出现（成员可见）');
+  assert.equal(find(await attention(creditFixture), 'finance').entity.name, '招行信用卡（欠 ¥1,234.50）', '名字带上欠多少');
+  await db.query('UPDATE finance_accounts SET "dueDay"=21 WHERE id=$1', [cardId]);
+  assertItem(await attention(creditFixture), 'finance', { kind: 'credit', dueOn: TODAY }, '还款日当天出现');
+  await db.query('UPDATE finance_accounts SET "dueDay"=20 WHERE id=$1', [cardId]);
+  assertAbsent(await attention(creditFixture), 'finance', '这个月的还款日已过，下个月的还远，不出现');
+  await db.query('UPDATE finance_accounts SET "dueDay"=31 WHERE id=$1', [cardId]);
+  assertItem(await attention(creditFixture, '2026-09-28T04:00:00.000Z'), 'finance', { kind: 'credit', dueOn: '2026-09-30' }, '31 号还款在 9 月按月末 30 日算');
+  await db.query('UPDATE finance_accounts SET "openingBalance"=0, "dueDay"=21 WHERE id=$1', [cardId]);
+  assertAbsent(await attention(creditFixture), 'finance', '不欠钱不出现');
+  await db.query('UPDATE finance_accounts SET "openingBalance"=-1, "isActive"=false WHERE id=$1', [cardId]);
+  assertAbsent(await attention(creditFixture), 'finance', '停用的卡不出现');
+  console.log('  ✓ 信用卡还款留意：前 3 天到当天、欠款、过期看下月、月末、停用');
+
   const backupFixture = await fixture();
   const policyId = await insertScoped(db, backupFixture, 'backup_policies', { workerLastSeenAt: NOW });
   assertAbsent(await attention(backupFixture), 'backups', 'worker 在线且无失败时不出现');

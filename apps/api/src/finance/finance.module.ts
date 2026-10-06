@@ -1,4 +1,9 @@
-import { FinanceAttention, FinanceBudgetAttentionRule, FinanceRecurringDueProvider } from './finance-attention';
+import {
+  FinanceAttention,
+  FinanceBudgetAttentionRule,
+  FinanceCreditDueProvider,
+  FinanceRecurringDueProvider,
+} from './finance-attention';
 import { TodayModule } from '../today/today.module';
 import {
   Body,
@@ -48,6 +53,7 @@ const ACCOUNT_TYPES: FinanceAccountType[] = [
   'alipay',
   'wechat',
   'other',
+  'credit',
 ];
 const TRANSACTION_TYPES: Exclude<FinanceTransactionType, 'reversal'>[] = [
   'expense',
@@ -97,6 +103,25 @@ export class CreateFinanceAccountDto {
   @Min(-MAX_AMOUNT)
   @Max(MAX_AMOUNT)
   openingBalance?: number;
+
+  /** K4：只有信用卡能填，见 FinanceService.creditFields */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(MAX_AMOUNT)
+  creditLimit?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  billingDay?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  dueDay?: number | null;
 }
 
 export class UpdateFinanceAccountDto {
@@ -113,6 +138,25 @@ export class UpdateFinanceAccountDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** K4：只有信用卡能填，见 FinanceService.creditFields */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(MAX_AMOUNT)
+  creditLimit?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  billingDay?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  dueDay?: number | null;
 
   @IsInt()
   @Min(1)
@@ -359,6 +403,7 @@ export class FinanceController {
     FinanceRecurringScheduler,
     FinanceBudgetAttentionRule,
     FinanceRecurringDueProvider,
+    FinanceCreditDueProvider,
     FinanceAttention,
   ],
   exports: [FinanceService],

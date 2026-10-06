@@ -79,7 +79,8 @@ export type FinanceAccountType =
   | 'bank'
   | 'alipay'
   | 'wechat'
-  | 'other';
+  | 'other'
+  | 'credit';
 export type FinanceCategoryKind = 'expense' | 'income';
 export type FinanceTransactionType =
   | 'expense'
@@ -4640,7 +4641,20 @@ export class PointsLedger {
 @Entity('finance_accounts')
 @Check(
   'CHK_finance_accounts_type',
-  `"type" IN ('cash', 'bank', 'alipay', 'wechat', 'other')`,
+  `"type" IN ('cash', 'bank', 'alipay', 'wechat', 'other', 'credit')`,
+)
+@Check(
+  'CHK_finance_accounts_credit_fields',
+  `"type" = 'credit' OR ("creditLimit" IS NULL AND "billingDay" IS NULL AND "dueDay" IS NULL)`,
+)
+@Check('CHK_finance_accounts_credit_limit', `"creditLimit" IS NULL OR "creditLimit" > 0`)
+@Check(
+  'CHK_finance_accounts_billing_day',
+  `"billingDay" IS NULL OR ("billingDay" >= 1 AND "billingDay" <= 31)`,
+)
+@Check(
+  'CHK_finance_accounts_due_day',
+  `"dueDay" IS NULL OR ("dueDay" >= 1 AND "dueDay" <= 31)`,
 )
 @Check('CHK_finance_accounts_currency', `"currency" = 'CNY'`)
 @Check('CHK_finance_accounts_version', `"version" >= 1`)
@@ -4672,6 +4686,18 @@ export class FinanceAccount {
 
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   openingBalance: string;
+
+  /** K4 信用卡额度（只有 credit 有）。 */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  creditLimit: string | null;
+
+  /** K4 信用卡每月几号出账单（只有 credit 有）。 */
+  @Column({ type: 'smallint', nullable: true })
+  billingDay: number | null;
+
+  /** K4 信用卡每月几号还款（只有 credit 有）。 */
+  @Column({ type: 'smallint', nullable: true })
+  dueDay: number | null;
 
   @Column({ type: 'varchar', length: 3, default: 'CNY' })
   currency: 'CNY';

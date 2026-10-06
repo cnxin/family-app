@@ -2,17 +2,23 @@ import { useState } from 'react';
 import type { FinanceAccount, FinanceAccountType } from '@family/contracts';
 import {
   ACCOUNT_TYPE_LABELS,
+  accountBalanceText,
+  creditDetail,
   isMoneyInput,
   useSetFinanceAccountActive,
   useUpsertFinanceAccount,
-  yuan,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { Button, Dialog, EmptyState, Input, Panel } from './ui';
 
 const label = 'mb-1 block text-[12px] text-ink-soft';
-/** 信用卡要额度 / 账单日 / 还款日，K4 加上这几项之前先不在类型里出现。 */
-const PICKABLE_TYPES = (Object.keys(ACCOUNT_TYPE_LABELS) as FinanceAccountType[]).filter((value) => value !== 'credit');
+const ACCOUNT_TYPES = Object.keys(ACCOUNT_TYPE_LABELS) as FinanceAccountType[];
+
+/** 每月几号：1～31 的整数，空串当没填。 */
+function dayOfMonth(raw: string) {
+  const value = Number(raw.trim());
+  return raw.trim() && Number.isInteger(value) && value >= 1 && value <= 31 ? value : null;
+}
 const chip = (active: boolean) =>
   'rounded-full border px-2.5 py-1 text-[13px] transition-colors duration-150 ' +
   (active ? 'border-accent bg-accent-soft text-accent' : 'border-border text-ink-soft hover:bg-muted');
@@ -28,20 +34,35 @@ export function AccountForm({
   const [name, setName] = useState(editing?.name ?? '');
   const [type, setType] = useState<FinanceAccountType>(editing?.type ?? 'bank');
   const [openingBalance, setOpeningBalance] = useState('0');
+  // K4 信用卡：额度选填，账单日 / 还款日必填；新建时填「当前欠多少」（存成负的初始余额）
+  const [creditLimit, setCreditLimit] = useState(editing?.creditLimit != null ? String(editing.creditLimit) : '');
+  const [billingDay, setBillingDay] = useState(editing?.billingDay ? String(editing.billingDay) : '');
+  const [dueDay, setDueDay] = useState(editing?.dueDay ? String(editing.dueDay) : '');
   const [message, setMessage] = useState<string | null>(null);
+  const credit = type === 'credit';
 
   function submit() {
     if (!name.trim()) return setMessage('先给账户起个名字');
     const raw = openingBalance.trim();
     const negative = raw.startsWith('-');
-    if (!editing && !isMoneyInput(negative ? raw.slice(1) : raw)) {
-      return setMessage('初始余额最多两位小数');
+    if (!editing && !isMoneyInput(credit || !negative ? raw : raw.slice(1))) {
+      return setMessage(credit ? '当前欠款填 0 或正数，最多两位小数' : '初始余额最多两位小数');
+    }
+    let creditFields: { creditLimit: number | null; billingDay: number; dueDay: number } | undefined;
+    if (credit) {
+      const billing = dayOfMonth(billingDay);
+      const due = dayOfMonth(dueDay);
+      if (!billing || !due) return setMessage('账单日、还款日填每月几号（1～31）');
+      if (creditLimit.trim() && (!isMoneyInput(creditLimit) || Number(creditLimit) <= 0)) {
+        return setMessage('额度要大于 0，最多两位小数；不知道可以不填');
+      }
+      creditFields = { creditLimit: creditLimit.trim() ? Number(creditLimit) : null, billingDay: billing, dueDay: due };
     }
     setMessage(null);
     save.mutate(
       editing
-        ? { id: editing.id, name: name.trim(), type, expectedVersion: editing.version }
-        : { name: name.trim(), type, openingBalance: Number(raw) },
+        ? { id: editing.id, name: name.trim(), type, expectedVersion: editing.version, credit: creditFields }
+        : { name: name.trim(), type, openingBalance: credit ? -Number(raw) : Number(raw), credit: creditFields },
       {
         onSuccess: () => {
           pushToast(editing ? '账户已更新' : `已建好账户「${name.trim()}」`);
@@ -81,7 +102,7 @@ export function AccountForm({
         <div>
           <span className={label}>类型</span>
           <div className="flex flex-wrap gap-1.5">
-            {PICKABLE_TYPES.map((value) => (
+            {ACCOUNT_TYPES.map((value) => (
               <button
                 key={value}
                 type="button"
@@ -94,18 +115,57 @@ export function AccountForm({
             ))}
           </div>
         </div>
+        {credit ? (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className={label}>额度（选填）</span>
+              <Input
+                inputMode="decimal"
+                value={creditLimit}
+                aria-label="信用额度"
+                placeholder="20000"
+                onChange={(event) => setCreditLimit(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className={label}>每月几号出账单</span>
+              <Input
+                inputMode="numeric"
+                value={billingDay}
+                maxLength={2}
+                aria-label="账单日"
+                placeholder="5"
+                onChange={(event) => setBillingDay(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className={label}>每月几号还款</span>
+              <Input
+                inputMode="numeric"
+                value={dueDay}
+                maxLength={2}
+                aria-label="还款日"
+                placeholder="23"
+                onChange={(event) => setDueDay(event.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
         {editing ? null : (
           <label className="block">
-            <span className={label}>初始余额</span>
+            <span className={label}>{credit ? '当前欠多少（没有就填 0）' : '初始余额'}</span>
             <Input
               inputMode="decimal"
               value={openingBalance}
-              aria-label="初始余额"
+              aria-label={credit ? '当前欠款' : '初始余额'}
               placeholder="0.00"
               onChange={(event) => setOpeningBalance(event.target.value)}
             />
           </label>
         )}
+        {credit ? (
+          <p className="text-[12px] text-ink-soft">刷卡消费照常「记一笔」选这张卡；还款就是从银行卡「转账」到这张卡。</p>
+        ) : null}
       </div>
     </Dialog>
   );
@@ -158,10 +218,13 @@ export function AccountsPanel({
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 text-[12px] text-ink-soft">{ACCOUNT_TYPE_LABELS[one.type]}</p>
+              <p className="mt-0.5 text-[12px] text-ink-soft">
+                {ACCOUNT_TYPE_LABELS[one.type]}
+                {creditDetail(one) ? ` · ${creditDetail(one)}` : ''}
+              </p>
             </div>
             <span className={'text-[15px] font-semibold ' + (one.balance < 0 ? 'text-danger' : '')}>
-              {yuan(one.balance)}
+              {accountBalanceText(one)}
             </span>
             {canManage ? (
               <div className="flex items-center gap-1">

@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCreateIntent } from '../lib/create-intent';
 import {
+  accountBalanceText,
+  creditDetail,
   monthLabel,
   shiftMonth,
   useFinanceAccounts,
@@ -49,9 +51,10 @@ export function FinancePage() {
     return !canManage && (wanted === 'budgets' || wanted === 'accounts') ? 'overview' : wanted;
   });
   const [recording, setRecording] = useState(false);
-  const [initialMode, setInitialMode] = useState<'expense' | 'income'>('expense');
+  const [initialMode, setInitialMode] = useState<'expense' | 'income' | 'transfer'>('expense');
+  // 留意里信用卡「去还款」带 kind=transfer：还款就是转账
   useCreateIntent((kind) => {
-    setInitialMode(kind === 'income' ? 'income' : 'expense');
+    setInitialMode(kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'expense');
     setRecording(true);
   });
 
@@ -200,7 +203,12 @@ export function FinancePage() {
                         (index || usable.length === 0 ? 'border-t border-border' : '')
                       }
                     >
-                      <p className="min-w-0 flex-1 truncate text-[14px]">{one.name}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px]">{one.name}</p>
+                        {creditDetail(one) ? (
+                          <p className="truncate text-[12px] text-ink-soft">{creditDetail(one)}</p>
+                        ) : null}
+                      </div>
                       {one.isActive ? null : (
                         <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-ink-soft">
                           已停用
@@ -212,7 +220,7 @@ export function FinancePage() {
                           (one.balance < 0 ? 'text-danger' : one.isActive ? '' : 'text-ink-soft')
                         }
                       >
-                        {yuan(one.balance)}
+                        {accountBalanceText(one)}
                       </span>
                     </div>
                   ))}

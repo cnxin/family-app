@@ -144,6 +144,7 @@ export class FinanceService {
           householdId: user.householdId,
           name,
           type: dto.type,
+          ...this.creditFields(dto.type, dto, null),
           openingBalance: money(dto.openingBalance).toFixed(2),
           currency: 'CNY',
           isActive: true,
@@ -174,6 +175,7 @@ export class FinanceService {
       throw new ConflictException('账户已更新，请刷新后重试');
     }
     if (dto.name !== undefined) account.name = dto.name.trim();
+    Object.assign(account, this.creditFields(dto.type ?? account.type, dto, account));
     if (dto.type !== undefined) account.type = dto.type;
     if (dto.isActive !== undefined) account.isActive = dto.isActive;
     account.version += 1;
@@ -660,10 +662,36 @@ export class FinanceService {
     return new Map(rows.map((row) => [row.id, money(row.balance)]));
   }
 
+  /**
+   * K4：信用卡必须有账单日、还款日（每月几号），额度选填；别的类型三项都得为空（库里也有 CHECK）。
+   * 改账户时没传的沿用原值；从信用卡改成别的类型时一并清掉。
+   */
+  private creditFields(
+    type: FinanceAccount['type'],
+    input: { creditLimit?: number | null; billingDay?: number | null; dueDay?: number | null },
+    current: FinanceAccount | null,
+  ) {
+    const keep = <T>(value: T | undefined, fallback: T | null) => (value === undefined ? fallback : value);
+    if (type !== 'credit') {
+      if (input.creditLimit != null || input.billingDay != null || input.dueDay != null) {
+        throw new BadRequestException('只有信用卡能填额度、账单日和还款日');
+      }
+      return { creditLimit: null, billingDay: null, dueDay: null };
+    }
+    const wasCredit = current?.type === 'credit';
+    const billingDay = keep(input.billingDay, wasCredit ? current.billingDay : null);
+    const dueDay = keep(input.dueDay, wasCredit ? current.dueDay : null);
+    if (!billingDay || !dueDay) throw new BadRequestException('信用卡要填每月几号出账单、几号还款');
+    const creditLimit: number | string | null =
+      input.creditLimit !== undefined ? input.creditLimit : wasCredit ? current.creditLimit : null;
+    return { creditLimit: creditLimit == null ? null : money(creditLimit).toFixed(2), billingDay, dueDay };
+  }
+
   private presentAccount(account: FinanceAccount, balance: number) {
     return {
       ...account,
       openingBalance: money(account.openingBalance),
+      creditLimit: account.creditLimit == null ? null : money(account.creditLimit),
       balance,
     };
   }

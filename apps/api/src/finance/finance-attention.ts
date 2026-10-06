@@ -6,7 +6,8 @@ import {
   type AttentionRuleContext,
   type AttentionSource,
 } from '../today/today-attention.rules';
-import { RECURRING_NOTICE_DAYS } from './finance-recurring.schedule';
+import { addDays } from '@family/shared';
+import { CREDIT_NOTICE_DAYS, nextMonthlyDayOnOrAfter, RECURRING_NOTICE_DAYS } from './finance-recurring.schedule';
 
 // 财务的留意规则（J1.7 从 today/today-attention.rules.ts 原样搬来，规则体不动）。
 // 排序、模块开关归属、能力门槛、文案与落点都在 manifest 的 attention 里声明，今天页按声明统一判。
@@ -75,6 +76,42 @@ export class FinanceRecurringDueProvider implements AttentionSource {
 }
 
 /**
+ * K4：信用卡还款日（每月几号，短月按月末）前 3 天到当天，而且还欠着钱（余额为负）。名字里带上欠多少，
+ * 标题模板是「{name} {soon}到还款日」。还款就是转账，成员也能记，不设能力门槛；过了还款日就看下个月的，不标逾期。
+ */
+@Injectable()
+export class FinanceCreditDueProvider implements AttentionSource {
+  readonly domain = 'finance' as const;
+  readonly kinds = ['credit'] as const;
+
+  constructor(private readonly db: DataSource) {}
+
+  async run({ householdId, today }: AttentionRuleContext) {
+    const cards: { id: string; name: string; dueDay: number; balance: string }[] = await this.db.query(
+      `SELECT a.id, a.name, a."dueDay", a."openingBalance" + COALESCE(SUM(p.delta), 0) AS balance
+         FROM finance_accounts a
+         LEFT JOIN finance_postings p ON p."accountId" = a.id
+        WHERE a."householdId" = $1
+          AND a."isActive"
+          AND a.type = 'credit'
+          AND a."dueDay" IS NOT NULL
+        GROUP BY a.id
+        ORDER BY a."createdAt", a.id`,
+      [householdId],
+    );
+    const horizon = addDays(today, CREDIT_NOTICE_DAYS);
+    return cards.flatMap((card): AttentionCandidate[] => {
+      const debt = Math.round(-Number(card.balance) * 100) / 100;
+      if (!(debt > 0)) return [];
+      const dueOn = nextMonthlyDayOnOrAfter(today, card.dueDay);
+      if (dueOn > horizon) return [];
+      const owed = debt.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return [{ domain: 'finance', kind: 'credit', id: card.id, name: `${card.name}（欠 ¥${owed}）`, dueOn, overdue: false }];
+    });
+  }
+}
+
+/**
  * 把本域的留意规则挂到今天页的 AttentionRegistry。
  */
 @Injectable()
@@ -83,10 +120,12 @@ export class FinanceAttention implements OnModuleInit {
     private readonly registry: AttentionRegistry,
     private readonly financeBudget: FinanceBudgetAttentionRule,
     private readonly financeRecurring: FinanceRecurringDueProvider,
+    private readonly financeCredit: FinanceCreditDueProvider,
   ) {}
 
   onModuleInit() {
     this.registry.register(this.financeBudget);
     this.registry.register(this.financeRecurring);
+    this.registry.register(this.financeCredit);
   }
 }

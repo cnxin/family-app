@@ -1,4 +1,4 @@
-// 财务（J1.3）。流水只能冲销不能改；记账提案必须单独确认，不能打包进 propose_plan。
+// 财务（J1.3；Phase K 加周期账单、信用卡）。流水只能冲销不能改；记账提案必须单独确认，不能打包进 propose_plan。
 // 权限口径（architecture §8.6 第 3 条）：成员能看流水、记账；账户、分类、预算、冲销只有管理员（manage_finance）。
 import type { PluginManifest } from './types';
 
@@ -48,6 +48,15 @@ export const financeManifest = {
         path: '/house/finance?view=recurring',
         title: '{name} {soon}该付了',
         mergedTitle: '{n} 笔固定支出该付了',
+      },
+      {
+        // K4：信用卡还款日前 3 天起、还欠着钱时出现（名字里带欠多少）；还款就是转账，点进去直接开转账
+        kind: 'credit',
+        server: 'finance.credit',
+        actionLabel: '去还款',
+        path: '/house/finance?create=1&kind=transfer',
+        title: '{name} {soon}到还款日',
+        mergedTitle: '{n} 张信用卡该还款了',
       },
     ],
   },

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   firstOccurrenceOnOrAfter,
   monthlyAverage,
+  nextMonthlyDayOnOrAfter,
   nextOccurrenceAfter,
   occurrenceAt,
   postingCutoff,
@@ -52,5 +53,13 @@ check('月均：周付 × 52 ÷ 12、季付 ÷ 3、年付 ÷ 12，两位小数�
   assert.equal(monthlyAverage(100, 'quarterly'), 33.33);
   assert.equal(monthlyAverage(4800, 'yearly'), 400);
   assert.equal(recurringIdempotencyKey('r1', '2026-10-06'), 'recurring:r1:2026-10-06');
+});
+check('信用卡还款日：这个月的没过就是这个月，过了是下个月，短月按月末', () => {
+  assert.equal(nextMonthlyDayOnOrAfter('2026-09-21', 24), '2026-09-24');
+  assert.equal(nextMonthlyDayOnOrAfter('2026-09-21', 21), '2026-09-21');
+  assert.equal(nextMonthlyDayOnOrAfter('2026-09-21', 20), '2026-10-20');
+  assert.equal(nextMonthlyDayOnOrAfter('2026-09-28', 31), '2026-09-30');
+  assert.equal(nextMonthlyDayOnOrAfter('2026-12-31', 5), '2027-01-05');
+  assert.equal(nextMonthlyDayOnOrAfter('2027-01-31', 30), '2027-02-28');
 });
 console.log(`周期账单日期推算单测全部通过（${passed} 条）`);

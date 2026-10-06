@@ -2,10 +2,10 @@ import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
 import type { FinanceAccount, FinanceCategory } from '@family/contracts';
 import {
+  accountBalanceText,
   isMoneyInput,
   monthLabel,
   useCreateFinanceTransaction,
-  yuan,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { Button, Dialog, Input, Segmented } from './ui';
@@ -36,8 +36,12 @@ export function TransactionForm({
 
   const [mode, setMode] = useState<Mode>(initialMode);
   const [amount, setAmount] = useState('');
-  const [accountId, setAccountId] = useState(usable[0]?.id ?? '');
-  const [toAccountId, setToAccountId] = useState(usable[1]?.id ?? '');
+  // 从信用卡「去还款」进来是转账：默认从一张不是信用卡的账户转进第一张信用卡
+  const repayTo = initialMode === 'transfer' ? usable.find((one) => one.type === 'credit') : undefined;
+  const [accountId, setAccountId] = useState(
+    repayTo ? (usable.find((one) => one.type !== 'credit')?.id ?? '') : (usable[0]?.id ?? ''),
+  );
+  const [toAccountId, setToAccountId] = useState(repayTo?.id ?? usable[1]?.id ?? '');
   const [categoryId, setCategoryId] = useState(
     categories.find((one) => one.kind === initialMode && one.isActive)?.id ?? '',
   );
@@ -153,7 +157,7 @@ export function TransactionForm({
                 className={chip(accountId === one.id)}
                 onClick={() => setAccountId(one.id)}
               >
-                {one.name} {yuan(one.balance)}
+                {one.name} {accountBalanceText(one)}
               </button>
             ))}
           </div>

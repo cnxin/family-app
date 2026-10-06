@@ -11,6 +11,7 @@ import { AddMapDecorations1785233500000 } from './1785233500000-add-map-decorati
 import { AddAssistantUtterances1785233600000 } from './1785233600000-add-assistant-utterances';
 import { AddAssistantTiers1785233700000 } from './1785233700000-add-assistant-tiers';
 import { AddFinanceRecurring1785233800000 } from './1785233800000-add-finance-recurring';
+import { AddFinanceCreditAccounts1785233900000 } from './1785233900000-add-finance-credit-accounts';
 import { SmartHomeDevicesByDevice1785233000000 } from './1785233000000-smart-home-devices-by-device';
 import { AddSmartHomeCommandSource1785233100000 } from './1785233100000-add-smart-home-command-source';
 import { InitialSchema1785226400000 } from './1785226400000-initial-schema';
@@ -150,4 +151,5 @@ export const ALL_MIGRATIONS = [
   AddAssistantUtterances1785233600000,
   AddAssistantTiers1785233700000,
   AddFinanceRecurring1785233800000,
+  AddFinanceCreditAccounts1785233900000,
 ];
