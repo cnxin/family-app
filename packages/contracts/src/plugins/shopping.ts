@@ -13,6 +13,8 @@ export const shoppingManifest = {
     { plugin: 'menus', via: 'contract', uses: ['GET /menus'], reason: '按菜单生成购物清单（POST /shopping-list/generate）' },
     { plugin: 'inventory', via: 'contract', uses: ['GET /inventory-items'], reason: '生成清单时扣掉已有库存' },
   ],
+  // J1b：生成清单读某天的菜走点菜门面，读库存与入库确认走库存门面
+  dependsOn: ['menus', 'inventory'],
   nav: [{ key: 'shopping', label: '购物', glyph: '购', scene: 'house', path: '/house/shopping', mobileTab: 'eat' }],
   legacyPaths: [['/shopping', '/house/shopping'], ['/supplies', '/house/shopping']],
   // core 层不进 /system/modules，没有开关

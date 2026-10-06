@@ -19,7 +19,7 @@ import {
   InventoryTransaction,
 } from '../entities';
 import { addDays, diffDays, householdToday, todayInShanghai } from '@family/shared';
-import { usableLocationId } from '../locations/location-refs';
+import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
 
 const MAX_QUANTITY = 99_999_999.99;
 
@@ -115,6 +115,7 @@ export class InventoryBatchesService {
     private readonly movements: Repository<InventoryBatchMovement>,
     private readonly dataSource: DataSource,
     private readonly clock: Clock,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   private async today(householdId: string): Promise<string> {
@@ -233,7 +234,7 @@ export class InventoryBatchesService {
       }
       const batchId = randomUUID();
       const locationId =
-        (await usableLocationId(manager, user.householdId, input.locationId)) ?? item.defaultLocationId ?? null;
+        (await this.facades.get('locations').usableLocationId(toPluginTransaction(manager), user.householdId, input.locationId)) ?? item.defaultLocationId ?? null;
       const batch = await manager.getRepository(InventoryBatch).save(
         manager.getRepository(InventoryBatch).create({
           id: batchId,
@@ -534,7 +535,7 @@ export class InventoryBatchesService {
     await this.dataSource.transaction(async (manager) => {
       const batch = await manager.getRepository(InventoryBatch).findOneBy({ id, householdId: user.householdId });
       if (!batch) throw new NotFoundException('库存批次不存在');
-      const usable = (await usableLocationId(manager, user.householdId, locationId)) ?? null;
+      const usable = (await this.facades.get('locations').usableLocationId(toPluginTransaction(manager), user.householdId, locationId)) ?? null;
       await manager
         .getRepository(InventoryBatch)
         .update({ id, householdId: user.householdId }, { locationId: usable, locationUpdatedAt: this.clock.now() });

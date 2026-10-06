@@ -8,6 +8,7 @@ import {
   Injectable,
   Module,
   NotFoundException,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -42,6 +43,8 @@ import {
   Notification,
 } from '../entities';
 import { buildRecipeSnapshot, isUniqueViolation } from '@family/shared';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { menusFacade } from './menus.facade';
 
 export class OrderItemDto {
   @IsUUID()
@@ -749,6 +752,16 @@ export class MenusController {
   }
 }
 
+/** 把点菜门面注册到内核（J1b）：购物生成清单读某天的菜从这里取，不再直读 Menu 实体。 */
+@Injectable()
+export class MenusFacadeProvider implements OnModuleInit {
+  constructor(private readonly registry: PluginFacadeRegistry) {}
+
+  onModuleInit() {
+    this.registry.register('menus', menusFacade());
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -760,7 +773,7 @@ export class MenusController {
     ]),
   ],
   controllers: [MenusController],
-  providers: [MenusService],
+  providers: [MenusService, MenusFacadeProvider],
   exports: [MenusService],
 })
 export class MenusModule {}

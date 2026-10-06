@@ -43,7 +43,6 @@ import { basename, extname, resolve, sep } from 'node:path';
 import { memoryStorage } from 'multer';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
-import { usableLocationId } from '../locations/location-refs';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { jwtSecret } from '../common/config';
@@ -65,10 +64,10 @@ import {
   Reminder,
   ShoppingItem,
 } from '../entities';
-import { InventoryModule } from '../inventory/inventory.module';
-import { InventoryTransactionsService } from '../inventory/inventory-transactions.service';
+import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
 import { PRIVATE_ASSET_UPLOAD_DIR, UPLOAD_DIR } from '../upload/upload.module';
 import { addDays, compare, householdToday, isUniqueViolation } from '@family/shared';
+import type { MaintenanceConsumptionLine } from '@family/contracts';
 
 const ASSET_CATEGORIES: AssetCategory[] = [
   'appliance',
@@ -512,7 +511,7 @@ export class AssetsService {
     private readonly inventoryTransactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
     private readonly clock: Clock,
-    private readonly inventoryLedger: InventoryTransactionsService,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   async list(query: AssetListQueryDto, householdId: string) {
@@ -598,7 +597,7 @@ export class AssetsService {
 
   /** I1：选了位置就清掉旧文本（「整理到位置」）；清掉位置时旧文本不动。 */
   private async locationFields(manager: EntityManager, householdId: string, locationId: string | null | undefined, text: string | null) {
-    const usable = (await usableLocationId(manager, householdId, locationId)) ?? null;
+    const usable = (await this.facades.get('locations').usableLocationId(toPluginTransaction(manager), householdId, locationId)) ?? null;
     return { locationId: usable, location: usable ? null : text };
   }
 
@@ -1401,10 +1400,7 @@ export class AssetsService {
       }
       const recordId = randomUUID();
       const operationId = dto.consumeInventory ? randomUUID() : null;
-      const pendingTransactions: {
-        item: InventoryItem;
-        transaction: InventoryTransaction;
-      }[] = [];
+      const consumptionLines: MaintenanceConsumptionLine[] = [];
       const consumablesSnapshot: MaintenanceConsumableSnapshot[] = rows.map(
         (row) => {
           if (!dto.consumeInventory || row.quantityAfter == null || !operationId) {
@@ -1424,22 +1420,15 @@ export class AssetsService {
             (candidate) => candidate.id === row.inventoryItemId,
           );
           if (!item) throw new NotFoundException('相关库存项不存在');
-          const transaction = this.inventoryLedger.createTransaction(manager, {
-            householdId: user.householdId,
+          const transactionId = randomUUID();
+          consumptionLines.push({
             inventoryItemId: item.id,
-            operationId,
-            type: 'consumption',
+            transactionId,
             quantityBefore: row.quantityBefore,
-            delta: -row.quantity,
+            quantity: row.quantity,
             quantityAfter: row.quantityAfter,
             unit: row.unit,
-            actor: user,
-            sourceType: 'maintenance_record',
-            sourceId: recordId,
-            idempotencyKey: `maintenance-record:${recordId}:consumption:${item.id}`,
           });
-          transaction.id = randomUUID();
-          pendingTransactions.push({ item, transaction });
           return {
             consumableId: row.consumableId,
             inventoryItemId: row.inventoryItemId,
@@ -1449,7 +1438,7 @@ export class AssetsService {
             consumed: true,
             quantityBefore: row.quantityBefore,
             quantityAfter: row.quantityAfter,
-            transactionId: transaction.id,
+            transactionId,
           };
         },
       );
@@ -1471,19 +1460,14 @@ export class AssetsService {
           inventoryOperationId: operationId,
         }),
       );
-      for (const pending of pendingTransactions) {
-        pending.item.quantity = pending.transaction.quantityAfter;
-        await manager.getRepository(InventoryItem).save(pending.item);
-        const savedTransaction = await manager
-          .getRepository(InventoryTransaction)
-          .save(pending.transaction);
-        await this.inventoryLedger.applyBatchConsumption(manager, {
-          item: pending.item,
-          quantity: -Number(savedTransaction.delta),
-          transaction: savedTransaction,
+      // 出库走库存门面，传本事务：维护记录与库存流水 / 余量 / 批次扣减同成同败（J1b）
+      if (operationId && consumptionLines.length) {
+        await this.facades.get('inventory').consumeForMaintenance(toPluginTransaction(manager), {
+          householdId: user.householdId,
+          operationId,
+          recordId,
           actor: user,
-          sourceType: 'maintenance_record',
-          sourceId: recordId,
+          lines: consumptionLines,
         });
       }
       plan.nextDueDate = nextDueDateAfter;
@@ -2014,7 +1998,6 @@ export class AssetsController {
 @Module({
   imports: [
     TodayModule,
-    InventoryModule,
     TypeOrmModule.forFeature([
       HomeAsset,
       AssetDocument,

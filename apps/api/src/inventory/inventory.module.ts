@@ -11,6 +11,7 @@ import {
   Injectable,
   Module,
   NotFoundException,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -50,7 +51,8 @@ import {
   InventoryBatchesService,
 } from './inventory-batches.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
-import { usableLocationId } from '../locations/location-refs';
+import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
+import { inventoryFacade } from './inventory.facade';
 import { isUniqueViolation } from '@family/shared';
 
 const INVENTORY_CATEGORIES: InventoryCategory[] = [
@@ -263,6 +265,7 @@ export class InventoryService {
     private readonly dataSource: DataSource,
     private readonly ledger: InventoryTransactionsService,
     private readonly batchService: InventoryBatchesService,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   async list(householdId: string) {
@@ -301,7 +304,7 @@ export class InventoryService {
             throw new ConflictException('这个食材和单位已经关联了库存');
           }
         }
-        const defaultLocationId = (await usableLocationId(manager, user.householdId, dto.defaultLocationId)) ?? null;
+        const defaultLocationId = (await this.facades.get('locations').usableLocationId(toPluginTransaction(manager), user.householdId, dto.defaultLocationId)) ?? null;
         const item = await items.save(
           items.create({
             householdId: user.householdId,
@@ -359,7 +362,7 @@ export class InventoryService {
         if (!item) throw new NotFoundException('库存项不存在');
 
         if (dto.defaultLocationId !== undefined) {
-          item.defaultLocationId = (await usableLocationId(manager, user.householdId, dto.defaultLocationId)) ?? null;
+          item.defaultLocationId = (await this.facades.get('locations').usableLocationId(toPluginTransaction(manager), user.householdId, dto.defaultLocationId)) ?? null;
           await items.update({ id: item.id }, { defaultLocationId: item.defaultLocationId });
         }
         const quantityBefore = Number(item.quantity);
@@ -647,6 +650,20 @@ export class InventoryController {
   }
 }
 
+/** 把库存门面注册到内核（J1b）：资产维护记出库、购物读库存与入库确认走这里，不再 import 本目录。 */
+@Injectable()
+export class InventoryFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly ledger: InventoryTransactionsService,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('inventory', inventoryFacade(this.ledger, this.dataSource));
+  }
+}
+
 @Module({
   imports: [
     TodayModule,
@@ -667,6 +684,7 @@ export class InventoryController {
     InventoryTransactionsService,
     InventoryExpiryAttentionRule,
     InventoryAttention,
+    InventoryFacadeProvider,
   ],
   exports: [
     InventoryService,

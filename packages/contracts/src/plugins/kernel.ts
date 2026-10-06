@@ -6,6 +6,9 @@
 // 这里只有类型与名字，没有实现（contracts 也给前端用，不能带 Nest / TypeORM）。
 
 import type { CalendarFacade } from './calendar.facade';
+import type { InventoryFacade } from './inventory.facade';
+import type { LocationsFacade } from './locations.facade';
+import type { MenusFacade } from './menus.facade';
 import type { TasksFacade } from './tasks.facade';
 import type { PluginRole } from './types';
 
@@ -32,6 +35,9 @@ export interface PluginTransaction {
 export interface PluginFacades {
   tasks: TasksFacade;
   calendar: CalendarFacade;
+  locations: LocationsFacade;
+  inventory: InventoryFacade;
+  menus: MenusFacade;
 }
 export type PluginFacadeKey = keyof PluginFacades;
 
