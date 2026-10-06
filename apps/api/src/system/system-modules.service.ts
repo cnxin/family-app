@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
+  findPlugin,
   pluginHasDataSql,
   SHELF_MODULE_KEYS,
   type ModuleOverride,
@@ -9,49 +10,41 @@ import {
 } from '@family/contracts';
 import { JwtUser } from '../auth/jwt.guard';
 import { agentDataKey } from '../common/config';
-import { homeAssistantServerDefaultConfigured } from '../smart-home/home-assistant.config';
+import { ModuleHasDataRegistry } from './module-has-data.registry';
 
-// 静态 SQL 注册表：标识符不来自请求，只有家庭 ID / 默认启用值通过参数传入。
-// 同域多表 UNION 后只取存在性；每个分支都必须带当前家庭边界。
-// 已迁到 manifest 的插件由 pluginHasDataSql 生成（同样只有 $1），这里只留还没迁的。
-const sources: Partial<
-  Record<Exclude<ShelfModuleKey, 'activity' | 'assistant' | 'smart-home'>, string>
-> = {
-};
-
-// 智能家居：连接器配好了（家庭自己的一行：启用 + 地址 + 令牌；没有这一行才看服务器默认）且白名单非空。
-// 服务器默认来自环境变量 / 令牌文件，不在库里，由 $2 传入。
-const smartHomeSource = `SELECT 1 FROM smart_home_devices WHERE "householdId" = $1 AND (
-    EXISTS (SELECT 1 FROM integrations i JOIN integration_secrets s ON s."integrationId" = i.id
-      WHERE i."householdId" = $1 AND i.kind = 'home_assistant' AND i."isEnabled"
-        AND NULLIF(i."baseUrl", '') IS NOT NULL)
-    OR ($2::boolean AND NOT EXISTS (
-      SELECT 1 FROM integrations WHERE "householdId" = $1 AND kind = 'home_assistant')))`;
+// hasData 全部来自插件 manifest（J1）：tables 由 pluginHasDataSql 生成静态 SQL（标识符不来自请求，只有家庭 ID 走 $1，
+// 同域多表 UNION 后只取存在性，每个分支都带家庭边界）；server 由插件在自己的模块里注册到 ModuleHasDataRegistry。
+// 内核自己的两个：家庭动态永远有，小管家看 agent 开关。
 
 @Injectable()
 export class SystemModulesService {
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    private readonly hasDataProviders: ModuleHasDataRegistry,
+  ) {}
 
   private async hasData(
     key: ShelfModuleKey,
     householdId: string,
   ): Promise<boolean> {
     if (key === 'activity') return true;
+    const declared = findPlugin(key)?.module.hasData;
+    if (declared?.kind === 'server') {
+      const provider = this.hasDataProviders.get(declared.id);
+      if (!provider) throw new Error(`模块 ${key} 的 hasData 判定 ${declared.id} 没有注册`);
+      return provider(householdId);
+    }
     const query =
       key === 'assistant'
         ? `SELECT 1 FROM agent_settings WHERE "householdId" = $1 AND enabled
          UNION ALL SELECT 1 FROM households WHERE id = $1 AND $2::boolean
            AND NOT EXISTS (SELECT 1 FROM agent_settings WHERE "householdId" = $1 LIMIT 1)`
-        : key === 'smart-home'
-          ? smartHomeSource
-          : (pluginHasDataSql(key) ?? sources[key]);
+        : pluginHasDataSql(key);
     if (!query) throw new Error(`模块 ${key} 没有 hasData 判定`);
     const parameters =
       key === 'assistant'
         ? [householdId, agentDataKey() != null]
-        : key === 'smart-home'
-          ? [householdId, homeAssistantServerDefaultConfigured()]
-          : [householdId];
+        : [householdId];
     const [row]: { hasData: boolean }[] = await this.db.query(
       `SELECT EXISTS(${query} LIMIT 1) AS "hasData"`,
       parameters,

@@ -20,11 +20,6 @@ const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   household: ['members'],
   backups: ['backup-dashboard'],
   modules: [],
-  'smart-home': [
-    'smart-home-states', 'smart-home-devices', 'smart-home-directory', 'smart-home-connector-settings',
-    'smart-home-commands', 'smart-home-webhook', 'smart-home-webhook-events', 'smart-home-links',
-    'smart-home-panel', 'smart-home-merge-report',
-  ],
 };
 
 /** 已迁插件的查询 key 由 manifest 的 events.queryKeys 生成（J1）；每个域都有一条由 plugins-registry 单测保证。 */

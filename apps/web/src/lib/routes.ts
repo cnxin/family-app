@@ -64,7 +64,7 @@ export const pluginAttentionOf: ReadonlyMap<string, PluginAttention> = new Map(
 );
 
 const HANDWRITTEN_ATTENTION_ROUTES: Partial<Record<AttentionItem['domain'], string>> = {
-  backups: '/house/backups', 'smart-home': '/house/smart-home',
+  backups: '/house/backups',
 };
 
 export const attentionRoutes = {
@@ -96,11 +96,5 @@ export function attentionPath(item: {
 }): string {
   const plugin = pluginAttentionOf.get(item.domain);
   if (plugin) return pluginAttentionPath(plugin, item);
-  if ((item.kinds?.length ?? 0) > 1) return attentionRoutes[item.domain];
-  if (item.domain === 'smart-home') {
-    if (item.kind === 'filter' && item.entity) return `${attentionRoutes['smart-home']}?device=${encodeURIComponent(item.entity.id)}`;
-    if (item.kind === 'laundry' && item.entity) return `/schedule/tasks?task=${encodeURIComponent(item.entity.id)}`;
-    if (item.kind === 'offline') return `${attentionRoutes['smart-home']}/settings`;
-  }
   return attentionRoutes[item.domain];
 }

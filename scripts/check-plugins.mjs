@@ -6,7 +6,7 @@
 // web 端登记的运行时结果另由 apps/web/src/lib/plugins-registry.test.ts 断言。
 // 依赖已构建的 packages/contracts（corepack pnpm build:packages；install 的 postinstall 会构建）。
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,6 +104,20 @@ if (/action\.domain\s*[!=]==/.test(read('apps/web/src/components/command-palette
   fail('command-palette.tsx 按域写死了动作可见性，改在 manifest 里声明');
 }
 
+// 内核模块不许 import 插件目录的代码（§8.2「不一致」第 6 条，J1.6 解掉 system → smart-home）
+for (const kernelDir of ['system', 'today', 'activities', 'notifications', 'events']) {
+  const dir = join(ROOT, 'apps/api/src', kernelDir);
+  if (!existsSync(dir)) continue;
+  for (const file of readdirSync(dir).filter((one) => one.endsWith('.ts'))) {
+    const text = read(`apps/api/src/${kernelDir}/${file}`);
+    for (const key of c.PLUGIN_KEYS) {
+      if (existsSync(join(ROOT, 'apps/api/src', key)) && text.includes(`from '../${key}/`)) {
+        fail(`内核 apps/api/src/${kernelDir}/${file} import 了插件 ${key} 的代码`);
+      }
+    }
+  }
+}
+
 // ---- 4. contracts 内的登记（dist 运行时结果） ---------------------------------------------------------
 
 const prefixes = c.EVENT_ROUTES.map((route) => route.prefix);
@@ -160,7 +174,15 @@ for (const plugin of PLUGINS) {
     fail(`${where} actions.ts 还手写着本域动作`);
   }
   if (hasKey(block('apps/web/src/lib/events.ts', 'const HANDWRITTEN_QUERY_KEYS'), key)) fail(`${where} web events.ts 还手写着查询 key`);
-  if (hasKey(block('apps/api/src/system/system-modules.service.ts', 'const sources:'), key)) fail(`${where} system-modules.service.ts 还手写着 hasData`);
+  const systemModules = read('apps/api/src/system/system-modules.service.ts');
+  if (systemModules.includes(`key === '${key}'`)) fail(`${where} system-modules.service.ts 还在按 key 特判 hasData`);
+  if (plugin.module.hasData.kind === 'server') {
+    const registered = new RegExp(`register\\(\\s*'${escape(plugin.module.hasData.id)}'`);
+    const sources = readdirSync(join(ROOT, 'apps/api/src', key)).filter((file) => file.endsWith('.ts'));
+    if (!sources.some((file) => registered.test(read(`apps/api/src/${key}/${file}`)))) {
+      fail(`${where} hasData 判定 ${plugin.module.hasData.id} 没有在 apps/api/src/${key}/ 里注册到 ModuleHasDataRegistry`);
+    }
+  }
   for (const marker of ['const HANDWRITTEN_ORDER', 'const HANDWRITTEN_OFF_KEYS']) {
     if (hasKey(block('apps/api/src/today/today-attention.service.ts', marker), key)) fail(`${where} today-attention.service.ts ${marker} 还有本域`);
   }

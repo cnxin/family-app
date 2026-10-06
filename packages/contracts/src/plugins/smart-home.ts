@@ -1,4 +1,8 @@
-// J0 草稿：智能家居。每个字段注明现在登记在哪；未接线，J1 才改成由它生成。
+// 智能家居（J1.6，由 J0 草稿转正）。
+// smart-home-linkages.service.ts 直接注入 TasksService / RemindersService / ShoppingService，在自己的事务里建任务、提醒、购物项；
+// smart-home-links.service.ts 订阅任务打勾事件触发设备联动。都属跨插件调用，原样保留，J1b 改走契约门面 / 内核事件与事务内钩子。
+// hasData 要读环境变量里的服务器默认 HA 配置，静态 SQL 表达不了：由 smart-home-has-data.ts 按 id 注册到内核，内核不再 import 本插件。
+// ⌘K 与 agent 都还没有智能家居的动作 / 查询（§8.2 缺项，J3 / J4 补）。
 import type { PluginManifest } from './types';
 
 export const smartHomeManifest = {
@@ -8,8 +12,6 @@ export const smartHomeManifest = {
   manifestVersion: 1,
   tier: 'shelf',
   requires: [
-    // smart-home-linkages.service.ts 直接注入 TasksService / RemindersService / ShoppingService，
-    // 在自己的事务里 createWithinTransaction。J1 要改成走契约门面，不再 import 别的插件的 Service。
     {
       plugin: 'tasks',
       via: 'contract',
@@ -20,18 +22,14 @@ export const smartHomeManifest = {
     { plugin: 'tasks', via: 'event', uses: ['tasks.completed'], optional: true, reason: '家务打勾触发设备联动（smart-home-links.service.ts）' },
     { plugin: 'reminders', via: 'contract', uses: ['POST /reminders'], optional: true, reason: '滤芯到期建提醒' },
     { plugin: 'shopping', via: 'contract', uses: ['POST /shopping-items'], optional: true, reason: '耗材快用完加进购物清单' },
-    { plugin: 'today', via: 'kernel', uses: ['AttentionRegistry'], reason: '往今天页挂留意（已是注册表模式）' },
+    { plugin: 'today', via: 'kernel', uses: ['AttentionRegistry', 'ModuleHasDataRegistry'], reason: '往今天页挂留意、向模块开关提供 hasData 判定' },
   ],
   nav: [{ key: 'smart-home', label: '智能家居', glyph: '智', scene: 'house', path: '/house/smart-home' }],
-  module: {
-    overridable: true,
-    // system-modules.service.ts 的 smartHomeSource：要读环境变量里的服务器默认 HA 配置，静态 SQL 表达不了。
-    // 现在内核 system 模块反向 import 了 smart-home/home-assistant.config；改成 server 判定后这条反向依赖消失。
-    hasData: { kind: 'server', id: 'smart-home.hasData' },
-  },
+  module: { overridable: true, hasData: { kind: 'server', id: 'smart-home.hasData' } },
   events: {
     routes: [
       { prefix: '/smart-home' },
+      // HA 打来的 webhook，没有登录用户，服务端显式发
       { prefix: '/smart-home/webhook', emit: 'explicit' },
     ],
     queryKeys: [
@@ -46,15 +44,15 @@ export const smartHomeManifest = {
     listActionLabel: '去看看',
     path: '/house/smart-home',
     order: 9,
+    mergedTitle: '智能家居有 {n} 件事要看一下',
+    // 三条规则在 smart-home-attention.ts，已挂 AttentionRegistry；这里只管文案、落点、排序与开关归属
     kinds: [
       { kind: 'filter', server: 'smart-home.filter', actionLabel: '看滤芯', path: '/house/smart-home?device={id}', title: '{name}的滤芯快用完了' },
-      // 指向别的插件的页面：留意的落点可以跨插件，但只是深链，不构成代码依赖
+      // 落点可以指向别的插件的页面：只是深链，不构成代码依赖
       { kind: 'laundry', server: 'smart-home.laundry', actionLabel: '去晾衣服', path: '/schedule/tasks?task={id}', title: '衣服好了两个多小时，还没晾' },
       { kind: 'offline', server: 'smart-home.offline', actionLabel: '看连接', path: '/house/smart-home/settings', capability: 'manage_integrations', title: 'Home Assistant 连不上一个多小时了' },
     ],
-    mergedTitle: '智能家居有 {n} 件事要看一下',
   },
-  // ⌘K 与 agent 现在都没有智能家居的动作 / 查询；J3 再补（device / room 槽位），J1 不加，免得改变现有行为
   settingsRows: [
     {
       title: '智能家居',
@@ -66,10 +64,11 @@ export const smartHomeManifest = {
   ],
   usage: {
     label: '智能家居',
+    // 控制按来源分开数：联动按的记在家庭主人名下（联动以他的名义执行），不是他本人按的
     tables: [
-      { label: '智能家居（手动控制）', table: 'smart_home_commands', memberColumn: 'memberId', createdColumn: 'createdAt', where: "source = 'manual'" },
-      { label: '智能家居（联动控制）', table: 'smart_home_commands', memberColumn: 'memberId', createdColumn: 'createdAt', where: "source = 'link'" },
-      { label: '智能家居（HA 回报）', table: 'smart_home_events', memberColumn: null, createdColumn: 'receivedAt', where: "event <> 'ping'" },
+      { label: '智能家居（手动控制）', table: 'smart_home_commands', memberColumn: 'memberId', createdColumn: 'createdAt', where: "source = 'manual'", note: 'source = manual' },
+      { label: '智能家居（联动控制）', table: 'smart_home_commands', memberColumn: 'memberId', createdColumn: 'createdAt', where: "source = 'link'", note: 'source = link，记在家庭主人名下' },
+      { label: '智能家居（HA 回报）', table: 'smart_home_events', memberColumn: null, createdColumn: 'receivedAt', where: "event <> 'ping'", note: 'HA 打来的，没有成员' },
     ],
   },
 } as const satisfies PluginManifest;

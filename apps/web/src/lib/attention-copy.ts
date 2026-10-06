@@ -12,24 +12,18 @@ export type AttentionCopy = {
 
 const HANDWRITTEN_LABELS: Partial<Record<AttentionItem['domain'], string>> = {
   backups: '备份',
-  'smart-home': '智能家居',
 };
 
 const HANDWRITTEN_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   backups: '看备份',
-  'smart-home': '去看看',
 };
 
 const kindActions: Partial<Record<string, string>> = {
   backup: '看备份',
-  filter: '看滤芯',
-  laundry: '去晾衣服',
-  offline: '看连接',
 };
 
 const HANDWRITTEN_LIST_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   backups: '看备份',
-  'smart-home': '去看看',
 };
 
 // 已迁插件的域名、默认按钮、列表按钮由 manifest 生成（J1）
@@ -63,13 +57,6 @@ function singleTitle(item: AttentionItem, today: string) {
   switch (item.kind) {
     case 'backup':
       return '备份需要看一下';
-    // 智能家居（H3 E5）：滤芯的 entity 是设备，晾衣服的是家务，连不上的是 Home Assistant 本身
-    case 'filter':
-      return `${name}的滤芯快用完了`;
-    case 'laundry':
-      return '衣服好了两个多小时，还没晾';
-    case 'offline':
-      return 'Home Assistant 连不上一个多小时了';
     default:
       return item.dueOn ? `${name} ${soon}需要处理` : `${name}需要处理`;
   }
@@ -92,8 +79,6 @@ function mergedTitle(item: AttentionItem): string {
   switch (item.domain) {
     case 'backups':
       return `备份有 ${n} 件事要看一下`;
-    case 'smart-home':
-      return `智能家居有 ${n} 件事要看一下`;
     default:
       return `${n} 件${labels[item.domain] ?? String(item.domain)}要处理`;
   }
