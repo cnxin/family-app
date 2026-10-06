@@ -248,3 +248,59 @@ AA 分摊、贷款台账、储蓄目标、多币种、对外 token API、整批�
 | 多账本 / 邀请制成员 | 小管家已有家庭与成员体系 |
 | SSR + SQLite 架构 | 栈不同 |
 | Open API token | 由助理层 propose 工具覆盖 |
+
+## 8. 执行记录（Phase K 第一批：K0 → K3 → K4，2026-10-06）
+
+### 8.1 进度
+
+| 阶段 | 状态 | 说明 |
+| --- | --- | --- |
+| K0 分类补齐与契约 | ☑ | 默认分类 27 个；契约加 credit、import / recurring / screenshot、流水三个可选字段 |
+| K3 周期账单 | ☑ | 表与接口、自动记账调度、到期留意、汇总页固定支出、「固定支出」分段 |
+| K4 信用卡账户 | ☑ | 额度 / 账单日 / 还款日、「欠 ¥…」、还款日留意、转账还款 |
+| K1 账单导入 | ☐ | 等 King 把脱敏样例放进 `apps/api/test/fixtures/finance/` 后另起一批 |
+| K2 截图记账 | ☐ | 等 J4 云端适配器 |
+
+### 8.2 提交
+
+| 步 | 内容 | 提交 | 合并 | CI |
+| --- | --- | --- | --- | --- |
+| 收尾 | J1b 演示栈升级记录、执行顺序调整 | `3623461` | `da32c88` | 一次过（#37471521146） |
+| K0 | 默认分类 12 → 27、契约 | `7481f2b` | `0f8f1bb` | 一次过（#37472150658） |
+| K3.1 | `finance_recurring` 表与增删改 / 「已付」接口 | `da68b9b` | `9091657` | 一次过（#37473856349） |
+| K3.2 | 自动记账调度、到期留意、固定支出汇总、资产门面 | `3b4c8e2` | `0d6a2ff` | 一次过（#37475609618） |
+| K3.3 | 「固定支出」分段、概览固定支出一行 | `bdadd37` | `4bb7a58` | 一次过（#37476934192） |
+| K4 | 信用卡账户；固定支出开关加「自动记账」字样（截图走查补的） | `6b0bc5e`、`9f13e99` | `327040a` | 一次过（#37479543765；`6b0bc5e` 那次 #37478969383 被紧接着推的 `9f13e99` 按并发组取消，以分支头为准） |
+| 收口 | 手机上固定支出一行放得下（截图走查补的）、本进度文档 | `461352e`、见本次合并 | 见本次合并 | 见本次合并 |
+
+**新表 / 新列（最终结构）**
+
+- `finance_recurring`（迁移 `AddFinanceRecurring1785233800000`）：`id` / `householdId`；`title` varchar(120)；`type` `expense` / `income`；`amount` numeric(14,2) > 0；`accountId` / `categoryId`（FK，RESTRICT）；`cadence` `weekly` / `monthly` / `quarterly` / `yearly`；`anchorOn` date；`nextDueOn` date（≥ `anchorOn`）；`autoPost` bool 默认 false；`lastPostedOn` date 可空；`isActive` 默认 true；`version` ≥ 1；`createdById` / `updatedById`；`createdAt` / `updatedAt`。索引 `(householdId, isActive, nextDueOn)`。
+- `finance_transactions` 加 `externalId` varchar(64)、`merchant` varchar(120)、`attachmentPath` varchar(255)（都可空，K1 / K2 用），部分唯一索引 `(householdId, sourceType, externalId) WHERE externalId IS NOT NULL`；来源 CHECK 加 `import` / `recurring` / `screenshot`。
+- `finance_accounts`（迁移 `AddFinanceCreditAccounts1785233900000`）：类型加 `credit`；加 `creditLimit` numeric(14,2)（> 0）、`billingDay` / `dueDay` smallint（1～31）；CHECK 非信用卡三项必须为空。
+
+**接口**：`GET /finance/recurring`（view_finance）；`POST` / `PATCH /finance/recurring/:id` / `DELETE /finance/recurring/:id`（manage_finance，乐观锁）；`POST /finance/recurring/:id/pay`（record_finance，带 `dueOn`，幂等）。`GET /finance/summary` 加 `fixedCosts { recurring, assets, total }`。建 / 改账户可带 `creditLimit` / `billingDay` / `dueDay`。新路由都在 manifest 的 `/finance` 前缀下，事件路由不用改。
+
+**跨插件**：K3 唯一的跨插件点是资产门面 `monthlyRecurringCost(householdId)`（`contracts/plugins/assets.facade.ts`），财务 manifest `dependsOn: ['assets']`，check-plugins 断言一致。
+
+**留意**：`finance.recurring`（`FinanceRecurringDueProvider`）、`finance.credit`（`FinanceCreditDueProvider`），都走 `AttentionRegistry`，kind 与文案在 manifest；都不设能力门槛。J1.7 的留意对比探针在 main 与 K3.2 上对本地库各跑一次（6 份成员 × 角色、16 条），逐字节一致。
+
+### 8.3 与计划不一样的地方
+
+1. **K0 默认分类是 27 个，不是 30**：§2.6 的名单是在原 12 个上补 15 个（支出 12、收入 3），照名单做；没有另编 3 个凑数。
+2. **汇总页「固定支出」只有两项**：周期账单（只算在用的支出）+ 资产续费。观影没有订阅费用的数据——观影里的「订阅」是 MoviePilot 的下载订阅，没有金额；视频会员这类付费订阅登记在资产的「订阅」分类里，已算进资产续费——所以没加观影门面，`dependsOn` 只有 `assets`。资产续费月均的口径：在用的订阅类资产，购买价格当作每期续费金额 ÷ 续费间隔月数。
+3. **新建周期账单不往回补**：第一次应付日早于今天时，下一期从不早于今天的那一期开始（不然老房租一建就补一年）。「漏跑逐期补」针对的是调度停机（NAS 关机）；验收的「漏跑 3 期补 3 条」在黑盒里把下一期拨回三期前来模拟。
+4. **到期没付的继续留在留意里、标逾期**（和资产续费一样），计划写的是「到期前 3 天到当天」。
+5. **「已付」的细节**：带上看到的那一期（重复点返回同一笔）；记账日是点的那天，自动落的记账日是那一期的应付日；到期前 3 天起才能点；自动记账的、停用的不能点。
+6. **调度**：沿用助理例行任务的进程内定时轮询（默认每分钟），每家按自己时区 06:00 判当天的能不能落（现有家庭都是上海）；自动落的流水记在最早的在用家庭主人名下、显示名「自动记账」。
+7. **K3.1 把 `FinanceService` 从 `finance.module.ts` 原样搬进 `finance.service.ts`**（逐字一致）：周期账单服务要用它，留在模块文件里会互相 import。
+8. 流水的三列在 K3 的迁移里加（指令写「K3 / K1 的迁移」，K3 先到）。
+9. **K4**：信用卡的账单日、还款日必填，额度选填；新建时界面填「当前欠多少」，存成负的初始余额；余额 0 写「已还清」，正数写「多还 ¥…」。信用卡留意的名字里带欠多少（文案模板只有 `{name}` / `{soon}`），「去还款」直接打开转账表单；过了还款日看下个月的，不标逾期。
+10. **固定支出列表上的「删除」放在编辑对话框里**（仍二次确认）：390 宽的手机上一行放不下「已付 + 自动记账 + 编辑 / 停用 / 删除」，手机上开关字样也缩成「自动」。
+11. 财务留意以前只有一种，这批起会和别的种类合成一张卡：补了 `mixedTitle`（「{n} 件财务的事要看」），`listActionLabel` 改成「去财务看看」（这项只在混合卡上用，以前用不到）。
+
+### 8.4 发现但没修
+
+- 资产表没有专门的「续费金额」，资产续费月均借用购买价格；登记订阅时没填价格的不算进去。
+- 自动记账落失败（比如账户被停用）只记一句日志，同一天不重复报；没有进留意或通知。
+- 老家庭的新分类在第一次读分类时补（打开财务页、记一笔都会读），升级后不会自己补。

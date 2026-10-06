@@ -553,8 +553,9 @@ export class PointsTaskHooks implements OnModuleInit {
 | `inventory` | `consumeForMaintenance(tx, …)`、`listIngredientStock(tx, …)`、`listShoppingReceipts(…)`、`hasShoppingReceipt(…)` | 资产（维护记出库，同一事务）、购物（生成清单扣库存、已入库的自动项保留；列表的入库确认；删除前检查） |
 | `menus` | `listIngredientNeeds(tx, householdId, date)` | 购物（按某天已接受 / 在做的菜生成清单） |
 | `shopping` | `hasUncheckedItem(tx, householdId, customName)` | 智能家居（滤芯低时清单里是否已有没买的滤芯） |
+| `assets` | `monthlyRecurringCost(householdId)`（Phase K3 加） | 财务（汇总页「固定支出」里的资产续费月均） |
 
-`dependsOn` 结果：calendar `[tasks]`、reminders `[calendar]`、smart-home `[tasks, shopping]`、inventory `[locations]`、assets `[locations, inventory]`、shopping `[menus, inventory]`。
+`dependsOn` 结果：calendar `[tasks]`、reminders `[calendar]`、smart-home `[tasks, shopping]`、inventory `[locations]`、assets `[locations, inventory]`、shopping `[menus, inventory]`、finance `[assets]`（Phase K3）。
 
 **事务内钩子**：
 
@@ -565,6 +566,8 @@ export class PointsTaskHooks implements OnModuleInit {
 | `smart-home.link-fired` | 智能家居（联动的事务） | 任务 → 提醒 → 购物（`TRANSACTION_HOOK_ORDER` 写死：提醒校验会读刚建的家务行） | 建家务（id 由智能家居预先生成）/ 挂在它上面的提醒 / 清单项 |
 
 **插件事件**：`tasks.completed`（任务，提交后）→ 智能家居联动规则（`smart-home-links.service.ts`）。原来任务目录的 `TaskEvents` 删掉，语义照旧。
+
+**Phase K 第一批新加的留意**（走 J1.7 的 `AttentionRegistry`，kind 与文案在财务 manifest）：`finance.recurring`（没开自动记账的周期账单，到期前 3 天起，逾期标出来，`FinanceRecurringDueProvider`）、`finance.credit`（信用卡还款日前 3 天到当天、还欠着钱，`FinanceCreditDueProvider`）。见 `docs/finance-plan.md` §8。
 
 **纯函数**：`taskOccursOn`、`buildRecipeSnapshot` 挪进 `packages/shared`（单测随之搬到 `kernel-units.check.ts`）；`usableLocationId` 要查库，归位置门面。
 
