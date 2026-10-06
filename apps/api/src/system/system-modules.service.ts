@@ -17,11 +17,6 @@ import { homeAssistantServerDefaultConfigured } from '../smart-home/home-assista
 const sources: Partial<
   Record<Exclude<ShelfModuleKey, 'activity' | 'assistant' | 'smart-home'>, string>
 > = {
-  media: `SELECT 1 FROM household_media WHERE "householdId" = $1
-    UNION ALL SELECT 1 FROM integrations WHERE "householdId" = $1
-      AND kind IN ('plex', 'emby', 'moviepilot') AND NULLIF("baseUrl", '') IS NOT NULL
-    UNION ALL SELECT 1 FROM household_media_source_configs WHERE "householdId" = $1
-      AND (NULLIF("baseUrl", '') IS NOT NULL OR NULLIF("credentialHint", '') IS NOT NULL)`,
 };
 
 // 智能家居：连接器配好了（家庭自己的一行：启用 + 地址 + 令牌；没有这一行才看服务器默认）且白名单非空。

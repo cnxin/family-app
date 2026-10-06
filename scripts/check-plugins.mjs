@@ -96,7 +96,8 @@ for (const plugin of PLUGINS) {
   for (const proposal of c.proposalsOf(plugin)) if (proposal.legacyTool) claim(proposal.legacyTool, plugin.key);
 }
 const unowned = tools.filter((tool) => !owners.has(tool));
-if (migrated.size === c.PLUGIN_KEYS.length && unowned.length) fail(`18 个插件都迁完了，还有无主工具：${unowned.join('、')}`);
+// J1.6 起每个 agent 工具都有归属（插件 manifest 或内核清单 KERNEL_AGENT_TOOLS），新加工具必须登记
+if (unowned.length) fail(`有无主的 agent 工具：${unowned.join('、')}（登记进某个插件 manifest 的 queries / actions / proposals，或 KERNEL_AGENT_TOOLS）`);
 
 // ⌘K 动作对谁可见只看 manifest，不在面板里按域写死权限特判（§8.6 第 3、5 条）
 if (/action\.domain\s*[!=]==/.test(read('apps/web/src/components/command-palette.tsx'))) {
