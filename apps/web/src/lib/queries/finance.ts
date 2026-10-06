@@ -6,6 +6,8 @@ import type {
   FinanceBudget,
   FinanceCategory,
   FinanceCategoryKind,
+  FinanceRecurring,
+  FinanceRecurringCadence,
   FinanceSummary,
   FinanceTransaction,
   FinanceTransactionType,
@@ -20,6 +22,24 @@ export const ACCOUNT_TYPE_LABELS: Record<FinanceAccountType, string> = {
   other: '其他',
   credit: '信用卡',
 };
+
+export const CADENCE_LABELS: Record<FinanceRecurringCadence, string> = {
+  weekly: '每周',
+  monthly: '每月',
+  quarterly: '每季度',
+  yearly: '每年',
+};
+
+/** 下一期离今天多远：今天 / N 天后 / 已过 N 天；再远就只写日期。 */
+export function recurringDueText(nextDueOn: string, today: string) {
+  const days = Math.round((Date.parse(`${nextDueOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  const [, month, day] = nextDueOn.split('-').map(Number);
+  const date = `${month} 月 ${day} 日`;
+  if (days < 0) return { text: `${date} · 已过 ${-days} 天`, tone: 'danger' as const };
+  if (days === 0) return { text: `${date} · 今天`, tone: 'warn' as const };
+  if (days <= 3) return { text: `${date} · ${days} 天后`, tone: 'warn' as const };
+  return { text: date, tone: 'soft' as const };
+}
 
 export const TRANSACTION_TYPE_LABELS: Record<FinanceTransactionType, string> = {
   expense: '支出',
@@ -83,6 +103,13 @@ export function useFinanceTransactions(month: string, type: FinanceTransactionTy
       api<FinanceTransaction[]>(
         `/finance/transactions?month=${month}&limit=100${type === 'all' ? '' : `&type=${type}`}`,
       ),
+  });
+}
+
+export function useFinanceRecurring() {
+  return useQuery({
+    queryKey: ['finance', 'recurring'],
+    queryFn: () => api<FinanceRecurring[]>('/finance/recurring'),
   });
 }
 
@@ -205,5 +232,47 @@ export function useRemoveFinanceBudget() {
       api<{ id: string }>(`/finance/budgets/${id}?expectedVersion=${expectedVersion}`, {
         method: 'DELETE',
       }),
+  );
+}
+
+export type FinanceRecurringInput = {
+  title: string;
+  type: FinanceCategoryKind;
+  amount: number;
+  accountId: string;
+  categoryId: string;
+  cadence: FinanceRecurringCadence;
+  anchorOn: string;
+  autoPost: boolean;
+};
+
+/** 新建不带 expectedVersion；修改必须带（页面上看到的那个版本），被别人改过 / 已付推进过会 409。 */
+export function useSaveFinanceRecurring() {
+  return useFinanceMutation<
+    { id?: string; expectedVersion?: number; body: Partial<FinanceRecurringInput> & { isActive?: boolean } },
+    FinanceRecurring
+  >(({ id, expectedVersion, body }) =>
+    id
+      ? api<FinanceRecurring>(`/finance/recurring/${id}`, { method: 'PATCH', body: { ...body, expectedVersion } })
+      : api<FinanceRecurring>('/finance/recurring', { method: 'POST', body }),
+  );
+}
+
+export function useRemoveFinanceRecurring() {
+  return useFinanceMutation<{ id: string; expectedVersion: number }, { id: string }>(({ id, expectedVersion }) =>
+    api<{ id: string }>(`/finance/recurring/${id}?expectedVersion=${expectedVersion}`, { method: 'DELETE' }),
+  );
+}
+
+/** 「已付」带上看到的那一期：重复点同一期后端返回同一笔，不会记成两笔。 */
+export function usePayFinanceRecurring() {
+  return useFinanceMutation<
+    { id: string; dueOn: string },
+    { recurring: FinanceRecurring; transaction: FinanceTransaction }
+  >(({ id, dueOn }) =>
+    api<{ recurring: FinanceRecurring; transaction: FinanceTransaction }>(`/finance/recurring/${id}/pay`, {
+      method: 'POST',
+      body: { dueOn },
+    }),
   );
 }

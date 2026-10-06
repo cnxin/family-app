@@ -1,11 +1,13 @@
 import { useHouseholdToday } from '../lib/use-household-today';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCreateIntent } from '../lib/create-intent';
 import {
   monthLabel,
   shiftMonth,
   useFinanceAccounts,
   useFinanceCategories,
+  useFinanceRecurring,
   useFinanceSummary,
   yuan,
 } from '../lib/queries';
@@ -14,12 +16,14 @@ import { AccountsPanel } from '../components/finance-accounts';
 import { BudgetBar, BudgetsPanel } from '../components/finance-budgets';
 import { CategoriesPanel } from '../components/finance-categories';
 import { LedgerPanel } from '../components/finance-ledger';
+import { RecurringPanel } from '../components/finance-recurring';
 import { TransactionForm } from '../components/finance-transaction-form';
 import { QueryFrame } from '../components/query-state';
 import { ListSkeleton } from '../components/skeleton';
 import { Button, EmptyState, Page, Panel, Segmented } from '../components/ui';
 
-type View = 'overview' | 'ledger' | 'budgets' | 'accounts';
+type View = 'overview' | 'ledger' | 'recurring' | 'budgets' | 'accounts';
+const VIEWS: readonly View[] = ['overview', 'ledger', 'recurring', 'budgets', 'accounts'];
 
 function Tile({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -37,7 +41,13 @@ export function FinancePage() {
   const today = useHouseholdToday();
   const currentMonth = today.slice(0, 7);
   const [month, setMonth] = useState(currentMonth);
-  const [view, setView] = useState<View>('overview');
+  // 留意里「去看看」带 ?view=recurring 进来；预算、账户成员看不到，带了也回概览
+  const [params] = useSearchParams();
+  const [view, setView] = useState<View>(() => {
+    const wanted = params.get('view') as View | null;
+    if (!wanted || !VIEWS.includes(wanted)) return 'overview';
+    return !canManage && (wanted === 'budgets' || wanted === 'accounts') ? 'overview' : wanted;
+  });
   const [recording, setRecording] = useState(false);
   const [initialMode, setInitialMode] = useState<'expense' | 'income'>('expense');
   useCreateIntent((kind) => {
@@ -48,6 +58,8 @@ export function FinancePage() {
   const summary = useFinanceSummary(month);
   const accounts = useFinanceAccounts();
   const categories = useFinanceCategories();
+  const recurring = useFinanceRecurring();
+  const fixed = summary.data?.fixedCosts;
 
   const rows = accounts.data ?? [];
   const usable = rows.filter((one) => one.isActive);
@@ -96,6 +108,8 @@ export function FinancePage() {
             options={[
               { value: 'overview' as const, label: '概览' },
               { value: 'ledger' as const, label: '流水' },
+              // 固定支出成员也能看（只读 + 到期点「已付」）
+              { value: 'recurring' as const, label: '固定支出' },
               // 预算、账户与分类只有管理员能管，成员不出这两个分段
               ...(canManage
                 ? [
@@ -110,6 +124,15 @@ export function FinancePage() {
     >
       {view === 'ledger' ? (
         <LedgerPanel month={month} canManage={canManage} />
+      ) : view === 'recurring' ? (
+        <QueryFrame queries={[recurring, accounts, categories]} skeleton={<ListSkeleton rows={4} />}>
+          <RecurringPanel
+            rows={recurring.data ?? []}
+            accounts={rows}
+            categories={categories.data ?? []}
+            canManage={canManage}
+          />
+        </QueryFrame>
       ) : view === 'budgets' ? (
         <QueryFrame queries={[summary, categories]} skeleton={<ListSkeleton rows={4} />}>
           <BudgetsPanel
@@ -195,6 +218,25 @@ export function FinancePage() {
                   ))}
                 </div>
               </div>
+
+              {fixed && fixed.total > 0 ? (
+                <div>
+                  <h2 className="mb-2 px-1 text-[13px] font-semibold text-ink-soft">固定支出</h2>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-border px-3.5 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px]">
+                        每月约 <span className="font-semibold tabular-nums">{yuan(fixed.total)}</span>
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-ink-soft">
+                        周期账单 {yuan(fixed.recurring)} · 资产续费 {yuan(fixed.assets)}（订阅类资产按续费周期折算）
+                      </p>
+                    </div>
+                    <Button variant="ghost" className="h-8 px-2 text-[13px]" onClick={() => setView('recurring')}>
+                      看固定支出
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
 
               {summary.data?.budgets.length ? (
                 <div>
