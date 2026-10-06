@@ -97,6 +97,16 @@ for (const plugin of PLUGINS) {
   if (seen.has(plugin.key)) fail(`manifest ${plugin.key} 重复`);
   seen.add(plugin.key);
   if (plugin.manifestVersion !== 1) fail(`${plugin.key}：manifestVersion 必须为 1`);
+  // J1b：dependsOn / hooks 的形状（与代码是否一致的强制断言在 J1b.6）
+  for (const dependency of plugin.dependsOn ?? []) {
+    if (!c.PLUGIN_KEYS.includes(dependency)) fail(`${plugin.key}：dependsOn 里的 ${dependency} 不是插件 key`);
+    if (dependency === plugin.key) fail(`${plugin.key}：dependsOn 不能写自己`);
+  }
+  if (new Set(plugin.dependsOn ?? []).size !== (plugin.dependsOn ?? []).length) fail(`${plugin.key}：dependsOn 有重复`);
+  for (const hook of plugin.hooks ?? []) {
+    if (!c.TRANSACTION_HOOK_NAMES.includes(hook)) fail(`${plugin.key}：hooks 里的 ${hook} 不在 contracts 的 TRANSACTION_HOOK_NAMES 里`);
+  }
+  if (new Set(plugin.hooks ?? []).size !== (plugin.hooks ?? []).length) fail(`${plugin.key}：hooks 有重复`);
 }
 
 // ---- 2. 别名表：各 key 空间的每个值都有唯一归属，别名表里没有死值 -------------------------------------------

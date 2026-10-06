@@ -6,3 +6,5 @@ export * from './roles';
 export * from './map-geometry';
 export * from './map-snap';
 export * from './map-split';
+export * from './task-occurrence';
+export * from './recipe-snapshot';

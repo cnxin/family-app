@@ -31,6 +31,7 @@ import { mediaManifest } from './media';
 import { smartHomeManifest } from './smart-home';
 
 export * from './core';
+export * from './kernel';
 export * from './keys';
 export * from './types';
 

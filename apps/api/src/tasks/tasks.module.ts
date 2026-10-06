@@ -31,7 +31,7 @@ import {
   Member,
   Notification,
 } from '../entities';
-import { isHouseholdManager, parseDateOnly } from '@family/shared';
+import { isHouseholdManager, parseDateOnly, taskOccursOn } from '@family/shared';
 import {
   createTaskBody,
   taskRangeQuery,
@@ -48,28 +48,6 @@ const DAY_MS = 86_400_000;
 
 function dateString(timestamp: number) {
   return new Date(timestamp).toISOString().slice(0, 10);
-}
-
-export function taskOccursOn(task: HouseholdTask, date: string) {
-  const startsAt = parseDateOnly(task.startsOn, '开始日期');
-  const dueAt = parseDateOnly(date, '任务日期');
-  if (dueAt < startsAt) return false;
-  if (task.endsOn && dueAt > parseDateOnly(task.endsOn, '结束日期')) {
-    return false;
-  }
-  const differenceDays = Math.round((dueAt - startsAt) / DAY_MS);
-  if (task.recurrence === 'once') return differenceDays === 0;
-  if (task.recurrence === 'daily') {
-    return differenceDays % task.repeatInterval === 0;
-  }
-  if (task.recurrence === 'weekly') {
-    return differenceDays % (task.repeatInterval * 7) === 0;
-  }
-  const starts = task.startsOn.split('-').map(Number);
-  const due = date.split('-').map(Number);
-  const monthDifference =
-    (due[0] - starts[0]) * 12 + (due[1] - starts[1]);
-  return due[2] === starts[2] && monthDifference % task.repeatInterval === 0;
 }
 
 function occurrenceDates(task: HouseholdTask, start: string, end: string) {

@@ -10,6 +10,9 @@
 //     （动态流水 module、通知 module、导航分段 key、提案 actionType）是内核的迁移包袱，统一登记在
 //     keys.ts 的别名表里，不进 manifest——第三方插件没有历史 key。
 
+import type { TransactionHookName } from './kernel';
+import type { PluginKey } from './keys';
+
 /** 角色。与 apps/api 的 MemberRole 一致。 */
 export type PluginRole = 'owner' | 'admin' | 'member';
 
@@ -249,6 +252,13 @@ export interface PluginManifest {
   manifestVersion: 1;
   tier: PluginTier;
     requires?: readonly PluginDependency[];
+  /**
+   * J1b：本插件从 PluginFacadeRegistry 取了哪些插件的门面。代码里取了谁就必须声明谁，声明了不用也不行
+   * （scripts/check-plugins.mjs 断言）。和上面说明性质的 requires 不同，这个是被检查的。
+   */
+  dependsOn?: readonly PluginKey[];
+  /** J1b：本插件订阅了哪些事务内钩子（TransactionHookRegistry.on）。同样被 check-plugins 断言。 */
+  hooks?: readonly TransactionHookName[];
   nav: readonly PluginNavSegment[];
   /** 旧路径 → 新路径（现 apps/web/src/lib/routes.ts MOVED）。 */
   legacyPaths?: readonly (readonly [string, string])[];

@@ -55,8 +55,8 @@ import {
   ReminderStatus,
   TravelPlan,
 } from '../entities';
-import { taskOccursOn, TasksModule } from '../tasks/tasks.module';
-import { isHouseholdManager } from '@family/shared';
+import { TasksModule } from '../tasks/tasks.module';
+import { isHouseholdManager, taskOccursOn } from '@family/shared';
 
 class ReminderSourceRangeDto {
   @IsISO8601({ strict: true })
