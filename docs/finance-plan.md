@@ -5,6 +5,7 @@
 > 排期：**排在 J1 / J1b 之后。** K0、K1、K3、K4 不依赖助理层，可以在等家庭试用原话（J3 前置条件）的空档做；K2 的截图识别依赖 J4 的云端档配置与脱敏，放到 J4 之后。
 > **King 拍板（2026-10-05）**：同意本计划全部决定——分期 K0→K1→K3→K4→（J4 后）K2、只借设计不搬代码、权限口径、导入先预览再入库、单号去重、K2 走云端档。K1 开工前先拿真实的支付宝/微信导出文件核对 §3-K1 的导出路径与列名。
 > **2026-10-06 执行顺序调整为 K0 → K3 → K4 → K1（K1 等真实账单样例）。**
+> **2026-10-07 K1 已做**：King 不再提供真实文件，样例按已知格式自造；演示栈升级后由 King 用真实导出文件核对列名（对不上只改 `import-formats.ts`，见 §8.5）。
 > 定位：财务是 18 个插件之一（key `finance`），本计划所有改动都落在财务插件自己的表、服务、页面和 manifest 里，不动内核。
 
 ---
@@ -249,7 +250,7 @@ AA 分摊、贷款台账、储蓄目标、多币种、对外 token API、整批�
 | SSR + SQLite 架构 | 栈不同 |
 | Open API token | 由助理层 propose 工具覆盖 |
 
-## 8. 执行记录（Phase K 第一批：K0 → K3 → K4，2026-10-06）
+## 8. 执行记录（Phase K 第一批：K0 → K3 → K4，2026-10-06；第二批：K1，2026-10-07）
 
 ### 8.1 进度
 
@@ -258,7 +259,7 @@ AA 分摊、贷款台账、储蓄目标、多币种、对外 token API、整批�
 | K0 分类补齐与契约 | ☑ | 默认分类 27 个；契约加 credit、import / recurring / screenshot、流水三个可选字段 |
 | K3 周期账单 | ☑ | 表与接口、自动记账调度、到期留意、汇总页固定支出、「固定支出」分段 |
 | K4 信用卡账户 | ☑ | 额度 / 账单日 / 还款日、「欠 ¥…」、还款日留意、转账还款 |
-| K1 账单导入 | ☐ | 等 King 把脱敏样例放进 `apps/api/test/fixtures/finance/` 后另起一批 |
+| K1 账单导入 | ☑ | 第二批（§8.5）：解析器与格式映射表、导入批次 / 商户规则两张表、上传 / 选列 / 预览 / 确认接口、「导入账单」对话框与导入记录；样例自造，待 King 用真实文件核对 |
 | K2 截图记账 | ☐ | 等 J4 云端适配器 |
 
 ### 8.2 提交
@@ -304,3 +305,48 @@ AA 分摊、贷款台账、储蓄目标、多币种、对外 token API、整批�
 - 资产表没有专门的「续费金额」，资产续费月均借用购买价格；登记订阅时没填价格的不算进去。
 - 自动记账落失败（比如账户被停用）只记一句日志，同一天不重复报；没有进留意或通知。
 - 老家庭的新分类在第一次读分类时补（打开财务页、记一笔都会读），升级后不会自己补。
+
+### 8.5 K1 账单导入（第二批，2026-10-07）
+
+样例文件按已知格式自己造（King 不再提供真实文件），放 `apps/api/test/fixtures/finance/`；演示栈升级后由 King 用真实导出文件核对列名。
+
+**提交**
+
+| 步 | 内容 | 提交 | 合并 | CI |
+| --- | --- | --- | --- | --- |
+| K1.1 | 解析器、格式映射表、三份样例、解析单测（不碰库） | `4947817` | `17c9261` | 一次过（#37502870872） |
+| K1.2 | 两张表、`/finance/imports` 六个接口、黑盒、家庭隔离 | `aef9c75` | `7a1b60d` | 一次过（#37507023378） |
+| K1.3 | 「导入账单」对话框、导入记录、e2e；导入流水名字改用交易对方 | `294f0c2` | `3189998` | 一次过（#37511009712） |
+| K1.4 | 本记录、家里人用法 | 见本次合并 | 见本次合并 | 见本次合并 |
+
+**新表（最终结构，迁移 `AddFinanceImports1785234000000`）**
+
+- `finance_imports`：`id` / `householdId`；`source` `alipay` / `wechat` / `csv`；`fileName` varchar(255)（只记名字）；`accountId`（FK）；`status` `previewing` / `committed` / `discarded`，默认 `previewing`；`totalRows` / `importedRows` / `skippedRows` / `duplicateRows` int ≥ 0；`rangeFrom` / `rangeTo` date；`columnMapping` jsonb 可空（通用 CSV 六列对应）；`preview` jsonb 可空（解析结果，确认 / 放弃后清空）；`processedExternalIds` jsonb 默认 `[]`（确认时这一批的全部单号）；`expiresAt` timestamptz（预览 30 分钟）；`createdById`；`createdAt` / `committedAt`。索引 `(householdId, createdAt)`。原文件只在内存里解析，不落盘。
+- `finance_merchant_rules`：`id` / `householdId`；`pattern` varchar(120)（`normalizeMerchant` 归一化后的商户名）；`kind` `expense` / `income`；`categoryId`（FK）；`hits` int ≥ 0；`createdAt` / `updatedAt`。唯一 `(householdId, pattern, kind)`。
+
+**接口**（都要 `view_finance` + `record_finance`，成员可用；都在 manifest 的 `/finance` 前缀下，事件路由不用改）：`POST /finance/imports`（multipart：`file`、`source`、`accountId`）、`POST /finance/imports/:id/mapping`、`GET /finance/imports/:id`、`POST /finance/imports/:id/commit`、`DELETE /finance/imports/:id`、`GET /finance/imports`。
+
+**格式映射表**：`apps/api/src/finance/import/import-formats.ts`，每种来源一条（编码、表头锚点「交易时间」、每个字段的候选列名、收 / 支写法、状态词、平台分类 → 默认分类）。列名先按完全相等找，再按包含找；真实文件列名对不上时只改这里。默认关键词表在 `default-merchant-rules.ts`。
+
+**写入**：确认时一个事务里逐笔走记账核心（`FinanceService.insertWithinTransaction`，复用校验与复式过账），`sourceType = 'import'`、`externalId` = 单号、`merchant` = 交易对方、幂等键 `import:<批次>:<单号或行号>`；流水名字用交易对方，商品说明放备注；家庭动态只记一条「某某导入了微信账单 N 笔」。
+
+**与计划 / 指令不一样的地方**
+
+1. 「同一文件再导一次全部标已导入」：只看流水的单号做不到（当时没勾的不计收支 / 关闭 / 退款行没有流水），所以 `finance_imports` 多一列 `processedExternalIds`，确认时记下整批单号。代价：当时没勾的行再导也勾不上，要补只能手工记一笔。
+2. 同一文件里同一单号第二次出现，标「已导入」（不另设标记）。
+3. 疑似重复多算一种：没单号的导入流水（通用 CSV 没选单号列）也算进「同账户、同日、同额」，不然同一份无单号的 CSV 导两次就全重了。指令原文是「非 import 流水」。
+4. 商户规则多一列 `kind`，唯一键 `(householdId, pattern, kind)`：同一商户的支出、收入分开学（京东网购是支出，京东退款是收入）。只在预览里改过分类时写规则、`hits` +1；按规则建议原样确认不加。
+5. 建议分类的顺序：家庭规则（长的优先、收支对得上）→ 内置关键词 → 平台自己的分类（支付宝「交易分类」、微信「交易类型」）→ 其他支出 / 其他收入。收入除计划写的「退款」外，还认红包、工资、理财收益、报销（都是 K0 已有分类）。「宠物」排在「医疗」前面（宠物医院）。
+6. 解析单测是 `scripts/finance-import.check.ts`，和 K3 的 `finance-recurring.check.ts` 一样在 `run-api-tests` 全量模式里跑，没并进 `kernel-units.check.ts` 本身。
+7. GBK 用 Node 自带的 `TextDecoder('gbk')`（生产镜像 node:22 带完整 ICU，已验证），没加 `iconv-lite`。
+8. 只收 `.csv`：zip、xlsx 前后端都拦，分别提示「先解压」「另存为 csv」。超过 5 MB 由 multer 直接拒，返回同一句中文。
+9. 页面：「导入账单」放在页头右上（只在「流水」分段出现）；导入记录在流水下方、默认收起、只列确认过的批次（接口也返回放弃的）；确认后流水自动切到账单最后一天所在的月份；改记成收入 / 支出 / 转账都走分类那个下拉（支出分类、收入分类、「转到某账户」）；预览一次摆 100 行，可筛「要导入的 / 有标记的」。
+10. 导出路径说明放在 `packages/contracts`（`FINANCE_IMPORT_SOURCE_INFO`），API 的格式表只管怎么读文件。
+
+**发现但没修**
+
+- 确认是逐笔走记账核心，约 9 ms 一笔：5000 行要 47 秒左右；一个月一两百笔 1～3 秒。
+- 确认只发改过的行；要是在几千行里手动改上千行，请求体可能超过 100 KB 的默认上限。预览里也没有「全选 / 全不选」。
+- 部分退款：微信「已退款(¥5.00)」那笔消费按原价记，退款到账那行状态是退款、默认不勾（照计划的行规则）；要净额得手动勾上退款那行。
+- 真实导出文件没核对过；微信新版若导出的是 xlsx，要先另存为 csv（页面会提示）。
+- 导入记录不能整批撤销（计划本来就只列表），导错了用流水上的「撤销」逐笔改。
