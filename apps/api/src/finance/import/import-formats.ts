@@ -126,3 +126,4 @@ export const GENERIC_DIRECTIONS = {
 /** 上限（§3-K1）：文件 ≤ 5 MB、数据 ≤ 5000 行。 */
 export const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
 export const IMPORT_MAX_ROWS = 5000;
+export const IMPORT_TOO_LARGE = '文件超过 5 MB，分几次导出再导入';

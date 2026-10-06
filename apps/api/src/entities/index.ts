@@ -98,6 +98,8 @@ export type FinanceTransactionSourceType =
   | 'recurring'
   | 'screenshot';
 export type FinanceRecurringCadence = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+export type FinanceImportSource = 'alipay' | 'wechat' | 'csv';
+export type FinanceImportStatus = 'previewing' | 'committed' | 'discarded';
 export type RewardRedemptionStatus =
   | 'pending'
   | 'approved'
@@ -5153,6 +5155,128 @@ export class FinanceRecurring {
   updatedAt: Date;
 }
 
+/** K1 账单导入批次（docs/finance-plan.md §2.2）。preview 是解析结果，确认 / 放弃后清空。 */
+@Entity('finance_imports')
+@Check('CHK_finance_imports_source', `"source" IN ('alipay', 'wechat', 'csv')`)
+@Check('CHK_finance_imports_status', `"status" IN ('previewing', 'committed', 'discarded')`)
+@Check(
+  'CHK_finance_imports_counts',
+  `"totalRows" >= 0 AND "importedRows" >= 0 AND "skippedRows" >= 0 AND "duplicateRows" >= 0`,
+)
+@Index('IDX_finance_imports_household_created', ['householdId', 'createdAt'])
+export class FinanceImport {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_finance_imports_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  source: FinanceImportSource;
+
+  @Column({ type: 'varchar', length: 255 })
+  fileName: string;
+
+  @ManyToOne(() => FinanceAccount, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'accountId', foreignKeyConstraintName: 'FK_finance_imports_account' })
+  account: FinanceAccount;
+
+  @Column('uuid')
+  accountId: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'previewing' })
+  status: FinanceImportStatus;
+
+  @Column({ type: 'int', default: 0 })
+  totalRows: number;
+
+  @Column({ type: 'int', default: 0 })
+  importedRows: number;
+
+  @Column({ type: 'int', default: 0 })
+  skippedRows: number;
+
+  @Column({ type: 'int', default: 0 })
+  duplicateRows: number;
+
+  @Column({ type: 'date', nullable: true })
+  rangeFrom: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  rangeTo: string | null;
+
+  /** 通用 CSV 的列对应（字段 → 第几列） */
+  @Column({ type: 'jsonb', nullable: true })
+  columnMapping: Record<string, number | null> | null;
+
+  /** 解析结果（预览阶段）；确认或放弃后清空 */
+  @Column({ type: 'jsonb', nullable: true })
+  preview: unknown;
+
+  /** 确认时这一批的所有单号（导了的和选了不导的）：同一份账单再导一次整份标「以前导过」 */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  processedExternalIds: string[];
+
+  @Column({ type: 'timestamptz' })
+  expiresAt: Date;
+
+  @ManyToOne(() => Member, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'createdById', foreignKeyConstraintName: 'FK_finance_imports_created_by' })
+  createdBy: Member;
+
+  @Column('uuid')
+  createdById: string;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  committedAt: Date | null;
+}
+
+/** K1 家里学到的「商户 → 分类」（docs/finance-plan.md §2.3）。pattern 是归一化后的商户名。 */
+@Entity('finance_merchant_rules')
+@Unique('UQ_finance_merchant_rules_household_pattern_kind', ['householdId', 'pattern', 'kind'])
+@Check('CHK_finance_merchant_rules_kind', `"kind" IN ('expense', 'income')`)
+@Check('CHK_finance_merchant_rules_hits', `"hits" >= 0`)
+export class FinanceMerchantRule {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => Household, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'householdId', foreignKeyConstraintName: 'FK_finance_merchant_rules_household' })
+  household: Household;
+
+  @Column('uuid')
+  householdId: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  pattern: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  kind: FinanceCategoryKind;
+
+  @ManyToOne(() => FinanceCategory, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'categoryId', foreignKeyConstraintName: 'FK_finance_merchant_rules_category' })
+  category: FinanceCategory;
+
+  @Column('uuid')
+  categoryId: string;
+
+  @Column({ type: 'int', default: 0 })
+  hits: number;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
+
 @Entity('rewards')
 @Check('CHK_rewards_cost', `"cost" >= 1 AND "cost" <= 1000000`)
 @Unique('UQ_rewards_household_name', ['householdId', 'name'])
@@ -8564,6 +8688,8 @@ export const ALL_ENTITIES = [
   FinancePosting,
   FinanceBudget,
   FinanceRecurring,
+  FinanceImport,
+  FinanceMerchantRule,
   Reward,
   RewardRedemption,
   TravelPlan,

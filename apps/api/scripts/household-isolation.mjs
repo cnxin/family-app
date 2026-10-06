@@ -838,6 +838,48 @@ try {
       foreignAttention.status === 200 && foreignAttention.body.data.items.some((item) => item.kind === 'credit' && item.entity?.id === foreignCard),
     '信用卡只在本家庭：别人家欠着钱、今天还款的卡不出现在本家庭的账户和留意里（在它自己家里会出现）',
   );
+  // K1 账单导入：别人家的批次看不到、选不了列、确认 / 放弃不了；也不能导进别人家的账户
+  const importAccount = await request('/finance/accounts', defaultToken, 'POST', {
+    name: `隔离导入账户-${randomUUID().slice(0, 6)}`,
+    type: 'wechat',
+  });
+  const uploadStatement = async (token, accountId) => {
+    const form = new FormData();
+    form.append('source', 'csv');
+    form.append('accountId', accountId);
+    form.append('file', new Blob(['日期,金额,对方\n2026-09-01,12.50,隔离商户\n']), 'isolation.csv');
+    const response = await fetch(`${BASE}/finance/imports`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    return { status: response.status, body: await response.json() };
+  };
+  const ownImport = await uploadStatement(defaultToken, importAccount.body.data.id);
+  const foreignImport = await uploadStatement(foreignToken, foreignFinance.account);
+  const crossImport = await Promise.all([
+    uploadStatement(foreignToken, importAccount.body.data.id),
+    uploadStatement(defaultToken, foreignFinance.account),
+    request(`/finance/imports/${ownImport.body.data.id}`, foreignToken),
+    request(`/finance/imports/${ownImport.body.data.id}/mapping`, foreignToken, 'POST', {
+      columnMapping: { occurredOn: 0, amount: 1, merchant: 2, direction: null, note: null, externalId: null },
+    }),
+    request(`/finance/imports/${ownImport.body.data.id}/commit`, foreignToken, 'POST', { rows: [] }),
+    request(`/finance/imports/${ownImport.body.data.id}`, foreignToken, 'DELETE'),
+    request(`/finance/imports/${foreignImport.body.data.id}`, defaultToken, 'DELETE'),
+  ]);
+  await request(`/finance/imports/${ownImport.body.data.id}`, defaultToken, 'DELETE');
+  await request(`/finance/imports/${foreignImport.body.data.id}`, foreignToken, 'DELETE');
+  const ownImports = await request('/finance/imports', defaultToken);
+  const foreignImports = await request('/finance/imports', foreignToken);
+  await request(`/finance/accounts/${importAccount.body.data.id}`, defaultToken, 'PATCH', {
+    isActive: false,
+    expectedVersion: importAccount.body.data.version,
+  });
+  assert(
+    ownImport.status === 201 && foreignImport.status === 201 && crossImport.every((response) => response.status === 404) &&
+      ownImports.body.data.some((one) => one.id === ownImport.body.data.id) &&
+      !ownImports.body.data.some((one) => one.id === foreignImport.body.data.id) &&
+      foreignImports.body.data.some((one) => one.id === foreignImport.body.data.id) &&
+      !foreignImports.body.data.some((one) => one.id === ownImport.body.data.id),
+    '账单导入只在本家庭：导不进别人家的账户；别人家的批次看、选列、确认、放弃都是 404；导入记录互相列不出',
+  );
 
   // J2 助理原话：两边各记一条，互相列不出、删不掉
   const foreignUtterance = await request('/assistant/utterances', foreignToken, 'POST', {
@@ -885,6 +927,8 @@ try {
   await db.query('DELETE FROM dish_ingredients WHERE "dishId" = $1', [ids.dish]);
   await db.query('DELETE FROM dishes WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM ingredients WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM finance_imports WHERE "householdId" = $1', [ids.household]);
+  await db.query('DELETE FROM finance_merchant_rules WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM finance_recurring WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM finance_categories WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM finance_accounts WHERE "householdId" = $1', [ids.household]);
