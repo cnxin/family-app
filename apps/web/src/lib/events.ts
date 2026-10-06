@@ -16,7 +16,6 @@ const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
     'menu-inventory-preview', 'shopping-inventory-preview', 'maintenance-consumables-preview',
   ],
   assets: ['assets', 'asset', 'maintenance-consumables-preview'],
-  locations: ['locations'],
   media: [
     'media', 'media-requests', 'media-library', 'media-library-availability', 'media-connectors',
     'media-connector-settings', 'media-metadata-sources', 'media-playback-users', 'viewing-sessions',

@@ -23,12 +23,13 @@ import { tasksManifest } from './tasks';
 import { calendarManifest } from './calendar';
 import { remindersManifest } from './reminders';
 import { menusManifest } from './menus';
+import { locationsManifest } from './locations';
 
 export * from './keys';
 export * from './types';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest];
+export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest, locationsManifest];
 
 export function findPlugin(key: string): PluginManifest | undefined {
   return PLUGINS.find((plugin) => plugin.key === key);
@@ -182,10 +183,12 @@ export function pluginUsage(): {
   activityDomains: Readonly<Record<string, string>>;
   tables: readonly GeneratedUsageTable[];
   uncounted: readonly string[];
+  snapshots: readonly { server: string; label: string }[];
 } {
   const activityDomains: Record<string, string> = {};
   const tables: GeneratedUsageTable[] = [];
   const uncounted: string[] = [];
+  const snapshots: { server: string; label: string }[] = [];
   for (const plugin of PLUGINS) {
     const usage = plugin.usage;
     if (!usage) continue;
@@ -198,6 +201,7 @@ export function pluginUsage(): {
       });
     }
     uncounted.push(...(usage.uncounted ?? []));
+    snapshots.push(...(usage.snapshots ?? []));
   }
-  return { activityDomains, tables, uncounted };
+  return { activityDomains, tables, uncounted, snapshots };
 }

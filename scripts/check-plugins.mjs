@@ -184,6 +184,10 @@ for (const plugin of PLUGINS) {
   for (const table of usage?.tables ?? []) {
     if (new RegExp(`domain: '${escape(table.label)}'`).test(tables)) fail(`${where} usage-report.mjs 还手写着主表 ${table.label}`);
   }
+  const snapshotSources = block('apps/api/scripts/usage-report.mjs', 'const SNAPSHOT_SOURCES');
+  for (const snapshot of usage?.snapshots ?? []) {
+    if (!hasKey(snapshotSources, snapshot.server)) fail(`${where} 用量快照 ${snapshot.server} 在 usage-report.mjs SNAPSHOT_SOURCES 里没有实现`);
+  }
   const uncounted = block('apps/api/scripts/usage-report.mjs', 'const HANDWRITTEN_UNCOUNTED');
   for (const line of usage?.uncounted ?? []) if (uncounted.includes(line)) fail(`${where} usage-report.mjs 还手写着未计入说明`);
   // 流水 module 必须挂在 manifest 上：别名表里有的流水值，manifest 里也要声明

@@ -63,6 +63,7 @@ const HANDWRITTEN_TABLE_SOURCES = [
 ];
 const TABLE_SOURCES = [...HANDWRITTEN_TABLE_SOURCES, ...generated.tables];
 
+// 现状快照：manifest 的 usage.snapshots 只声明 id 和名字，查询与每行文案按 id 写在这里（§8.4 第 5 条）。
 // 位置（I1）：不是写操作次数，是现状快照——各处有多少条记着位置。位置的改动没有操作人列，按成员数不了。
 const LOCATION_SNAPSHOT = `
   SELECT h.id AS household,
@@ -79,8 +80,24 @@ const LOCATION_SNAPSHOT = `
     (SELECT count(*) FROM home_assets a WHERE a."householdId" = h.id AND a.status = 'active' AND a."locationId" IS NULL AND a.location IS NOT NULL)::int AS assets_text
   FROM households h`;
 
+const SNAPSHOT_SOURCES = {
+  'locations.snapshot': {
+    sql: LOCATION_SNAPSHOT,
+    lines: (place) => [
+      `- 位置：${place.locations} 个（不含「未整理」）；家人新建、还挂在「未整理」下待归位的 ${place.unsorted} 个`,
+      `- 库存物品记着默认位置：${place.items_located} / ${place.items}`,
+      `- 在用批次记着位置：${place.batches_located} / ${place.batches}（最近 ${DAYS} 天改过位置的 ${place.batches_moved} 个）`,
+      `- 在用资产记着位置：${place.assets_located} / ${place.assets}（还只有旧文字位置、没整理的 ${place.assets_text} 件）`,
+    ],
+  },
+};
+const SNAPSHOTS = generated.snapshots.map((snapshot) => {
+  const source = SNAPSHOT_SOURCES[snapshot.server];
+  if (!source) throw new Error(`用量快照 ${snapshot.server} 在 SNAPSHOT_SOURCES 里没有实现`);
+  return { ...snapshot, ...source };
+});
+
 const HANDWRITTEN_UNCOUNTED = [
-  '位置：storage_locations 与库存 / 批次 / 资产的位置列都没有操作人，只给现状快照（见各家庭「位置」一段），不按成员计数',
 ];
 const UNCOUNTED = [...HANDWRITTEN_UNCOUNTED, ...generated.uncounted];
 
@@ -128,7 +145,10 @@ try {
       rows.push({ household: row.household, domain: table.domain, source: table.source, member: row.member, count: row.count });
     }
   }
-  const locations = new Map((await client.query(LOCATION_SNAPSHOT, [DAYS])).rows.map((row) => [row.household, row]));
+  const snapshotRows = [];
+  for (const snapshot of SNAPSHOTS) {
+    snapshotRows.push(new Map((await client.query(snapshot.sql, [DAYS])).rows.map((row) => [row.household, row])));
+  }
   await client.query('COMMIT');
 
   console.log(`# 小管家用量：最近 ${DAYS} 天的写操作次数\n`);
@@ -144,23 +164,17 @@ try {
       .sort((left, right) => left.domain.localeCompare(right.domain, 'zh-CN'));
 
     console.log(`## ${household.name}（${household.timezone}）\n`);
-    const place = locations.get(household.id);
-    const locationLines = place
-      ? [
-          `- 位置：${place.locations} 个（不含「未整理」）；家人新建、还挂在「未整理」下待归位的 ${place.unsorted} 个`,
-          `- 库存物品记着默认位置：${place.items_located} / ${place.items}`,
-          `- 在用批次记着位置：${place.batches_located} / ${place.batches}（最近 ${DAYS} 天改过位置的 ${place.batches_moved} 个）`,
-          `- 在用资产记着位置：${place.assets_located} / ${place.assets}（还只有旧文字位置、没整理的 ${place.assets_text} 件）`,
-        ]
-      : [];
-    const printLocations = () => {
-      console.log('**位置（现状快照，不是写操作次数）**\n');
-      for (const line of locationLines) console.log(line);
-      console.log('');
+    const printSnapshots = () => {
+      SNAPSHOTS.forEach((snapshot, index) => {
+        const row = snapshotRows[index].get(household.id);
+        console.log(`**${snapshot.label}（现状快照，不是写操作次数）**\n`);
+        for (const line of row ? snapshot.lines(row) : []) console.log(line);
+        console.log('');
+      });
     };
     if (!domains.length) {
       console.log('这段时间没有写操作。\n');
-      printLocations();
+      printSnapshots();
       continue;
     }
     console.log(`| 域 | ${columns.map((column) => column.name).join(' | ')} | 合计 | 计数来源 |`);
@@ -180,7 +194,7 @@ try {
       console.log(`| ${domain} | ${cells.join(' | ')} | ${total} | ${source} |`);
     }
     console.log('');
-    printLocations();
+    printSnapshots();
   }
   console.log('**没有计入的写操作**\n');
   for (const line of UNCOUNTED) console.log(`- ${line}`);

@@ -24,7 +24,7 @@ export const ACTIONS: Action[] = [
   ...fromPlugin('finance'),
   ...fromPlugin('guests'),
   ...fromPlugin('travel'),
-  { id: 'locate', label: '记一下东西放哪', keywords: ['位置', '放在哪', '柜子'], domain: 'locations', to: '/house/inventory?locate=1' },
+  ...fromPlugin('locations'),
   { id: 'asset', label: '登记一件资产', keywords: ['家电'], domain: 'assets', to: '/house/assets?create=1' },
   ...fromPlugin('polls'),
   ...fromPlugin('memories'),
