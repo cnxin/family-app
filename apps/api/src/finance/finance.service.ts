@@ -21,8 +21,11 @@ import {
   FinancePosting,
   FinanceTransaction,
   FinanceTransactionSourceType,
+  FinanceRecurring,
   Household,
 } from '../entities';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { monthlyAverage } from './finance-recurring.schedule';
 import type {
   CreateFinanceAccountDto,
   CreateFinanceCategoryDto,
@@ -118,6 +121,7 @@ export class FinanceService {
     private readonly budgets: Repository<FinanceBudget>,
     private readonly dataSource: DataSource,
     private readonly clock: Clock,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   async listAccounts(user: JwtUser, includeInactive = false) {
@@ -456,7 +460,7 @@ export class FinanceService {
   async summary(monthValue: string | undefined, user: JwtUser) {
     const month = (monthValue ?? (await this.today(user.householdId)).slice(0, 7));
     const { start, end } = monthRange(month);
-    const [accounts, categories, budgets, spendingRows, totalsRows] = await Promise.all([
+    const [accounts, categories, budgets, spendingRows, totalsRows, fixedCosts] = await Promise.all([
       this.listAccounts(user, true),
       this.listCategories(user, true),
       this.budgets.find({ where: { householdId: user.householdId, month }, order: { createdAt: 'ASC' } }),
@@ -478,6 +482,7 @@ export class FinanceService {
          GROUP BY t.type`,
         [user.householdId, start, end],
       ) as Promise<{ type: 'expense' | 'income'; amount: string }[]>,
+      this.fixedCosts(user.householdId),
     ]);
     const income = money(totalsRows.find((row) => row.type === 'income')?.amount);
     const expense = money(totalsRows.find((row) => row.type === 'expense')?.amount);
@@ -508,7 +513,21 @@ export class FinanceService {
         category: categoryMap.get(row.categoryId) ?? null,
         amount: money(row.spent),
       })),
+      fixedCosts,
     };
+  }
+
+  /** 汇总页「固定支出」：在用的支出类周期账单折月均 + 资产续费月均（只能经资产门面读，J1b 规矩）。 */
+  private async fixedCosts(householdId: string) {
+    const [rules, assets] = await Promise.all([
+      this.dataSource.getRepository(FinanceRecurring).find({
+        where: { householdId, isActive: true, type: 'expense' },
+        select: { id: true, amount: true, cadence: true },
+      }),
+      this.facades.get('assets').monthlyRecurringCost(householdId),
+    ]);
+    const recurring = money(rules.reduce((sum, rule) => sum + monthlyAverage(money(rule.amount), rule.cadence), 0));
+    return { recurring, assets, total: money(recurring + assets) };
   }
 
   async listBudgets(monthValue: string | undefined, user: JwtUser) {

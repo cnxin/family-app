@@ -5,6 +5,7 @@
 //     任一回调抛错整个事务回滚；manifest 声明 hooks。
 // 这里只有类型与名字，没有实现（contracts 也给前端用，不能带 Nest / TypeORM）。
 
+import type { AssetsFacade } from './assets.facade';
 import type { CalendarFacade } from './calendar.facade';
 import type { InventoryFacade } from './inventory.facade';
 import type { LocationsFacade } from './locations.facade';
@@ -44,6 +45,7 @@ export interface PluginFacades {
   inventory: InventoryFacade;
   menus: MenusFacade;
   shopping: ShoppingFacade;
+  assets: AssetsFacade;
 }
 export type PluginFacadeKey = keyof PluginFacades;
 

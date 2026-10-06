@@ -224,6 +224,12 @@ export const financeSummarySchema = z
         amount: z.number(),
       }),
     ),
+    /** K3「固定支出」：每月约多少（不随所选月份变），周期账单（只算支出）+ 资产续费，各自折成月均。 */
+    fixedCosts: z.object({
+      recurring: z.number(),
+      assets: z.number(),
+      total: z.number(),
+    }),
   });
 export type FinanceSummary = z.infer<typeof financeSummarySchema>;
 

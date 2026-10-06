@@ -9,6 +9,7 @@ import {
   Injectable,
   Module,
   NotFoundException,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -68,6 +69,7 @@ import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-faca
 import { PRIVATE_ASSET_UPLOAD_DIR, UPLOAD_DIR } from '../upload/upload.module';
 import { addDays, compare, householdToday, isUniqueViolation } from '@family/shared';
 import type { MaintenanceConsumptionLine } from '@family/contracts';
+import { assetsFacade } from './assets.facade';
 
 const ASSET_CATEGORIES: AssetCategory[] = [
   'appliance',
@@ -1995,6 +1997,19 @@ export class AssetsController {
   }
 }
 
+/** 把资产门面注册到内核（K3）：财务汇总页的「固定支出」读资产续费月均走这里。 */
+@Injectable()
+export class AssetsFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('assets', assetsFacade(this.dataSource));
+  }
+}
+
 @Module({
   imports: [
     TodayModule,
@@ -2011,7 +2026,14 @@ export class AssetsController {
     ]),
   ],
   controllers: [AssetsController],
-  providers: [AssetsService, AssetMaintenanceAttentionRule, AssetRenewalAttentionRule, AssetWarrantyAttentionRule, AssetsAttention],
+  providers: [
+    AssetsService,
+    AssetMaintenanceAttentionRule,
+    AssetRenewalAttentionRule,
+    AssetWarrantyAttentionRule,
+    AssetsAttention,
+    AssetsFacadeProvider,
+  ],
   exports: [AssetsService],
 })
 export class AssetsModule {}

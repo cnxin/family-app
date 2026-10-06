@@ -258,6 +258,48 @@ try {
   await db.query('UPDATE finance_budgets SET amount=200 WHERE id=$1', [budgetId]);
   assertAbsent(await attention(financeFixture), 'finance', '提高预算后消失');
 
+  // K3 周期账单：没开自动记账的到期前 3 天起出现、逾期标出来、停用 / 开自动记账后消失；成员也看得到
+  const recurringRule = async (target, due, values = {}) => {
+    const accountId = await insertScoped(db, target, 'finance_accounts', {
+      name: `留意账户-${randomUUID().slice(0, 6)}`, type: 'cash', createdById: target.memberId,
+    });
+    const ruleCategoryId = await insertScoped(db, target, 'finance_categories', {
+      name: `物业房租-${randomUUID().slice(0, 6)}`, kind: 'expense', createdById: target.memberId,
+    });
+    return insertScoped(db, target, 'finance_recurring', {
+      title: '房租', type: 'expense', amount: 3200, accountId, categoryId: ruleCategoryId, cadence: 'monthly',
+      anchorOn: due, nextDueOn: due, createdById: target.memberId, updatedById: target.memberId, ...values,
+    });
+  };
+  await dateRule({
+    domain: 'finance', kind: 'recurring', threshold: 3,
+    create: (target, due) => recurringRule(target, due),
+    setDue: (_, id, due) => db.query('UPDATE finance_recurring SET "anchorOn"=$1, "nextDueOn"=$1 WHERE id=$2', [due, id]),
+    complete: (_, id) => db.query('UPDATE finance_recurring SET "isActive"=false WHERE id=$1', [id]),
+  });
+  const recurringMember = await fixture('member');
+  const autoRuleId = await recurringRule(recurringMember, TODAY, { autoPost: true });
+  assertAbsent(await attention(recurringMember), 'finance', '开了自动记账的周期账单不进留意');
+  await db.query('UPDATE finance_recurring SET "autoPost"=false WHERE id=$1', [autoRuleId]);
+  assertItem(await attention(recurringMember), 'finance', { kind: 'recurring', dueOn: TODAY, overdue: false }, '成员也看得到要付的周期账单');
+  // 同一个家庭里同时有超预算和要付的周期账单：合成一张卡，kinds 两种都在
+  const mixedFinance = await fixture();
+  const mixedCategory = await insertScoped(db, mixedFinance, 'finance_categories', {
+    name: '餐饮', kind: 'expense', createdById: mixedFinance.memberId,
+  });
+  await insertScoped(db, mixedFinance, 'finance_budgets', {
+    categoryId: mixedCategory, month: '2026-09', amount: 1, updatedById: mixedFinance.memberId,
+  });
+  await insertScoped(db, mixedFinance, 'finance_transactions', {
+    type: 'expense', amount: 2, title: '超预算', occurredOn: TODAY, categoryId: mixedCategory,
+    actorId: mixedFinance.memberId, actorName: '测试成员', sourceType: 'manual', sourceId: randomUUID(),
+    idempotencyKey: randomUUID(), requestFingerprint: 'today-attention',
+  });
+  await recurringRule(mixedFinance, TODAY);
+  const mixedItem = find(await attention(mixedFinance), 'finance');
+  assert.ok(mixedItem && mixedItem.count === 2 && mixedItem.kinds.includes('budget') && mixedItem.kinds.includes('recurring'), '超预算与周期账单合成一张财务卡');
+  console.log('  ✓ 周期账单留意：阈值、逾期、停用、自动记账、成员可见、与预算合卡');
+
   const backupFixture = await fixture();
   const policyId = await insertScoped(db, backupFixture, 'backup_policies', { workerLastSeenAt: NOW });
   assertAbsent(await attention(backupFixture), 'backups', 'worker 在线且无失败时不出现');
