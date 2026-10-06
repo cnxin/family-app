@@ -41,8 +41,7 @@ import {
   MenuItemStatus,
   Notification,
 } from '../entities';
-import { buildRecipeSnapshot } from '../recipes/recipe.snapshot';
-import { isUniqueViolation } from '@family/shared';
+import { buildRecipeSnapshot, isUniqueViolation } from '@family/shared';
 
 export class OrderItemDto {
   @IsUUID()
