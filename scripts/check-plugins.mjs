@@ -8,7 +8,7 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -99,7 +99,7 @@ for (const plugin of PLUGINS) {
   if (seen.has(plugin.key)) fail(`manifest ${plugin.key} 重复`);
   seen.add(plugin.key);
   if (plugin.manifestVersion !== 1) fail(`${plugin.key}：manifestVersion 必须为 1`);
-  // J1b：dependsOn / hooks 的形状（与代码是否一致的强制断言在 J1b.6）
+  // J1b：dependsOn / hooks 的形状（与代码是否一致见 1d）
   for (const dependency of plugin.dependsOn ?? []) {
     if (!c.PLUGIN_KEYS.includes(dependency)) fail(`${plugin.key}：dependsOn 里的 ${dependency} 不是插件 key`);
     if (dependency === plugin.key) fail(`${plugin.key}：dependsOn 不能写自己`);
@@ -269,6 +269,143 @@ for (const kernelDir of ['system', 'today', 'activities', 'notifications', 'even
   }
 }
 
+// ---- 1d. J1b：插件之间只经内核的门面 / 事务内钩子（docs/architecture.md §9） ---------------------------------
+// 插件目录之间零 import（contracts、shared 不算插件目录）；dependsOn == 实际取用的门面、hooks == 实际订阅的钩子
+// （多声明、少声明都报错）；门面接口只在 contracts 定义、实现只在提供方目录注册；钩子名 / 插件事件名只在 contracts 定义。
+
+const j1b = { facades: 0, hooks: 0, events: 0 };
+{
+  const SRC = 'apps/api/src';
+  /** 不叫插件 key 的插件目录。 */
+  const PLUGIN_EXTRA_DIRS = { dishes: 'recipes' };
+  /** 内核目录：不属于任何插件（内核 → 插件的 import 不在 J1b 范围，见 §9「没解的」）。新目录必须归到这里或插件。 */
+  const KERNEL_DIRS = ['activities', 'agent', 'assistant', 'auth', 'common', 'database', 'entities', 'events', 'households', 'notifications', 'system', 'today', 'upload'];
+  const ownerOfDir = (dir) => (c.PLUGIN_KEYS.includes(dir) ? dir : PLUGIN_EXTRA_DIRS[dir] ?? null);
+  const walk = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? walk(`${dir}/${entry.name}`) : entry.name.endsWith('.ts') ? [`${dir}/${entry.name}`] : []);
+  const filesOf = new Map(c.PLUGIN_KEYS.map((key) => [key, []]));
+  const apiFiles = [];
+  for (const entry of readdirSync(join(ROOT, SRC), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const owner = ownerOfDir(entry.name);
+    if (!owner && !KERNEL_DIRS.includes(entry.name)) {
+      fail(`apps/api/src/${entry.name}/ 既不是插件目录也不是登记过的内核目录：在 check-plugins 的 PLUGIN_EXTRA_DIRS 或 KERNEL_DIRS 里归类`);
+    }
+    for (const file of walk(`${SRC}/${entry.name}`)) {
+      const item = { file, text: read(file), owner };
+      apiFiles.push(item);
+      if (owner) filesOf.get(owner).push(item);
+    }
+  }
+  /** 注入的字段名：private readonly <字段>: <类型> */
+  const fieldsOf = (text, type) => [...text.matchAll(new RegExp(`private readonly (\\w+): ${type}\\b`, 'g'))].map((match) => match[1]);
+  const calls = (text, type, method) => fieldsOf(text, type).flatMap((field) =>
+    [...text.matchAll(new RegExp(`this\\.${field}\\s*\\.${method}\\(\\s*'([\\w.-]+)'(?:,\\s*'([\\w-]+)')?`, 'g'))].map((match) => ({ name: match[1], owner: match[2] })));
+
+  // 插件目录之间零 import
+  for (const { file, text, owner } of apiFiles) {
+    if (!owner) continue;
+    for (const [, spec] of text.matchAll(/(?:\bfrom\s+|\bimport\(\s*|\brequire\(\s*)'(\.{1,2}\/[^']+)'/g)) {
+      const target = relative(join(ROOT, SRC), resolve(dirname(join(ROOT, file)), spec)).split(sep)[0];
+      const targetOwner = ownerOfDir(target);
+      if (targetOwner && targetOwner !== owner) fail(`${file} import 了插件 ${targetOwner} 的 ${spec}：插件之间只走门面 / 事务内钩子（§9）`);
+    }
+  }
+
+  // 门面：接口只在 contracts（plugins/<key>.facade.ts，登记进 PluginFacades），实现只在提供方目录注册一次
+  const kernelTypes = 'packages/contracts/src/plugins/kernel.ts';
+  const facadeKeys = readdirSync(join(ROOT, 'packages/contracts/src/plugins'))
+    .filter((name) => name.endsWith('.facade.ts')).map((name) => name.replace(/\.facade\.ts$/, ''));
+  const facadeMap = block(kernelTypes, 'export interface PluginFacades');
+  const facadeEntries = [...facadeMap.matchAll(/^\s+'?([\w-]+)'?: (\w+);$/gm)].map((match) => match[1]);
+  for (const key of facadeKeys) {
+    if (!c.PLUGIN_KEYS.includes(key)) fail(`contracts/plugins/${key}.facade.ts：${key} 不是插件 key`);
+    if (!facadeEntries.includes(key)) fail(`门面 ${key} 没有登记进 kernel.ts 的 PluginFacades`);
+  }
+  for (const key of facadeEntries) if (!facadeKeys.includes(key)) fail(`PluginFacades 里的 ${key} 没有对应的 contracts/plugins/${key}.facade.ts`);
+  const registered = new Map();
+  for (const { file, text, owner } of apiFiles) {
+    if (/\binterface \w+Facade\b/.test(text)) fail(`${file} 定义了门面接口：门面接口只在 contracts/plugins/<key>.facade.ts`);
+    for (const [, key] of text.matchAll(/\.register\(\s*'([\w-]+)',\s*\w+Facade\(/g)) {
+      if (owner !== key) fail(`${file} 注册了 ${key} 的门面：实现只在提供方目录 apps/api/src/${key}/`);
+      registered.set(key, (registered.get(key) ?? 0) + 1);
+    }
+  }
+  for (const key of facadeKeys) if (registered.get(key) !== 1) fail(`门面 ${key} 注册了 ${registered.get(key) ?? 0} 次（应为在 apps/api/src/${key}/ 里注册 1 次）`);
+
+  // dependsOn == 实际取用的门面
+  for (const plugin of PLUGINS) {
+    const used = new Set(filesOf.get(plugin.key).flatMap(({ text }) => calls(text, 'PluginFacadeRegistry', 'get').map((call) => call.name)));
+    for (const key of used) {
+      if (!facadeKeys.includes(key)) fail(`${plugin.key} 取用了不存在的门面 ${key}`);
+      if (key === plugin.key) fail(`${plugin.key} 取用了自己的门面`);
+    }
+    const declared = new Set(plugin.dependsOn ?? []);
+    for (const key of used) if (!declared.has(key) && key !== plugin.key) fail(`${plugin.key} 取用了 ${key} 的门面，manifest 的 dependsOn 没声明`);
+    for (const key of declared) if (!used.has(key)) fail(`${plugin.key} 的 dependsOn 声明了 ${key}，代码里没有取用它的门面`);
+  }
+
+  // 事务内钩子：名单与 payload 只在 contracts；订阅方 == manifest.hooks；发起方 == 钩子名前缀的插件；写死的顺序只列订阅方
+  const hookNames = [...c.TRANSACTION_HOOK_NAMES];
+  const hookPayloads = [...block(kernelTypes, 'export interface TransactionHookPayloads').matchAll(/^\s+'([\w.-]+)': (\w+);$/gm)];
+  const eventPayloadEntries = [...block(kernelTypes, 'export interface PluginEventPayloads').matchAll(/^\s+'([\w.-]+)': (\w+);$/gm)];
+  const payloadNames = hookPayloads.map((match) => match[1]);
+  const payloadTypes = [...hookPayloads, ...eventPayloadEntries].map((match) => match[2]);
+  if (JSON.stringify([...payloadNames].sort()) !== JSON.stringify([...hookNames].sort())) {
+    fail(`kernel.ts 的 TransactionHookPayloads（${payloadNames.join('、')}）与 TRANSACTION_HOOK_NAMES（${hookNames.join('、')}）不一致`);
+  }
+  for (const name of hookNames) {
+    if (!c.PLUGIN_KEYS.includes(name.split('.')[0])) fail(`钩子 ${name} 不是「<发起方插件 key>.<事件>」`);
+  }
+  const ran = new Set();
+  const subscribersOf = new Map(hookNames.map((name) => [name, new Set()]));
+  for (const { file, text, owner } of apiFiles) {
+    const redefined = payloadTypes.find((type) => new RegExp(`\\b(?:(?:interface|class) ${type}\\b|type ${type}\\s*=)`).test(text));
+    if (/\b(?:TRANSACTION_HOOK_NAMES|PLUGIN_EVENT_NAMES|TRANSACTION_HOOK_ORDER)\s*[:=]/.test(text) || redefined) {
+      fail(`${file} 定义了钩子 / 插件事件的名单或 payload${redefined ? `（${redefined}）` : ''}：只在 contracts 定义`);
+    }
+    for (const { name } of calls(text, 'TransactionHookRegistry', 'run')) {
+      if (!hookNames.includes(name)) fail(`${file} 发起了 contracts 里没有的钩子 ${name}`);
+      else if (owner !== name.split('.')[0]) fail(`${file} 发起了钩子 ${name}：只有 ${name.split('.')[0]} 插件能发起`);
+      ran.add(name);
+    }
+    for (const { name, owner: subscriber } of calls(text, 'TransactionHookRegistry', 'on')) {
+      if (!hookNames.includes(name)) fail(`${file} 订阅了 contracts 里没有的钩子 ${name}`);
+      else if (!owner || subscriber !== owner) fail(`${file} 以 ${subscriber} 的名义订阅 ${name}：只能以所在插件（${owner ?? '内核'}）的名义`);
+      else subscribersOf.get(name).add(owner);
+    }
+  }
+  for (const name of hookNames) {
+    if (!ran.has(name)) fail(`钩子 ${name} 没有发起方（${name.split('.')[0]} 插件里没有 hooks.run）`);
+    if (!subscribersOf.get(name).size) fail(`钩子 ${name} 没有订阅方`);
+  }
+  for (const plugin of PLUGINS) {
+    const subscribed = new Set(hookNames.filter((name) => subscribersOf.get(name).has(plugin.key)));
+    const declared = new Set(plugin.hooks ?? []);
+    for (const name of subscribed) if (!declared.has(name)) fail(`${plugin.key} 订阅了钩子 ${name}，manifest 的 hooks 没声明`);
+    for (const name of declared) if (!subscribed.has(name)) fail(`${plugin.key} 的 hooks 声明了 ${name}，代码里没有订阅`);
+  }
+  for (const [name, order] of Object.entries(c.TRANSACTION_HOOK_ORDER)) {
+    for (const key of order) if (!subscribersOf.get(name)?.has(key)) fail(`TRANSACTION_HOOK_ORDER.${name} 里的 ${key} 不是它的订阅方`);
+  }
+
+  j1b.facades = facadeKeys.length;
+  j1b.hooks = hookNames.length;
+
+  // 内核事件总线上的插件事件：名字只在 contracts；只有前缀插件能发
+  const eventNames = [...c.PLUGIN_EVENT_NAMES];
+  j1b.events = eventNames.length;
+  const eventPayloads = eventPayloadEntries.map((match) => match[1]);
+  if (JSON.stringify([...eventPayloads].sort()) !== JSON.stringify([...eventNames].sort())) fail('kernel.ts 的 PluginEventPayloads 与 PLUGIN_EVENT_NAMES 不一致');
+  for (const { file, text, owner } of apiFiles) {
+    for (const { name } of calls(text, 'EventBus', 'emit')) {
+      if (!eventNames.includes(name)) fail(`${file} 发了 contracts 里没有的插件事件 ${name}`);
+      else if (owner !== name.split('.')[0]) fail(`${file} 发了插件事件 ${name}：只有 ${name.split('.')[0]} 插件能发`);
+    }
+    for (const { name } of calls(text, 'EventBus', 'on')) if (!eventNames.includes(name)) fail(`${file} 订阅了 contracts 里没有的插件事件 ${name}`);
+  }
+}
+
 // ---- 4. contracts 内的登记（dist 运行时结果） ---------------------------------------------------------
 
 const prefixes = c.EVENT_ROUTES.map((route) => route.prefix);
@@ -426,5 +563,6 @@ if (errors.length) {
 }
 console.log(
   `插件登记一致：${PLUGINS.length} / ${c.PLUGIN_KEYS.length} 个插件都有 manifest；agent 工具 ${tools.length} 个全部有归属（插件 ${owners.size - c.KERNEL_AGENT_TOOLS.length}、内核 ${c.KERNEL_AGENT_TOOLS.length}）；` +
-    `仍手写并断言一致的 ${KNOWN_HANDWRITTEN.length} 处（${KNOWN_HANDWRITTEN.map((one) => one.no).join('')}），内核表 ${CORE_TABLES.length} 张`,
+    `仍手写并断言一致的 ${KNOWN_HANDWRITTEN.length} 处（${KNOWN_HANDWRITTEN.map((one) => one.no).join('')}），内核表 ${CORE_TABLES.length} 张；` +
+    `插件目录之间零 import，门面 ${j1b.facades} 个、事务内钩子 ${j1b.hooks} 个、插件事件 ${j1b.events} 个与 manifest 一致`,
 );
