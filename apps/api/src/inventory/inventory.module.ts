@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { InventoryExpiryAttentionRule, InventoryAttention } from './inventory-attention';
+import { TodayModule } from '../today/today.module';
 import {
   BadRequestException,
   Body,
@@ -647,6 +649,7 @@ export class InventoryController {
 
 @Module({
   imports: [
+    TodayModule,
     TypeOrmModule.forFeature([
       InventoryItem,
       Ingredient,
@@ -662,6 +665,8 @@ export class InventoryController {
     InventoryService,
     InventoryBatchesService,
     InventoryTransactionsService,
+    InventoryExpiryAttentionRule,
+    InventoryAttention,
   ],
   exports: [
     InventoryService,

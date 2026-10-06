@@ -1,26 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { addDays, householdToday, monthRange } from '@family/shared';
-import { findPlugin, pluginAttention, type AttentionItem } from '@family/contracts';
+import { allAttention, findPlugin, pluginAttention, type AttentionItem } from '@family/contracts';
 import { hasCapability, type Capability } from '../auth/capabilities';
 import type { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
 import {
   AttentionRegistry,
-  AssetMaintenanceAttentionRule,
-  AssetRenewalAttentionRule,
-  AssetWarrantyAttentionRule,
   ATTENTION_THRESHOLDS,
-  BackupAttentionRule,
-  FinanceBudgetAttentionRule,
-  GuestMealRequestAttentionRule,
-  GuestMenuAttentionRule,
-  InventoryExpiryAttentionRule,
-  PointsRedemptionAttentionRule,
-  PollAttentionRule,
-  TravelChecklistAttentionRule,
   type AttentionCandidate,
-  type AttentionRule,
   type AttentionRuleContext,
 } from './today-attention.rules';
 
@@ -49,22 +37,21 @@ const OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
   ),
 };
 
+/**
+ * 每种留意要什么能力才看得到（manifest / CORE_ATTENTION 里 kind 的 capability）。J1.7 前这四处写死在下面拼规则时：
+ * 访客点菜 manage_guests、积分兑换 manage_points、超预算 manage_finance、备份 manage_integrations。
+ */
+const KIND_CAPABILITY = new Map<string, string>(
+  allAttention().flatMap(({ key, attention }) =>
+    attention.kinds.flatMap((kind) => (kind.capability ? [[`${key}:${kind.kind}`, kind.capability] as const] : [])),
+  ),
+);
+
 @Injectable()
 export class TodayAttentionService {
   constructor(
     private readonly db: DataSource,
     private readonly clock: Clock,
-    private readonly assetMaintenance: AssetMaintenanceAttentionRule,
-    private readonly assetRenewal: AssetRenewalAttentionRule,
-    private readonly assetWarranty: AssetWarrantyAttentionRule,
-    private readonly guestMenu: GuestMenuAttentionRule,
-    private readonly guestRequests: GuestMealRequestAttentionRule,
-    private readonly travelChecklist: TravelChecklistAttentionRule,
-    private readonly inventoryExpiry: InventoryExpiryAttentionRule,
-    private readonly poll: PollAttentionRule,
-    private readonly pointsRedemption: PointsRedemptionAttentionRule,
-    private readonly financeBudget: FinanceBudgetAttentionRule,
-    private readonly backup: BackupAttentionRule,
     private readonly registry: AttentionRegistry,
   ) {}
 
@@ -106,29 +93,18 @@ export class TodayAttentionService {
       return !key || !hidden.has(key);
     };
     const can = (capability: Capability) => hasCapability(user, capability);
-    const rules: AttentionRule[] = [];
+    const permitted = (domain: string, kind: string) => {
+      const capability = KIND_CAPABILITY.get(`${domain}:${kind}`);
+      return !capability || can(capability as Capability);
+    };
 
-    if (allowed('assets')) {
-      rules.push(this.assetMaintenance, this.assetRenewal, this.assetWarranty);
-    }
-    if (allowed('guests')) {
-      rules.push(this.guestMenu);
-      if (can('manage_guests')) rules.push(this.guestRequests);
-    }
-    if (allowed('travel')) rules.push(this.travelChecklist);
-    if (allowed('inventory')) rules.push(this.inventoryExpiry);
-    if (allowed('polls')) rules.push(this.poll);
-    if (allowed('points') && can('manage_points')) rules.push(this.pointsRedemption);
-    if (allowed('finance') && can('manage_finance')) rules.push(this.financeBudget);
-    if (can('manage_integrations')) rules.push(this.backup);
-
-    const sources = this.registry.list().filter((source) => allowed(source.domain));
-    const candidates = (
-      await Promise.all([
-        ...rules.map((rule) => rule.run(context)),
-        ...sources.map((source) => source.run(context, can)),
-      ])
-    ).flat();
+    // 模块关了不跑；一个来源产出的种类当前成员都看不到也不跑；跑出来的再按种类过一遍能力（智能家居一个来源出三种）
+    const sources = this.registry
+      .list()
+      .filter((source) => allowed(source.domain) && source.kinds.some((kind) => permitted(source.domain, kind)));
+    const candidates = (await Promise.all(sources.map((source) => source.run(context, can))))
+      .flat()
+      .filter((candidate) => permitted(candidate.domain, candidate.kind));
     return { today, items: this.merge(candidates) };
   }
 

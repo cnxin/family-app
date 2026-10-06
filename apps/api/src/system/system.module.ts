@@ -1,4 +1,6 @@
 import { EventBus } from '../events/event-bus';
+import { BackupAttentionRule, BackupsAttention } from './backups-attention';
+import { TodayModule } from '../today/today.module';
 import { SystemModulesController } from './system-modules.controller';
 import { SystemModulesService } from './system-modules.service';
 import {
@@ -866,9 +868,10 @@ class HealthController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([BackupPolicy, BackupRun, Member, Notification])],
+  imports: [
+    TodayModule,TypeOrmModule.forFeature([BackupPolicy, BackupRun, Member, Notification])],
   controllers: [HealthController, SystemBackupController, SystemModulesController],
-  providers: [SystemBackupService, SystemModulesService, ModuleHasDataRegistry],
+  providers: [SystemBackupService, SystemModulesService, ModuleHasDataRegistry, BackupAttentionRule, BackupsAttention],
   exports: [ModuleHasDataRegistry],
 })
 export class SystemModule {}

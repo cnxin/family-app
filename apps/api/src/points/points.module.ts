@@ -10,6 +10,8 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { PointsRedemptionAttentionRule, PointsAttention } from './points-attention';
+import { TodayModule } from '../today/today.module';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -887,6 +889,7 @@ export class PointsController {
 
 @Module({
   imports: [
+    TodayModule,
     TypeOrmModule.forFeature([
       Member,
       Notification,
@@ -897,7 +900,7 @@ export class PointsController {
     ]),
   ],
   controllers: [PointsController],
-  providers: [PointsService],
+  providers: [PointsService, PointsRedemptionAttentionRule, PointsAttention],
   exports: [PointsService],
 })
 export class PointsModule {}

@@ -1,4 +1,6 @@
 import { householdToday, monthRange } from '@family/shared';
+import { FinanceBudgetAttentionRule, FinanceAttention } from './finance-attention';
+import { TodayModule } from '../today/today.module';
 import { Clock } from '../common/clock';
 import { Household } from '../entities';
 import {
@@ -977,6 +979,7 @@ export class FinanceController {
 
 @Module({
   imports: [
+    TodayModule,
     TypeOrmModule.forFeature([
       FinanceAccount,
       FinanceBudget,
@@ -986,7 +989,7 @@ export class FinanceController {
     ]),
   ],
   controllers: [FinanceController],
-  providers: [FinanceService],
+  providers: [FinanceService, FinanceBudgetAttentionRule, FinanceAttention],
   exports: [FinanceService],
 })
 export class FinanceModule {}

@@ -55,6 +55,7 @@ export function offlineCandidate(householdId: string, since: Date | null, now: D
 @Injectable()
 export class SmartHomeAttentionSource implements AttentionSource, OnModuleInit {
   readonly domain = 'smart-home' as const;
+  readonly kinds = ['filter', 'laundry', 'offline'] as const;
 
   constructor(
     private readonly registry: AttentionRegistry,

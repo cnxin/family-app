@@ -12,6 +12,8 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { PollAttentionRule, PollsAttention } from './polls-attention';
+import { TodayModule } from '../today/today.module';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
@@ -881,6 +883,7 @@ export class PollsController {
 
 @Module({
   imports: [
+    TodayModule,
     TypeOrmModule.forFeature([
       Poll,
       PollOption,
@@ -891,7 +894,7 @@ export class PollsController {
     ]),
   ],
   controllers: [PollsController],
-  providers: [PollsService],
+  providers: [PollsService, PollAttentionRule, PollsAttention],
   exports: [PollsService],
 })
 export class PollsModule {}
