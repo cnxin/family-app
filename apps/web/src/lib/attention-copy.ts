@@ -12,14 +12,12 @@ export type AttentionCopy = {
 
 const HANDWRITTEN_LABELS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '资产',
-  inventory: '库存',
   backups: '备份',
   'smart-home': '智能家居',
 };
 
 const HANDWRITTEN_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '看这件资产',
-  inventory: '看库存',
   backups: '看备份',
   'smart-home': '去看看',
 };
@@ -33,7 +31,6 @@ const kindActions: Partial<Record<string, string>> = {
 
 const HANDWRITTEN_LIST_ACTIONS: Partial<Record<AttentionItem['domain'], string>> = {
   assets: '看资产',
-  inventory: '看库存',
   backups: '看备份',
   'smart-home': '去看看',
 };
@@ -73,8 +70,6 @@ function singleTitle(item: AttentionItem, today: string) {
       return `${name} ${soon}该续费了`;
     case 'warranty':
       return `${name} ${soon}保修到期`;
-    case 'expiry':
-      return `${name} ${soon}过期`;
     case 'backup':
       return '备份需要看一下';
     // 智能家居（H3 E5）：滤芯的 entity 是设备，晾衣服的是家务，连不上的是 Home Assistant 本身
@@ -109,8 +104,6 @@ function mergedTitle(item: AttentionItem): string {
       if (item.kind === 'renewal') return `${n} 项订阅该续费了`;
       if (item.kind === 'warranty') return `${n} 件资产保修快到期`;
       return `${n} 件资产该保养了`;
-    case 'inventory':
-      return item.overdue ? `${n} 样快过期，有的已经过期了` : `${n} 样快过期`;
     case 'backups':
       return `备份有 ${n} 件事要看一下`;
     case 'smart-home':
