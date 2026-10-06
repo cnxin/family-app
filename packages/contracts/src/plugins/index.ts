@@ -32,6 +32,8 @@ import { smartHomeManifest } from './smart-home';
 
 export * from './core';
 export * from './kernel';
+export * from './tasks.facade';
+export * from './calendar.facade';
 export * from './keys';
 export * from './types';
 

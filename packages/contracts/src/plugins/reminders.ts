@@ -14,6 +14,8 @@ export const remindersManifest = {
     { plugin: 'calendar', via: 'contract', uses: ['calendar.list'], reason: '列出可以加提醒的日历条目' },
     { plugin: 'tasks', via: 'contract', uses: ['tasks.occursOn'], reason: '任务提醒要确认那天确实有这次任务' },
   ],
+  // J1b：可加提醒的日历条目从日历门面取；任务那天是否发生用 @family/shared 的 taskOccursOn
+  dependsOn: ['calendar'],
   nav: [{ key: 'reminders', label: '提醒', glyph: '醒', scene: 'schedule', path: '/schedule/reminders' }],
   legacyPaths: [['/reminders', '/schedule/reminders']],
   module: {

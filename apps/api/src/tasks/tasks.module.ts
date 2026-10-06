@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -12,6 +13,8 @@ import {
   Post,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { tasksFacade } from './tasks.facade';
 import {
   Between,
   DataSource,
@@ -588,6 +591,19 @@ export class TasksController {
   }
 }
 
+/** 把任务门面注册到内核（J1b）。放在 TasksService 之后：门面文件只引类型，不反过来 import 本文件。 */
+@Injectable()
+export class TasksFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly tasks: TasksService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('tasks', tasksFacade(this.tasks));
+  }
+}
+
 @Module({
   imports: [
     PointsModule,
@@ -599,7 +615,7 @@ export class TasksController {
     ]),
   ],
   controllers: [TasksController],
-  providers: [TasksService, TaskEvents],
+  providers: [TasksService, TaskEvents, TasksFacadeProvider],
   exports: [TasksService, TaskEvents],
 })
 export class TasksModule {}

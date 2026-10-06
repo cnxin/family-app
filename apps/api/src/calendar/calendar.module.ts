@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -32,7 +33,8 @@ import {
   TravelPlan,
   Visit,
 } from '../entities';
-import { TasksModule, TasksService } from '../tasks/tasks.module';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { calendarFacade } from './calendar.facade';
 import { addDays, householdToday, parseDateOnly, startOfHouseholdDay } from '@family/shared';
 
 class CalendarRangeDto {
@@ -161,7 +163,7 @@ export class CalendarService {
     private readonly maintenancePlans: Repository<MaintenancePlan>,
     @InjectRepository(TravelPlan)
     private readonly travelPlans: Repository<TravelPlan>,
-    private readonly tasks: TasksService,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   async list(start: string, end: string, user: JwtUser) {
@@ -218,7 +220,8 @@ export class CalendarService {
           status: 'open' | 'done';
           itemCount: string;
         }>(),
-      this.tasks.list(start, end, user),
+      // 任务条目走任务门面（J1b），不 import 任务目录
+      this.facades.get('tasks').listOccurrences(start, end, user),
       this.householdMedia.find({
         where: {
           householdId: user.householdId,
@@ -502,6 +505,19 @@ export class CalendarController {
   }
 }
 
+/** 把日历门面注册到内核（J1b）。 */
+@Injectable()
+export class CalendarFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly calendar: CalendarService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('calendar', calendarFacade(this.calendar));
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -513,10 +529,9 @@ export class CalendarController {
       MaintenancePlan,
       TravelPlan,
     ]),
-    TasksModule,
   ],
   controllers: [CalendarController],
-  providers: [CalendarService],
+  providers: [CalendarService, CalendarFacadeProvider],
   exports: [CalendarService],
 })
 export class CalendarModule {}
