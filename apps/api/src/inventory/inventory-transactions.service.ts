@@ -20,7 +20,7 @@ import {
   BatchDatesInput,
   InventoryBatchesService,
 } from './inventory-batches.service';
-import { usableLocationId } from '../locations/location-refs';
+import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
 
 const MAX_QUANTITY = 99_999_999.99;
 
@@ -65,6 +65,7 @@ export class InventoryTransactionsService {
     private readonly transactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
     private readonly batches: InventoryBatchesService,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   createTransaction(
@@ -356,7 +357,7 @@ export class InventoryTransactionsService {
       assertQuantityRange(quantityAfter);
       target.quantity = quantityString(quantityAfter);
       // I1「放哪儿」：分批时记在新批次上（物品还没有默认位置就顺手记上）；不分批时就是物品的默认位置
-      const location = (await usableLocationId(manager, user.householdId, locationId)) ?? null;
+      const location = (await this.facades.get('locations').usableLocationId(toPluginTransaction(manager), user.householdId, locationId)) ?? null;
       if (location && (!batchDates || !target.defaultLocationId)) target.defaultLocationId = location;
       await manager.getRepository(InventoryItem).save(target);
       const transaction = this.createTransaction(manager, {

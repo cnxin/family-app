@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Module, Patch, Post } from '@nestjs/common';
+import { Controller, Delete, Get, Injectable, Module, OnModuleInit, Patch, Post } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   createStorageLocationBody,
@@ -19,6 +19,8 @@ import {
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { ZodBody, ZodParam, ZodQuery } from '../common/zod';
 import { HouseholdMap, StorageLocation } from '../entities';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { locationsFacade } from './locations.facade';
 import { LocationsService } from './locations.service';
 import { MapController } from './map.controller';
 import { MapService } from './map.service';
@@ -100,9 +102,19 @@ export class LocationsController {
   }
 }
 
+/** 把位置门面注册到内核（J1b）：库存、资产引用位置前的检查走这里，不再 import location-refs。 */
+@Injectable()
+export class LocationsFacadeProvider implements OnModuleInit {
+  constructor(private readonly registry: PluginFacadeRegistry) {}
+
+  onModuleInit() {
+    this.registry.register('locations', locationsFacade());
+  }
+}
+
 @Module({
   imports: [TypeOrmModule.forFeature([StorageLocation, HouseholdMap])],
   controllers: [LocationsController, MapController],
-  providers: [LocationsService, MapService, RoomRestructureService],
+  providers: [LocationsService, MapService, RoomRestructureService, LocationsFacadeProvider],
 })
 export class LocationsModule {}

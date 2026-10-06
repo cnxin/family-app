@@ -13,6 +13,8 @@ export const inventoryManifest = {
   requires: [
     { plugin: 'locations', via: 'contract', uses: ['locations.usableLocationId'], reason: '物品默认位置、批次位置要是家里还在用的位置' },
   ],
+  // J1b：物品默认位置、批次位置、入库放哪儿的检查走位置门面
+  dependsOn: ['locations'],
   nav: [{ key: 'inventory', label: '库存', glyph: '库', scene: 'house', path: '/house/inventory' }],
   legacyPaths: [['/inventory', '/house/inventory']],
   module: { overridable: true, hasData: { kind: 'tables', tables: [{ table: 'inventory_items' }] } },

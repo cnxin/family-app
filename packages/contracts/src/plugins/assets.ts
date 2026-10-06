@@ -14,6 +14,8 @@ export const assetsManifest = {
     { plugin: 'inventory', via: 'contract', uses: ['inventory.transactions'], reason: '维护用掉的耗材从库存出库' },
     { plugin: 'locations', via: 'contract', uses: ['locations.usableLocationId'], reason: '资产放的位置要是家里还在用的位置' },
   ],
+  // J1b：资产放哪儿的检查走位置门面；维护记出库走库存门面（同一事务）
+  dependsOn: ['locations', 'inventory'],
   nav: [{ key: 'assets', label: '资产', glyph: '资', scene: 'house', path: '/house/assets' }],
   // 三条旧路径在 routes.ts MOVED 里原本分在两处；它们互不为前缀、也不和中间的条目重叠，合到一处换算结果不变
   legacyPaths: [['/assets', '/house/assets'], ['/home-assets', '/house/assets'], ['/asset', '/house/assets']],

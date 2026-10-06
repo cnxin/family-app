@@ -4,7 +4,7 @@ import { StorageLocation } from '../entities';
 
 /**
  * 库存 / 批次 / 资产引用位置前的检查（I1）：必须是这个家庭的、没归档的位置。
- * 纯函数、只读一行，给别的域直接调，不经过 LocationsService（重构期约束：不 import 别的域的 Service）。
+ * 只读一行。别的插件经位置门面调（J1b，locations.facade.ts），不直接 import 本文件。
  * undefined = 调用方没提这个字段；null = 清掉。
  */
 export async function usableLocationId(

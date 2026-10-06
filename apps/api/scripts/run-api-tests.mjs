@@ -157,6 +157,7 @@ const BUSINESS_SCRIPTS = [
   'shopping-inventory',
   'food-batches',
   'assets',
+  'assets-inventory-rollback',
   'locations',
   'map',
   'map-rooms',

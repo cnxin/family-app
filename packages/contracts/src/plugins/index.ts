@@ -34,6 +34,9 @@ export * from './core';
 export * from './kernel';
 export * from './tasks.facade';
 export * from './calendar.facade';
+export * from './locations.facade';
+export * from './inventory.facade';
+export * from './menus.facade';
 export * from './keys';
 export * from './types';
 

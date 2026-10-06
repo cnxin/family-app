@@ -24,12 +24,8 @@ import {
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import {
-  InventoryItem,
-  InventoryTransaction,
-  Menu,
-  ShoppingItem,
-} from '../entities';
+import { ShoppingItem } from '../entities';
+import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
 
 class GenerateDto {
   @IsISO8601()
@@ -68,57 +64,40 @@ export class ShoppingService {
   constructor(
     @InjectRepository(ShoppingItem)
     private readonly items: Repository<ShoppingItem>,
-    @InjectRepository(InventoryTransaction)
-    private readonly transactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   async list(householdId: string, date: string) {
     const list = await this.items.find({ where: { householdId, date } });
+    // 确认入库记录（含撤销时间）从库存门面读（J1b）
     const receipts = list.length
-      ? await this.transactions.find({
-          where: {
-            householdId,
-            sourceType: 'shopping_item',
-            sourceId: In(list.map((item) => item.id)),
-            type: 'receipt',
-          },
-          order: { createdAt: 'ASC' },
-        })
+      ? await this.facades.get('inventory').listShoppingReceipts(
+          householdId,
+          list.map((item) => item.id),
+        )
       : [];
-    const reversals = receipts.length
-      ? await this.transactions.find({
-          where: {
-            householdId,
-            reversesTransactionId: In(receipts.map((row) => row.id)),
-          },
-        })
-      : [];
-    const reversalByOriginal = new Map(
-      reversals.map((row) => [row.reversesTransactionId, row]),
-    );
     const receiptBySource = new Map(
-      receipts.map((row) => [row.sourceId, row]),
+      receipts.map((row) => [row.shoppingItemId, row]),
     );
     // 按食材分类分组排序，手动项排最后
     return list
       .map((item) => {
         const receipt = receiptBySource.get(item.id);
-        const reversal = receipt ? reversalByOriginal.get(receipt.id) : null;
         return {
           ...item,
           inventoryConfirmation: receipt
             ? {
-                transactionId: receipt.id,
+                transactionId: receipt.transactionId,
                 inventoryItemId: receipt.inventoryItemId,
-                inventoryItemName: receipt.inventoryItem.name,
+                inventoryItemName: receipt.inventoryItemName,
                 quantityBefore: receipt.quantityBefore,
                 delta: receipt.delta,
                 quantityAfter: receipt.quantityAfter,
                 unit: receipt.unit,
                 actorName: receipt.actorName,
                 createdAt: receipt.createdAt,
-                reversedAt: reversal?.createdAt ?? null,
+                reversedAt: receipt.reversedAt,
               }
             : null,
         };
@@ -139,13 +118,11 @@ export class ShoppingService {
         `shopping-list:${householdId}:${date}`,
       ]);
       const items = manager.getRepository(ShoppingItem);
-      const menus = await manager.getRepository(Menu).find({
-        where: { householdId, date },
-        relations: { items: { dish: { ingredients: { ingredient: true } } } },
-      });
-      const wanted = menus
-        .flatMap((menu) => menu.items)
-        .filter((item) => item.status === 'accepted' || item.status === 'cooking');
+      // 某天的菜要哪些食材、现有库存、哪些自动项已确认入库：分别从点菜、库存门面读，同一事务（J1b）
+      const transaction = toPluginTransaction(manager);
+      const needs = await this.facades
+        .get('menus')
+        .listIngredientNeeds(transaction, householdId, date);
 
       const merged = new Map<
         string,
@@ -156,39 +133,26 @@ export class ShoppingService {
           isPantryStaple: boolean;
         }
       >();
-      for (const item of wanted) {
-        const recipeIngredients = item.recipeSnapshot
-          ? item.recipeSnapshot.ingredients
-          : (item.dish.ingredients ?? []).map((dishIngredient) => ({
-              ingredientId: dishIngredient.ingredientId,
-              isPantryStaple: dishIngredient.ingredient.isPantryStaple,
-              quantity: Number(dishIngredient.quantity),
-              unit: dishIngredient.unit,
-            }));
-        for (const ingredient of recipeIngredients) {
-          const key = `${ingredient.ingredientId}|${ingredient.unit}`;
-          const previous = merged.get(key);
-          merged.set(key, {
-            ingredientId: ingredient.ingredientId,
-            unit: ingredient.unit,
-            requiredQty:
-              (previous?.requiredQty ?? 0) + Number(ingredient.quantity),
-            isPantryStaple:
-              (previous?.isPantryStaple ?? true) &&
-              ingredient.isPantryStaple,
-          });
-        }
+      for (const ingredient of needs) {
+        const key = `${ingredient.ingredientId}|${ingredient.unit}`;
+        const previous = merged.get(key);
+        merged.set(key, {
+          ingredientId: ingredient.ingredientId,
+          unit: ingredient.unit,
+          requiredQty:
+            (previous?.requiredQty ?? 0) + Number(ingredient.quantity),
+          isPantryStaple:
+            (previous?.isPantryStaple ?? true) &&
+            ingredient.isPantryStaple,
+        });
       }
 
       const inventory = merged.size
-        ? await manager.getRepository(InventoryItem).find({
-            where: {
-              householdId,
-              ingredientId: In(
-                [...new Set([...merged.values()].map((item) => item.ingredientId))],
-              ),
-            },
-          })
+        ? await this.facades.get('inventory').listIngredientStock(
+            transaction,
+            householdId,
+            [...new Set([...merged.values()].map((item) => item.ingredientId))],
+          )
         : [];
       const inventoryByKey = new Map(
         inventory.map((item) => [
@@ -214,16 +178,15 @@ export class ShoppingService {
         where: { householdId, date, source: 'auto' },
       });
       const receipts = oldAuto.length
-        ? await manager.getRepository(InventoryTransaction).find({
-            where: {
-              householdId,
-              sourceType: 'shopping_item',
-              sourceId: In(oldAuto.map((item) => item.id)),
-              type: 'receipt',
-            },
-          })
+        ? await this.facades.get('inventory').listShoppingReceipts(
+            householdId,
+            oldAuto.map((item) => item.id),
+            transaction,
+          )
         : [];
-      const confirmedSourceIds = new Set(receipts.map((row) => row.sourceId));
+      const confirmedSourceIds = new Set(
+        receipts.map((row) => row.shoppingItemId),
+      );
       const reusableByKey = new Map(
         oldAuto
           .filter((item) => !confirmedSourceIds.has(item.id))
@@ -297,14 +260,7 @@ export class ShoppingService {
   }
 
   async remove(id: string, householdId: string) {
-    if (
-      await this.transactions.existsBy({
-        householdId,
-        sourceType: 'shopping_item',
-        sourceId: id,
-        type: 'receipt',
-      })
-    ) {
+    if (await this.facades.get('inventory').hasShoppingReceipt(householdId, id)) {
       throw new ConflictException('已经确认入库的购物项不能删除');
     }
     const result = await this.items.delete({ id, householdId });
@@ -352,7 +308,7 @@ export class ShoppingController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ShoppingItem, InventoryTransaction])],
+  imports: [TypeOrmModule.forFeature([ShoppingItem])],
   controllers: [ShoppingController],
   providers: [ShoppingService],
   exports: [ShoppingService],
