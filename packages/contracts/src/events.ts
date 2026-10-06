@@ -68,8 +68,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
 
   { prefix: '/assets', domains: ['assets', 'reminders', 'calendar', 'locations'] },
   { prefix: '/assets/:id/location', domains: ['assets', 'locations'] },
-  { prefix: '/locations', domains: ['locations', 'inventory', 'assets'] },
-  { prefix: '/map', domains: ['locations'] },
   { prefix: '/asset-documents', domains: ['assets'] },
   { prefix: '/maintenance-plans', domains: ['assets', 'reminders', 'calendar', 'inventory'] },
   { prefix: '/maintenance-plans/:id/shopping-items', domains: ['assets', 'shopping'] },

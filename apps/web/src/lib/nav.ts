@@ -78,7 +78,7 @@ export const SCENES: NavScene[] = [
       { key: shelfModuleKey.enum.inventory, tier: 'shelf', glyph: '库', label: '库存', path: '/house/inventory', ready: true },
       ...pluginSegments('shopping'),
       { key: shelfModuleKey.enum.assets, tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
-      { key: shelfModuleKey.enum.locations, tier: 'shelf', glyph: '图', label: '地图', path: '/house/map', ready: true },
+      ...pluginSegments('locations'),
       ...pluginSegments('finance'),
       ...pluginSegments('points'),
       ...pluginSegments('guests'),

@@ -217,6 +217,11 @@ export interface PluginUsage {
   tables?: readonly PluginUsageTable[];
   /** 统计不到的，写原因。 */
   uncounted?: readonly string[];
+  /**
+   * 现状快照（不是写操作次数）：改动没有操作人、按成员数不了的域（位置），每个家庭另起一段列现状。
+   * 查询要专门写，manifest 只给 id，实现按 id 写在 apps/api/scripts/usage-report.mjs 的 SNAPSHOT_SOURCES。
+   */
+  snapshots?: readonly { server: string; label: string }[];
 }
 
 export interface PluginNotificationModule {
