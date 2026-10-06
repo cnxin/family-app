@@ -415,10 +415,15 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | J1.4 | 日历 | `704c187` | `4db858d` | **重跑 1 次**（#37332584424） | 以日历为主的写路由只有 `/calendar-events`；另 8 条推日历的路由是小管家提案 ×2、资产、维护计划、提醒、任务、出行、来访，留在各自的域。`get_today_summary` / `get_family_schedule` 跨域、归内核，不认领。首跑桌面视口「片单：改成已排期」失败（观影，本笔未碰），重跑全绿 |
 | J1.4 | 提醒 | `8e33db1` | `db108c4` | 一次过（#37332864835） | 本批唯一 shelf 域。hasData 由 `tables[].where` 生成，与手写 SQL 只差空白，system-modules 黑盒「提醒边界」通过。读工具仍缺，不补 |
 | J1.4 | 点菜 | `14f7e79` | `442cd83` | **重跑 2 次**（#37333503940，第 3 次全绿） | 两段导航本来就能用 `nav[]` 表达，类型不用补（指令写的 `nav.segments` 不存在）。**manifest 类型补了两处**：①顶层 `proposals`——点菜没有 ⌘K 动作，而 `actions` 里的每条都会进 ⌘K（注册表单测按此断言），提案无处挂，先放这里，J3 补动作时挪进 `actions[].propose`；② `PluginUsageTable.log`——`menu_events` 每行就是一次操作，来源输出「流水 menu_events」，用量脚本里单独查它的那段删掉。`POST /menus/:id/confirm-consumption` 同样写在 inventory.module.ts（扣库存），与 confirm-stock 同类，**不收**、白名单，归属随 J1.5 定。首跑与第一次重跑都是手机视口「片单：改成已排期」失败；本地该用例双视口各连跑 5 次全过，点菜分支没碰观影，判定为同一偶发，**超出「重跑一次」的规矩多重跑了一次**，第 3 次全绿。该偶发已有未合并的修复分支 `fix/media-scheduled-cache`（`92a8d55`） |
+| J1.5 | 位置 | `d61018e` | `8285055` | 一次过（#37418223045） | hasData 含子查询：子查询按外层表名 `storage_locations."parentId"` 关联父位置，现有 `tables[].where` 就能表达，**不补类型**；新旧 SQL 在本地开发库两个家庭上结果一致（22 / 0），system-modules 黑盒通过。⌘K「记一下东西放哪」归位置、落点在库存页，照原样。事件以位置为主 2 条（`/locations`、`/map`），另 5 条推位置的（库存物品、批次、买到后入库、资产、资产位置）留在各自的域。**补类型**：`PluginUsage.snapshots`（server id + 名字）——位置只有现状快照，SQL 与每行文案按 id 留在 usage-report.mjs 的 `SNAPSHOT_SOURCES`（§8.4 第 5 条的 server 模式），check-plugins 断言声明的快照有实现 |
+| J1.5 | 库存 | `d7ecc89` | `2799e3a` | 一次过（#37418498319） | **收白名单**：`confirm-stock`（推 shopping / inventory / locations）、`confirm-consumption`（推 menus / inventory）进库存 manifest，推送的域集合与原来逐条一致；手写表里删掉，`PENDING_ROUTES` 空了，整个机制从 check-plugins 删掉；购物、点菜 manifest 的注释改成现状。查询失效 6 个 key 逐条一致。留意「快过期」的合并标题用 `mergedOverdueTitle` 表达「有的已经过期了」 |
+| J1.5 | 资产 | `ada4071` | `0da1e3b` | 一次过（#37418772528） | 事件以资产为主 6 条，第 7 条推资产的是 `/locations`（位置）。留意三种由 manifest 生成，`attentionPath` 的资产特判删掉；服务端三条规则的顺序（保养 → 续费 → 保修）与开关归属不变。三条旧路径原本在 `MOVED` 里分两处（`/assets` 一处，`/home-assets`、`/asset` 在观影之后），`pluginLegacyPaths` 只能整组放回，放在 `/assets` 原位：三条互不为前缀，也不和中间条目重叠，换算结果不变。§8.2 写的「库存 Service」实际是 `InventoryTransactionsService`（维护记出库） |
+
+**J1.5 等价比对**：每笔前后各导一份快照比——事件路由、查询失效表、导航分段 / core 顺序 / 手机底栏、⌘K（除动作 id）、旧路径换算（样例加了 `/home-assets/…`、`/asset/…?…`、`/map`、`/locations`）、通知名与图标、留意落点，以及**本批新加的留意文案样例**（九个有留意的域 × 每种事 × 有 / 无截止日、逾期、合并、合并含逾期、混合，共 73 条 `attentionCopy` 输出）；再在本地开发库上跑 `usage-report.mjs`（含「位置」快照一段）排序后逐行比。三笔全部一致。agent 工具只剩 `get_watch_candidates`（观影）无主。
 
 **每笔都做的等价比对**：迁移前后各导一份快照比对——web 端的事件路由、查询失效表、导航分段、core 顺序、手机底栏、⌘K（除动作 id）、旧路径换算、通知名与图标、留意落点；再在本地开发库上跑 `usage-report.mjs`，排序后逐行比。五笔全部一致。
 
-**J1.5 待收**：`POST /shopping-items/:id/confirm-stock` 与 `POST /menus/:id/confirm-consumption` **都归库存插件**（前者 §8.6 第 4 条，后者 2026-10-06 King 拍板），仍在 `contracts/src/events.ts` 的手写表里，`scripts/check-plugins.mjs` 的 `PENDING_ROUTES` 暂时放过；J1.5 迁库存时收进 inventory manifest，并删掉 `PENDING_ROUTES` 里这两条白名单。
+**J1.5 待收**：已收，见 J1.5 库存一行（`PENDING_ROUTES` 已删）。
 
 **演示栈升级（2026-10-06，J1.4 合完后）**：`b5c4e7c` → `442cd83`（脚本打印的「升级前提交」取自 ORIG_HEAD，是 `db108c4`，不准；实际运行版本以 9-30 的备份清单与 reflog 为准）。`upgrade-prod.sh --no-pull`，无新迁移（仍 72 个）。回滚标签 `prod-before-20261006-003241`，升级前备份 `backups-production/20261005-163242Z`。升级后：14 张业务表行数与迁移数前后一致；四个服务与 API Node 时区均为上海；`/api/health/ready` ok，今天 / 家里 / 点菜 / 厨房 / 购物 / 日历 / 任务 / 提醒 / 财务 / 访客 / 智能家居 / 位置 12 个页面 200，新 bundle 含 J1.3 / J1.4 的 manifest；智能家居 `smart_home_live mode=push`，API 容器到 HA 401（网络通）；API 日志无 error。事件流的 `hello` / `heartbeat` 要成员令牌，没测（不登录家里人的账号），无令牌 401。J1.3 的财务权限变化随这次一起上线。
 
@@ -434,7 +439,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
 | J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；§8.6 五项已拍板 |
-| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 13 / 18（知识库、回忆、出行、投票、菜谱、积分、访客、财务、购物、任务、日历、提醒、点菜）；演示栈 2026-10-06 升到 `442cd83`（含 J1.3 财务权限）；J1.5 待收 confirm-stock / confirm-consumption 两条手写路由 |
+| J1 插件注册表（18 域） | 进行中 | 见 §8.7 | 已迁 16 / 18（知识库、回忆、出行、投票、菜谱、积分、访客、财务、购物、任务、日历、提醒、点菜、位置、库存、资产）；演示栈在 `442cd83`，J1.6 + J1.7 做完一起升 |
 | J2 助理数据与开关 | ☐ | | |
 | J3 第 0 档引擎 | ☐ | | 等试用原话；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | ☐ | | |
