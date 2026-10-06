@@ -588,6 +588,8 @@ main 上 `105926f`（J1b.2 合并）、`a14ee3a`（J1b.3 合并）两次 CI 被�
 
 **check-plugins 新断言（J1b.6）与反向验证**：插件目录之间零 import；`apps/api/src` 下每个目录都归到插件或登记过的内核目录（`dishes` 归菜谱）；门面接口只在 contracts、登记进 `PluginFacades`、实现只在提供方目录注册一次；`dependsOn` == 代码里取用的门面；钩子名单与 payload 只在 contracts，发起方 == 钩子名前缀的插件，只能以所在插件的名义订阅，`hooks` == 代码里订阅的钩子，每个钩子有发起方和订阅方，写死顺序只列订阅方；插件事件名只在 contracts、只有前缀插件能发。逐条故意改坏、跑一遍、再从备份还原（还原后工作区与改坏前一致）：加回一条跨目录 import、漏声明 / 多声明 `dependsOn`、漏注册一个钩子订阅、订阅了没声明、发起不存在的钩子、冒充别的插件订阅、在 api 里定义门面接口、在非提供方目录注册门面、写死顺序里列非订阅方、在 api 里重定义钩子 payload、新加没归类的目录——12 条都报错。
 
+**演示栈升级（2026-10-06，J1b 合完后）**：`4ed0746` → `eaaef2e`，`upgrade-prod.sh --no-pull`，无新迁移（仍 74 个）。「升级前提交」由脚本从运行中 api 镜像的 `org.opencontainers.image.revision` 标签读出（标签路径第一次生效，与实际一致）。回滚镜像标签 `prod-before-20261006-210401`，升级前备份 `backups-production/20261006-130403Z`；升级后 api / web / backup-worker 三个镜像的标签都是 `eaaef2e`。检查（King 授权的演示栈只读查询）：20 张业务表行数与迁移数前后一致；四个服务与 API Node 时区为上海；`/api/health/ready` ok；今天、家里、点菜、厨房、购物、库存、资产、地图、积分、日历、任务、提醒、智能家居、小管家 14 个页面 200，新 bundle 含 `smart-home.link-fired` / `tasks.completed` / `tasks.uncompleted` 与内核工具标签；智能家居 `smart_home_live mode=push`，API 容器到 HA 401（网络通）；API 日志无 error、无 5xx、没有门面 / 钩子注册类报错；事件流无令牌 401。人工走查（资产记维护看库存出库、任务打勾看积分、触发联动看建出的任务）要用 King 本人的账号、要往演示栈写数据，执行者不做，留给 King。
+
 ### 9.4 与指令不一样的地方
 
 1. 门面方法名按今天真实的调用收口：任务门面是 `listOccurrences(start, end, actor)`（指令写 `listForCalendar(householdId, range)`；日历今天调的是 `TasksService.list(start, end, user)`，智能家居也用它），日历门面是 `listEntries`。
