@@ -38,7 +38,8 @@ import {
   Repository,
 } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { CalendarModule, CalendarService } from '../calendar/calendar.module';
+import type { CalendarEntryView } from '@family/contracts';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import {
   CalendarEvent,
   HouseholdTask,
@@ -55,7 +56,6 @@ import {
   ReminderStatus,
   TravelPlan,
 } from '../entities';
-import { TasksModule } from '../tasks/tasks.module';
 import { isHouseholdManager, taskOccursOn } from '@family/shared';
 
 class ReminderSourceRangeDto {
@@ -164,7 +164,7 @@ export class RemindersService
     private readonly reminders: Repository<Reminder>,
     @InjectRepository(Poll)
     private readonly polls: Repository<Poll>,
-    private readonly calendar: CalendarService,
+    private readonly facades: PluginFacadeRegistry,
     private readonly dataSource: DataSource,
     private readonly events: EventBus,
   ) {}
@@ -186,7 +186,8 @@ export class RemindersService
 
   async listSources(query: ReminderSourceRangeDto, user: JwtUser) {
     const [calendarEntries, polls, maintenancePlans] = await Promise.all([
-      this.calendar.list(query.start, query.end, user),
+      // 日历条目走日历门面（J1b），不 import 日历目录
+      this.facades.get('calendar').listEntries(query.start, query.end, user),
       this.polls.find({
         where: {
           householdId: user.householdId,
@@ -227,7 +228,8 @@ export class RemindersService
       }));
 
     const calendarSources = calendarEntries
-      .filter((entry) => entry.module !== 'media' && entry.module !== 'guest')
+      .filter((entry): entry is CalendarEntryView & { module: ReminderSource['module'] } =>
+        entry.module !== 'media' && entry.module !== 'guest')
       .filter((entry) => {
         if (entry.module === 'menu') return entry.status === 'open';
         if (entry.module === 'task') return entry.status === 'pending';
@@ -767,8 +769,6 @@ export class RemindersController {
 
 @Module({
   imports: [
-    CalendarModule,
-    TasksModule,
     TypeOrmModule.forFeature([
       Reminder,
       ReminderRecipient,

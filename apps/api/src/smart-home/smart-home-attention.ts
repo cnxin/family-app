@@ -4,7 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 import { smartHomeRulesSchema, DEFAULT_SMART_HOME_RULES, type SmartHomeRules } from '@family/contracts';
 import type { Capability } from '../auth/capabilities';
 import { SmartHomeDevice, SmartHomeWebhookSettings } from '../entities';
-import { TasksService } from '../tasks/tasks.module';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import {
   AttentionRegistry,
   type AttentionCandidate,
@@ -65,7 +65,7 @@ export class SmartHomeAttentionSource implements AttentionSource, OnModuleInit {
     @InjectRepository(SmartHomeWebhookSettings)
     private readonly webhookSettings: Repository<SmartHomeWebhookSettings>,
     private readonly smartHome: SmartHomeService,
-    private readonly tasks: TasksService,
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   onModuleInit() {
@@ -113,7 +113,8 @@ export class SmartHomeAttentionSource implements AttentionSource, OnModuleInit {
     if (!event) return null;
     const actor = await smartHomeActor(this.dataSource, context.householdId);
     if (!actor) return null;
-    const occurrences = await this.tasks.list(context.today, context.today, actor);
+    // 走任务门面（J1b），不 import 任务目录
+    const occurrences = await this.facades.get('tasks').listOccurrences(context.today, context.today, actor);
     const pending = occurrences.find((one) => one.status === 'pending' && one.task.title === LAUNDRY_TASK);
     if (!pending) return null;
     return {

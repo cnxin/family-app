@@ -24,6 +24,8 @@ export const smartHomeManifest = {
     { plugin: 'shopping', via: 'contract', uses: ['POST /shopping-items'], optional: true, reason: '耗材快用完加进购物清单' },
     { plugin: 'today', via: 'kernel', uses: ['AttentionRegistry', 'ModuleHasDataRegistry'], reason: '往今天页挂留意、向模块开关提供 hasData 判定' },
   ],
+  // J1b：留意里查今天的「晾衣服」从任务门面取
+  dependsOn: ['tasks'],
   nav: [{ key: 'smart-home', label: '智能家居', glyph: '智', scene: 'house', path: '/house/smart-home' }],
   module: { overridable: true, hasData: { kind: 'server', id: 'smart-home.hasData' } },
   events: {

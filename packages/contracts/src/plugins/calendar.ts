@@ -13,6 +13,8 @@ export const calendarManifest = {
   requires: [
     { plugin: 'tasks', via: 'contract', uses: ['tasks.list'], reason: '日历视图里显示当天的任务' },
   ],
+  // J1b：日历视图里的任务条目从任务门面取
+  dependsOn: ['tasks'],
   nav: [{ key: 'calendar', label: '日历', glyph: '历', scene: 'schedule', path: '/schedule/calendar', mobileTab: 'schedule' }],
   legacyPaths: [['/calendar', '/schedule/calendar']],
   module: { overridable: false, hasData: { kind: 'always' } },

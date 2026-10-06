@@ -5,6 +5,8 @@
 //     任一回调抛错整个事务回滚；manifest 声明 hooks。
 // 这里只有类型与名字，没有实现（contracts 也给前端用，不能带 Nest / TypeORM）。
 
+import type { CalendarFacade } from './calendar.facade';
+import type { TasksFacade } from './tasks.facade';
 import type { PluginRole } from './types';
 
 /** 发起操作的成员。字段与 apps/api 的 JwtUser 一一对应，门面与钩子 payload 原样传递。 */
@@ -27,7 +29,10 @@ export interface PluginTransaction {
 }
 
 /** key → 门面接口。新增门面时在这里登记（check-plugins 断言接口只在 contracts 定义）。 */
-export type PluginFacades = Record<never, never>;
+export interface PluginFacades {
+  tasks: TasksFacade;
+  calendar: CalendarFacade;
+}
 export type PluginFacadeKey = keyof PluginFacades;
 
 /** 钩子名 → payload。新增钩子时在这里与 TRANSACTION_HOOK_NAMES 一起登记。 */
