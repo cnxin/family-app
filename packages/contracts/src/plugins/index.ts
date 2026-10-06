@@ -37,6 +37,7 @@ export * from './calendar.facade';
 export * from './locations.facade';
 export * from './inventory.facade';
 export * from './menus.facade';
+export * from './tasks.hooks';
 export * from './keys';
 export * from './types';
 

@@ -6,6 +6,7 @@ import {
   Injectable,
   Module,
   NotFoundException,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -34,11 +35,12 @@ import {
   type LedgerQuery,
   type RedemptionQuery,
   type RewardsQuery,
+  type TaskCompletedHookPayload,
+  type TaskUncompletedHookPayload,
   type UpdateRewardBody,
 } from '@family/contracts';
 import { ZodBody, ZodQuery } from '../common/zod';
 import {
-  HouseholdTask,
   HouseholdTaskInstance,
   Member,
   Notification,
@@ -51,6 +53,7 @@ import {
   RewardRedemptionStatus,
 } from '../entities';
 import { isHouseholdManager, normalizedText } from '@family/shared';
+import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
 
 interface DeltaInput {
   householdId: string;
@@ -530,14 +533,13 @@ export class PointsService {
     return this.findRedemption(resultId, user.householdId);
   }
 
-  async awardTaskCompletion(
-    manager: EntityManager,
-    task: HouseholdTask,
-    instance: HouseholdTaskInstance,
-    memberId: string,
-    user: JwtUser,
-  ) {
-    if (task.rewardPoints <= 0) return null;
+  /** 订阅 tasks.completed（J1b）：在任务的事务里记积分，并把积分版本 / 流水 id 记回任务实例。 */
+  async awardTaskCompletion(manager: EntityManager, payload: TaskCompletedHookPayload) {
+    if (payload.rewardPoints <= 0) return null;
+    const user = payload.actor as JwtUser;
+    const memberId = payload.memberId;
+    const task = { id: payload.taskId, title: payload.title, rewardPoints: payload.rewardPoints };
+    const instance = await this.lockedTaskInstance(manager, payload);
     const version = instance.pointsAwardVersion + 1;
     const result = await this.applyDelta(manager, {
       householdId: user.householdId,
@@ -564,12 +566,11 @@ export class PointsService {
     return result.entry;
   }
 
-  async reverseTaskAward(
-    manager: EntityManager,
-    task: HouseholdTask,
-    instance: HouseholdTaskInstance,
-    user: JwtUser,
-  ) {
+  /** 订阅 tasks.uncompleted（J1b）：在任务的事务里冲销这次完成记的积分。 */
+  async reverseTaskAward(manager: EntityManager, payload: TaskUncompletedHookPayload) {
+    const user = payload.actor as JwtUser;
+    const task = { id: payload.taskId, title: payload.title, rewardPoints: payload.rewardPoints };
+    const instance = await this.lockedTaskInstance(manager, payload);
     if (!instance.pointsLedgerId) return null;
     const original = await manager.getRepository(PointsLedger).findOneByOrFail({
       id: instance.pointsLedgerId,
@@ -593,6 +594,21 @@ export class PointsService {
       metadata: { taskId: task.id, ledgerId: result.entry.id },
     });
     return result.entry;
+  }
+
+  /**
+   * 任务实例上的积分版本 / 流水 id 两列由积分维护（列在任务实例表上，J1b 不动表）。任务那边已在同一事务里锁住并保存了这一行；
+   * 不带 eager 关系重读，和原来直接传进来的那份对象一样。
+   */
+  private lockedTaskInstance(manager: EntityManager, payload: { instanceId: string; householdId: string }) {
+    return manager
+      .getRepository(HouseholdTaskInstance)
+      .createQueryBuilder('instance')
+      .where('instance.id = :id AND instance.householdId = :householdId', {
+        id: payload.instanceId,
+        householdId: payload.householdId,
+      })
+      .getOneOrFail();
   }
 
   private async applyDelta(manager: EntityManager, input: DeltaInput) {
@@ -887,6 +903,24 @@ export class PointsController {
   }
 }
 
+/** 积分订阅任务的事务内钩子（J1b）：打勾记积分、取消打勾冲销，不再由任务 import PointsService。 */
+@Injectable()
+export class PointsTaskHooks implements OnModuleInit {
+  constructor(
+    private readonly hooks: TransactionHookRegistry,
+    private readonly points: PointsService,
+  ) {}
+
+  onModuleInit() {
+    this.hooks.on('tasks.completed', 'points', async (payload, manager) => {
+      await this.points.awardTaskCompletion(manager, payload);
+    });
+    this.hooks.on('tasks.uncompleted', 'points', async (payload, manager) => {
+      await this.points.reverseTaskAward(manager, payload);
+    });
+  }
+}
+
 @Module({
   imports: [
     TodayModule,
@@ -900,7 +934,7 @@ export class PointsController {
     ]),
   ],
   controllers: [PointsController],
-  providers: [PointsService, PointsRedemptionAttentionRule, PointsAttention],
+  providers: [PointsService, PointsRedemptionAttentionRule, PointsAttention, PointsTaskHooks],
   exports: [PointsService],
 })
 export class PointsModule {}

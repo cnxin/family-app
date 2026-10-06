@@ -7,6 +7,8 @@ export const pointsManifest = {
   glyph: '分',
   manifestVersion: 1,
   tier: 'shelf',
+  // J1b：任务打勾记积分 / 取消打勾冲销，订阅任务的事务内钩子（同一事务）
+  hooks: ['tasks.completed', 'tasks.uncompleted'],
   nav: [{ key: 'points', label: '积分', glyph: '分', scene: 'house', path: '/house/points' }],
   legacyPaths: [['/points', '/house/points']],
   module: {
