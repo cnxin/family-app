@@ -217,6 +217,21 @@ export type FinanceRecurring = z.infer<typeof financeRecurringSchema>;
 export const FINANCE_IMPORT_SOURCES = ['alipay', 'wechat', 'csv'] as const;
 export const financeImportSource = z.enum(FINANCE_IMPORT_SOURCES);
 export type FinanceImportSource = z.infer<typeof financeImportSource>;
+/** 页面上每种来源的名字与导出路径说明（列名映射在 apps/api/src/finance/import/import-formats.ts） */
+export const FINANCE_IMPORT_SOURCE_INFO: Readonly<Record<FinanceImportSource, { label: string; hint: string }>> = {
+  alipay: {
+    label: '支付宝',
+    hint: '支付宝 App → 我的 → 账单 → 右上角「…」→ 开具交易流水证明 → 用于个人对账，发到邮箱。邮件里的 zip 先解压，上传里面的 csv。',
+  },
+  wechat: {
+    label: '微信',
+    hint: '微信 → 我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单 → 用于个人对账，导出 csv 后上传。',
+  },
+  csv: {
+    label: '通用 CSV',
+    hint: '银行或别的记账软件导出的 csv（第一行是表头）。上传后自己选哪列是日期、金额、对方。',
+  },
+};
 /** 预览里一行的标记：已导入过（或同一文件里单号重复）、疑似重复、不计收支、交易关闭、退款 */
 export const FINANCE_IMPORT_FLAGS = ['already_imported', 'suspected_duplicate', 'not_counted', 'closed', 'refund'] as const;
 export const financeImportFlag = z.enum(FINANCE_IMPORT_FLAGS);

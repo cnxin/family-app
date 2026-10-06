@@ -17,6 +17,8 @@ import { useAuth } from '../lib/auth';
 import { AccountsPanel } from '../components/finance-accounts';
 import { BudgetBar, BudgetsPanel } from '../components/finance-budgets';
 import { CategoriesPanel } from '../components/finance-categories';
+import { ImportDialog } from '../components/finance-import';
+import { ImportHistory } from '../components/finance-import-history';
 import { LedgerPanel } from '../components/finance-ledger';
 import { RecurringPanel } from '../components/finance-recurring';
 import { TransactionForm } from '../components/finance-transaction-form';
@@ -51,6 +53,7 @@ export function FinancePage() {
     return !canManage && (wanted === 'budgets' || wanted === 'accounts') ? 'overview' : wanted;
   });
   const [recording, setRecording] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [initialMode, setInitialMode] = useState<'expense' | 'income' | 'transfer'>('expense');
   // 留意里信用卡「去还款」带 kind=transfer：还款就是转账
   useCreateIntent((kind) => {
@@ -73,13 +76,26 @@ export function FinancePage() {
       title="家庭财务"
       subtitle="家里共用的账本、账户余额和月度预算"
       actions={
-        <Button
-          className="h-9 px-3 text-[13px]"
-          disabled={usable.length === 0}
-          onClick={() => setRecording(true)}
-        >
-          + 记一笔
-        </Button>
+        <div className="flex gap-2">
+          {/* 导入算记账（record_finance），成员也能导；只在「流水」分段出现 */}
+          {view === 'ledger' ? (
+            <Button
+              variant="outline"
+              className="h-9 px-3 text-[13px]"
+              disabled={usable.length === 0}
+              onClick={() => setImporting(true)}
+            >
+              导入账单
+            </Button>
+          ) : null}
+          <Button
+            className="h-9 px-3 text-[13px]"
+            disabled={usable.length === 0}
+            onClick={() => setRecording(true)}
+          >
+            + 记一笔
+          </Button>
+        </div>
       }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
@@ -126,7 +142,10 @@ export function FinancePage() {
       }
     >
       {view === 'ledger' ? (
-        <LedgerPanel month={month} canManage={canManage} />
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <LedgerPanel month={month} canManage={canManage} />
+          <ImportHistory />
+        </div>
       ) : view === 'recurring' ? (
         <QueryFrame queries={[recurring, accounts, categories]} skeleton={<ListSkeleton rows={4} />}>
           <RecurringPanel
@@ -283,6 +302,17 @@ export function FinancePage() {
           </QueryFrame>
         </Panel>
       )}
+
+      {importing ? (
+        <ImportDialog
+          accounts={rows}
+          categories={categories.data ?? []}
+          onClose={() => setImporting(false)}
+          onDone={(statementMonth) => {
+            if (statementMonth && statementMonth <= currentMonth) setMonth(statementMonth);
+          }}
+        />
+      ) : null}
 
       {recording ? (
         <TransactionForm

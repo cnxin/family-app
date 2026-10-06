@@ -176,7 +176,9 @@ export class FinanceImportService {
         const toAccountId = type === 'transfer' ? (decision?.toAccountId ?? row.toAccountId) : null;
         if (type !== 'transfer' && !categoryId) throw new BadRequestException(`第 ${row.rowNo} 行没选分类`);
         if (type === 'transfer' && !toAccountId) throw new BadRequestException(`第 ${row.rowNo} 行记成转账要选转入账户`);
-        const title = (row.title && row.title !== '/' ? row.title : row.merchant || SOURCE_LABELS[record.source]).slice(0, 120);
+        // 流水名字用交易对方（「康安大药房-望京店」比「药品」好认），商品说明放备注
+        const product = row.title && row.title !== '/' && row.title !== row.merchant ? row.title : null;
+        const title = (row.merchant || product || SOURCE_LABELS[record.source]).slice(0, 120);
         await this.finance.insertWithinTransaction(
           {
             type,
@@ -185,7 +187,7 @@ export class FinanceImportService {
             toAccountId,
             categoryId,
             title,
-            note: null,
+            note: row.merchant ? (product?.slice(0, 1000) ?? null) : null,
             occurredOn: row.occurredOn,
             idempotencyKey: `import:${record.id}:${row.externalId ?? `row-${row.rowNo}`}`.slice(0, 180),
           },
