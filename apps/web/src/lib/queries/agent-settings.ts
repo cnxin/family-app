@@ -15,6 +15,13 @@ export function useUpdateAgentSettings() {
       expectedVersion: number;
       enabled?: boolean;
       runtimeKind?: AgentRuntimeKind;
+      tier0Enabled?: boolean;
+      tier1Enabled?: boolean;
+      tier1BaseUrl?: string | null;
+      tier1Model?: string | null;
+      tier2DailyLimit?: number;
+      tier2Redact?: boolean;
+      captureUtterances?: boolean;
     }) => api<AgentSettings>('/agent/settings', { method: 'PATCH', body }),
     onSuccess: (settings) => {
       void invalidateModules(client);

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { AgentRuntimeKind } from '@family/contracts';
 import {
   useAgentChannelPairings,
   useAgentChannels,
@@ -11,9 +10,10 @@ import {
   useUpdateAgentSettings,
 } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { AssistantTiers, UtteranceLog, type TierChange } from './assistant-tiers';
 import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
-import { Button, Checkbox, Dialog, Input, Segmented } from './ui';
+import { Button, Dialog, Input } from './ui';
 
 function shortTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -26,11 +26,11 @@ function shortTime(value: string) {
 }
 
 /**
- * 助理设置：运行方式（谁来回答）+ 消息渠道绑定（把 Telegram 这类外部账号配到某个成员）。
- * 外部渠道进来的消息是只读的——要改东西还是回 App 里确认提案。
+ * 助理设置：三档（本机规则 / 本地模型 / 云端助理，J2）+ 原话记录 + 消息渠道绑定（把 Telegram 这类外部账号配到某个成员）。
+ * 成员也看得到三档与自己的原话，但只有管理员能改。外部渠道进来的消息是只读的——要改东西还是回 App 里确认提案。
  */
 export function AssistantSettings({ manager, onClose }: { manager: boolean; onClose: () => void }) {
-  const settings = useAgentSettings(manager);
+  const settings = useAgentSettings(true);
   const update = useUpdateAgentSettings();
   const channels = useAgentChannels();
   const pairings = useAgentChannelPairings(manager);
@@ -50,7 +50,7 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
   const onError = (error: unknown) =>
     setMessage(error instanceof Error ? error.message : '没成功，再试一次');
 
-  function change(values: { enabled?: boolean; runtimeKind?: AgentRuntimeKind }) {
+  function change(values: TierChange) {
     if (!settings.data || update.isPending) return;
     setMessage(null);
     update.mutate({ ...values, expectedVersion: settings.data.version }, { onError });
@@ -59,42 +59,27 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
   return (
     <Dialog title="小管家设置" onClose={onClose} maxWidth={520}>
       <div className="flex flex-col gap-4">
-        {manager ? (
-          <section>
-            <h3 className="text-[13px] font-semibold text-ink-soft">运行方式</h3>
+        <section>
+          <h3 className="text-[13px] font-semibold text-ink-soft">三档</h3>
+          <p className="mt-1 text-[12px] text-ink-soft">
+            小管家先用本机规则听懂你，听不懂再交给家里的模型或云端。{manager ? '' : '只有家庭管理员能改。'}
+          </p>
+          <div className="mt-2">
             {settings.data ? (
-              <div className="mt-2 flex flex-col gap-2.5">
-                <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">启用问问小管家</span>
-                    <span className="mt-0.5 block text-[12px] text-ink-soft">
-                      关掉之后这一页就只能看历史，不能再提问
-                    </span>
-                  </span>
-                  <Checkbox
-                    label="启用问问小管家"
-                    checked={settings.data.enabled}
-                    disabled={update.isPending}
-                    onChange={() => change({ enabled: !settings.data!.enabled })}
-                  />
-                </div>
-                <div>
-                  <p className="mb-1.5 text-[12px] text-ink-soft">谁来回答（Hermes 连不上会自动退回本地摘要）</p>
-                  <Segmented
-                    value={settings.data.runtimeKind}
-                    onChange={(runtimeKind) => change({ runtimeKind })}
-                    options={[
-                      { value: 'fake' as const, label: '本地摘要' },
-                      { value: 'hermes' as const, label: 'Hermes' },
-                    ]}
-                  />
-                </div>
-              </div>
+              <AssistantTiers settings={settings.data} manager={manager} pending={update.isPending} onChange={change} />
             ) : (
-              <p className="mt-2 text-[13px] text-ink-soft">读取设置…</p>
+              <p className="text-[13px] text-ink-soft">读取设置…</p>
             )}
-          </section>
-        ) : null}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="text-[13px] font-semibold text-ink-soft">原话记录</h3>
+          <p className="mt-1 mb-2 text-[12px] text-ink-soft">
+            ⌘K 里每次输入结束记一条：说了什么、最后点了哪个。{manager ? '管理员能看全家的、导出 CSV。' : '这里只有你自己的。'}
+          </p>
+          <UtteranceLog manager={manager} capturing={settings.data?.captureUtterances ?? true} />
+        </section>
 
         <section>
           <h3 className="text-[13px] font-semibold text-ink-soft">消息渠道</h3>

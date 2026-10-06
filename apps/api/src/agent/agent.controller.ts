@@ -7,6 +7,7 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   Max,
   MaxLength,
@@ -102,6 +103,39 @@ class UpdateAgentSettingsDto {
   @IsOptional()
   @IsBoolean()
   routineNotificationsEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  tier0Enabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  tier1Enabled?: boolean;
+
+  /** null 清空。局域网地址（如 http://192.168.1.10:11434）没有顶级域名，放过 tld。 */
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false })
+  @MaxLength(300)
+  tier1BaseUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  tier1Model?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  tier2DailyLimit?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  tier2Redact?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  captureUtterances?: boolean;
 
   @IsOptional()
   @IsArray()

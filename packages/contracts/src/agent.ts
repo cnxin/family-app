@@ -219,6 +219,8 @@ export const agentStatusSchema = z.object({
   persistenceEncrypted: z.boolean(),
   readToolsEnabled: z.array(z.string()),
   proposalToolsEnabled: z.array(z.string()),
+  /** 家里是否记录助理原话（J2）；⌘K 按它决定记不记。 */
+  captureUtterances: z.boolean(),
 });
 export type AgentStatus = z.infer<typeof agentStatusSchema>;
 
@@ -233,6 +235,15 @@ export const agentSettingsSchema = z.object({
   routineNotificationsEnabled: z.boolean(),
   readToolsEnabled: z.array(z.string()),
   proposalToolsEnabled: z.array(z.string()),
+  /** J2 助理三档（docs/architecture.md §2）：第 2 档（云端）的开关就是 enabled。下面只存，引擎在 J3 / J4 / J5。 */
+  tier0Enabled: z.boolean(),
+  tier1Enabled: z.boolean(),
+  tier1BaseUrl: z.string().nullable(),
+  tier1Model: z.string().nullable(),
+  tier2DailyLimit: z.number().int(),
+  tier2Redact: z.boolean(),
+  /** 是否记录助理原话（assistant_utterances）。 */
+  captureUtterances: z.boolean(),
   version: z.number().int(),
   updatedAt: isoDateTime,
 });
@@ -562,6 +573,14 @@ export const updateAgentSettingsBody = z.object({
   routineNotificationsEnabled: z.boolean().optional(),
   readToolsEnabled: z.array(z.string()).max(AGENT_READ_TOOLS.length).optional(),
   proposalToolsEnabled: z.array(z.string()).max(AGENT_PROPOSAL_TOOLS.length).optional(),
+  tier0Enabled: z.boolean().optional(),
+  tier1Enabled: z.boolean().optional(),
+  /** OpenAI 兼容地址（如家里 Ollama 的 http://192.168.1.10:11434），null 清空。 */
+  tier1BaseUrl: z.url({ protocol: /^https?$/ }).max(300).nullable().optional(),
+  tier1Model: z.string().trim().max(120).nullable().optional(),
+  tier2DailyLimit: z.number().int().min(1).max(1000).optional(),
+  tier2Redact: z.boolean().optional(),
+  captureUtterances: z.boolean().optional(),
   expectedVersion,
 });
 

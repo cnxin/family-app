@@ -171,6 +171,42 @@ try {
     '别人家的原话列不出、导不出、删不掉',
   );
 
+  console.log('7. 三档开关与配置（agent_settings 新列）');
+  const defaults = await request('/agent/settings', owner.accessToken);
+  assert(
+    defaults.status === 200 && defaults.data.tier0Enabled === true && defaults.data.tier1Enabled === false &&
+      defaults.data.tier1BaseUrl === null && defaults.data.tier1Model === null && defaults.data.tier2DailyLimit === 50 &&
+      defaults.data.tier2Redact === true && defaults.data.captureUtterances === true,
+    '默认：第 0 档开、第 1 档关、无地址、每日上限 50、脱敏开、记录原话开',
+  );
+  const patched = await request('/agent/settings', owner.accessToken, 'PATCH', {
+    tier1Enabled: true, tier1BaseUrl: 'http://192.168.1.10:11434', tier1Model: ' qwen2.5:7b ',
+    tier2DailyLimit: 120, tier2Redact: false, captureUtterances: false, expectedVersion: defaults.data.version,
+  });
+  const status = await request('/agent/status', member.accessToken);
+  const memberSettings = await request('/agent/settings', member.accessToken);
+  assert(
+    patched.status === 200 && patched.data.tier1Enabled === true && patched.data.tier1BaseUrl === 'http://192.168.1.10:11434' &&
+      patched.data.tier1Model === 'qwen2.5:7b' && patched.data.tier2DailyLimit === 120 && patched.data.tier2Redact === false &&
+      patched.data.captureUtterances === false && patched.data.enabled === defaults.data.enabled &&
+      status.status === 200 && status.data.captureUtterances === false &&
+      memberSettings.status === 200 && memberSettings.data.tier1Model === 'qwen2.5:7b',
+    '管理员能改三档与「记录原话」（局域网地址可用，模型名去空白，enabled 不受影响）；成员读得到，status 带上记录开关',
+  );
+  const badUrl = await request('/agent/settings', owner.accessToken, 'PATCH', { tier1BaseUrl: 'ftp://nas/models', expectedVersion: patched.data.version });
+  const badLimit = await request('/agent/settings', owner.accessToken, 'PATCH', { tier2DailyLimit: 0, expectedVersion: patched.data.version });
+  const tooHigh = await request('/agent/settings', owner.accessToken, 'PATCH', { tier2DailyLimit: 1001, expectedVersion: patched.data.version });
+  const memberPatch = await request('/agent/settings', member.accessToken, 'PATCH', { captureUtterances: true, expectedVersion: patched.data.version });
+  assert(
+    badUrl.status === 400 && badLimit.status === 400 && tooHigh.status === 400 && memberPatch.status === 403,
+    '非 http(s) 地址、每日上限超出 1～1000 都 400；成员不能改',
+  );
+  const restored = await request('/agent/settings', owner.accessToken, 'PATCH', {
+    tier1Enabled: false, tier1BaseUrl: null, tier1Model: null, tier2DailyLimit: 50, tier2Redact: true, captureUtterances: true,
+    expectedVersion: patched.data.version,
+  });
+  assert(restored.status === 200 && restored.data.tier1BaseUrl === null && restored.data.captureUtterances === true, '传 null 清空地址，设置恢复默认');
+
   console.log('助理原话黑盒全部通过');
 } finally {
   await db.query('DELETE FROM assistant_utterances WHERE "householdId" = $1', [other.householdId]).catch(() => undefined);
