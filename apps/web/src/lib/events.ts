@@ -11,10 +11,6 @@ import { invalidateModules } from './queries/modules';
  */
 const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   notifications: ['notifications', 'notification-deliveries', 'notification-channels'],
-  media: [
-    'media', 'media-requests', 'media-library', 'media-library-availability', 'media-connectors',
-    'media-connector-settings', 'media-metadata-sources', 'media-playback-users', 'viewing-sessions',
-  ],
   activity: ['activities'],
   assistant: [
     'agent-conversation', 'agent-conversations', 'agent-status', 'agent-settings', 'agent-routines',

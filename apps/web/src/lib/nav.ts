@@ -93,7 +93,7 @@ export const SCENES: NavScene[] = [
     icon: '✨',
     path: '/life',
     segments: [
-      { key: shelfModuleKey.enum.media, tier: 'shelf', glyph: '影', label: '观影', path: '/life/media', ready: true },
+      ...pluginSegments('media'),
       ...pluginSegments('travel'),
       ...pluginSegments('memories'),
       ...pluginSegments('knowledge'),
