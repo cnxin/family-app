@@ -24,13 +24,11 @@ function RecurringRow({
   first,
   canManage,
   onEdit,
-  onRemove,
 }: {
   row: FinanceRecurring;
   first: boolean;
   canManage: boolean;
   onEdit: () => void;
-  onRemove: () => void;
 }) {
   const today = useHouseholdToday();
   const pay = usePayFinanceRecurring();
@@ -99,7 +97,9 @@ function RecurringRow({
             {row.isActive ? (
               // 开关旁边写明是什么，不然和「已付」挨着看不出是自动记账
               <span className="flex items-center gap-1.5 pr-1 text-[12px] text-ink-soft">
-                自动记账
+                {/* 手机上一行放不下「已付 + 自动记账 + 编辑 / 停用」，字样缩成「自动」 */}
+                <span className="sm:hidden">自动</span>
+                <span className="hidden sm:inline">自动记账</span>
                 <Switch
                   label={`自动记账${row.title}`}
                   checked={row.autoPost}
@@ -119,14 +119,6 @@ function RecurringRow({
               onClick={() => patch({ isActive: !row.isActive }, row.isActive ? `「${row.title}」停用了` : `「${row.title}」重新启用了`)}
             >
               {row.isActive ? '停用' : '启用'}
-            </Button>
-            <Button
-              variant="ghost"
-              className="h-8 px-2 text-[13px] text-danger"
-              aria-label={`删除${row.title}`}
-              onClick={onRemove}
-            >
-              删除
             </Button>
           </>
         ) : (
@@ -198,7 +190,6 @@ export function RecurringPanel({
               first={index === 0}
               canManage={canManage}
               onEdit={() => setEditing(row)}
-              onRemove={() => setRemoving(row)}
             />
           ))}
         </>
@@ -213,7 +204,17 @@ export function RecurringPanel({
         <RecurringForm editing={null} accounts={accounts} categories={categories} onClose={() => setCreating(false)} />
       ) : null}
       {editing ? (
-        <RecurringForm editing={editing} accounts={accounts} categories={categories} onClose={() => setEditing(null)} />
+        <RecurringForm
+          editing={editing}
+          accounts={accounts}
+          categories={categories}
+          onClose={() => setEditing(null)}
+          // 删除放进编辑框里（行上放不下，也免得误点），点了先关编辑框再二次确认
+          onRemove={() => {
+            setRemoving(editing);
+            setEditing(null);
+          }}
+        />
       ) : null}
       {removing ? (
         <Dialog
