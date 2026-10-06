@@ -821,6 +821,23 @@ try {
       crossRecurring.every((response) => response.status === 404),
     '周期账单只在本家庭：互相列不出；改、删、「已付」别人家的都是 404，也不能挂到别人家的账户上',
   );
+  // K4 信用卡：别人家今天到还款日、欠着钱的卡，不出现在本家庭的账户和留意里
+  const foreignCard = randomUUID();
+  const todayDay = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()).slice(8, 10));
+  await db.query(
+    `INSERT INTO finance_accounts (id, "householdId", name, type, "openingBalance", "billingDay", "dueDay", "createdById")
+     VALUES ($1, $2, '隔离家庭信用卡', 'credit', -500, 1, $3, $4)`,
+    [foreignCard, ids.household, todayDay, ids.member],
+  );
+  const ownAccounts = await request('/finance/accounts?includeInactive=true', defaultToken);
+  const ownAttention = await request('/today/attention', defaultToken);
+  const foreignAttention = await request('/today/attention', foreignToken);
+  assert(
+    ownAccounts.status === 200 && !ownAccounts.body.data.some((one) => one.id === foreignCard) &&
+      ownAttention.status === 200 && !ownAttention.body.data.items.some((item) => item.entity?.id === foreignCard) &&
+      foreignAttention.status === 200 && foreignAttention.body.data.items.some((item) => item.kind === 'credit' && item.entity?.id === foreignCard),
+    '信用卡只在本家庭：别人家欠着钱、今天还款的卡不出现在本家庭的账户和留意里（在它自己家里会出现）',
+  );
 
   // J2 助理原话：两边各记一条，互相列不出、删不掉
   const foreignUtterance = await request('/assistant/utterances', foreignToken, 'POST', {

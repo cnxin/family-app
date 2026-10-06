@@ -59,6 +59,24 @@ export function yuan(value: number, signed = false) {
   return `${sign}¥${Math.abs(value).toLocaleString('zh-CN', digits)}`;
 }
 
+/** K4 信用卡余额为负 = 欠款：卡片上写「欠 ¥…」，不写「余额 -¥…」。 */
+export function accountBalanceText(account: Pick<FinanceAccount, 'type' | 'balance'>) {
+  if (account.type !== 'credit') return yuan(account.balance);
+  if (account.balance < 0) return `欠 ${yuan(-account.balance)}`;
+  return account.balance === 0 ? '已还清' : `多还 ${yuan(account.balance)}`;
+}
+
+/** 信用卡的额度 / 账单日 / 还款日一行；不是信用卡返回 null。 */
+export function creditDetail(account: Pick<FinanceAccount, 'type' | 'creditLimit' | 'billingDay' | 'dueDay'>) {
+  if (account.type !== 'credit') return null;
+  const parts = [
+    account.creditLimit != null ? `额度 ${yuan(account.creditLimit)}` : null,
+    account.billingDay ? `每月 ${account.billingDay} 日出账` : null,
+    account.dueDay ? `${account.dueDay} 日还款` : null,
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+
 /** 两位小数只能用字符串正则判：`8.29 * 100` 是 828.9999999999999，用浮点算会把合法金额判掉。 */
 export function isMoneyInput(raw: string) {
   return /^\d+(\.\d{1,2})?$/.test(raw.trim());
@@ -162,17 +180,19 @@ export function useUpsertFinanceAccount() {
       type: FinanceAccountType;
       openingBalance?: number;
       expectedVersion?: number;
+      /** K4 只有信用卡带：额度（选填）、每月几号出账 / 还款 */
+      credit?: { creditLimit: number | null; billingDay: number; dueDay: number };
     },
     FinanceAccount
-  >(({ id, name, type, openingBalance, expectedVersion }) =>
+  >(({ id, name, type, openingBalance, expectedVersion, credit }) =>
     id
       ? api<FinanceAccount>(`/finance/accounts/${id}`, {
           method: 'PATCH',
-          body: { name, type, expectedVersion },
+          body: { name, type, ...(credit ?? {}), expectedVersion },
         })
       : api<FinanceAccount>('/finance/accounts', {
           method: 'POST',
-          body: { name, type, openingBalance },
+          body: { name, type, openingBalance, ...(credit ?? {}) },
         }),
   );
 }

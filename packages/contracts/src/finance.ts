@@ -60,6 +60,10 @@ export const financeAccountRecordSchema = z
     name: z.string(),
     type: financeAccountType,
     openingBalance: z.union([z.number(), z.string()]),
+    /** K4 信用卡：额度（numeric，嵌套在流水里时是字符串）、每月几号出账 / 还款；别的类型都是 null */
+    creditLimit: z.union([z.number(), z.string()]).nullable(),
+    billingDay: z.number().int().nullable(),
+    dueDay: z.number().int().nullable(),
     currency,
     isActive: z.boolean(),
     version: z.number().int(),
@@ -72,6 +76,7 @@ export const financeAccountRecordSchema = z
 /** 账户列表/写操作回传：presentAccount() 附带实时余额。 */
 export const financeAccountSchema = financeAccountRecordSchema.extend({
   openingBalance: z.number(),
+  creditLimit: z.number().nullable(),
   balance: z.number(),
   createdBy: memberSchema,
 });
@@ -80,6 +85,7 @@ export type FinanceAccount = z.infer<typeof financeAccountSchema>;
 /** POST /finance/accounts 回传 save() 结果：save() 不触发 eager，createdBy 缺席。 */
 export const createdFinanceAccountSchema = financeAccountRecordSchema.extend({
   openingBalance: z.number(),
+  creditLimit: z.number().nullable(),
   balance: z.number(),
 });
 
@@ -246,15 +252,23 @@ export const includeInactiveQuery = z.object({
 });
 
 const MAX_AMOUNT = 99_999_999.99;
+/** K4：只有信用卡能填；信用卡必须有账单日、还款日（服务端校验） */
+const creditAccountFields = {
+  creditLimit: z.number().min(0.01).max(MAX_AMOUNT).nullish(),
+  billingDay: z.number().int().min(1).max(31).nullish(),
+  dueDay: z.number().int().min(1).max(31).nullish(),
+};
 export const createFinanceAccountBody = z.object({
   name: z.string().min(1).max(80),
   type: financeAccountType,
   openingBalance: z.number().min(-MAX_AMOUNT).max(MAX_AMOUNT).optional(),
+  ...creditAccountFields,
 });
 export const updateFinanceAccountBody = z.object({
   name: z.string().min(1).max(80).optional(),
   type: financeAccountType.optional(),
   isActive: z.boolean().optional(),
+  ...creditAccountFields,
   expectedVersion: z.number().int().min(1),
 });
 export const createFinanceCategoryBody = z.object({

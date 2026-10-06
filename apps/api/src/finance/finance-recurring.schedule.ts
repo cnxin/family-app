@@ -14,6 +14,8 @@ const MONTHS: Record<Exclude<FinanceRecurringCadence, 'weekly'>, number> = {
 export const RECURRING_POST_HOUR = 6;
 /** 非自动记账的到期前几天进留意、可以点「已付」。 */
 export const RECURRING_NOTICE_DAYS = 3;
+/** K4 信用卡还款日前几天进留意（还欠着钱时）。 */
+export const CREDIT_NOTICE_DAYS = 3;
 
 function pad(value: number, length = 2) {
   return String(value).padStart(length, '0');
@@ -32,6 +34,17 @@ export function occurrenceAt(anchorOn: string, cadence: FinanceRecurringCadence,
   const targetYear = year + Math.floor(total / 12);
   const targetMonth = ((total % 12) + 12) % 12;
   return `${pad(targetYear, 4)}-${pad(targetMonth + 1)}-${pad(Math.min(day, daysInMonth(targetYear, targetMonth)))}`;
+}
+
+/** 每月 day 号（短月按月末）里不早于 date 的那一天：K4 信用卡这个月的还款日过了就是下个月的。 */
+export function nextMonthlyDayOnOrAfter(date: string, day: number): string {
+  parseDateOnly(date, '日期');
+  const [year, month] = date.split('-').map(Number);
+  const thisMonth = `${pad(year, 4)}-${pad(month)}-${pad(Math.min(day, daysInMonth(year, month - 1)))}`;
+  if (thisMonth >= date) return thisMonth;
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextIndex = month % 12;
+  return `${pad(nextYear, 4)}-${pad(nextIndex + 1)}-${pad(Math.min(day, daysInMonth(nextYear, nextIndex)))}`;
 }
 
 /** 不早于 date 的第一期（anchorOn 本身在 date 之后就是 anchorOn）。 */
