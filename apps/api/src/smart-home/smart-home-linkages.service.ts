@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, IsNull, In } from 'typeorm';
-import type { DomainKey, SmartHomeRules, SmartHomeWebhookBody } from '@family/contracts';
+import type { DomainKey, SmartHomeLinkFiredPayload, SmartHomeRules, SmartHomeWebhookBody } from '@family/contracts';
 import { householdToday } from '@family/shared';
 import { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
-import { Member, Notification, ShoppingItem } from '../entities';
-import { RemindersService } from '../reminders/reminders.module';
+import { Member, Notification } from '../entities';
+import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
+import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
 import { smartHomeActor } from './smart-home-actor';
-import { ShoppingService } from '../shopping/shopping.module';
-import { TasksService } from '../tasks/tasks.module';
 
 export interface LinkageOutcome {
   status: 'processed' | 'ignored';
@@ -23,16 +23,17 @@ const FILTER_ITEM = '净水器滤芯';
 
 /**
  * E3 首批三条联动（pre-trial-plan H3）。写死在服务端，设置页只能开关；不做通用规则引擎。
- * 产生的对象一律走各域现有的服务，以家庭主人的名义、显示名「智能家居联动」。
+ * 产生的对象以家庭主人的名义、显示名「智能家居联动」，由各插件自己建（J1b）：查家务、扫完打勾走任务门面，
+ * 查购物清单走购物门面；要建的家务 / 提醒 / 清单项放进事务内钩子 smart-home.link-fired，任务、提醒、购物各自订阅、
+ * 用本联动的事务建，任一方失败整条联动回滚。
  */
 @Injectable()
 export class SmartHomeLinkagesService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly clock: Clock,
-    private readonly tasks: TasksService,
-    private readonly shopping: ShoppingService,
-    private readonly reminders: RemindersService,
+    private readonly facades: PluginFacadeRegistry,
+    private readonly hooks: TransactionHookRegistry,
   ) {}
 
   async run(householdId: string, body: SmartHomeWebhookBody, rules: SmartHomeRules): Promise<LinkageOutcome> {
@@ -52,9 +53,11 @@ export class SmartHomeLinkagesService {
     const label = appliance === 'dryer' ? '烘干机' : appliance === 'washer' ? '洗衣机' : '洗衣';
     const existing = await this.pendingToday(actor, today, (title) => title === LAUNDRY_TASK);
     return this.dataSource.transaction(async (manager) => {
-      const taskId =
-        existing[0]?.taskId ??
-        (await this.tasks.createWithinTransaction({ title: LAUNDRY_TASK, startsOn: today }, actor, manager));
+      let taskId = existing[0]?.taskId;
+      if (!taskId) {
+        taskId = randomUUID();
+        await this.fire(manager, actor, { task: { id: taskId, title: LAUNDRY_TASK, startsOn: today } });
+      }
       const notified = await this.notifyAll(manager, actor.householdId, {
         type: 'smart_home_laundry_done',
         title: `${label}完成了，记得晾衣服`,
@@ -74,7 +77,7 @@ export class SmartHomeLinkagesService {
     const targets = await this.pendingToday(actor, today, (title) => title.includes('扫地'));
     if (!targets.length) return { status: 'ignored', result: '今天没有待做的「扫地」家务', domains: [] };
     for (const target of targets) {
-      await this.tasks.updateOccurrence(target.taskId, today, { status: 'done' }, actor);
+      await this.facades.get('tasks').completeOccurrence(target.taskId, today, actor);
     }
     return {
       status: 'processed',
@@ -88,46 +91,38 @@ export class SmartHomeLinkagesService {
     const existing = await this.pendingToday(actor, today, (title) => title === FILTER_TASK);
     return this.dataSource.transaction(async (manager) => {
       const done: string[] = [];
+      const linked: Omit<SmartHomeLinkFiredPayload, 'householdId' | 'actor'> = {};
       if (!existing.length) {
-        const taskId = await this.tasks.createWithinTransaction(
-          {
-            title: FILTER_TASK,
-            startsOn: today,
-            note: value == null ? 'Home Assistant 报滤芯快到期了' : `Home Assistant 报滤芯剩 ${value}%`,
-          },
-          actor,
-          manager,
-        );
+        const taskId = randomUUID();
         const recipientIds = await this.activeMemberIds(manager, actor.householdId, ['owner', 'admin']);
-        await this.reminders.createWithinTransaction(
-          {
-            sourceModule: 'task',
-            sourceId: taskId,
-            occurrenceDate: today,
-            // 提醒必须晚于「现在」；一分钟后由提醒派发发出
-            remindAt: new Date(Date.now() + 60_000).toISOString(),
-            recipientIds,
-          },
-          actor,
-          manager,
-        );
+        linked.task = {
+          id: taskId,
+          title: FILTER_TASK,
+          startsOn: today,
+          note: value == null ? 'Home Assistant 报滤芯快到期了' : `Home Assistant 报滤芯剩 ${value}%`,
+        };
+        linked.reminder = {
+          sourceModule: 'task',
+          sourceId: taskId,
+          occurrenceDate: today,
+          // 提醒必须晚于「现在」；一分钟后由提醒派发发出
+          remindAt: new Date(Date.now() + 60_000).toISOString(),
+          recipientIds,
+        };
         done.push(`建了家务「${FILTER_TASK}」并提醒 ${recipientIds.length} 位管理员`);
       } else {
         done.push(`今天已有「${FILTER_TASK}」`);
       }
-      const onList = await manager.getRepository(ShoppingItem).count({
-        where: { householdId: actor.householdId, customName: FILTER_ITEM, checked: false },
-      });
+      const onList = await this.facades
+        .get('shopping')
+        .hasUncheckedItem(toPluginTransaction(manager), actor.householdId, FILTER_ITEM);
       if (!onList) {
-        await this.shopping.addManualWithinTransaction(
-          { date: today, customName: FILTER_ITEM, totalQty: 1, unit: '个' },
-          actor.householdId,
-          manager,
-        );
+        linked.shoppingItem = { date: today, customName: FILTER_ITEM, totalQty: 1, unit: '个' };
         done.push(`把「${FILTER_ITEM}」加进了购物清单`);
       } else {
         done.push('购物清单里已经有了');
       }
+      if (linked.task || linked.shoppingItem) await this.fire(manager, actor, linked);
       return {
         status: 'processed',
         result: done.join('；'),
@@ -136,8 +131,13 @@ export class SmartHomeLinkagesService {
     });
   }
 
+  /** 要连带建的东西交给事务内钩子，任务 / 提醒 / 购物各自在本事务里建。 */
+  private fire(manager: EntityManager, actor: JwtUser, linked: Omit<SmartHomeLinkFiredPayload, 'householdId' | 'actor'>) {
+    return this.hooks.run('smart-home.link-fired', { householdId: actor.householdId, actor, ...linked }, manager);
+  }
+
   private async pendingToday(actor: JwtUser, today: string, match: (title: string) => boolean) {
-    const occurrences = await this.tasks.list(today, today, actor);
+    const occurrences = await this.facades.get('tasks').listOccurrences(today, today, actor);
     return occurrences
       .filter((occurrence) => occurrence.status === 'pending' && match(occurrence.task.title))
       .map((occurrence) => ({ taskId: occurrence.taskId, title: occurrence.task.title }));

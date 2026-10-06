@@ -15,6 +15,8 @@ export const shoppingManifest = {
   ],
   // J1b：生成清单读某天的菜走点菜门面，读库存与入库确认走库存门面
   dependsOn: ['menus', 'inventory'],
+  // J1b：智能家居联动要加清单项时，订阅它的事务内钩子、用联动的事务加
+  hooks: ['smart-home.link-fired'],
   nav: [{ key: 'shopping', label: '购物', glyph: '购', scene: 'house', path: '/house/shopping', mobileTab: 'eat' }],
   legacyPaths: [['/shopping', '/house/shopping'], ['/supplies', '/house/shopping']],
   // core 层不进 /system/modules，没有开关

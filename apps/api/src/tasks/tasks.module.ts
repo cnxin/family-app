@@ -27,7 +27,7 @@ import {
   Repository,
 } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { TaskEvents } from './task-events';
+import { EventBus } from '../events/event-bus';
 import {
   HouseholdTask,
   HouseholdTaskInstance,
@@ -112,7 +112,7 @@ export class TasksService {
     private readonly instances: Repository<HouseholdTaskInstance>,
     private readonly dataSource: DataSource,
     private readonly hooks: TransactionHookRegistry,
-    private readonly taskEvents: TaskEvents,
+    private readonly events: EventBus,
   ) {}
 
   async list(start: string, end: string, user: JwtUser) {
@@ -187,10 +187,12 @@ export class TasksService {
     return this.findTask(taskId, user.householdId);
   }
 
+  /** id：智能家居联动预先生成（通知、提醒要挂在它上面）；其余调用方不传，由数据库生成。 */
   async createWithinTransaction(
     dto: CreateTaskBody,
     user: JwtUser,
     manager: EntityManager,
+    id?: string,
   ) {
     if ((dto.rewardPoints ?? 0) > 0 && !isHouseholdManager(user)) {
       throw new ForbiddenException('只有家庭管理员可以设置任务积分');
@@ -203,6 +205,7 @@ export class TasksService {
       : null;
     const task = await tasks.save(
       tasks.create({
+        ...(id ? { id } : {}),
         ...input,
         householdId: user.householdId,
         createdById: user.memberId,
@@ -487,7 +490,7 @@ export class TasksService {
 
     // 事务已提交：通知订阅方（智能家居联动等），不等它们
     if (completedTitle !== null) {
-      this.taskEvents.emitCompleted({
+      this.events.emit('tasks.completed', {
         householdId: user.householdId,
         taskId,
         dueDate,
@@ -626,6 +629,28 @@ export class TasksFacadeProvider implements OnModuleInit {
   }
 }
 
+/** 任务订阅智能家居联动的事务内钩子（J1b）：联动要建家务时，用联动的事务、联动预先生成的 id 建。 */
+@Injectable()
+export class TasksLinkHooks implements OnModuleInit {
+  constructor(
+    private readonly hooks: TransactionHookRegistry,
+    private readonly tasks: TasksService,
+  ) {}
+
+  onModuleInit() {
+    this.hooks.on('smart-home.link-fired', 'tasks', async (payload, manager) => {
+      if (!payload.task) return;
+      const { id, title, startsOn, note } = payload.task;
+      await this.tasks.createWithinTransaction(
+        { title, startsOn, ...(note === undefined ? {} : { note }) },
+        payload.actor as JwtUser,
+        manager,
+        id,
+      );
+    });
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -636,7 +661,7 @@ export class TasksFacadeProvider implements OnModuleInit {
     ]),
   ],
   controllers: [TasksController],
-  providers: [TasksService, TaskEvents, TasksFacadeProvider],
-  exports: [TasksService, TaskEvents],
+  providers: [TasksService, TasksFacadeProvider, TasksLinkHooks],
+  exports: [TasksService],
 })
 export class TasksModule {}

@@ -8,5 +8,8 @@ import type { TasksService } from './tasks.module';
 export function tasksFacade(tasks: TasksService): TasksFacade {
   return {
     listOccurrences: (start, end, actor) => tasks.list(start, end, actor),
+    completeOccurrence: async (taskId, dueDate, actor) => {
+      await tasks.updateOccurrence(taskId, dueDate, { status: 'done' }, actor);
+    },
   };
 }

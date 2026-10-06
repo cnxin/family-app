@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { buildRecipeSnapshot, taskOccursOn, type TaskRecurrenceRule } from '@family/shared';
 import type { EntityManager } from 'typeorm';
+import { InProcessEventBus } from '../src/events/event-bus';
 import { PluginFacadeRegistry } from '../src/system/plugin-facades.registry';
 import { TransactionHookRegistry } from '../src/system/transaction-hooks.registry';
 
@@ -19,9 +20,10 @@ const as = <T>(value: unknown) => value as T;
 const fakeManager = as<EntityManager>({ tag: 'manager' });
 
 class TestHooks extends TransactionHookRegistry {
-  constructor(names: string[]) {
+  constructor(names: string[], order: Record<string, string[]> = {}) {
     super();
     this.names = new Set(names);
+    this.order = order;
   }
 }
 
@@ -80,6 +82,49 @@ void (async () => {
   });
   await check('没有订阅方时 run 什么也不做', async () => {
     await new TestHooks(['demo.happened']).run(as<never>('demo.happened'), as<never>({}), fakeManager);
+  });
+  await check('写死了顺序的钩子按写死的顺序执行，与注册先后无关；没写的按注册顺序排在后面', async () => {
+    const hooks = new TestHooks(['demo.fired'], { 'demo.fired': ['tasks', 'reminders'] });
+    const calls: string[] = [];
+    for (const owner of ['shopping', 'reminders', 'media', 'tasks']) {
+      hooks.on(as<never>('demo.fired'), as<never>(owner), async () => {
+        calls.push(owner);
+      });
+    }
+    await hooks.run(as<never>('demo.fired'), as<never>({}), fakeManager);
+    assert.deepEqual(calls, ['tasks', 'reminders', 'shopping', 'media']);
+  });
+  await check('contracts 里 smart-home.link-fired 写死为 任务 → 提醒 → 购物', async () => {
+    const hooks = new TransactionHookRegistry();
+    const calls: string[] = [];
+    for (const owner of ['shopping', 'reminders', 'tasks']) {
+      hooks.on('smart-home.link-fired', as<never>(owner), async () => {
+        calls.push(owner);
+      });
+    }
+    await hooks.run('smart-home.link-fired', as<never>({}), fakeManager);
+    assert.deepEqual(calls, ['tasks', 'reminders', 'shopping']);
+  });
+
+  console.log('内核事件总线上的插件事件');
+  await check('emit 不等订阅方；订阅方异步收到同一个 payload，一个抛错不影响另一个，退订后收不到', async () => {
+    const bus = new InProcessEventBus();
+    const received: string[] = [];
+    bus.on('tasks.completed', () => {
+      throw new Error('订阅方出错');
+    });
+    const off = bus.on('tasks.completed', (event) => {
+      received.push(event.taskId);
+    });
+    const payload = as<never>({ householdId: 'h', taskId: 't1', dueDate: '2026-10-06', title: '倒垃圾', actor: {} });
+    bus.emit('tasks.completed', payload);
+    assert.deepEqual(received, []);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(received, ['t1']);
+    off();
+    bus.emit('tasks.completed', payload);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(received, ['t1']);
   });
 
   console.log('taskOccursOn（搬到 @family/shared）');

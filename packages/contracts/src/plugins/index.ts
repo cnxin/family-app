@@ -38,6 +38,9 @@ export * from './locations.facade';
 export * from './inventory.facade';
 export * from './menus.facade';
 export * from './tasks.hooks';
+export * from './tasks.events';
+export * from './smart-home.hooks';
+export * from './shopping.facade';
 export * from './keys';
 export * from './types';
 
