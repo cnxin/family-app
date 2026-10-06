@@ -1,7 +1,7 @@
 // 点菜（J1.4）。一个插件两段导航：点菜（order）、厨房（kitchen），导航 key 登记在 keys.ts 的别名表。
 // menus.module.ts 用菜谱的 buildRecipeSnapshot 给菜单项拍做法快照，属跨插件引用，原样保留（J1b）。
 // 「确认用料」POST /menus/:id/confirm-consumption 写在 inventory.module.ts（扣库存），路径挂在点菜下；
-// 与 confirm-stock 同类，留在手写表，归属随 J1.5 迁库存一起定。
+// 归库存插件（2026-10-06 King 拍板），登记在 inventory.ts。
 // ⌘K 还没有点菜动作（§8.2 缺项，J3 补），写提案先放在 proposals。
 import type { PluginManifest } from './types';
 

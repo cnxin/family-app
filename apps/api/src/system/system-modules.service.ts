@@ -17,7 +17,6 @@ import { homeAssistantServerDefaultConfigured } from '../smart-home/home-assista
 const sources: Partial<
   Record<Exclude<ShelfModuleKey, 'activity' | 'assistant' | 'smart-home'>, string>
 > = {
-  inventory: 'SELECT 1 FROM inventory_items WHERE "householdId" = $1',
   assets: 'SELECT 1 FROM home_assets WHERE "householdId" = $1',
   media: `SELECT 1 FROM household_media WHERE "householdId" = $1
     UNION ALL SELECT 1 FROM integrations WHERE "householdId" = $1

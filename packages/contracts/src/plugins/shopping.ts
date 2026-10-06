@@ -1,6 +1,6 @@
 // 购物（J1.4）。路径在 /house 下，手机底栏放在「吃饭」tab。
 // shopping.module.ts 直接读 Menu / InventoryItem / InventoryTransaction 实体（共用 entities/index.ts），属跨插件引用（J1b）。
-// 「买到后入库」POST /shopping-items/:id/confirm-stock 写在 inventory.module.ts，归库存插件（§8.6 第 4 条），不在这里登记。
+// 「买到后入库」POST /shopping-items/:id/confirm-stock 写在 inventory.module.ts，归库存插件（§8.6 第 4 条），登记在 inventory.ts。
 import type { PluginManifest } from './types';
 
 export const shoppingManifest = {

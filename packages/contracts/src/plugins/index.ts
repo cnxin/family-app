@@ -24,12 +24,13 @@ import { calendarManifest } from './calendar';
 import { remindersManifest } from './reminders';
 import { menusManifest } from './menus';
 import { locationsManifest } from './locations';
+import { inventoryManifest } from './inventory';
 
 export * from './keys';
 export * from './types';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest, locationsManifest];
+export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest, locationsManifest, inventoryManifest];
 
 export function findPlugin(key: string): PluginManifest | undefined {
   return PLUGINS.find((plugin) => plugin.key === key);

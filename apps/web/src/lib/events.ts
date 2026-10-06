@@ -11,10 +11,6 @@ import { invalidateModules } from './queries/modules';
  */
 const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   notifications: ['notifications', 'notification-deliveries', 'notification-channels'],
-  inventory: [
-    'inventory', 'inventory-batches', 'inventory-transactions',
-    'menu-inventory-preview', 'shopping-inventory-preview', 'maintenance-consumables-preview',
-  ],
   assets: ['assets', 'asset', 'maintenance-consumables-preview'],
   media: [
     'media', 'media-requests', 'media-library', 'media-library-availability', 'media-connectors',
