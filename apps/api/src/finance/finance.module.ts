@@ -84,10 +84,26 @@ const DEFAULT_CATEGORIES: {
   { systemKey: 'expense_entertainment', name: '娱乐', kind: 'expense', icon: 'film', color: '#7565A8', sortOrder: 50 },
   { systemKey: 'expense_health', name: '医疗', kind: 'expense', icon: 'heart-pulse', color: '#B44F55', sortOrder: 60 },
   { systemKey: 'expense_gift', name: '人情', kind: 'expense', icon: 'gift', color: '#A95E78', sortOrder: 70 },
+  // K0（docs/finance-plan.md §2.6）：补到 27 个，仍平铺；排在原有分类之后、「其他支出 / 其他收入」之前
+  { systemKey: 'expense_clothing', name: '服饰', kind: 'expense', icon: 'shirt', color: '#A95E78', sortOrder: 71 },
+  { systemKey: 'expense_education', name: '教育', kind: 'expense', icon: 'graduation-cap', color: '#3973A6', sortOrder: 72 },
+  { systemKey: 'expense_childcare', name: '育儿', kind: 'expense', icon: 'baby', color: '#B56A35', sortOrder: 73 },
+  { systemKey: 'expense_pet', name: '宠物', kind: 'expense', icon: 'paw-print', color: '#7565A8', sortOrder: 74 },
+  { systemKey: 'expense_telecom', name: '通讯', kind: 'expense', icon: 'smartphone', color: '#3973A6', sortOrder: 75 },
+  { systemKey: 'expense_utilities', name: '水电燃气', kind: 'expense', icon: 'zap', color: '#3D6B57', sortOrder: 76 },
+  { systemKey: 'expense_housing', name: '物业房租', kind: 'expense', icon: 'building-2', color: '#3D6B57', sortOrder: 77 },
+  { systemKey: 'expense_insurance', name: '保险', kind: 'expense', icon: 'shield', color: '#26734D', sortOrder: 78 },
+  { systemKey: 'expense_repair', name: '维修', kind: 'expense', icon: 'wrench', color: '#69736D', sortOrder: 79 },
+  { systemKey: 'expense_travel', name: '旅行', kind: 'expense', icon: 'plane', color: '#3973A6', sortOrder: 80 },
+  { systemKey: 'expense_digital', name: '数码', kind: 'expense', icon: 'laptop', color: '#7565A8', sortOrder: 81 },
+  { systemKey: 'expense_snacks', name: '烟酒零食', kind: 'expense', icon: 'cookie', color: '#B56A35', sortOrder: 82 },
   { systemKey: 'expense_other', name: '其他支出', kind: 'expense', icon: 'circle-ellipsis', color: '#69736D', sortOrder: 90 },
   { systemKey: 'income_salary', name: '工资', kind: 'income', icon: 'landmark', color: '#26734D', sortOrder: 10 },
   { systemKey: 'income_bonus', name: '奖金', kind: 'income', icon: 'badge-dollar-sign', color: '#3973A6', sortOrder: 20 },
   { systemKey: 'income_reimbursement', name: '报销', kind: 'income', icon: 'receipt-text', color: '#B56A35', sortOrder: 30 },
+  { systemKey: 'income_investment', name: '理财收益', kind: 'income', icon: 'trending-up', color: '#26734D', sortOrder: 40 },
+  { systemKey: 'income_refund', name: '退款', kind: 'income', icon: 'undo-2', color: '#3973A6', sortOrder: 50 },
+  { systemKey: 'income_red_packet', name: '红包', kind: 'income', icon: 'wallet', color: '#B44F55', sortOrder: 60 },
   { systemKey: 'income_other', name: '其他收入', kind: 'income', icon: 'circle-plus', color: '#69736D', sortOrder: 90 },
 ];
 
@@ -800,6 +816,10 @@ export class FinanceService {
     return account;
   }
 
+  /**
+   * 按 systemKey 缺则补（ON CONFLICT DO NOTHING）：老家庭升级后第一次读分类时补上新加的默认分类；
+   * 用户改过名的内置分类 systemKey 还在，不会再插一条；与用户自建的同类同名分类冲突时也跳过，不覆盖。
+   */
   private async ensureDefaultCategories(user: JwtUser) {
     await this.dataSource.transaction(async (manager) => {
       for (const category of DEFAULT_CATEGORIES) {

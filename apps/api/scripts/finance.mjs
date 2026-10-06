@@ -396,6 +396,58 @@ try {
   const activities = await request('/activities?scope=all&limit=100', owner.accessToken);
   assert(activities.data.some((entry) => entry.module === 'finance'), '账户和记账操作进入家庭活动审计');
 
+  console.log('5. 默认分类补齐（K0）：新家庭 27 个；老家庭缺的补上，改过名的不动');
+  const K0_KEYS = [
+    'expense_clothing', 'expense_education', 'expense_childcare', 'expense_pet', 'expense_telecom', 'expense_utilities',
+    'expense_housing', 'expense_insurance', 'expense_repair', 'expense_travel', 'expense_digital', 'expense_snacks',
+    'income_investment', 'income_refund', 'income_red_packet',
+  ];
+  const systemRows = async () =>
+    (await db.query(
+      `SELECT "systemKey", name, kind FROM finance_categories WHERE "householdId" = $1 AND "systemKey" IS NOT NULL ORDER BY "systemKey"`,
+      [owner.member.householdId],
+    )).rows;
+  const seeded = await systemRows();
+  assert(
+    seeded.length === 27 && K0_KEYS.every((key) => seeded.some((row) => row.systemKey === key)) &&
+      seeded.filter((row) => row.kind === 'expense').length === 20 && seeded.filter((row) => row.kind === 'income').length === 7,
+    '默认分类 27 个（支出 20、收入 7），K0 新加的 15 个都在',
+  );
+  // 模拟升级前的老家庭：去掉 K0 新加的 15 个（都还没被流水引用），再把一个老的内置分类改名
+  await db.query(
+    `DELETE FROM finance_categories WHERE "householdId" = $1 AND "systemKey" = ANY($2::text[])`,
+    [owner.member.householdId, K0_KEYS],
+  );
+  const foodBefore = (await request('/finance/categories?includeInactive=true', owner.accessToken)).data;
+  const foodRow = (await db.query(
+    `SELECT id, version FROM finance_categories WHERE "householdId" = $1 AND "systemKey" = 'expense_food'`,
+    [owner.member.householdId],
+  )).rows[0];
+  const renamedName = `吃饭-${randomUUID().slice(0, 6)}`;
+  // 上一步的读取已经把缺的补上了，这里再删一次，确保改名之后的那次读取才是「升级后第一次」
+  await db.query(
+    `DELETE FROM finance_categories WHERE "householdId" = $1 AND "systemKey" = ANY($2::text[])`,
+    [owner.member.householdId, K0_KEYS],
+  );
+  const renamed = await request(`/finance/categories/${foodRow.id}`, owner.accessToken, 'PATCH', {
+    name: renamedName,
+    expectedVersion: foodRow.version,
+  });
+  const afterUpgrade = await request('/finance/categories?includeInactive=true', member.accessToken);
+  const upgradedRows = await systemRows();
+  assert(
+    foodBefore.length >= 27 && renamed.status === 200 && afterUpgrade.status === 200 && upgradedRows.length === 27 &&
+      K0_KEYS.every((key) => upgradedRows.some((row) => row.systemKey === key)) &&
+      upgradedRows.find((row) => row.systemKey === 'expense_food')?.name === renamedName &&
+      !afterUpgrade.data.some((entry) => entry.name === '餐饮' && entry.kind === 'expense'),
+    '老家庭第一次读分类时补上缺的 15 个；改过名的「餐饮」保持新名字，也不会再冒出一个「餐饮」',
+  );
+  const restoredFood = await request(`/finance/categories/${foodRow.id}`, owner.accessToken, 'PATCH', {
+    name: '餐饮',
+    expectedVersion: renamed.data.version,
+  });
+  assert(restoredFood.status === 200, '把「餐饮」改回原名，不影响后续脚本');
+
   console.log('\n家庭财务与 Hermes 记账回归测试全部通过');
 } finally {
   await db.query('DELETE FROM finance_categories WHERE id = $1', [other.categoryId]);

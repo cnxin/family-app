@@ -11,6 +11,8 @@ import { pushToast } from '../lib/toast';
 import { Button, Dialog, EmptyState, Input, Panel } from './ui';
 
 const label = 'mb-1 block text-[12px] text-ink-soft';
+/** 信用卡要额度 / 账单日 / 还款日，K4 加上这几项之前先不在类型里出现。 */
+const PICKABLE_TYPES = (Object.keys(ACCOUNT_TYPE_LABELS) as FinanceAccountType[]).filter((value) => value !== 'credit');
 const chip = (active: boolean) =>
   'rounded-full border px-2.5 py-1 text-[13px] transition-colors duration-150 ' +
   (active ? 'border-accent bg-accent-soft text-accent' : 'border-border text-ink-soft hover:bg-muted');
@@ -79,7 +81,7 @@ export function AccountForm({
         <div>
           <span className={label}>类型</span>
           <div className="flex flex-wrap gap-1.5">
-            {(Object.keys(ACCOUNT_TYPE_LABELS) as FinanceAccountType[]).map((value) => (
+            {PICKABLE_TYPES.map((value) => (
               <button
                 key={value}
                 type="button"
