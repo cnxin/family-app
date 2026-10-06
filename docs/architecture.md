@@ -184,7 +184,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | **J0 盘点**（不改代码） | 列出 15 个域在七处登记的现状差异；起草 `PluginManifest` 类型；选 3 个域（购物、任务、智能家居）做 manifest 草稿看是否表达得下 | S | — |
 | **J1 插件注册表** | `packages/contracts/src/plugins/`；nav / modules / events 映射 / attention 挂载 / settings 行 / usage 表改为从 manifest 生成；CI 断言全覆盖；15 个域逐个迁（每域一提交，页面不动） | L（约 1.5 周） | J0 |
 | **J2 助理数据与开关** | `assistant_utterances` 表；助理三档的家庭级开关与配置页（第 0 档默认开、1/2 默认关）；⌘K 输入原话落表（试用期就开始攒句子） | M | J1 |
-| **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认。**补 ⌘K 动作时**：给点菜补一条动作，把 `propose_menu` 从 manifest 顶层 `proposals` 挪回 `actions[].propose`，然后删掉 `proposals` 字段（J1.4 加的过渡结构，2026-10-06 King 认定） | L（约 2 周） | J1；**模板需要试用期攒的原话** |
+| **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认。**输入 = `assistant_utterances` 导出的 CSV**（设置页「原话记录 → 导出 CSV」，`chosenKind` / `chosenId` 当人工标注）。**补 ⌘K 动作时**：给点菜补一条动作，把 `propose_menu` 从 manifest 顶层 `proposals` 挪回 `actions[].propose`，然后删掉 `proposals` 字段（J1.4 加的过渡结构，2026-10-06 King 认定） | L（约 2 周） | J1；**模板需要试用期攒的原话** |
 | **J4 agent 重建为 manifest 消费者** | refactor-plan 3.2 的自研 loop 落到 `packages/agent-core`；工具由 manifest 生成；28 个旧工具名做别名；`/events` 推运行状态（H2 已备）；第 2 档路由接入；脱敏与每日上限 | XL（约 3 周） | J1、J3 |
 | **J5 第 1 档本地模型** | OpenAI 兼容适配；Ollama 探测；仅做意图 + 槽位；评测集（用 J2 攒的原话）；默认关 | M | J3 |
 | **J6 收口** | 删 Hermes 相关（compose、配置）；文档；开源版的「写一个插件」指南 | S | J4 |
@@ -460,13 +460,58 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 - `agent-proposal-groups` 黑盒可单跑（先 GET /agent/routines 补建 nightly_digest）：`e29b6d3` / 合并 `e481e51`，#37346861982 一次过。
 - 重跑规矩修订写进 `docs/execution-plan.md` §3.1 第 6 条。事件流 `hello` / `heartbeat` 由 King 本人登录验证。
 
+### 8.8 J2 执行记录（助理数据与开关）
+
+**目的**：让试用期从第一天起就攒原话（§2.3「模板迭代和试用分析的唯一数据源」）。本批不接任何模型，原话只存本地库。
+
+| 步 | 内容 | 提交 | 合并 | CI | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| 收尾 | J1 收尾杂项 | `6b66a1b` | `8a74cc6` | 一次过（#37442334833） | `docs/finance-plan.md` 入库；`_to_delete/`（两个空锁文件）与 `fix/media-scheduled-cache` 本地分支 / worktree 清掉（远端分支未动）；§8.7 补 J1.7 后的演示栈升级记录、三段等价比对合成一段。财务不能打包有人盯着：黑盒「`propose_plan` 混进 type finance 整组拒绝」，且 check-plugins 断言 MCP `propose_plan` 手写的步骤类型联合 == manifest 里 `grouped` 不为 false 的提案类型（反证过）——黑盒其实是被 MCP 入参这层手写联合拦下的，manifest 推出的 `GROUPABLE_ACTION_TYPES` 是第二道 |
+| J2.1 | `assistant_utterances` 表与接口 | `8c53535` | `b6bdcd5` | 一次过（#37443619010） | 迁移 `AddAssistantUtterances1785233600000`；`/assistant/utterances` 五个端点（见下）；路由进 `CORE_EVENT_ROUTE_EXEMPT`（不推事件、不进流水 / 通知），查询 key 进 `CORE_QUERY_KEYS`；`agent-retention.service.ts` 留 `ASSISTANT_UTTERANCE_RETENTION_DAYS = null`（J3 评测集固定后再定）；黑盒 `assistant-utterances.mjs` + `household-isolation.mjs` 一段 |
+| J2.2 | 三档开关与配置、设置页 | `430c5e6` | `272862a` | 一次过（#37444906394） | 迁移 `AddAssistantTiers1785233700000`；设置对话框加「三档」「原话记录」两段；e2e `assistant-settings`（双视口） |
+| J2.3 | ⌘K 原话落表 | `0b4a1ae` | `b8dbc3d` | 一次过（#37445870812） | 只改 `command-palette.tsx` 的提交 / 关闭逻辑；e2e：输「记一笔」选中 → 设置页原话记录可见（双视口），没点就关三种结果 + 空输入不记（桌面） |
+
+**表结构（最终版）** `assistant_utterances`：
+
+| 列 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | uuid PK | |
+| `householdId` | uuid，FK households ON DELETE CASCADE | 家庭隔离 |
+| `memberId` | uuid，FK members ON DELETE CASCADE | 说话的人 |
+| `clientId` | uuid | 前端打开面板时生成的幂等键；唯一 `(householdId, memberId, clientId)`，重复提交返回第一次那条（**指令表里没有这一列**，幂等要用它） |
+| `text` | varchar(200) | 原话，去首尾空白；CHECK 长度 1～200 |
+| `source` | varchar(24) | `command_palette` / `today_search` / `agent_chat`（CHECK）；本批只出现 `command_palette` |
+| `tier` | smallint 可空 | 0～2（CHECK）；本批全为空 |
+| `intentId` | varchar(80) 可空 | J3 起 |
+| `confidence` | numeric(4,3) 可空 | 0～1（CHECK） |
+| `outcome` | varchar(16) | `navigated` / `proposed` / `candidates` / `no_match` / `dismissed`（CHECK）；`navigated` 必须带 `chosenKind`（接口校验） |
+| `chosenKind` | varchar(16) 可空 | `action` / `page` / `dish` / `item` / `agent`（CHECK） |
+| `chosenId` | varchar(120) 可空 | 点的那条的 id（动作 id、页面 key、`dish-<id>`…） |
+| `correctedIntentId` | varchar(80) 可空 | J3 起 |
+| `createdAt` | timestamptz | 写入时由服务端给到毫秒（库默认 `now()` 是微秒，游标按毫秒比会漏行） |
+
+索引 `IDX_assistant_utterances_household_created (householdId, createdAt)`。
+
+**接口**：`POST /assistant/utterances`（任意成员，clientId 幂等）；`GET /assistant/utterances`（倒序游标分页；`manage_agent` 看全家、可按人筛，**成员也能调、只拿到自己的**，指定别人 403——指令写的是仅 `manage_agent`，但设置页要让成员看自己的）；`GET /assistant/utterances/export.csv`（`manage_agent`，UTF-8 BOM，`= + - @` 开头垫单引号防公式）；`DELETE /assistant/utterances/:id`（本人或 `manage_agent`）；`DELETE /assistant/utterances?memberId=me`（清自己的）。
+
+**开关语义**（`agent_settings` 新列，都有默认值，老家庭升级后行为不变）：
+- **`enabled` = 第 2 档（云端）的开关**，不加新列、不改语义：它今天控制的 Hermes 就是云端档的现状形态，J4 重建后仍用这一个字段。设置页上它的标签改成「云端助理（第 2 档）」。
+- `tier0Enabled`（默认 true，第 0 档规则引擎，J3 实现）、`tier1Enabled`（false，第 1 档本地模型，J5）、`tier1BaseUrl` / `tier1Model`（OpenAI 兼容地址与模型名，只收 http(s)，局域网地址可用；本批只存、不连）、`tier2DailyLimit`（50，CHECK 1～1000，J4 执行）、`tier2Redact`（true，J4 执行）、`captureUtterances`（true；关掉后 ⌘K 不再落表）。
+- `GET /agent/settings` 回传（成员也读得到，`use_agent`），`PATCH /agent/settings` 可改（`manage_agent`）；`/agent/status` 带上 `captureUtterances` 给 ⌘K 用。
+
+**⌘K 记录规则**：一次打开 = 一次会话，只在输入结束时记一条——点了某条 → `navigated`（带 chosenKind / chosenId）；有候选没点就关（Esc / 点外面 / 再按 ⌘K）→ `candidates`；没候选 → `no_match`（「交给小管家」那条不算候选）；输过 ≥ 2 个字又全删掉再关 → `dismissed`（记最后一次非空文本）；空输入不记。只记 text、不记候选列表。`captureUtterances` 为 false，或者面板打开后还没读到 `/agent/status` 时不记（宁可少记）。`keepalive` fetch，失败静默。
+
+**今天页搜索条**：现在没有。家里页搜索条和顶栏放大镜打开的就是 ⌘K，统一记 `command_palette`；`today_search` 留给 J3 接今天页搜索条时用。
+
+**设置页**：小管家设置实际是 `components/agent-settings-ui.tsx` 里的对话框（`pages/assistant.tsx` 的 `?settings=1` 只负责打开），三档与原话记录两段放在新组件 `components/assistant-tiers.tsx`；`pages/assistant.tsx` 没有改动。管理员可改，成员只读；原话记录最近 20 条，管理员可切「全部 / 我的」、导出 CSV，所有人可「清空我的」（二次确认）。
+
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
 | J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；§8.6 五项已拍板 |
 | J1 插件注册表（18 域） | ☑ | 见 §8.7 | 18 / 18 个插件都有 manifest，14 处登记里插件的条目全部由 manifest 导出，check-plugins 全量断言；剩余手写项与 J1b 输入见 §8.7 末尾；J1.7 合完后升演示栈 |
-| J2 助理数据与开关 | ☐ | | |
+| J2 助理数据与开关 | ☑ | 见 §8.8 | `assistant_utterances` 表与接口、三档开关、⌘K 原话落表；演示栈随本批升级，King 本人去 ⌘K 输几句再看「原话记录」做人工验收 |
 | J3 第 0 档引擎 | ☐ | | 等试用原话；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | ☐ | | |
 | J5 本地模型档 | ☐ | | |
