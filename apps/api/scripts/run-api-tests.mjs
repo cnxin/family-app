@@ -396,6 +396,7 @@ try {
     // J1b：内核注册表与共享纯函数的单测
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/kernel-units.check.ts']);
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-recurring.check.ts']);
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-import.check.ts']);
   } else {
     // --only：跳过契约、初始化演练与旧 PIN 迁移，只灌种子后直接跑选中的业务脚本
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
