@@ -36,9 +36,9 @@ export interface StatementFormat {
   statuses: { refund: readonly string[]; closed: readonly string[] };
   /** 平台自己的分类 / 交易类型 → 我们的默认分类 systemKey（商户关键词都没命中时用） */
   platformCategories: Readonly<Record<string, string>>;
-  /** 页面上的导出路径说明 */
-  exportHint: string;
 }
+
+// 页面上的导出路径说明在 packages/contracts（FINANCE_IMPORT_SOURCE_INFO），这里只管怎么读文件。
 
 export const STATEMENT_FORMATS: Readonly<Record<ImportSource, StatementFormat>> = {
   alipay: {
@@ -80,7 +80,6 @@ export const STATEMENT_FORMATS: Readonly<Record<ImportSource, StatementFormat>> 
       保险: 'expense_insurance',
       商业服务: 'expense_other',
     },
-    exportHint: '支付宝 App → 我的 → 账单 → 右上角「…」→ 开具交易流水证明 → 用于个人对账，发到邮箱。邮件里的 zip 先解压，上传里面的 csv。',
   },
   wechat: {
     source: 'wechat',
@@ -108,7 +107,6 @@ export const STATEMENT_FORMATS: Readonly<Record<ImportSource, StatementFormat>> 
       '微信红包（群红包）': 'income_red_packet',
       退款: 'income_refund',
     },
-    exportHint: '微信 → 我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单 → 用于个人对账，导出 csv 后上传。',
   },
 };
 

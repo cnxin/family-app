@@ -142,7 +142,7 @@ try {
   const expectedWallet = delta(w.rows.filter((one) => one.included || one.rowNo === 8));
   const medicine = (
     await db.query(
-      `SELECT "categoryId", merchant, "sourceType", "idempotencyKey" FROM finance_transactions WHERE "sourceId" = $1 AND "externalId" = $2`,
+      `SELECT "categoryId", merchant, title, note, "sourceType", "idempotencyKey" FROM finance_transactions WHERE "sourceId" = $1 AND "externalId" = $2`,
       [w.id, '42000016721202609300005219699'],
     )
   ).rows[0];
@@ -159,10 +159,11 @@ try {
   );
   assert(
     medicine.categoryId === byKey.expense_childcare && medicine.merchant === '康安大药房-望京店' && medicine.sourceType === 'import' &&
+      medicine.title === '康安大药房-望京店' && medicine.note === '药品' &&
       medicine.idempotencyKey === `import:${w.id}:42000016721202609300005219699` &&
       rules.length === 1 && rules[0].pattern === '康安大药房' && rules[0].kind === 'expense' &&
       rules[0].categoryId === byKey.expense_childcare && rules[0].hits === 1,
-    '改了分类的那笔按改的记，带交易对方和 import:<批次>:<单号>；商户规则记下「康安大药房」→ 改的分类（hits 1）',
+    '改了分类的那笔按改的记；流水名字是交易对方、备注是商品，带 import:<批次>:<单号>；商户规则记下「康安大药房」→ 改的分类（hits 1）',
   );
   const activity = await db.query(
     `SELECT summary FROM household_activity_logs WHERE "householdId" = $1 AND action = 'finance_import_committed' ORDER BY "createdAt" DESC LIMIT 1`,

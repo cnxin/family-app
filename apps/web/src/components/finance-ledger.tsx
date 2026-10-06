@@ -74,7 +74,12 @@ export function LedgerPanel({ month, canManage }: { month: string; canManage: bo
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-medium">{entry.title}</p>
                 <p className="truncate text-[12px] text-ink-soft">
-                  {[entry.occurredOn, entry.category?.name, accountPath(entry), entry.actorName]
+                  {[
+                    entry.occurredOn,
+                    entry.category?.name,
+                    accountPath(entry),
+                    entry.sourceType === 'import' ? `${entry.actorName}导入` : entry.actorName,
+                  ]
                     .filter(Boolean)
                     .join(' · ')}
                 </p>

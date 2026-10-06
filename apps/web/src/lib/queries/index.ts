@@ -21,6 +21,7 @@ export * from './guest-invitation';
 export * from './assets';
 export * from './assets-maintenance';
 export * from './finance';
+export * from './finance-import';
 export * from './knowledge';
 export * from './memories';
 export * from './travel';
