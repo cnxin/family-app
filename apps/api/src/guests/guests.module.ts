@@ -1,4 +1,6 @@
 import { EventBus } from '../events/event-bus';
+import { GuestMenuAttentionRule, GuestMealRequestAttentionRule, GuestsAttention } from './guests-attention';
+import { TodayModule } from '../today/today.module';
 import { addDays, householdToday } from '@family/shared';
 import {
   BadRequestException,
@@ -1432,9 +1434,9 @@ export class GuestsController {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Menu, MenuItem, Member, Notification, HouseholdActivityLog])],
+  imports: [TodayModule, TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Menu, MenuItem, Member, Notification, HouseholdActivityLog])],
   controllers: [GuestsController],
-  providers: [GuestsService],
+  providers: [GuestsService, GuestMenuAttentionRule, GuestMealRequestAttentionRule, GuestsAttention],
   exports: [GuestsService],
 })
 export class GuestsModule {}

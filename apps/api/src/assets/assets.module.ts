@@ -18,6 +18,8 @@ import {
   UseInterceptors,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { AssetMaintenanceAttentionRule, AssetRenewalAttentionRule, AssetWarrantyAttentionRule, AssetsAttention } from './assets-attention';
+import { TodayModule } from '../today/today.module';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { Response } from 'express';
@@ -2011,6 +2013,7 @@ export class AssetsController {
 
 @Module({
   imports: [
+    TodayModule,
     InventoryModule,
     TypeOrmModule.forFeature([
       HomeAsset,
@@ -2025,7 +2028,7 @@ export class AssetsController {
     ]),
   ],
   controllers: [AssetsController],
-  providers: [AssetsService],
+  providers: [AssetsService, AssetMaintenanceAttentionRule, AssetRenewalAttentionRule, AssetWarrantyAttentionRule, AssetsAttention],
   exports: [AssetsService],
 })
 export class AssetsModule {}

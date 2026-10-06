@@ -118,6 +118,16 @@ for (const kernelDir of ['system', 'today', 'activities', 'notifications', 'even
   }
 }
 
+// 内核留意声明的能力名也必须存在
+{
+  const union = read('apps/api/src/auth/capabilities.ts').match(/export type Capability =([^;]*);/)?.[1] ?? '';
+  for (const { key, attention } of c.CORE_ATTENTION) {
+    for (const kind of attention.kinds) {
+      if (kind.capability && !union.includes(`'${kind.capability}'`)) fail(`内核留意 ${key}/${kind.kind} 的能力 ${kind.capability} 不在 Capability 清单里`);
+    }
+  }
+}
+
 // ---- 4. contracts 内的登记（dist 运行时结果） ---------------------------------------------------------
 
 const prefixes = c.EVENT_ROUTES.map((route) => route.prefix);
@@ -263,6 +273,10 @@ for (const plugin of PLUGINS) {
   }
   for (const action of plugin.actions ?? []) {
     if (action.capability && !capabilityUnion.includes(`'${action.capability}'`)) fail(`${where} 动作 ${action.id} 的能力 ${action.capability} 不存在`);
+  }
+  // 留意种类的 capability 有消费者（today-attention.service.ts 按它判门槛，J1.7），名字必须存在
+  for (const kind of plugin.attention?.kinds ?? []) {
+    if (kind.capability && !capabilityUnion.includes(`'${kind.capability}'`)) fail(`${where} 留意 ${kind.kind} 的能力 ${kind.capability} 不在 Capability 清单里`);
   }
 
   // ---- 6. 页面文件里的登记（J1 不改页面，只断言一致）：家庭设置行 ------------------------------------------

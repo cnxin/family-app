@@ -13,6 +13,8 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { TravelChecklistAttentionRule, TravelAttention } from './travel-attention';
+import { TodayModule } from '../today/today.module';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { Type } from 'class-transformer';
 import {
@@ -1690,6 +1692,7 @@ export class TravelController {
 
 @Module({
   imports: [
+    TodayModule,
     TypeOrmModule.forFeature([
       TravelPlan,
       TravelChecklistItem,
@@ -1702,7 +1705,7 @@ export class TravelController {
     ]),
   ],
   controllers: [TravelController],
-  providers: [TravelService],
+  providers: [TravelService, TravelChecklistAttentionRule, TravelAttention],
   exports: [TravelService],
 })
 export class TravelModule {}

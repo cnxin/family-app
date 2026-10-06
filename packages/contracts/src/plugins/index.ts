@@ -9,6 +9,7 @@ import type {
   PluginProposal,
   PluginUsageTable,
 } from './types';
+import { CORE_ATTENTION } from './core';
 import { PLUGIN_ALIASES, PLUGIN_KEYS, type PluginKey } from './keys';
 import { financeManifest } from './finance';
 import { guestsManifest } from './guests';
@@ -29,6 +30,7 @@ import { assetsManifest } from './assets';
 import { mediaManifest } from './media';
 import { smartHomeManifest } from './smart-home';
 
+export * from './core';
 export * from './keys';
 export * from './types';
 
@@ -106,6 +108,11 @@ export function pluginHasDataSql(key: string): string | null {
 
 export function pluginAttention(): readonly { key: string; attention: PluginAttention }[] {
   return PLUGINS.flatMap((plugin) => (plugin.attention ? [{ key: plugin.key, attention: plugin.attention }] : []));
+}
+
+/** 插件的留意声明加上内核的（CORE_ATTENTION）：今天页按它判排序、能力门槛，前端按它出文案与落点。 */
+export function allAttention(): readonly { key: string; attention: PluginAttention }[] {
+  return [...pluginAttention(), ...CORE_ATTENTION];
 }
 
 /** 把 `{name}` 这类占位换成值；没给的占位换成空串。 */
