@@ -213,6 +213,90 @@ export const financeRecurringSchema = z.object({
 });
 export type FinanceRecurring = z.infer<typeof financeRecurringSchema>;
 
+// ---- K1 账单导入（docs/finance-plan.md §2.2、§3-K1） ----
+export const FINANCE_IMPORT_SOURCES = ['alipay', 'wechat', 'csv'] as const;
+export const financeImportSource = z.enum(FINANCE_IMPORT_SOURCES);
+export type FinanceImportSource = z.infer<typeof financeImportSource>;
+/** 预览里一行的标记：已导入过（或同一文件里单号重复）、疑似重复、不计收支、交易关闭、退款 */
+export const FINANCE_IMPORT_FLAGS = ['already_imported', 'suspected_duplicate', 'not_counted', 'closed', 'refund'] as const;
+export const financeImportFlag = z.enum(FINANCE_IMPORT_FLAGS);
+export type FinanceImportFlag = z.infer<typeof financeImportFlag>;
+/** 通用 CSV：字段 → 第几列（从 0 起）；收支、备注、单号可不选 */
+export const financeImportColumnMapping = z.object({
+  occurredOn: z.number().int().min(0),
+  amount: z.number().int().min(0),
+  merchant: z.number().int().min(0),
+  direction: z.number().int().min(0).nullable(),
+  note: z.number().int().min(0).nullable(),
+  externalId: z.number().int().min(0).nullable(),
+});
+export type FinanceImportColumnMapping = z.infer<typeof financeImportColumnMapping>;
+
+export const financeImportPreviewRowSchema = z.object({
+  rowNo: z.number().int(),
+  occurredOn: dateOnly,
+  merchant: z.string(),
+  title: z.string(),
+  amount: z.number(),
+  direction: z.enum(['expense', 'income', 'not_counted']),
+  status: z.enum(['success', 'closed', 'refund']),
+  suggestedType: z.enum(['expense', 'income', 'transfer']),
+  suggestedCategoryId: uuid.nullable(),
+  /** 建议记成转账时预填的转入账户（对方名对上了家里另一个在用账户） */
+  toAccountId: uuid.nullable(),
+  flags: z.array(financeImportFlag),
+  /** 默认勾不勾 */
+  included: z.boolean(),
+  /** 能不能勾：已导入过的不能 */
+  selectable: z.boolean(),
+});
+export type FinanceImportPreviewRow = z.infer<typeof financeImportPreviewRowSchema>;
+
+export const financeImportSchema = z.object({
+  id: uuid,
+  householdId: uuid,
+  source: financeImportSource,
+  fileName: z.string(),
+  accountId: uuid,
+  account: z.object({ id: uuid, name: z.string(), type: financeAccountType }),
+  status: z.enum(['previewing', 'committed', 'discarded']),
+  /** mapping：通用 CSV 还没选列；ready：预览好了；done：已确认或已放弃 */
+  stage: z.enum(['mapping', 'ready', 'done']),
+  totalRows: z.number().int(),
+  importedRows: z.number().int(),
+  skippedRows: z.number().int(),
+  duplicateRows: z.number().int(),
+  rangeFrom: dateOnly.nullable(),
+  rangeTo: dateOnly.nullable(),
+  columnMapping: financeImportColumnMapping.nullable(),
+  expiresAt: isoDateTime,
+  createdById: uuid,
+  createdBy: z.object({ id: uuid, name: z.string() }),
+  createdAt: isoDateTime,
+  committedAt: nullableDateTime,
+});
+export type FinanceImport = z.infer<typeof financeImportSchema>;
+
+export const financeImportPreviewSchema = financeImportSchema.extend({
+  /** 通用 CSV 选列那一步：表头与前几行 */
+  headers: z.array(z.string()).nullable(),
+  sampleRows: z.array(z.array(z.string())).nullable(),
+  stats: z.object({
+    total: z.number().int(),
+    suggested: z.number().int(),
+    alreadyImported: z.number().int(),
+    suspectedDuplicate: z.number().int(),
+    notCounted: z.number().int(),
+    closed: z.number().int(),
+    refund: z.number().int(),
+    skippedLines: z.number().int(),
+  }),
+  /** 解析时跳过的行（表尾汇总行、日期 / 金额看不懂） */
+  skipped: z.array(z.object({ line: z.number().int(), reason: z.string() })),
+  rows: z.array(financeImportPreviewRowSchema),
+});
+export type FinanceImportPreview = z.infer<typeof financeImportPreviewSchema>;
+
 export const financeSummarySchema = z
   .object({
     month: monthString,
@@ -328,6 +412,27 @@ export type UpdateFinanceRecurringBody = z.infer<typeof updateFinanceRecurringBo
 export const deleteFinanceRecurringQuery = z.object({
   expectedVersion: z.coerce.number().int().min(1),
 });
+/** 上传账单（multipart 的文本字段；文件字段名 file） */
+export const createFinanceImportBody = z.object({ source: financeImportSource, accountId: uuid });
+export type CreateFinanceImportBody = z.infer<typeof createFinanceImportBody>;
+export const financeImportMappingBody = z.object({ columnMapping: financeImportColumnMapping });
+export type FinanceImportMappingBody = z.infer<typeof financeImportMappingBody>;
+/** 确认导入：没列到的行按预览的默认（勾不勾、建议的分类 / 类型）；已导入过的行勾了也不导 */
+export const commitFinanceImportBody = z.object({
+  rows: z
+    .array(
+      z.object({
+        rowNo: z.number().int().min(1),
+        included: z.boolean(),
+        categoryId: uuid.nullish(),
+        type: z.enum(['expense', 'income', 'transfer']).optional(),
+        toAccountId: uuid.nullish(),
+      }),
+    )
+    .max(5000),
+});
+export type CommitFinanceImportBody = z.infer<typeof commitFinanceImportBody>;
+
 /** 「已付」：带上看到的那一期，重复点同一期返回同一笔流水，那一期已经推过去了就 409。 */
 export const payFinanceRecurringBody = z.object({ dueOn: dateOnly });
 export type PayFinanceRecurringBody = z.infer<typeof payFinanceRecurringBody>;
@@ -456,6 +561,54 @@ export const finance = {
     params: idParams,
     query: deleteFinanceRecurringQuery,
     response: z.object({ deleted: z.literal(true), id: uuid }),
+  }),
+  imports: defineEndpoint({
+    method: 'GET',
+    path: '/finance/imports',
+    summary: '导入记录（已确认 / 已放弃，新的在前）',
+    response: z.array(financeImportSchema),
+  }),
+  createImport: defineEndpoint({
+    method: 'POST',
+    path: '/finance/imports',
+    summary: '上传账单（multipart：file、source、accountId），返回预览；通用 CSV 先返回表头让选列',
+    body: createFinanceImportBody,
+    response: financeImportPreviewSchema,
+  }),
+  importPreview: defineEndpoint({
+    method: 'GET',
+    path: '/finance/imports/:id',
+    summary: '导入预览（过期 410）',
+    params: idParams,
+    response: financeImportPreviewSchema,
+  }),
+  importMapping: defineEndpoint({
+    method: 'POST',
+    path: '/finance/imports/:id/mapping',
+    summary: '通用 CSV 提交列对应，返回预览',
+    params: idParams,
+    body: financeImportMappingBody,
+    response: financeImportPreviewSchema,
+  }),
+  commitImport: defineEndpoint({
+    method: 'POST',
+    path: '/finance/imports/:id/commit',
+    summary: '确认导入：事务内批量建流水，改过分类的商户记下来',
+    params: idParams,
+    body: commitFinanceImportBody,
+    response: z.object({
+      import: financeImportSchema,
+      imported: z.number().int(),
+      skipped: z.number().int(),
+      duplicates: z.number().int(),
+    }),
+  }),
+  discardImport: defineEndpoint({
+    method: 'DELETE',
+    path: '/finance/imports/:id',
+    summary: '放弃预览',
+    params: idParams,
+    response: financeImportSchema,
   }),
   payRecurring: defineEndpoint({
     method: 'POST',

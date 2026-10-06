@@ -124,6 +124,7 @@ const BUSINESS_SCRIPTS = [
   'finance',
   'finance-recurring',
   'finance-credit',
+  'finance-import',
   'assistant-utterances',
   'polls',
   'reminders',

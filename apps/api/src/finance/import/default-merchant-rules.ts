@@ -3,6 +3,8 @@
 // 右边是 K0 默认分类的 systemKey（finance.service.ts 的 DEFAULT_CATEGORIES）。
 
 export const DEFAULT_MERCHANT_RULES: readonly { systemKey: string; keywords: readonly string[] }[] = [
+  // 宠物排在医疗前面：「宠物医院」是宠物
+  { systemKey: 'expense_pet', keywords: ['宠物'] },
   { systemKey: 'expense_food', keywords: ['美团', '饿了么', '肯德基', '麦当劳', '星巴克', '瑞幸', '喜茶', '必胜客', '外卖', '餐厅', '饭店', '面馆'] },
   { systemKey: 'expense_transport', keywords: ['滴滴', '高德', '地铁', '公交', '曹操出行', '哈啰', '铁路', '12306', '航空', '加油', '石化', '停车', 'etc'] },
   { systemKey: 'expense_utilities', keywords: ['国家电网', '电力', '供电', '燃气', '水务', '自来水', '热力'] },
@@ -11,7 +13,6 @@ export const DEFAULT_MERCHANT_RULES: readonly { systemKey: string; keywords: rea
   { systemKey: 'expense_housing', keywords: ['物业', '房租', '自如', '链家', '贝壳'] },
   { systemKey: 'expense_entertainment', keywords: ['爱奇艺', '腾讯视频', '优酷', '芒果', '网易云音乐', 'qq音乐', '电影', '猫眼', '淘票票'] },
   { systemKey: 'expense_education', keywords: ['学校', '培训', '课程', '学而思', '新东方'] },
-  { systemKey: 'expense_pet', keywords: ['宠物'] },
   { systemKey: 'expense_insurance', keywords: ['保险'] },
   { systemKey: 'expense_shopping', keywords: ['京东', '淘宝', '天猫', '拼多多', '唯品会', '超市', '便利店', '便利蜂', '盒马', '永辉'] },
 ];

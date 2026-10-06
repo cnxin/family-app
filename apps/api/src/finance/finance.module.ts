@@ -41,6 +41,8 @@ import {
   FinanceBudget,
   FinanceCategory,
   FinanceCategoryKind,
+  FinanceImport,
+  FinanceMerchantRule,
   FinancePosting,
   FinanceRecurring,
   FinanceTransaction,
@@ -61,6 +63,8 @@ const TRANSACTION_TYPES: Exclude<FinanceTransactionType, 'reversal'>[] = [
   'transfer',
 ];
 import { FinanceService, MAX_AMOUNT } from './finance.service';
+import { FinanceImportController } from './finance-import.controller';
+import { FinanceImportService } from './finance-import.service';
 import { FinanceRecurringScheduler } from './finance-recurring.scheduler';
 import { FinanceRecurringController, FinanceRecurringService } from './finance-recurring.service';
 
@@ -391,14 +395,17 @@ export class FinanceController {
       FinanceAccount,
       FinanceBudget,
       FinanceCategory,
+      FinanceImport,
+      FinanceMerchantRule,
       FinancePosting,
       FinanceRecurring,
       FinanceTransaction,
     ]),
   ],
-  controllers: [FinanceController, FinanceRecurringController],
+  controllers: [FinanceController, FinanceRecurringController, FinanceImportController],
   providers: [
     FinanceService,
+    FinanceImportService,
     FinanceRecurringService,
     FinanceRecurringScheduler,
     FinanceBudgetAttentionRule,

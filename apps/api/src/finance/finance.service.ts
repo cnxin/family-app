@@ -82,6 +82,9 @@ const DEFAULT_CATEGORIES: {
 export type FinanceCreateSource = {
   sourceType: FinanceTransactionSourceType;
   sourceId?: string;
+  /** K1 导入：交易单号（按家庭 + 来源唯一）与交易对方 */
+  externalId?: string | null;
+  merchant?: string | null;
 };
 
 function amount(value: number | string) {
@@ -270,6 +273,30 @@ export class FinanceService {
     manager: EntityManager,
     source: FinanceCreateSource,
   ) {
+    const { id, created } = await this.insertWithinTransaction(dto, user, manager, source);
+    if (created) {
+      await recordActivity(manager, user, {
+        module: 'finance',
+        action: `finance_${dto.type}_recorded`,
+        summary: `${user.name}记录了${dto.type === 'expense' ? '支出' : dto.type === 'income' ? '收入' : '转账'}「${dto.title.trim()}」`,
+        detail: normalized(dto.note),
+        targetPath: '/finance',
+        metadata: { transactionId: id, amount: money(dto.amount), sourceType: source.sourceType },
+      });
+    }
+    return this.findTransaction(id, user.householdId, manager);
+  }
+
+  /**
+   * 记一笔的核心：校验、幂等（同一个键、同样的内容返回原来那笔）、写流水与复式过账。不记动态、不重读整笔——
+   * 账单导入一次几百上千笔，动态记一条汇总（K1）；普通记账走上面的 createWithinTransaction。
+   */
+  async insertWithinTransaction(
+    dto: CreateFinanceTransactionDto,
+    user: JwtUser,
+    manager: EntityManager,
+    source: FinanceCreateSource,
+  ): Promise<{ id: string; created: boolean }> {
     assertCapability(user, 'record_finance');
     const prepared = await this.prepareTransaction(dto, user, manager);
     const requestFingerprint = fingerprint({
@@ -294,7 +321,7 @@ export class FinanceService {
       if (existing.requestFingerprint !== requestFingerprint) {
         throw new ConflictException('幂等键已用于另一笔不同的财务流水');
       }
-      return this.findTransaction(existing.id, user.householdId, manager);
+      return { id: existing.id, created: false };
     }
 
     const transaction = await repository.save(
@@ -311,6 +338,8 @@ export class FinanceService {
         actorName: user.name,
         sourceType: source.sourceType,
         sourceId: source.sourceId ?? randomUUID(),
+        externalId: source.externalId ?? null,
+        merchant: source.merchant ?? null,
         idempotencyKey: dto.idempotencyKey,
         requestFingerprint,
         reversalOfId: null,
@@ -347,15 +376,7 @@ export class FinanceService {
         }),
       ]);
     }
-    await recordActivity(manager, user, {
-      module: 'finance',
-      action: `finance_${dto.type}_recorded`,
-      summary: `${user.name}记录了${dto.type === 'expense' ? '支出' : dto.type === 'income' ? '收入' : '转账'}「${dto.title.trim()}」`,
-      detail: normalized(dto.note),
-      targetPath: '/finance',
-      metadata: { transactionId: transaction.id, amount: money(dto.amount), sourceType: source.sourceType },
-    });
-    return this.findTransaction(transaction.id, user.householdId, manager);
+    return { id: transaction.id, created: true };
   }
 
   async reverseTransaction(
