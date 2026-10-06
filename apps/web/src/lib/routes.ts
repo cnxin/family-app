@@ -31,7 +31,7 @@ const MOVED: [string, string][] = [
   ...legacyPaths('points'),
   ['/members', '/house/members'],
   ...legacyPaths('guests'),
-  ['/assets', '/house/assets'],
+  ...legacyPaths('assets'),
   ...legacyPaths('finance'),
   ...legacyPaths('knowledge'),
   ...legacyPaths('memories'),
@@ -43,8 +43,6 @@ const MOVED: [string, string][] = [
   ['/media/watchlist', '/life/media/watchlist'],
   ['/media/settings', '/life/media/settings'],
   ['/media', '/life/media'],
-  ['/home-assets', '/house/assets'],
-  ['/asset', '/house/assets'],
   ['/profile', '/me/profile'],
   ['/assistant', '/me/assistant'],
   ['/agent-memory', '/me/assistant/memories'],
@@ -70,7 +68,7 @@ export const pluginAttentionOf: ReadonlyMap<string, PluginAttention> = new Map(
 );
 
 const HANDWRITTEN_ATTENTION_ROUTES: Partial<Record<AttentionItem['domain'], string>> = {
-  assets: '/house/assets', backups: '/house/backups', 'smart-home': '/house/smart-home',
+  backups: '/house/backups', 'smart-home': '/house/smart-home',
 };
 
 export const attentionRoutes = {
@@ -103,7 +101,6 @@ export function attentionPath(item: {
   const plugin = pluginAttentionOf.get(item.domain);
   if (plugin) return pluginAttentionPath(plugin, item);
   if ((item.kinds?.length ?? 0) > 1) return attentionRoutes[item.domain];
-  if (item.domain === 'assets' && item.entity) return `${attentionRoutes.assets}/${encodeURIComponent(item.entity.id)}`;
   if (item.domain === 'smart-home') {
     if (item.kind === 'filter' && item.entity) return `${attentionRoutes['smart-home']}?device=${encodeURIComponent(item.entity.id)}`;
     if (item.kind === 'laundry' && item.entity) return `/schedule/tasks?task=${encodeURIComponent(item.entity.id)}`;

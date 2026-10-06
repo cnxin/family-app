@@ -77,7 +77,7 @@ export const SCENES: NavScene[] = [
     segments: [
       ...pluginSegments('inventory'),
       ...pluginSegments('shopping'),
-      { key: shelfModuleKey.enum.assets, tier: 'shelf', glyph: '资', label: '资产', path: '/house/assets', ready: true },
+      ...pluginSegments('assets'),
       ...pluginSegments('locations'),
       ...pluginSegments('finance'),
       ...pluginSegments('points'),

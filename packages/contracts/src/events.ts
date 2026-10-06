@@ -66,12 +66,6 @@ const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/internal/agent/channels/:channelId/messages', domains: ['assistant'], emit: 'explicit' },
   { prefix: '/internal/agent/mcp', domains: ['assistant'], emit: 'explicit' },
 
-  { prefix: '/assets', domains: ['assets', 'reminders', 'calendar', 'locations'] },
-  { prefix: '/assets/:id/location', domains: ['assets', 'locations'] },
-  { prefix: '/asset-documents', domains: ['assets'] },
-  { prefix: '/maintenance-plans', domains: ['assets', 'reminders', 'calendar', 'inventory'] },
-  { prefix: '/maintenance-plans/:id/shopping-items', domains: ['assets', 'shopping'] },
-  { prefix: '/maintenance-consumables', domains: ['assets', 'inventory'] },
 
   { prefix: '/auth/invitations/redeem', domains: ['members'], emit: 'explicit' },
   { prefix: '/household', domains: ['members'] },
