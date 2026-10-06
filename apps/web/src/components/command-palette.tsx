@@ -6,7 +6,8 @@ import { ACTIONS } from '../lib/actions';
 import { coreSegments, shelfSegments, settingsSegments } from '../lib/nav';
 import { useAuth } from '../lib/auth';
 import { prefetchSearchSources } from '../lib/prefetch';
-import { useAgentStatus, useFindItemLocations, useHouseholdMap } from '../lib/queries';
+import { newId } from '../lib/ids';
+import { recordUtterance, useAgentStatus, useFindItemLocations, useHouseholdMap } from '../lib/queries';
 
 /** 顶栏那个按钮也要能开，用一个自定义事件把两边接起来，免得再拉一层 context。 */
 export function openPalette() {
@@ -23,6 +24,17 @@ interface Entry {
 
 function includes(text: string, keyword: string) {
   return text.toLowerCase().includes(keyword);
+}
+
+/**
+ * 一次打开 = 一次会话（J2 原话落表，docs/architecture.md §2.3）：只在这次输入结束时记一条，不记每次按键。
+ * clientId 打开时生成，同一次会话再交也落同一条。
+ */
+interface CaptureSession {
+  clientId: string;
+  /** 最后一次非空的输入（输了又全删掉时记它）。 */
+  lastText: string;
+  done: boolean;
 }
 
 /**
@@ -50,25 +62,66 @@ export function CommandPalette() {
   const map = useHouseholdMap(open);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // 原话落表：会话、当前输入、候选数、家里开没开「记录原话」都放 ref，关面板的那一刻读最新的
+  const capture = useRef<CaptureSession | null>(null);
+  const latest = useRef({ query: '', candidates: 0, allowed: false });
+  const allowed = agent.data?.captureUtterances === true;
+  useEffect(() => {
+    latest.current.allowed = allowed;
+  }, [allowed]);
+
+  const startCapture = useCallback(() => {
+    capture.current = { clientId: newId(), lastText: '', done: false };
+  }, []);
+
+  /** 一次输入结束：点了某条 → navigated；没点就关 → 有候选 candidates / 没候选 no_match；输过字又全删 → dismissed。 */
+  const finishCapture = useCallback((chosen?: { kind: Entry['kind']; id: string }) => {
+    const session = capture.current;
+    if (!session || session.done) return;
+    session.done = true;
+    // 家里关了「记录原话」，或者还没读到这个开关，就不记
+    if (!latest.current.allowed) return;
+    const text = latest.current.query.trim();
+    if (chosen) {
+      if (text) recordUtterance({ clientId: session.clientId, text, source: 'command_palette', outcome: 'navigated', chosenKind: chosen.kind, chosenId: chosen.id });
+      return;
+    }
+    if (text) {
+      recordUtterance({ clientId: session.clientId, text, source: 'command_palette', outcome: latest.current.candidates > 0 ? 'candidates' : 'no_match' });
+    } else if (session.lastText.length >= 2) {
+      recordUtterance({ clientId: session.clientId, text: session.lastText, source: 'command_palette', outcome: 'dismissed' });
+    }
+  }, []);
+
+  const close = useCallback(() => {
+    finishCapture();
+    setOpen(false);
+  }, [finishCapture]);
+
   // 打开的同时把上次的输入清掉——放在打开动作里而不是 effect 里，少一次级联渲染
   const show = useCallback(() => {
     setQuery('');
     setCursor(0);
+    latest.current.query = '';
+    startCapture();
     setOpen(true);
-  }, []);
+  }, [startCapture]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
+        if (capture.current && !capture.current.done) finishCapture();
         setOpen((value) => {
           if (value) return false;
           setQuery('');
           setCursor(0);
+          latest.current.query = '';
+          startCapture();
           return true;
         });
       }
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') close();
     };
     const onOpen = () => show();
     document.addEventListener('keydown', onKey);
@@ -77,7 +130,7 @@ export function CommandPalette() {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('palette:open', onOpen);
     };
-  }, [show]);
+  }, [show, close, finishCapture, startCapture]);
 
   useEffect(() => {
     if (!open) return;
@@ -159,14 +212,26 @@ export function CommandPalette() {
     // 顺序和下面分组显示的顺序一致，上下键和回车才对得上
     return [...named, ...aliased, ...pageHits, ...dishHits, ...itemHits, ...ask].slice(0, 20);
   }, [agent.data?.enabled, entries, found.data, itemQuery, map.data, navigate, query]);
+  // 「交给小管家」那条总在，不算候选
+  const candidates = results.filter((entry) => entry.kind !== 'agent').length;
+  useEffect(() => {
+    latest.current.candidates = candidates;
+  }, [candidates]);
+
+  const pick = useCallback((entry: Entry | undefined) => {
+    if (!entry) return;
+    finishCapture({ kind: entry.kind, id: entry.id });
+    setOpen(false);
+    entry.go();
+  }, [finishCapture]);
+  // 列表项点击：用 data-index 取条目，不在渲染循环里给每一项新建闭包
+  const choose = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => pick(results[Number(event.currentTarget.dataset.index)]),
+    [pick, results],
+  );
 
   if (!open) return null;
 
-  const pick = (entry: Entry | undefined) => {
-    if (!entry) return;
-    setOpen(false);
-    entry.go();
-  };
 
   const groups = [
     { title: '动作', items: results.filter((entry) => entry.kind === 'action') },
@@ -181,7 +246,7 @@ export function CommandPalette() {
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-start sm:p-4 sm:pt-[12vh]"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) setOpen(false);
+        if (event.target === event.currentTarget) close();
       }}
     >
       <div
@@ -198,6 +263,8 @@ export function CommandPalette() {
           onChange={(event) => {
             setQuery(event.target.value);
             setCursor(0);
+            latest.current.query = event.target.value;
+            if (capture.current && event.target.value.trim()) capture.current.lastText = event.target.value.trim();
           }}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') {
@@ -229,7 +296,8 @@ export function CommandPalette() {
                         key={entry.id}
                         type="button"
                         onMouseEnter={() => setCursor(index)}
-                        onClick={() => pick(entry)}
+                        data-index={index}
+                        onClick={choose}
                         className={
                           'flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors duration-100 ' +
                           (index === cursor ? 'bg-accent-soft' : '')

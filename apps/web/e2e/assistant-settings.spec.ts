@@ -72,3 +72,66 @@ test('成员：看得到三档和自己的原话记录，开关都是只读', as
   await expect(dialog.getByRole('tab', { name: '本地摘要' })).toHaveCount(0);
   await shot(page, `j2-assistant-settings-member-${isMobile ? '390x844' : '1280x800'}.png`);
 });
+
+test('⌘K 输「记一笔」选中动作：原话记录里有这条，结果是「点了」', async ({ page, isMobile }) => {
+  await page.goto('/');
+  const status = page.waitForResponse((response) => response.url().endsWith('/agent/status') && response.ok());
+  if (isMobile) await page.getByRole('button', { name: '快速跳转', exact: true }).click();
+  else await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
+  const palette = page.getByRole('dialog', { name: '快速跳转' });
+  // 「记录原话」开关跟着 /agent/status 来，读到之前不记
+  expect((await status).ok()).toBeTruthy();
+  await palette.getByRole('textbox').fill('记一笔');
+  await expect(palette.getByRole('button').first()).toContainText('记一笔支出');
+  const recorded = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/assistant/utterances'),
+  );
+  await palette.getByRole('textbox').press('Enter');
+  const response = await recorded;
+  expect(response.status()).toBe(201);
+  const saved = (await response.json()) as { data: { id: string; outcome: string; chosenKind: string } };
+  expect(saved.data.outcome).toBe('navigated');
+  expect(saved.data.chosenKind).toBe('action');
+  await expect(page).toHaveURL(/\/house\/finance$/);
+
+  const dialog = await openSettings(page);
+  const log = dialog.getByRole('list', { name: '原话记录' });
+  const row = log.getByRole('listitem').filter({ hasText: '记一笔' }).first();
+  await expect(row).toContainText('点了');
+  await expect(row).toContainText('动作：finance.record-expense');
+});
+
+test('⌘K 没点就关：有候选记 candidates、没候选记 no_match、删光再关记 dismissed、空输入不记', async ({ page, request }, info) => {
+  test.skip(info.project.name !== 'desktop-chrome', '记录规则在桌面项目验一次');
+  const api = apiClient(request);
+  const key = process.platform === 'darwin' ? 'Meta+k' : 'Control+k';
+  const posts: { text: string; outcome: string }[] = [];
+  page.on('request', (sent) => {
+    if (sent.method() === 'POST' && new URL(sent.url()).pathname.endsWith('/assistant/utterances')) posts.push(sent.postDataJSON());
+  });
+  await page.goto('/');
+  // 「记录原话」开关跟着 /agent/status 来（缓存 60 秒）：第一次打开时等它读到，后面几次直接用
+  let status: Promise<unknown> | null = page.waitForResponse((response) => response.url().endsWith('/agent/status'));
+  async function session(type: (input: ReturnType<typeof page.getByRole>) => Promise<void>) {
+    await page.keyboard.press(key);
+    const input = page.getByRole('dialog', { name: '快速跳转' }).getByRole('textbox');
+    if (status) {
+      await status;
+      status = null;
+    }
+    await type(input);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: '快速跳转' })).toHaveCount(0);
+  }
+  await session(async (input) => input.fill('记一'));
+  await session(async (input) => input.fill('呜啦啦不存在的东西'));
+  await session(async (input) => {
+    await input.fill('买菜');
+    await input.fill('');
+  });
+  await session(async () => undefined);
+  await expect.poll(() => posts.length).toBe(3);
+  expect(posts.map(({ text, outcome }) => `${text}:${outcome}`)).toEqual(['记一:candidates', '呜啦啦不存在的东西:no_match', '买菜:dismissed']);
+  const page1 = await api.get<{ items: { text: string; outcome: string }[] }>('/assistant/utterances?limit=5');
+  expect(page1.items.map((one) => one.text)).toEqual(expect.arrayContaining(['记一', '呜啦啦不存在的东西', '买菜']));
+});
