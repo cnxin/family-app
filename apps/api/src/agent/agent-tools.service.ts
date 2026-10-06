@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { pluginToolSources } from '@family/contracts';
+import { CORE_TOOL_SOURCES, pluginToolSources } from '@family/contracts';
 import { AssetsService } from '../assets/assets.module';
 import { JwtUser } from '../auth/jwt.guard';
 import { CalendarService } from '../calendar/calendar.module';
@@ -432,20 +432,6 @@ function outputItemCount(output: unknown) {
   }
   return 1;
 }
-
-/**
- * 内核 agent 工具（KERNEL_AGENT_TOOLS）调用记录的 sourceModule。内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。
- * 今日摘要、家庭日程跨日历 / 任务 / 提醒，调用记录历来记在 calendar 名下（数据值，J1 不改）。
- */
-const CORE_TOOL_SOURCES: Readonly<Record<string, string>> = {
-  get_today_summary: 'calendar',
-  get_family_schedule: 'calendar',
-  get_weather: 'weather',
-  get_member_profile: 'member',
-  recall_preferences: 'agent_memory',
-  remember_preference: 'agent_memory',
-  propose_plan: 'agent_plan',
-};
 
 @Injectable()
 export class AgentToolsService {
@@ -1256,7 +1242,7 @@ export class AgentToolsService {
     output: unknown,
     startedAt: Date,
   ) {
-    // 插件认领的工具，来源模块取 keys.ts 别名表（pluginToolSources）；内核工具见 CORE_TOOL_SOURCES
+    // 插件认领的工具，来源模块取 keys.ts 别名表（pluginToolSources）；内核工具取 contracts/plugins/core-assistant.ts
     const sourceModule: Record<string, string> = { ...pluginToolSources(), ...CORE_TOOL_SOURCES };
     const presentation =
       status === 'completed' ? resultPresentation(toolName, output) : null;
