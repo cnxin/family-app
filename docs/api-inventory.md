@@ -4,13 +4,14 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 316 个端点（POST 124 / GET 105 / PATCH 48 / DELETE 28 / PUT 11），公开端点 28 个，已定义契约 316 个。
+共 321 个端点（POST 125 / GET 107 / PATCH 48 / DELETE 30 / PUT 11），公开端点 28 个，已定义契约 321 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
 | activities | 1 | 1 |
 | agent | 39 | 39 |
 | assets | 19 | 19 |
+| assistant | 5 | 5 |
 | auth | 16 | 16 |
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
@@ -110,6 +111,16 @@
 | POST | `/maintenance-plans/:id/consumables` | `AssetsController.createConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
 | GET | `/maintenance-plans/:id/consumables-preview` | `AssetsController.consumablesPreview` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
 | POST | `/maintenance-plans/:id/shopping-items` | `AssetsController.addConsumablesToShopping` | `manage_assets` `manage_shopping` | ✓ | `apps/api/src/assets/assets.module.ts` |
+
+## assistant（5）
+
+| 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
+| --- | --- | --- | --- | :-: | --- |
+| GET | `/assistant/utterances` | `AssistantUtterancesController.list` | 登录 | ✓ | `apps/api/src/assistant/assistant-utterances.module.ts` |
+| POST | `/assistant/utterances` | `AssistantUtterancesController.create` | 登录 | ✓ | `apps/api/src/assistant/assistant-utterances.module.ts` |
+| DELETE | `/assistant/utterances` | `AssistantUtterancesController.clearMine` | 登录 | ✓ | `apps/api/src/assistant/assistant-utterances.module.ts` |
+| DELETE | `/assistant/utterances/:id` | `AssistantUtterancesController.remove` | 登录 | ✓ | `apps/api/src/assistant/assistant-utterances.module.ts` |
+| GET | `/assistant/utterances/export.csv` | `AssistantUtterancesController.exportCsv` | `manage_agent` | ✓ | `apps/api/src/assistant/assistant-utterances.module.ts` |
 
 ## auth（16）
 

@@ -27,6 +27,7 @@ export * from './memories';
 export * from './system';
 export * from './media';
 export * from './agent';
+export * from './assistant';
 export * from './today';
 export * from './households';
 export * from './events';
@@ -48,6 +49,7 @@ import { memories } from './memories';
 import { system } from './system';
 import { media } from './media';
 import { agent } from './agent';
+import { assistant } from './assistant';
 import { today } from './today';
 import { households } from './households';
 import { events } from './events';
@@ -91,6 +93,7 @@ export const contracts = {
   system,
   media,
   agent,
+  assistant,
   today,
   households,
   events,

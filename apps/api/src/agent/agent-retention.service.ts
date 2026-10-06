@@ -13,6 +13,12 @@ import {
 
 const PURGE_BATCH_SIZE = 200;
 const DEFAULT_RETENTION_DAYS = 7;
+
+/**
+ * 助理原话（assistant_utterances，J2）的保留期。试用期宁多勿少，暂不自动清理（null）；
+ * J3 评测集固定后再定保留期，届时在本服务里加清理。
+ */
+export const ASSISTANT_UTTERANCE_RETENTION_DAYS: number | null = null;
 const DUE_CONVERSATIONS = `
   SELECT conversation.id
   FROM agent_conversations AS conversation

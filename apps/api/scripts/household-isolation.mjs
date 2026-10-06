@@ -766,6 +766,26 @@ try {
     '事件通道只推本家庭：本家庭收到 shopping，其他家庭的连接收不到任何 changed',
   );
 
+  // J2 助理原话：两边各记一条，互相列不出、删不掉
+  const foreignUtterance = await request('/assistant/utterances', foreignToken, 'POST', {
+    clientId: randomUUID(), text: '隔离家庭的原话', source: 'command_palette', outcome: 'no_match',
+  });
+  const localUtterance = await request('/assistant/utterances', defaultToken, 'POST', {
+    clientId: randomUUID(), text: '默认家庭的原话', source: 'command_palette', outcome: 'no_match',
+  });
+  const localUtterances = await request('/assistant/utterances?limit=200', defaultToken);
+  const foreignUtterances = await request('/assistant/utterances?limit=200', foreignToken);
+  const crossUtteranceDelete = await request(`/assistant/utterances/${localUtterance.body.data.id}`, foreignToken, 'DELETE');
+  await request(`/assistant/utterances/${localUtterance.body.data.id}`, defaultToken, 'DELETE');
+  await db.query('DELETE FROM assistant_utterances WHERE id = $1', [foreignUtterance.body.data.id]);
+  assert(
+    foreignUtterance.status === 201 && localUtterance.status === 201 &&
+      !localUtterances.body.data.items.some((item) => item.id === foreignUtterance.body.data.id) &&
+      !foreignUtterances.body.data.items.some((item) => item.id === localUtterance.body.data.id) &&
+      crossUtteranceDelete.status === 404,
+    '助理原话只在本家庭：两边互相列不出，别人家的删不掉',
+  );
+
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
   await db.query('DELETE FROM reminders WHERE id = $1', [ids.reminder]);

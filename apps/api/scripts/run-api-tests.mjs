@@ -120,6 +120,7 @@ const BUSINESS_SCRIPTS = [
   'tasks',
   'points',
   'finance',
+  'assistant-utterances',
   'polls',
   'reminders',
   'external-notifications',
