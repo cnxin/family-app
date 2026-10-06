@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -26,6 +27,8 @@ import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { ShoppingItem } from '../entities';
 import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
+import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
+import { shoppingFacade } from './shopping.facade';
 
 class GenerateDto {
   @IsISO8601()
@@ -307,10 +310,30 @@ export class ShoppingController {
   }
 }
 
+/**
+ * 购物对外（J1b）：注册购物门面（智能家居看清单里有没有没买的滤芯），订阅智能家居联动的事务内钩子（加清单项）。
+ */
+@Injectable()
+export class ShoppingPluginProvider implements OnModuleInit {
+  constructor(
+    private readonly facades: PluginFacadeRegistry,
+    private readonly hooks: TransactionHookRegistry,
+    private readonly shopping: ShoppingService,
+  ) {}
+
+  onModuleInit() {
+    this.facades.register('shopping', shoppingFacade());
+    this.hooks.on('smart-home.link-fired', 'shopping', async (payload, manager) => {
+      if (!payload.shoppingItem) return;
+      await this.shopping.addManualWithinTransaction(payload.shoppingItem, payload.householdId, manager);
+    });
+  }
+}
+
 @Module({
   imports: [TypeOrmModule.forFeature([ShoppingItem])],
   controllers: [ShoppingController],
-  providers: [ShoppingService],
+  providers: [ShoppingService, ShoppingPluginProvider],
   exports: [ShoppingService],
 })
 export class ShoppingModule {}

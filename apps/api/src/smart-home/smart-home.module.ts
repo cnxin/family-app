@@ -39,9 +39,6 @@ import {
   SmartHomeWebhookSettings,
 } from '../entities';
 import { SmartHomeLinksService } from './smart-home-links.service';
-import { RemindersModule } from '../reminders/reminders.module';
-import { ShoppingModule } from '../shopping/shopping.module';
-import { TasksModule } from '../tasks/tasks.module';
 import { TodayModule } from '../today/today.module';
 import { SystemModule } from '../system/system.module';
 import { SmartHomeAttentionSource } from './smart-home-attention';
@@ -278,9 +275,6 @@ export class SmartHomeLinksController {
       SmartHomeLinkRun,
       SmartHomeMergeReportRecord,
     ]),
-    TasksModule,
-    ShoppingModule,
-    RemindersModule,
     TodayModule,
     SystemModule,
   ],

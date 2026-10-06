@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import {
   smartHomeActionsFor,
+  type TaskCompletedEvent,
   type CreateSmartHomeLinkBody,
   type SmartHomeAction,
   type SmartHomeLink as SmartHomeLinkView,
@@ -20,7 +21,6 @@ import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
 import { SmartHomeDevice, SmartHomeLink, SmartHomeLinkRun } from '../entities';
 import { EventBus } from '../events/event-bus';
-import { TaskEvents, type TaskCompletedEvent } from '../tasks/task-events';
 import { isSmartHomeActor, smartHomeActor } from './smart-home-actor';
 import { SmartHomeCommandsService } from './smart-home-commands.service';
 
@@ -37,7 +37,7 @@ function isUniqueViolation(error: unknown) {
 
 /**
  * E4：小管家 → HA。两个挂点（home-assistant-plan §5.2）：
- * - 家务打勾（TaskEvents，事务提交后异步，打勾本身不等 HA）；
+ * - 家务打勾（内核事件总线上的 tasks.completed，事务提交后异步，打勾本身不等 HA）；
  * - 日程开始前 N 分钟（这里自己的定时器，跟提醒派发互不相干——HA 挂了，日历提醒照常）。
  * 执行走 E2 的控制链路（权限、审计、超时）；(规则, 那一次发生) 唯一，同一次只跑一次；
  * 失败只在家庭动态里记一句。联动自己打的勾不再触发联动（防自激：E3 扫完打勾 → E4 启动扫地机）。
@@ -58,12 +58,11 @@ export class SmartHomeLinksService implements OnModuleInit, OnModuleDestroy {
     private readonly devices: Repository<SmartHomeDevice>,
     private readonly dataSource: DataSource,
     private readonly commands: SmartHomeCommandsService,
-    private readonly taskEvents: TaskEvents,
     private readonly bus: EventBus,
   ) {}
 
   onModuleInit() {
-    this.unsubscribe = this.taskEvents.onCompleted((event) => this.onTaskCompleted(event));
+    this.unsubscribe = this.bus.on('tasks.completed', (event) => this.onTaskCompleted(event));
     this.timer = setInterval(() => void this.pollCalendar(), pollMs());
   }
 

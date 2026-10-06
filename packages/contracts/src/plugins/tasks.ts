@@ -12,6 +12,8 @@ export const tasksManifest = {
   requires: [
     { plugin: 'points', via: 'contract', uses: ['points.awardTaskCompletion', 'points.reverseTaskAward'], optional: true, reason: '完成家务记积分' },
   ],
+  // J1b：智能家居联动要建家务时，订阅它的事务内钩子、用联动的事务建
+  hooks: ['smart-home.link-fired'],
   nav: [{ key: 'tasks', label: '任务', glyph: '待', scene: 'schedule', path: '/schedule/tasks', mobileTab: 'schedule' }],
   legacyPaths: [['/tasks', '/schedule/tasks']],
   module: { overridable: false, hasData: { kind: 'always' } },

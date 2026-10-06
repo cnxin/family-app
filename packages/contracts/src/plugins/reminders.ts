@@ -16,6 +16,8 @@ export const remindersManifest = {
   ],
   // J1b：可加提醒的日历条目从日历门面取；任务那天是否发生用 @family/shared 的 taskOccursOn
   dependsOn: ['calendar'],
+  // J1b：智能家居联动要建提醒时，订阅它的事务内钩子、用联动的事务建
+  hooks: ['smart-home.link-fired'],
   nav: [{ key: 'reminders', label: '提醒', glyph: '醒', scene: 'schedule', path: '/schedule/reminders' }],
   legacyPaths: [['/reminders', '/schedule/reminders']],
   module: {

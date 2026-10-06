@@ -9,8 +9,12 @@ import type { CalendarFacade } from './calendar.facade';
 import type { InventoryFacade } from './inventory.facade';
 import type { LocationsFacade } from './locations.facade';
 import type { MenusFacade } from './menus.facade';
+import type { ShoppingFacade } from './shopping.facade';
+import type { SmartHomeLinkFiredPayload } from './smart-home.hooks';
 import type { TasksFacade } from './tasks.facade';
+import type { TaskCompletedEvent } from './tasks.events';
 import type { TaskCompletedHookPayload, TaskUncompletedHookPayload } from './tasks.hooks';
+import type { PluginKey } from './keys';
 import type { PluginRole } from './types';
 
 /** 发起操作的成员。字段与 apps/api 的 JwtUser 一一对应，门面与钩子 payload 原样传递。 */
@@ -39,6 +43,7 @@ export interface PluginFacades {
   locations: LocationsFacade;
   inventory: InventoryFacade;
   menus: MenusFacade;
+  shopping: ShoppingFacade;
 }
 export type PluginFacadeKey = keyof PluginFacades;
 
@@ -46,8 +51,33 @@ export type PluginFacadeKey = keyof PluginFacades;
 export interface TransactionHookPayloads {
   'tasks.completed': TaskCompletedHookPayload;
   'tasks.uncompleted': TaskUncompletedHookPayload;
+  'smart-home.link-fired': SmartHomeLinkFiredPayload;
 }
 export type TransactionHookName = keyof TransactionHookPayloads;
 
 /** 运行时可校验的钩子名单（check-plugins、内核注册表都读它）。 */
-export const TRANSACTION_HOOK_NAMES: readonly TransactionHookName[] = ['tasks.completed', 'tasks.uncompleted'];
+export const TRANSACTION_HOOK_NAMES: readonly TransactionHookName[] = [
+  'tasks.completed',
+  'tasks.uncompleted',
+  'smart-home.link-fired',
+];
+
+/**
+ * 同一钩子的订阅方之间有先后依赖时，在这里写死执行顺序；列出的按这里的顺序先跑，没列的按注册顺序排在后面。
+ * 不写在这里就只能靠模块初始化顺序，换个 import 顺序就可能变。
+ * - smart-home.link-fired：提醒挂在刚建的家务上（提醒校验会读家务那一行），家务必须先建；购物与二者无关，排最后
+ *   （与搬家前「建家务 → 建提醒 → 加清单」的写入顺序一致）。
+ */
+export const TRANSACTION_HOOK_ORDER: { readonly [N in TransactionHookName]?: readonly PluginKey[] } = {
+  'smart-home.link-fired': ['tasks', 'reminders', 'shopping'],
+};
+
+/**
+ * 内核事件总线上的插件事件（事务提交后、进程内异步，发起方不等，订阅方出错只记日志）：事件名 → payload。
+ * 和钩子不同：钩子在发起方的事务里同步跑、抛错回滚；事件只是「事情已经发生了」的通知。
+ */
+export interface PluginEventPayloads {
+  'tasks.completed': TaskCompletedEvent;
+}
+export type PluginEventName = keyof PluginEventPayloads;
+export const PLUGIN_EVENT_NAMES: readonly PluginEventName[] = ['tasks.completed'];

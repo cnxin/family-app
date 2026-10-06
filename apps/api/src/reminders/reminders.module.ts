@@ -23,6 +23,7 @@ import {
   NotFoundException,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -40,6 +41,7 @@ import {
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import type { CalendarEntryView } from '@family/contracts';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
 import {
   CalendarEvent,
   HouseholdTask,
@@ -767,6 +769,22 @@ export class RemindersController {
   }
 }
 
+/** 提醒订阅智能家居联动的事务内钩子（J1b）：联动要建提醒时，用联动的事务建（家务由任务先建好，见 TRANSACTION_HOOK_ORDER）。 */
+@Injectable()
+export class RemindersLinkHooks implements OnModuleInit {
+  constructor(
+    private readonly hooks: TransactionHookRegistry,
+    private readonly reminders: RemindersService,
+  ) {}
+
+  onModuleInit() {
+    this.hooks.on('smart-home.link-fired', 'reminders', async (payload, manager) => {
+      if (!payload.reminder) return;
+      await this.reminders.createWithinTransaction(payload.reminder, payload.actor as JwtUser, manager);
+    });
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -784,7 +802,7 @@ export class RemindersController {
     ]),
   ],
   controllers: [RemindersController],
-  providers: [RemindersService],
+  providers: [RemindersService, RemindersLinkHooks],
   exports: [RemindersService],
 })
 export class RemindersModule {}
