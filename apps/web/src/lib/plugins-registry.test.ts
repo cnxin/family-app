@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CORE_ATTENTION,
   DOMAIN_KEYS,
   PLUGIN_ALIASES,
+  PLUGIN_KEYS,
   PLUGINS,
   renderTemplate,
   type AttentionItem,
@@ -20,6 +22,28 @@ import { toNewRoute } from './routes';
 describe('插件注册表 · 全局', () => {
   it('每个域都有查询失效登记', () => {
     for (const key of DOMAIN_KEYS) expect(DOMAIN_QUERY_KEYS[key], key).toBeInstanceOf(Array);
+  });
+
+  // J1.7 起全量：下面逐插件的断言覆盖全部 18 个
+  it('18 个插件都有 manifest', () => {
+    expect(PLUGINS.map((plugin) => plugin.key).sort()).toEqual([...PLUGIN_KEYS].sort());
+  });
+
+  it('内核留意（备份）的文案与落点来自 CORE_ATTENTION', () => {
+    const today = '2026-10-07';
+    for (const { key, attention } of CORE_ATTENTION) {
+      const domain = key as AttentionItem['domain'];
+      for (const kind of attention.kinds) {
+        const base = { key: `${key}:attention`, domain, kind: kind.kind, kinds: [kind.kind], overdue: false };
+        const single = attentionCopy({ ...base, count: 1, entity: { id: 'e1', name: '某物' }, dueOn: '2026-10-10' }, today);
+        expect(single.domainLabel).toBe(attention.label);
+        expect(single.title).toBe(renderTemplate(kind.title, { name: '某物', soon: '3 天后' }));
+        expect(single.actionLabel).toBe(kind.actionLabel);
+        expect(single.path).toBe(attention.path);
+        const merged = attentionCopy({ ...base, count: 2 }, today);
+        expect(merged.title).toBe(renderTemplate(kind.mergedTitle ?? attention.mergedTitle, { n: 2 }));
+      }
+    }
   });
 });
 
