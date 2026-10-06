@@ -145,6 +145,8 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
   attention: [FinanceBudgetProvider],   // F5 provider 列表
   settingsRows: [...],                  // F7 家庭设置行
   usage: { tables: [...], activities: [...] },  // usage-report 由此生成
+  dependsOn: ['tasks'],                 // J1b：用到了哪些插件的门面（读 / 同步调用），与代码里取用的一致（check-plugins 断言）
+  hooks: ['tasks.completed'],           // J1b：订阅了哪些事务内钩子（同一事务连带写），与代码里订阅的一致
   actions: [{                           // ⌘K 动作 + 第0档模板 + agent propose 工具，三合一
     id: 'finance.record-expense',
     label: '记一笔支出',
@@ -163,6 +165,8 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
   }],
 }
 ```
+
+**插件之间怎么打交道**（J1b 定，见 §9）：插件目录之间不 import，只走内核的两种机制——门面（读与同步调用，声明 `dependsOn`）、事务内钩子（同一事务连带写，声明 `hooks`）；事务提交后的「事情已经发生了」走内核事件总线上 contracts 定义的插件事件。
 
 **原则**：manifest 是数据，不是框架。现有 nav.ts、events.ts、actions.ts、attention、usage-report 改成**从 manifest 生成**，各自的形态不变；CI 断言「每个域必须有 manifest 且七处全部由它导出」。
 
@@ -441,9 +445,9 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 2. **内核 / 助理层的 `CORE_*` 表**（11 张，不许出现插件 key / 别名）：`CORE_EVENT_ROUTES`、`CORE_EVENT_ROUTE_EXEMPT`、`CORE_ATTENTION`（备份）、`CORE_QUERY_KEYS`、`CORE_MODULE_LABEL` / `CORE_MODULE_ICON`、`CORE_NAV`、`CORE_LEGACY_PATHS`、`CORE_ROLE_CAPABILITIES`、`CORE_TOOL_SOURCES`、`CORE_ACTIVITY_DOMAINS`；外加 `KERNEL_AGENT_TOOLS`、`PLUGIN_ALIASES` / `KERNEL_ALIASES` 这些 key 表本身。唯一例外：`CORE_TOOL_SOURCES` 里 `get_today_summary` / `get_family_schedule` 记成 `calendar`（数据值，J1b 定）。
 3. **按设计留在代码里的实现**（manifest 只给 id）：位置用量快照 `SNAPSHOT_SOURCES`、智能家居 hasData 判定、各插件的留意规则。
 
-**J1b 的输入**（§8.6 第 2 条）：
-- **7 条跨插件 Service import**：资产 → 库存（`InventoryTransactionsService`）、日历 → 任务（`TasksService.list`）、提醒 → 日历（`CalendarService.list`）、智能家居 → 任务 / 提醒 / 购物（`createWithinTransaction`）、任务 → 积分（打勾的同一事务里记积分）；另有纯函数 import：位置的 `usableLocationId`（库存、资产用）、菜谱的 `buildRecipeSnapshot`（点菜用）、任务的 `taskOccursOn`（提醒用）；以及智能家居订阅任务打勾事件（`smart-home-links.service.ts`）、购物直读点菜 / 库存实体。
-- **assistant 内核工具清单**：`get_today_summary`、`get_family_schedule`、`get_member_profile`、`get_weather`、`propose_plan`、两个记忆工具，现由 `KERNEL_AGENT_TOOLS` + `CORE_TOOL_SOURCES` 承接。
+**J1b 的输入**（§8.6 第 2 条）：已解，见 §9。下面前两条是当时的输入原文，后两条仍然有效。
+- ~~**7 条跨插件 Service import**：资产 → 库存（`InventoryTransactionsService`）、日历 → 任务（`TasksService.list`）、提醒 → 日历（`CalendarService.list`）、智能家居 → 任务 / 提醒 / 购物（`createWithinTransaction`）、任务 → 积分（打勾的同一事务里记积分）；另有纯函数 import：位置的 `usableLocationId`（库存、资产用）、菜谱的 `buildRecipeSnapshot`（点菜用）、任务的 `taskOccursOn`（提醒用）；以及智能家居订阅任务打勾事件（`smart-home-links.service.ts`）、购物直读点菜 / 库存实体。~~
+- ~~**assistant 内核工具清单**：`get_today_summary`、`get_family_schedule`、`get_member_profile`、`get_weather`、`propose_plan`、两个记忆工具，现由 `KERNEL_AGENT_TOOLS` + `CORE_TOOL_SOURCES` 承接。~~（J1b.5 收进 `contracts/plugins/core-assistant.ts`）
 - **数据库里的引用**（J1 不动）：提醒 / 日历 / 回忆的 `sourceModule`、`propose_plan` 的步骤类型、财务流水的 `sourceType`（`asset`、`media_subscription`）、日历条目来源图标表。
 - **待 J4**：财务两个 agent 工具（`get_finance_summary`、`propose_finance_transaction`）的调用记录 `sourceModule` 落 `'agent'`（J1.3 起记录，不改值）；manifest 顶层 `proposals` 是过渡结构，J3 补点菜 ⌘K 动作时收掉。
 
@@ -505,12 +509,108 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 
 **设置页**：小管家设置实际是 `components/agent-settings-ui.tsx` 里的对话框（`pages/assistant.tsx` 的 `?settings=1` 只负责打开），三档与原话记录两段放在新组件 `components/assistant-tiers.tsx`；`pages/assistant.tsx` 没有改动。管理员可改，成员只读；原话记录最近 20 条，管理员可切「全部 / 我的」、导出 CSV，所有人可「清空我的」（二次确认）。
 
+## 9. J1b 执行记录（跨插件解耦）
+
+**结果**：`apps/api/src/<插件>/` 之间零 import（contracts、shared 除外），`check-plugins` 断言。插件之间只走内核的两种机制：**门面**（读与同步调用）、**事务内钩子**（同一事务连带写）；事务提交后的通知走内核事件总线上 contracts 定义的**插件事件**（指令点名沿用的现有总线，不是第三种机制）。无依赖的纯函数挪进 `packages/shared`。数据库里的引用（`sourceModule`、`sourceType`、`propose_plan` 步骤类型、日历来源图标表）一个没动。
+
+### 9.1 两种机制怎么用（给插件作者）
+
+**门面：读，或者同步调一下别的插件。** 接口写在 `packages/contracts/src/plugins/<提供方 key>.facade.ts`（只有类型，前端也能 import），并登记进 `kernel.ts` 的 `PluginFacades`。提供方在自己目录里实现，`onModuleInit` 时 `PluginFacadeRegistry.register('<key>', <key>Facade(...))`；消费方注入 `PluginFacadeRegistry`，用到时再 `this.facades.get('<key>')`（别在构造函数里取，提供方可能还没初始化），manifest 声明 `dependsOn: ['<key>']`。要在调用方的事务里读写时，传 `toPluginTransaction(manager)`，提供方用 `fromPluginTransaction` 还原。门面方法按消费方今天真实用到的签名收口，不多给。
+
+**事务内钩子：同一事务里要连带写别的插件的东西。** 钩子名 `<发起方 key>.<事件>` 与 payload 类型写在 contracts（`kernel.ts` 的 `TransactionHookPayloads` + `TRANSACTION_HOOK_NAMES`，payload 放 `<key>.hooks.ts`）。发起方在自己的事务里 `await this.hooks.run(name, payload, manager)`；订阅方在 `onModuleInit` 里 `this.hooks.on(name, '<自己的 key>', async (payload, manager) => …)`，用同一个 `manager` 写自己的表，manifest 声明 `hooks: [name]`。订阅方依次执行，任一个抛错整个事务回滚；没有订阅方时什么也不做。订阅方之间有先后依赖时，在 contracts 的 `TRANSACTION_HOOK_ORDER` 写死顺序（不写就只能靠模块初始化顺序）。
+
+**插件事件：事情已经发生了，告诉想知道的人。** 事件名与 payload 写在 contracts（`PluginEventPayloads` + `PLUGIN_EVENT_NAMES`，payload 放 `<key>.events.ts`）。发起方事务提交后 `this.events.emit(name, payload)`（`EventBus`），订阅方 `this.bus.on(name, listener)`；订阅方异步执行、出错只记一句警告，发起方不等也不受影响。要和发起方同成同败的，用钩子，不用事件。
+
+例：积分订阅任务打勾（`apps/api/src/points/points.module.ts`）
+
+```ts
+// contracts/plugins/kernel.ts
+export interface TransactionHookPayloads { 'tasks.completed': TaskCompletedHookPayload; /* … */ }
+// 任务：打勾的事务里
+await this.hooks.run('tasks.completed', { householdId, taskId, instanceId, dueDate, title, rewardPoints, memberId, completedAt, actor }, manager);
+// 积分：
+@Injectable()
+export class PointsTaskHooks implements OnModuleInit {
+  constructor(private readonly hooks: TransactionHookRegistry, private readonly points: PointsService) {}
+  onModuleInit() {
+    this.hooks.on('tasks.completed', 'points', async (payload, manager) => {
+      await this.points.awardTaskCompletion(manager, payload); // 同一事务；抛错 → 任务也不会变成已完成
+    });
+  }
+}
+// contracts/plugins/points.ts：hooks: ['tasks.completed', 'tasks.uncompleted']
+```
+
+### 9.2 清单
+
+**门面**（`contracts/plugins/<key>.facade.ts`）：
+
+| 门面 | 方法 | 消费方（manifest `dependsOn`） |
+| --- | --- | --- |
+| `tasks` | `listOccurrences(start, end, actor)`（= `GET /tasks`）、`completeOccurrence(taskId, dueDate, actor)`（= 打勾，自己的事务） | 日历（日历视图里的任务条目）、智能家居（留意查今天的「晾衣服」；联动查今天待做的家务、扫完打勾） |
+| `calendar` | `listEntries(start, end, actor)`（= `GET /calendar`） | 提醒（可加提醒的日历条目） |
+| `locations` | `usableLocationId(tx, householdId, locationId)` | 库存（物品默认位置、批次位置、入库放哪儿）、资产（放哪儿） |
+| `inventory` | `consumeForMaintenance(tx, …)`、`listIngredientStock(tx, …)`、`listShoppingReceipts(…)`、`hasShoppingReceipt(…)` | 资产（维护记出库，同一事务）、购物（生成清单扣库存、已入库的自动项保留；列表的入库确认；删除前检查） |
+| `menus` | `listIngredientNeeds(tx, householdId, date)` | 购物（按某天已接受 / 在做的菜生成清单） |
+| `shopping` | `hasUncheckedItem(tx, householdId, customName)` | 智能家居（滤芯低时清单里是否已有没买的滤芯） |
+
+`dependsOn` 结果：calendar `[tasks]`、reminders `[calendar]`、smart-home `[tasks, shopping]`、inventory `[locations]`、assets `[locations, inventory]`、shopping `[menus, inventory]`。
+
+**事务内钩子**：
+
+| 钩子 | 发起方 | 订阅方（顺序） | 做什么 |
+| --- | --- | --- | --- |
+| `tasks.completed` | 任务（打勾的事务） | 积分 | 记积分，写回任务实例的积分版本 / 流水 id，记动态 |
+| `tasks.uncompleted` | 任务（取消打勾 / 改跳过） | 积分 | 冲销这次完成记的积分 |
+| `smart-home.link-fired` | 智能家居（联动的事务） | 任务 → 提醒 → 购物（`TRANSACTION_HOOK_ORDER` 写死：提醒校验会读刚建的家务行） | 建家务（id 由智能家居预先生成）/ 挂在它上面的提醒 / 清单项 |
+
+**插件事件**：`tasks.completed`（任务，提交后）→ 智能家居联动规则（`smart-home-links.service.ts`）。原来任务目录的 `TaskEvents` 删掉，语义照旧。
+
+**纯函数**：`taskOccursOn`、`buildRecipeSnapshot` 挪进 `packages/shared`（单测随之搬到 `kernel-units.check.ts`）；`usableLocationId` 要查库，归位置门面。
+
+**assistant 内核工具清单**：`contracts/plugins/core-assistant.ts` 的 `CORE_ASSISTANT_TOOLS`（7 个，各带标签与 `sourceModule`），`KERNEL_AGENT_TOOLS` 与 `CORE_TOOL_SOURCES` 由它导出；`get_today_summary` / `get_family_schedule` 仍记 `calendar`。
+
+### 9.3 每笔记录
+
+每笔的「改前 / 改后」对比都在本地库副本上跑（`pg_dump` 进临时库，Nest 应用上下文直接调服务，结果去掉新生成的 id 与时间后逐字节比；每份探针先在改前代码上连跑两次确认本身确定），写入类的另加黑盒，新黑盒也在改前代码上跑过一遍、结果相同。
+
+| 步 | 内容 | 提交 | 合并 | CI | 对比证据 |
+| --- | --- | --- | --- | --- | --- |
+| J1b.0 | 内核两个注册表 + 两个纯函数进 shared + manifest 类型 | `15cf044` | `a638fc0` | 一次过（#37453554476） | 注册表单测 8 条（注册取回 / 重复注册 / 未注册取用 / 按注册顺序执行 / 抛错向上抛且后面不再执行 / 重复订阅 / 不认识的钩子名 / 没有订阅方）、两个纯函数单测 3 条（`kernel-units.check.ts`，全量 API 测试里跑）；check-plugins 先只校验形状 |
+| J1b.1 | 读门面：日历 → 任务、提醒 → 日历、智能家居留意 → 任务 | `f50ef79` | `42b1570` | 一次过（#37454583370；main #37457085313） | 两个家庭每位成员 × 两种角色调日历 / 提醒来源 / 任务 / 今日留意，24 份逐字节一致 |
+| J1b.2 | 写门面：资产 → 库存 / 位置、库存 → 位置、购物 → 点菜 / 库存 | `d1d12d7` | `105926f` | 一次过（#37457237859） | 购物列表 / 生成 / 重新生成 / 删除、位置五种取值 × 五个入口、确认入库与撤销、维护记出库各表的行，65 份逐字节一致；新黑盒 `assets-inventory-rollback`（库存流水 / 批次流水写失败 → 维护记录、周期、余量、批次、动态都不落，同一幂等键重来正常） |
+| J1b.3 | 事务内钩子：任务 → 积分 | `66a21b8` | `a14ee3a` | 一次过（#37458364963） | 3 个任务 × 14 步打勾（打勾、重复打勾、取消、重复取消、再打勾、跳过、0 分、无人认领、完成后改负责人、越权），每步的返回 / 流水 / 账户 / 实例积分列 / 动态 / 通知 93 份逐字节一致；新黑盒 `tasks-points-hook`（积分写失败 → 任务不完成；冲销写失败 → 保持已完成；重复不重复记；并发打勾只记一次） |
+| J1b.4 | 智能家居：联动走钩子 / 任务门面，订阅打勾走内核事件 | `4117505` | `9fe85ee` | 一次过（#37460386542） | 12 步联动（洗完、重复、滤芯低、重复、买了再报低、扫完、规则关着、ping、打勾触发联动规则、扫完不自激），各表新行与联动规则记录 71 份逐字节一致，J1b.3 探针在本笔代码上仍一致；单测加 3 条（写死顺序 ×2、插件事件）；新黑盒 `smart-home-link-hooks`（家务 / 提醒 / 清单项任一写失败整条回滚；关掉「提醒」/「积分」模块时照旧连带写；打勾 → 联动规则；不自激） |
+| J1b.5 | assistant 内核工具清单 | `b2cd7ca` | `2c4e683` | 一次过（#37461227810） | 30 个工具的调用记录 `sourceModule` 映射与 `KERNEL_AGENT_TOOLS` 逐字节一致 |
+| J1b.6 | 强制断言 + 文档 | 见本次合并 | | | 反向验证 12 条（下） |
+
+main 上 `105926f`（J1b.2 合并）、`a14ee3a`（J1b.3 合并）两次 CI 被紧接着的合并推送按并发组取消（Playwright 一项 cancelled，其余三项已过），以 J1b.6 合并后的 main 全量 CI 为准。
+
+**check-plugins 新断言（J1b.6）与反向验证**：插件目录之间零 import；`apps/api/src` 下每个目录都归到插件或登记过的内核目录（`dishes` 归菜谱）；门面接口只在 contracts、登记进 `PluginFacades`、实现只在提供方目录注册一次；`dependsOn` == 代码里取用的门面；钩子名单与 payload 只在 contracts，发起方 == 钩子名前缀的插件，只能以所在插件的名义订阅，`hooks` == 代码里订阅的钩子，每个钩子有发起方和订阅方，写死顺序只列订阅方；插件事件名只在 contracts、只有前缀插件能发。逐条故意改坏、跑一遍、再从备份还原（还原后工作区与改坏前一致）：加回一条跨目录 import、漏声明 / 多声明 `dependsOn`、漏注册一个钩子订阅、订阅了没声明、发起不存在的钩子、冒充别的插件订阅、在 api 里定义门面接口、在非提供方目录注册门面、写死顺序里列非订阅方、在 api 里重定义钩子 payload、新加没归类的目录——12 条都报错。
+
+### 9.4 与指令不一样的地方
+
+1. 门面方法名按今天真实的调用收口：任务门面是 `listOccurrences(start, end, actor)`（指令写 `listForCalendar(householdId, range)`；日历今天调的是 `TasksService.list(start, end, user)`，智能家居也用它），日历门面是 `listEntries`。
+2. 资产维护记出库原来调库存的 `createTransaction` + `applyBatchConsumption` 两个方法、传 TypeORM 实体；contracts 不能带实体，收成一个 `consumeForMaintenance`、传普通值的出库行，流水 id 仍由资产预先生成写进耗材快照。建流水对象时的数量校验从「维护记录写入前」挪到「写入后」，同一事务，落库结果一致。
+3. 钩子多了一张 `TRANSACTION_HOOK_ORDER`：`smart-home.link-fired` 的提醒订阅方要读刚建的家务行，不写死顺序就只能靠模块初始化顺序。
+4. `smart-home.link-fired` 只在要建东西时发；扫完打勾是同步调用，走任务门面 `completeOccurrence`。家务 id 由智能家居预先生成（通知、提醒要挂在它上面），任务的 `createWithinTransaction` 加了可选 `id` 参数。
+5. 积分订阅方写回任务实例表上的两列（`pointsAwardVersion` / `pointsLedgerId`）：列在任务表上，J1b 不动表，照旧由积分维护。
+6. 内核表 11 → 12：来源表从 `agent-tools.service.ts` 搬到 `core-assistant.ts`，清单与派生的 `CORE_TOOL_SOURCES` 两张都登记。
+7. 打勾事件订阅方出错时的告警由 `task_completed_listener_failed task=<id>`（`TaskEvents`）变为 `plugin_event_listener_failed event=tasks.completed`（`EventBus`）。
+
+### 9.5 没解的（不在 J1b 范围）
+
+1. **实体层的跨插件读写**（共享 `entities` 文件，不经插件目录 import，check-plugins 查不到；实体拆目录本就不在 J1 / J1b 范围，§8.5）：日历直读点菜 / 观影 / 访客 / 资产维护计划 / 旅行；提醒的来源解析直读家务 / 菜单 / 投票 / 维护计划 / 旅行 / 日程；资产直读并锁库存物品、读库存流水，维护缺口加购物项、取消维护提醒直接写购物 / 提醒的表；库存的菜单扣库、买到入库直读菜单与购物项；积分写任务实例的两列。
+2. **内核（助理 `agent` 目录）→ 插件服务的 import** 还在（`agent-tools` / `agent-proposals` / `agent-routine` / `agent-location-tools` / `agent.module`）：J1b 只管插件之间，J4 重建 agent 时改走门面。
+3. 数据库里的引用照旧（§8.7 第 8 条）。
+
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |
 | --- | --- | --- | --- |
 | J0 盘点与 manifest 草稿 | ☑ | 见本次合并 | 结果见 §8；§8.6 五项已拍板 |
 | J1 插件注册表（18 域） | ☑ | 见 §8.7 | 18 / 18 个插件都有 manifest，14 处登记里插件的条目全部由 manifest 导出，check-plugins 全量断言；剩余手写项与 J1b 输入见 §8.7 末尾；J1.7 合完后升演示栈 |
+| J1b 跨插件解耦 | ☑ | 见 §9 | 插件目录之间零 import（check-plugins 断言）；门面 6 个、事务内钩子 3 个、插件事件 1 个，manifest 的 `dependsOn` / `hooks` 与代码一致；assistant 内核工具清单收进 `core-assistant.ts`；实体层的跨插件读写与内核（agent）→ 插件的 import 不在范围，见 §9「没解的」；演示栈随本批升级，人工走查由 King 本人做 |
 | J2 助理数据与开关 | ☑ | 见 §8.8 | `assistant_utterances` 表与接口、三档开关、⌘K 原话落表；演示栈随本批升级，King 本人去 ⌘K 输几句再看「原话记录」做人工验收 |
 | J3 第 0 档引擎 | ☐ | | 等试用原话；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | ☐ | | |
