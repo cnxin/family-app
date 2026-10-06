@@ -28,7 +28,8 @@ export const tasksManifest = {
       label: '加任务',
       keywords: ['待办'],
       deepLink: '/schedule/tasks?create=1',
-      propose: { legacyTool: 'propose_task', actionType: 'task', label: '家庭任务' },
+      // 任务会出现在日历上
+      propose: { legacyTool: 'propose_task', actionType: 'task', label: '家庭任务', domains: ['tasks', 'calendar'] },
     },
   ],
   queries: [

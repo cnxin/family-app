@@ -30,10 +30,10 @@ export type Capability =
   | 'manage_agent';
 
 /**
- * 角色 → 能力。能力名清单（上面的 Capability）仍是手写的 key 表；已迁插件在 manifest 里声明自己的能力
- * 和授予哪些角色（J1），这里只手写内核与还没迁的。
+ * 角色 → 能力。能力名清单（上面的 Capability）仍是手写的 key 表；插件在 manifest 里声明自己的能力
+ * 和授予哪些角色（J1），这里只写内核的。内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。
  */
-const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> = {
+const CORE_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> = {
   owner: [
     'manage_members',
     'manage_integrations',
@@ -52,9 +52,9 @@ const HANDWRITTEN_ROLE_CAPABILITIES: Record<MemberRole, readonly Capability[]> =
 };
 
 const ROLE_CAPABILITIES = {} as Record<MemberRole, ReadonlySet<Capability>>;
-for (const role of Object.keys(HANDWRITTEN_ROLE_CAPABILITIES) as MemberRole[]) {
+for (const role of Object.keys(CORE_ROLE_CAPABILITIES) as MemberRole[]) {
   ROLE_CAPABILITIES[role] = new Set<Capability>([
-    ...HANDWRITTEN_ROLE_CAPABILITIES[role],
+    ...CORE_ROLE_CAPABILITIES[role],
     ...pluginCapabilities()
       .filter((capability) => capability.roles.includes(role))
       .map((capability) => capability.key as Capability),

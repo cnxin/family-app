@@ -1,5 +1,5 @@
 import {
-  pluginAttention,
+  allAttention,
   pluginLegacyPaths,
   renderTemplate,
   type AttentionItem,
@@ -19,6 +19,17 @@ function legacyPaths(key: PluginKey): [string, string][] {
   return pluginLegacyPaths(key).map(([from, to]) => [from, to]);
 }
 
+/** 内核页面的旧路径，放回 MOVED 里原来的位置。内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。 */
+const CORE_LEGACY_PATHS = {
+  members: ['/members', '/house/members'],
+  backups: ['/system-backups', '/house/backups'],
+  activity: ['/activity', '/life/activity'],
+  profile: ['/profile', '/me/profile'],
+  assistant: ['/assistant', '/me/assistant'],
+  agentMemory: ['/agent-memory', '/me/assistant/memories'],
+  notifications: ['/notifications', '/schedule/notifications'],
+} satisfies Record<string, [string, string]>;
+
 const MOVED: [string, string][] = [
   ...legacyPaths('menus'),
   ...legacyPaths('recipes'),
@@ -29,20 +40,20 @@ const MOVED: [string, string][] = [
   ...legacyPaths('reminders'),
   ...legacyPaths('polls'),
   ...legacyPaths('points'),
-  ['/members', '/house/members'],
+  CORE_LEGACY_PATHS.members,
   ...legacyPaths('guests'),
   ...legacyPaths('assets'),
   ...legacyPaths('finance'),
   ...legacyPaths('knowledge'),
   ...legacyPaths('memories'),
   ...legacyPaths('travel'),
-  ['/system-backups', '/house/backups'],
-  ['/activity', '/life/activity'],
+  CORE_LEGACY_PATHS.backups,
+  CORE_LEGACY_PATHS.activity,
   ...legacyPaths('media'),
-  ['/profile', '/me/profile'],
-  ['/assistant', '/me/assistant'],
-  ['/agent-memory', '/me/assistant/memories'],
-  ['/notifications', '/schedule/notifications'],
+  CORE_LEGACY_PATHS.profile,
+  CORE_LEGACY_PATHS.assistant,
+  CORE_LEGACY_PATHS.agentMemory,
+  CORE_LEGACY_PATHS.notifications,
 ];
 
 /** 已经是新客户端的规范路径（后端逐步改为直接生成新路径），原样放行。 */
@@ -58,22 +69,24 @@ export function toNewRoute(targetPath: string | null | undefined): string | null
   return `${hit[1]}${rest}${search ? `?${search}` : ''}`;
 }
 
-/** 已迁插件的留意配置（J1），按域取。 */
-export const pluginAttentionOf: ReadonlyMap<string, PluginAttention> = new Map(
-  pluginAttention().map(({ key, attention }) => [key, attention]),
+/** 每个留意域的声明（插件 manifest 的 attention，加内核的 CORE_ATTENTION：备份），按域取。J1.7 起没有手写表。 */
+export const attentionOf: ReadonlyMap<string, PluginAttention> = new Map(
+  allAttention().map(({ key, attention }) => [key, attention]),
 );
 
-const HANDWRITTEN_ATTENTION_ROUTES: Partial<Record<AttentionItem['domain'], string>> = {
-  backups: '/house/backups',
-};
+/** 取一个留意域的声明；没声明说明 contracts 的 domain 枚举与声明对不上（check-plugins 断言），直接报错。 */
+export function declaredAttention(domain: string): PluginAttention {
+  const attention = attentionOf.get(domain);
+  if (!attention) throw new Error(`留意域 ${domain} 没有声明（manifest 的 attention 或 CORE_ATTENTION）`);
+  return attention;
+}
 
-export const attentionRoutes = {
-  ...HANDWRITTEN_ATTENTION_ROUTES,
-  ...Object.fromEntries([...pluginAttentionOf].map(([key, attention]) => [key, attention.path])),
-} as Record<AttentionItem['domain'], string>;
+export const attentionRoutes = Object.fromEntries(
+  [...attentionOf].map(([key, attention]) => [key, attention.path]),
+) as Record<AttentionItem['domain'], string>;
 
-/** manifest 的落点模板：占位（`{id}` 实体、`{dueOn}` 日期）都有值才用，否则回到域的默认落点。 */
-function pluginAttentionPath(attention: PluginAttention, item: { kind: string; kinds?: string[]; dueOn?: string; entity?: { id: string } }) {
+/** 声明里的落点模板：占位（`{id}` 实体、`{dueOn}` 日期）都有值才用，否则回到域的默认落点。 */
+function declaredAttentionPath(attention: PluginAttention, item: { kind: string; kinds?: string[]; dueOn?: string; entity?: { id: string } }) {
   if ((item.kinds?.length ?? 0) > 1) return attention.path;
   const template = attention.kinds.find((kind) => kind.kind === item.kind)?.path;
   if (!template) return attention.path;
@@ -94,7 +107,5 @@ export function attentionPath(item: {
   dueOn?: string;
   entity?: { id: string };
 }): string {
-  const plugin = pluginAttentionOf.get(item.domain);
-  if (plugin) return pluginAttentionPath(plugin, item);
-  return attentionRoutes[item.domain];
+  return declaredAttentionPath(declaredAttention(item.domain), item);
 }

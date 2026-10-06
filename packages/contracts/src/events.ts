@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isoDateTime, uuid } from './common';
-import { KERNEL_DOMAIN_KEYS, PLUGIN_KEYS, pluginEventExempt, pluginEventRoutes } from './plugins';
+import { KERNEL_DOMAIN_KEYS, PLUGIN_KEYS, pluginEventExempt, pluginEventRoutes, pluginProposalDomains } from './plugins';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/events/（H2a）。/events 只推「哪个域变了」，不推数据；客户端收到后让
@@ -54,45 +54,38 @@ export interface EventRoute {
   emit?: 'explicit';
 }
 
-/** 小管家确认提案会按提案类型写各个域。 */
-const PROPOSAL_DOMAINS: readonly DomainKey[] = [
-  'assistant', 'tasks', 'reminders', 'polls', 'shopping', 'menus', 'finance', 'calendar',
-];
+/** 小管家确认提案会按提案类型写各个域：助理自己，加上各插件 manifest 的提案声明（actions[].propose / proposals 的 domains）。 */
+const PROPOSAL_DOMAINS = ['assistant', ...pluginProposalDomains()] as readonly DomainKey[];
 
-const HANDWRITTEN_EVENT_ROUTES: readonly EventRoute[] = [
+/** 内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。 */
+const CORE_EVENT_ROUTES: readonly EventRoute[] = [
   { prefix: '/agent', domains: ['assistant'] },
   { prefix: '/agent/proposals', domains: PROPOSAL_DOMAINS },
   { prefix: '/agent/proposal-groups', domains: PROPOSAL_DOMAINS },
   { prefix: '/internal/agent/channels/:channelId/messages', domains: ['assistant'], emit: 'explicit' },
   { prefix: '/internal/agent/mcp', domains: ['assistant'], emit: 'explicit' },
 
-
   { prefix: '/auth/invitations/redeem', domains: ['members'], emit: 'explicit' },
   { prefix: '/household', domains: ['members'] },
   { prefix: '/members/me/preferences', domains: ['members'] },
   { prefix: '/households/me', domains: ['household'] },
 
-
   { prefix: '/notifications', domains: ['notifications'] },
   { prefix: '/notification-channels', domains: ['notifications'] },
   { prefix: '/notification-deliveries', domains: ['notifications'] },
-
-
-
-
 
   { prefix: '/system/backups', domains: ['backups'] },
   { prefix: '/system/modules', domains: ['modules'] },
 ];
 
-/** 手写的 + 已迁插件 manifest 生成的。域名是否合法由 scripts/check-plugins.mjs 断言。 */
+/** 内核的 + 插件 manifest 生成的。域名是否合法由 scripts/check-plugins.mjs 断言。 */
 export const EVENT_ROUTES: readonly EventRoute[] = [
-  ...HANDWRITTEN_EVENT_ROUTES,
+  ...CORE_EVENT_ROUTES,
   ...(pluginEventRoutes() as readonly EventRoute[]),
 ];
 
-/** 显式豁免：写入不改变任何家庭共享的数据，或事件由别处统一发。每条都要写原因。 */
-const HANDWRITTEN_EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
+/** 显式豁免：写入不改变任何家庭共享的数据，或事件由别处统一发。每条都要写原因。内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。 */
+const CORE_EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
   { prefix: '/auth/login', reason: '登录只建本人会话' },
   { prefix: '/auth/refresh', reason: '续期只换令牌' },
   { prefix: '/auth/logout', reason: '退出只吊销本人会话' },
@@ -104,7 +97,7 @@ const HANDWRITTEN_EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string 
 ];
 
 export const EVENT_ROUTE_EXEMPT: readonly { prefix: string; reason: string }[] = [
-  ...HANDWRITTEN_EVENT_ROUTE_EXEMPT,
+  ...CORE_EVENT_ROUTE_EXEMPT,
   ...pluginEventExempt(),
 ];
 

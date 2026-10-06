@@ -145,6 +145,8 @@ export interface PluginProposal {
   actionType: string;
   label: string;
   grouped?: boolean;
+  /** 确认这个提案会写哪些域（推 /events 用）；缺省只写本插件。 */
+  domains?: readonly string[];
 }
 
 export interface PluginAction {

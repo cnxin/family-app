@@ -170,45 +170,30 @@ export type SingleAgentProposalToolName = Exclude<
   AgentProposalToolName,
   'propose_plan'
 >;
-export type GroupedAgentProposalToolName = Exclude<
-  SingleAgentProposalToolName,
-  'propose_finance_transaction'
->;
+/** 能放进 propose_plan 一组的提案工具：哪些不能由 manifest 的 grouped: false 决定（财务），运行时由 GROUPABLE_ACTION_TYPES 校验。 */
+export type GroupedAgentProposalToolName = SingleAgentProposalToolName;
 
-// 提案工具 ↔ actionType ↔ 提案卡类型名：已迁插件由 manifest 的 actions[].propose 生成（J1），这里只手写还没迁的。
+// 提案工具 ↔ actionType ↔ 提案卡类型名 ↔ 能否打包：全部由 manifest 的提案声明生成（J1）。
 const PLUGIN_PROPOSALS = pluginProposals();
 
-const HANDWRITTEN_TYPE_BY_TOOL: Partial<Record<SingleAgentProposalToolName, AgentActionType>> = {
-};
-
-const TYPE_BY_TOOL = {
-  ...HANDWRITTEN_TYPE_BY_TOOL,
-  ...Object.fromEntries(PLUGIN_PROPOSALS.map((proposal) => [proposal.tool, proposal.actionType])),
-} as Record<SingleAgentProposalToolName, AgentActionType>;
+const TYPE_BY_TOOL = Object.fromEntries(
+  PLUGIN_PROPOSALS.map((proposal) => [proposal.tool, proposal.actionType]),
+) as Record<SingleAgentProposalToolName, AgentActionType>;
 
 /** 反查表由 TYPE_BY_TOOL 推出，不再另写一份。 */
 export const TOOL_BY_TYPE = Object.fromEntries(
   Object.entries(TYPE_BY_TOOL).map(([tool, type]) => [type, tool]),
 ) as Record<AgentActionType, SingleAgentProposalToolName>;
 
-const HANDWRITTEN_ACTION_LABELS: Partial<Record<AgentActionType, string>> = {
-};
+const ACTION_LABELS = Object.fromEntries(
+  PLUGIN_PROPOSALS.map((proposal) => [proposal.actionType, proposal.label]),
+) as Record<AgentActionType, string>;
 
-const ACTION_LABELS = {
-  ...HANDWRITTEN_ACTION_LABELS,
-  ...Object.fromEntries(PLUGIN_PROPOSALS.map((proposal) => [proposal.actionType, proposal.label])),
-} as Record<AgentActionType, string>;
-
-/** 不能放进 propose_plan 一组、必须单独确认的类型（财务）。已迁插件看 manifest 的 grouped。 */
-const HANDWRITTEN_UNGROUPED: readonly AgentActionType[] = [];
-const UNGROUPED = new Set<string>([
-  ...HANDWRITTEN_UNGROUPED,
-  ...PLUGIN_PROPOSALS.filter((proposal) => !proposal.grouped).map((proposal) => proposal.actionType),
-]);
-export const GROUPABLE_ACTION_TYPES = AGENT_ACTION_TYPES.filter((type) => !UNGROUPED.has(type)) as Exclude<
-  AgentActionType,
-  'finance'
->[];
+/** 不能放进 propose_plan 一组、必须单独确认的类型：manifest 里 grouped: false 的（财务）。 */
+const UNGROUPED = new Set<string>(
+  PLUGIN_PROPOSALS.filter((proposal) => !proposal.grouped).map((proposal) => proposal.actionType),
+);
+export const GROUPABLE_ACTION_TYPES: readonly AgentActionType[] = AGENT_ACTION_TYPES.filter((type) => !UNGROUPED.has(type));
 
 const MEAL_LABELS = {
   breakfast: '早餐',

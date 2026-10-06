@@ -167,6 +167,11 @@ export function pluginProposals(): readonly { plugin: string; tool: string; acti
   );
 }
 
+/** 小管家确认提案会写到的插件域（/agent/proposals、/agent/proposal-groups 推送用），去重、保持声明顺序。 */
+export function pluginProposalDomains(): readonly string[] {
+  return [...new Set(PLUGINS.flatMap((plugin) => proposalsOf(plugin).flatMap((proposal) => proposal.domains ?? [plugin.key])))];
+}
+
 export function pluginNotificationModules(): readonly { key: string; label: string; icon: string }[] {
   return PLUGINS.flatMap((plugin) => plugin.notifications ?? []);
 }

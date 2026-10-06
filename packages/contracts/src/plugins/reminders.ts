@@ -34,7 +34,8 @@ export const remindersManifest = {
       label: '加一条提醒',
       keywords: ['别忘了'],
       deepLink: '/schedule/reminders?create=1',
-      propose: { legacyTool: 'propose_reminder', actionType: 'reminder', label: '家庭提醒' },
+      // 提醒会出现在日历上
+      propose: { legacyTool: 'propose_reminder', actionType: 'reminder', label: '家庭提醒', domains: ['reminders', 'calendar'] },
     },
   ],
   usage: {
