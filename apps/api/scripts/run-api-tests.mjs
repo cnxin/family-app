@@ -119,6 +119,7 @@ const BUSINESS_SCRIPTS = [
   'guests',
   'tasks',
   'points',
+  'tasks-points-hook',
   'finance',
   'assistant-utterances',
   'polls',

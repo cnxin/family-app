@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
 import { tasksFacade } from './tasks.facade';
 import {
   Between,
@@ -26,7 +27,6 @@ import {
   Repository,
 } from 'typeorm';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { PointsModule, PointsService } from '../points/points.module';
 import { TaskEvents } from './task-events';
 import {
   HouseholdTask,
@@ -111,7 +111,7 @@ export class TasksService {
     @InjectRepository(HouseholdTaskInstance)
     private readonly instances: Repository<HouseholdTaskInstance>,
     private readonly dataSource: DataSource,
-    private readonly pointsService: PointsService,
+    private readonly hooks: TransactionHookRegistry,
     private readonly taskEvents: TaskEvents,
   ) {}
 
@@ -407,21 +407,43 @@ export class TasksService {
       instance = await instances.save(instance);
       savedId = instance.id;
 
+      // 连带写走事务内钩子（J1b）：积分订阅 tasks.completed / tasks.uncompleted，用本事务记 / 冲销积分，
+      // 订阅方抛错则任务状态的修改一起回滚
       if (dto.status === 'done' && previousStatus !== 'done') {
         completedTitle = task.title;
-        await this.pointsService.awardTaskCompletion(
+        await this.hooks.run(
+          'tasks.completed',
+          {
+            householdId: user.householdId,
+            taskId: task.id,
+            instanceId: instance.id,
+            dueDate: instance.dueDate,
+            title: task.title,
+            rewardPoints: task.rewardPoints,
+            memberId: instance.assigneeId ?? user.memberId,
+            completedAt: instance.resolvedAt!,
+            actor: user,
+          },
           manager,
-          task,
-          instance,
-          instance.assigneeId ?? user.memberId,
-          user,
         );
       } else if (
         dto.status !== undefined &&
         dto.status !== 'done' &&
         previousStatus === 'done'
       ) {
-        await this.pointsService.reverseTaskAward(manager, task, instance, user);
+        await this.hooks.run(
+          'tasks.uncompleted',
+          {
+            householdId: user.householdId,
+            taskId: task.id,
+            instanceId: instance.id,
+            dueDate: instance.dueDate,
+            title: task.title,
+            rewardPoints: task.rewardPoints,
+            actor: user,
+          },
+          manager,
+        );
       }
 
       if (
@@ -606,7 +628,6 @@ export class TasksFacadeProvider implements OnModuleInit {
 
 @Module({
   imports: [
-    PointsModule,
     TypeOrmModule.forFeature([
       HouseholdTask,
       HouseholdTaskInstance,

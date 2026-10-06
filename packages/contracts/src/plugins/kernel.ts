@@ -10,6 +10,7 @@ import type { InventoryFacade } from './inventory.facade';
 import type { LocationsFacade } from './locations.facade';
 import type { MenusFacade } from './menus.facade';
 import type { TasksFacade } from './tasks.facade';
+import type { TaskCompletedHookPayload, TaskUncompletedHookPayload } from './tasks.hooks';
 import type { PluginRole } from './types';
 
 /** 发起操作的成员。字段与 apps/api 的 JwtUser 一一对应，门面与钩子 payload 原样传递。 */
@@ -41,9 +42,12 @@ export interface PluginFacades {
 }
 export type PluginFacadeKey = keyof PluginFacades;
 
-/** 钩子名 → payload。新增钩子时在这里与 TRANSACTION_HOOK_NAMES 一起登记。 */
-export type TransactionHookPayloads = Record<never, never>;
+/** 钩子名（<发起方 key>.<事件>）→ payload。新增钩子时在这里与 TRANSACTION_HOOK_NAMES 一起登记。 */
+export interface TransactionHookPayloads {
+  'tasks.completed': TaskCompletedHookPayload;
+  'tasks.uncompleted': TaskUncompletedHookPayload;
+}
 export type TransactionHookName = keyof TransactionHookPayloads;
 
 /** 运行时可校验的钩子名单（check-plugins、内核注册表都读它）。 */
-export const TRANSACTION_HOOK_NAMES: readonly string[] = [];
+export const TRANSACTION_HOOK_NAMES: readonly TransactionHookName[] = ['tasks.completed', 'tasks.uncompleted'];
