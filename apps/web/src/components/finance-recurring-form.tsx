@@ -17,11 +17,14 @@ export function RecurringForm({
   accounts,
   categories,
   onClose,
+  onRemove,
 }: {
   editing: FinanceRecurring | null;
   accounts: FinanceAccount[];
   categories: FinanceCategory[];
   onClose: () => void;
+  /** 编辑时给：删除这条（由面板二次确认） */
+  onRemove?: () => void;
 }) {
   const today = useHouseholdToday();
   const save = useSaveFinanceRecurring();
@@ -79,6 +82,16 @@ export function RecurringForm({
           <Button className="w-full" disabled={save.isPending} onClick={submit}>
             {save.isPending ? '保存中…' : '保存'}
           </Button>
+          {editing && onRemove ? (
+            <Button
+              variant="ghost"
+              className="w-full text-danger"
+              aria-label={`删除${editing.title}`}
+              onClick={onRemove}
+            >
+              删除这条周期账单
+            </Button>
+          ) : null}
         </div>
       }
     >
