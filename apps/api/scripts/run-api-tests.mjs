@@ -121,6 +121,7 @@ const BUSINESS_SCRIPTS = [
   'points',
   'tasks-points-hook',
   'finance',
+  'finance-recurring',
   'assistant-utterances',
   'polls',
   'reminders',
