@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 import contracts from '@family/contracts';
 import pg from 'pg';
 
-// 已迁到插件 manifest 的域，流水名、主表来源、未计入说明都由 manifest 生成（J1）；下面只手写还没迁的。
+// 插件的流水名、主表来源、未计入说明、快照都由 manifest 生成（J1）；下面只写内核的。
 const generated = contracts.pluginUsage();
 
 const args = process.argv.slice(2);
@@ -42,18 +42,16 @@ function password() {
   return process.env.DB_PASSWORD ?? 'family123';
 }
 
-// 流水 module → 域名。成员与邀请并成一个域。
-const HANDWRITTEN_ACTIVITY_DOMAINS = {
+// 流水 module → 域名。成员与邀请并成一个域。内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。
+const CORE_ACTIVITY_DOMAINS = {
   member: '成员',
   invitation: '成员',
   system: '家庭设置与备份',
 };
-const ACTIVITY_DOMAINS = { ...HANDWRITTEN_ACTIVITY_DOMAINS, ...generated.activityDomains };
+const ACTIVITY_DOMAINS = { ...CORE_ACTIVITY_DOMAINS, ...generated.activityDomains };
 
-// 不写流水的域：主表最近 N 天新增的行。timestamp（无时区）列按数据库会话时区比较。
-const HANDWRITTEN_TABLE_SOURCES = [
-];
-const TABLE_SOURCES = [...HANDWRITTEN_TABLE_SOURCES, ...generated.tables];
+// 不写流水的域：主表最近 N 天新增的行（全部由 manifest 的 usage.tables 生成）。timestamp（无时区）列按数据库会话时区比较。
+const TABLE_SOURCES = generated.tables;
 
 // 现状快照：manifest 的 usage.snapshots 只声明 id 和名字，查询与每行文案按 id 写在这里（§8.4 第 5 条）。
 // 位置（I1）：不是写操作次数，是现状快照——各处有多少条记着位置。位置的改动没有操作人列，按成员数不了。
@@ -89,9 +87,8 @@ const SNAPSHOTS = generated.snapshots.map((snapshot) => {
   return { ...snapshot, ...source };
 });
 
-const HANDWRITTEN_UNCOUNTED = [
-];
-const UNCOUNTED = [...HANDWRITTEN_UNCOUNTED, ...generated.uncounted];
+// 统计不到的写操作（manifest 的 usage.uncounted）
+const UNCOUNTED = generated.uncounted;
 
 const client = new pg.Client({
   host: process.env.DB_HOST || '127.0.0.1',

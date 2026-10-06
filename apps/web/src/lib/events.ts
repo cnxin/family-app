@@ -9,7 +9,8 @@ import { invalidateModules } from './queries/modules';
  * 域 → 这个域的查询 key 前缀（queryKey[0]）。/events 只说「哪个域变了」，收到后让这些查询失效、
  * 自己重取。新加查询时把它的前缀登记到对应的域里，否则别人改了这边不会跟着变。
  */
-const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
+/** 内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。 */
+const CORE_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   notifications: ['notifications', 'notification-deliveries', 'notification-channels'],
   activity: ['activities'],
   assistant: [
@@ -22,9 +23,9 @@ const HANDWRITTEN_QUERY_KEYS: Partial<Record<DomainKey, readonly string[]>> = {
   modules: [],
 };
 
-/** 已迁插件的查询 key 由 manifest 的 events.queryKeys 生成（J1）；每个域都有一条由 plugins-registry 单测保证。 */
+/** 插件的查询 key 由 manifest 的 events.queryKeys 生成（J1）；每个域都有一条由 plugins-registry 单测保证。 */
 export const DOMAIN_QUERY_KEYS = {
-  ...HANDWRITTEN_QUERY_KEYS,
+  ...CORE_QUERY_KEYS,
   ...pluginQueryKeys(),
 } as Record<DomainKey, readonly string[]>;
 

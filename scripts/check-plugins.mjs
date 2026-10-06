@@ -138,7 +138,7 @@ for (const route of c.EVENT_ROUTES) {
   for (const domain of route.domains) if (!domainKeys.has(domain)) fail(`EVENT_ROUTES ${route.prefix} 的域 ${domain} 不存在`);
 }
 const attentionDomains = c.attentionItemSchema.shape.domain.options;
-const handwrittenEvents = block('packages/contracts/src/events.ts', 'const HANDWRITTEN_EVENT_ROUTES');
+const handwrittenEvents = block('packages/contracts/src/events.ts', 'const CORE_EVENT_ROUTES');
 
 for (const plugin of PLUGINS) {
   const { key } = plugin;
@@ -183,7 +183,7 @@ for (const plugin of PLUGINS) {
   if (new RegExp(`domain: '${escape(key)}'`).test(block('apps/web/src/lib/actions.ts', 'export const ACTIONS'))) {
     fail(`${where} actions.ts 还手写着本域动作`);
   }
-  if (hasKey(block('apps/web/src/lib/events.ts', 'const HANDWRITTEN_QUERY_KEYS'), key)) fail(`${where} web events.ts 还手写着查询 key`);
+  if (hasKey(block('apps/web/src/lib/events.ts', 'const CORE_QUERY_KEYS'), key)) fail(`${where} web events.ts 内核查询 key 表里有本域`);
   const systemModules = read('apps/api/src/system/system-modules.service.ts');
   if (systemModules.includes(`key === '${key}'`)) fail(`${where} system-modules.service.ts 还在按 key 特判 hasData`);
   if (plugin.module.hasData.kind === 'server') {
@@ -193,26 +193,17 @@ for (const plugin of PLUGINS) {
       fail(`${where} hasData 判定 ${plugin.module.hasData.id} 没有在 apps/api/src/${key}/ 里注册到 ModuleHasDataRegistry`);
     }
   }
-  for (const marker of ['const HANDWRITTEN_ORDER', 'const HANDWRITTEN_OFF_KEYS']) {
-    if (hasKey(block('apps/api/src/today/today-attention.service.ts', marker), key)) fail(`${where} today-attention.service.ts ${marker} 还有本域`);
-  }
-  const toolSources = block('apps/api/src/agent/agent-tools.service.ts', 'const sourceModule: Record<string, string>');
+  const toolSources = block('apps/api/src/agent/agent-tools.service.ts', 'const CORE_TOOL_SOURCES');
   for (const [tool, owner] of owners) {
     if (owner === key && hasKey(toolSources, tool)) fail(`${where} agent-tools.service.ts sourceModule 还手写着 ${tool}`);
   }
   const usage = plugin.usage;
-  const activity = block('apps/api/scripts/usage-report.mjs', 'const HANDWRITTEN_ACTIVITY_DOMAINS');
+  const activity = block('apps/api/scripts/usage-report.mjs', 'const CORE_ACTIVITY_DOMAINS');
   for (const module of usage?.activityModules ?? []) if (hasKey(activity, module)) fail(`${where} usage-report.mjs 还手写着流水 ${module}`);
-  const tables = block('apps/api/scripts/usage-report.mjs', 'const HANDWRITTEN_TABLE_SOURCES');
-  for (const table of usage?.tables ?? []) {
-    if (new RegExp(`domain: '${escape(table.label)}'`).test(tables)) fail(`${where} usage-report.mjs 还手写着主表 ${table.label}`);
-  }
   const snapshotSources = block('apps/api/scripts/usage-report.mjs', 'const SNAPSHOT_SOURCES');
   for (const snapshot of usage?.snapshots ?? []) {
     if (!hasKey(snapshotSources, snapshot.server)) fail(`${where} 用量快照 ${snapshot.server} 在 usage-report.mjs SNAPSHOT_SOURCES 里没有实现`);
   }
-  const uncounted = block('apps/api/scripts/usage-report.mjs', 'const HANDWRITTEN_UNCOUNTED');
-  for (const line of usage?.uncounted ?? []) if (uncounted.includes(line)) fail(`${where} usage-report.mjs 还手写着未计入说明`);
   // 流水 module 必须挂在 manifest 上：别名表里有的流水值，manifest 里也要声明
   for (const module of c.PLUGIN_ALIASES[key].activity ?? []) {
     if (!(usage?.activityModules ?? []).includes(module)) fail(`${where} 别名表里的流水 ${module} 没写进 manifest.usage.activityModules`);
@@ -220,17 +211,11 @@ for (const plugin of PLUGINS) {
 
   // 留意文案与落点（web）
   if (plugin.attention) {
-    for (const marker of ['const HANDWRITTEN_LABELS', 'const HANDWRITTEN_ACTIONS', 'const HANDWRITTEN_LIST_ACTIONS']) {
-      if (hasKey(block('apps/web/src/lib/attention-copy.ts', marker), key)) fail(`${where} attention-copy.ts ${marker} 还有本域`);
-    }
-    const kindActions = block('apps/web/src/lib/attention-copy.ts', 'const kindActions');
     const copy = read('apps/web/src/lib/attention-copy.ts');
     for (const kind of plugin.attention.kinds) {
-      if (hasKey(kindActions, kind.kind)) fail(`${where} attention-copy.ts kindActions 还手写着 ${kind.kind}`);
-      if (copy.includes(`case '${kind.kind}':`)) fail(`${where} attention-copy.ts 单条标题还手写着 ${kind.kind}`);
+      if (copy.includes(`'${kind.kind}'`)) fail(`${where} attention-copy.ts 还手写着 ${kind.kind}`);
     }
-    if (copy.includes(`case '${key}':`)) fail(`${where} attention-copy.ts 合并标题还手写着本域`);
-    if (hasKey(block('apps/web/src/lib/routes.ts', 'const HANDWRITTEN_ATTENTION_ROUTES'), key)) fail(`${where} routes.ts 留意落点还手写着本域`);
+    if (copy.includes(`'${key}'`)) fail(`${where} attention-copy.ts 还手写着本域`);
     if (read('apps/web/src/lib/routes.ts').includes(`item.domain === '${key}'`)) fail(`${where} routes.ts attentionPath 还有本域特判`);
   }
   // 旧路径
@@ -244,7 +229,7 @@ for (const plugin of PLUGINS) {
   if (JSON.stringify([...declared].sort()) !== JSON.stringify([...notificationAliases].sort())) {
     fail(`${where} manifest.notifications（${declared.join('、') || '—'}）与别名表 notification（${notificationAliases.join('、') || '—'}）不一致`);
   }
-  for (const marker of ['const HANDWRITTEN_MODULE_LABEL', 'const HANDWRITTEN_MODULE_ICON']) {
+  for (const marker of ['const CORE_MODULE_LABEL', 'const CORE_MODULE_ICON']) {
     const text = block('apps/web/src/lib/notification-meta.ts', marker);
     for (const module of declared) if (hasKey(text, module)) fail(`${where} notification-meta.ts ${marker} 还手写着 ${module}`);
   }
@@ -254,22 +239,21 @@ for (const plugin of PLUGINS) {
   if (JSON.stringify(proposals.map((one) => one.actionType).sort()) !== JSON.stringify([...proposalAliases].sort())) {
     fail(`${where} manifest 的提案 actionType 与别名表 proposal 不一致`);
   }
+  const proposalService = read('apps/api/src/agent/agent-proposals.service.ts') + read('apps/api/src/agent/agent-proposal-groups.service.ts');
   for (const proposal of proposals) {
-    const service = 'apps/api/src/agent/agent-proposals.service.ts';
-    if (hasKey(block(service, 'const HANDWRITTEN_TYPE_BY_TOOL'), proposal.tool)) fail(`${where} TYPE_BY_TOOL 还手写着 ${proposal.tool}`);
-    if (hasKey(block(service, 'const HANDWRITTEN_ACTION_LABELS'), proposal.actionType)) fail(`${where} ACTION_LABELS 还手写着 ${proposal.actionType}`);
-    if (block(service, 'const HANDWRITTEN_UNGROUPED').includes(`'${proposal.actionType}'`)) fail(`${where} HANDWRITTEN_UNGROUPED 还手写着 ${proposal.actionType}`);
+    if (proposalService.includes(`${proposal.tool}: '`) || proposalService.includes(`Exclude<AgentActionType, '${proposal.actionType}'>`)) {
+      fail(`${where} agent 提案服务里还写死着 ${proposal.tool} / ${proposal.actionType}`);
+    }
   }
 
   // 能力：名字必须在 Capability 清单里，授予关系不再手写
   const capabilities = read('apps/api/src/auth/capabilities.ts');
   const capabilityUnion = capabilities.match(/export type Capability =([^;]*);/)?.[1] ?? '';
   if (!capabilityUnion) fail('capabilities.ts 找不到 Capability 清单');
-  const handwrittenRoles = block('apps/api/src/auth/capabilities.ts', 'const HANDWRITTEN_ROLE_CAPABILITIES');
-  if (!capabilities.includes('const HANDWRITTEN_ROLE_CAPABILITIES')) fail('capabilities.ts 找不到 HANDWRITTEN_ROLE_CAPABILITIES');
+  const handwrittenRoles = block('apps/api/src/auth/capabilities.ts', 'const CORE_ROLE_CAPABILITIES');
   for (const capability of plugin.capabilities ?? []) {
     if (!capabilityUnion.includes(`'${capability.key}'`)) fail(`${where} 能力 ${capability.key} 不在 Capability 清单里`);
-    if (handwrittenRoles.includes(`'${capability.key}'`)) fail(`${where} 能力 ${capability.key} 还在 HANDWRITTEN_ROLE_CAPABILITIES 里手写授予`);
+    if (handwrittenRoles.includes(`'${capability.key}'`)) fail(`${where} 能力 ${capability.key} 还在内核 CORE_ROLE_CAPABILITIES 里授予`);
   }
   for (const action of plugin.actions ?? []) {
     if (action.capability && !capabilityUnion.includes(`'${action.capability}'`)) fail(`${where} 动作 ${action.id} 的能力 ${action.capability} 不存在`);

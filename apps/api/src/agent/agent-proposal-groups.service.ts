@@ -10,7 +10,6 @@ import { DataSource, EntityManager, In } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import {
   AgentActionProposal,
-  AgentActionType,
   AgentProposalGroup,
   AgentProposalGroupEvent,
   AgentProposalGroupEventOperation,
@@ -43,7 +42,8 @@ const groupInputSchema = z
   })
   .passthrough();
 
-type GroupAgentActionType = Exclude<AgentActionType, 'finance'>;
+/** 能打包的提案类型由 manifest 的 grouped: false 推出（GROUPABLE_ACTION_TYPES），不在这里写死。 */
+type GroupAgentActionType = (typeof GROUPABLE_ACTION_TYPES)[number];
 
 
 function untrustedText(value: unknown) {

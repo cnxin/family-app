@@ -37,6 +37,14 @@ function pluginSegments(key: PluginKey): NavSegment[] {
   }));
 }
 
+/** 内核分段，放回 SCENES 里原来的位置。内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。 */
+const CORE_NAV = {
+  notifications: { key: 'notifications', tier: 'core', glyph: '信', label: '消息', path: '/schedule/notifications', ready: true },
+  members: { key: 'members', tier: 'settings', glyph: '员', label: '成员', path: '/house/members', ready: true, managerOnly: true },
+  backups: { key: 'backups', tier: 'settings', glyph: '备', label: '备份', path: '/house/backups', ready: true, managerOnly: true },
+  activity: { key: shelfModuleKey.enum.activity, tier: 'shelf', glyph: '动', label: '家庭动态', path: '/life/activity', ready: true },
+} satisfies Record<string, NavSegment>;
+
 export const SCENES: NavScene[] = [
   {
     key: 'today',
@@ -65,7 +73,7 @@ export const SCENES: NavScene[] = [
       ...pluginSegments('tasks'),
       ...pluginSegments('reminders'),
       ...pluginSegments('polls'),
-      { key: 'notifications', tier: 'core', glyph: '信', label: '消息', path: '/schedule/notifications', ready: true },
+      CORE_NAV.notifications,
     ],
   },
   {
@@ -83,8 +91,8 @@ export const SCENES: NavScene[] = [
       ...pluginSegments('points'),
       ...pluginSegments('guests'),
       ...pluginSegments('smart-home'),
-      { key: 'members', tier: 'settings', glyph: '员', label: '成员', path: '/house/members', ready: true, managerOnly: true },
-      { key: 'backups', tier: 'settings', glyph: '备', label: '备份', path: '/house/backups', ready: true, managerOnly: true },
+      CORE_NAV.members,
+      CORE_NAV.backups,
     ],
   },
   {
@@ -97,12 +105,12 @@ export const SCENES: NavScene[] = [
       ...pluginSegments('travel'),
       ...pluginSegments('memories'),
       ...pluginSegments('knowledge'),
-      { key: shelfModuleKey.enum.activity, tier: 'shelf', glyph: '动', label: '家庭动态', path: '/life/activity', ready: true },
+      CORE_NAV.activity,
     ],
   },
 ];
 
-/** 历史独立入口：只保留注册信息，不再永久置顶；用户置顶由 F4 接线。 */
+/** 历史独立入口：只保留注册信息，不再永久置顶；用户置顶由 F4 接线。PINNED 与 TODAY 都是内核条目。内核条目，不属于任何插件；assistant 工具清单归 J1b（§8.6 第 2 条）。 */
 export interface NavPinned extends NavSegment {
   icon: string;
   path: string;

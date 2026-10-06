@@ -12,30 +12,21 @@ import {
   type AttentionRuleContext,
 } from './today-attention.rules';
 
-/** 今天页里各域的排序位次（越小越靠前）。已迁插件取 manifest 的 attention.order。 */
-const HANDWRITTEN_ORDER: Partial<Record<AttentionItem['domain'], number>> = {
-  backups: 8,
-};
-const DOMAIN_ORDER: Partial<Record<AttentionItem['domain'], number>> = {
-  ...HANDWRITTEN_ORDER,
-  ...Object.fromEntries(pluginAttention().map(({ key, attention }) => [key, attention.order])),
-};
+/** 今天页里各域的排序位次（越小越靠前）：manifest / CORE_ATTENTION 的 attention.order。 */
+const DOMAIN_ORDER: Partial<Record<AttentionItem['domain'], number>> = Object.fromEntries(
+  allAttention().map(({ key, attention }) => [key, attention.order]),
+);
 const orderOf = (domain: AttentionItem['domain']) => DOMAIN_ORDER[domain] ?? Number.MAX_SAFE_INTEGER;
 
 /**
- * 留意跟着哪个模块开关走（F3 shelf key 来自 contracts/src/system.ts）；settings 域不参与 override。
- * 已迁插件：manifest 里模块可开关的，就跟自己的 key 走。
+ * 留意跟着哪个模块开关走（F3 shelf key 来自 contracts/src/system.ts）：manifest 里模块可开关的插件跟自己的 key 走；
+ * 内核留意（备份）不参与 override。
  */
-const HANDWRITTEN_OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
-};
-const OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = {
-  ...HANDWRITTEN_OFF_KEYS,
-  ...Object.fromEntries(
-    pluginAttention()
-      .filter(({ key }) => findPlugin(key)?.module.overridable)
-      .map(({ key }) => [key, key]),
-  ),
-};
+const OFF_KEYS: Partial<Record<AttentionItem['domain'], string>> = Object.fromEntries(
+  pluginAttention()
+    .filter(({ key }) => findPlugin(key)?.module.overridable)
+    .map(({ key }) => [key, key]),
+);
 
 /**
  * 每种留意要什么能力才看得到（manifest / CORE_ATTENTION 里 kind 的 capability）。J1.7 前这四处写死在下面拼规则时：
