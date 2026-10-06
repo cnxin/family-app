@@ -369,6 +369,39 @@ async function runApiPhase() {
       '身份、groupId 和 stepOrder 注入被忽略，超过 8 项整体拒绝且无部分数据',
     );
 
+    // 财务记账必须单独确认：manifest 的 grouped: false 推出 GROUPABLE_ACTION_TYPES，组里混进财务整组拒绝
+    const beforeFinance = await db.query(
+      `SELECT count(*)::int AS n FROM agent_proposal_groups WHERE "runId" = $1`,
+      [toolRun.runId],
+    );
+    const financeInGroup = await mcp(
+      toolCall(31, 'propose_plan', toolRun.runId, {
+        title: '带记账的计划',
+        summary: '财务不能打包',
+        steps: [
+          taskStep(`财务组里的任务-${randomUUID()}`),
+          { type: 'finance', kind: 'expense', title: '买菜', amount: 12.5, occurredOn: '2199-12-21' },
+        ],
+      }),
+    );
+    const afterFinance = await db.query(
+      `SELECT count(*)::int AS n FROM agent_proposal_groups WHERE "runId" = $1`,
+      [toolRun.runId],
+    );
+    const financeProposals = await db.query(
+      `SELECT count(*)::int AS n FROM agent_action_proposals WHERE "runId" = $1 AND "actionType" = 'finance'`,
+      [toolRun.runId],
+    );
+    const financeError = JSON.stringify(financeInGroup.body ?? {});
+    assert(
+      financeInGroup.body?.result?.isError === true &&
+        financeError.includes('steps[1].type') &&
+        !financeError.includes("'finance'") &&
+        beforeFinance.rows[0].n === afterFinance.rows[0].n &&
+        financeProposals.rows[0].n === 0,
+      'propose_plan 里混进 propose_finance_transaction（type finance）整组拒绝，不留组也不留财务提案',
+    );
+
     console.log('3. 全有或全无回滚与独立 failed 审计');
     const sourceTask = await request('/tasks', owner.accessToken, 'POST', {
       title: `A7.5 临时提醒来源-${randomUUID()}`,
