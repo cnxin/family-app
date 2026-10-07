@@ -170,7 +170,7 @@ async function exportMap() {
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
-    pushToast(error instanceof Error ? error.message : '导出失败');
+    pushToast(error instanceof Error ? error.message : '导出失败', undefined, 'error');
   }
 }
 

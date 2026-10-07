@@ -84,8 +84,8 @@ export function ChannelCard({
             aria-label={`测试${channel.name}`}
             onClick={() =>
               test.mutate(channel.id, {
-                onSuccess: () => pushToast('测试消息发出去了，去那边看看收到没'),
-                onError: (error) => pushToast(error instanceof Error ? error.message : '测试没成功'),
+                onSuccess: () => pushToast('测试消息发出去了，去那边看看收到没', undefined, 'success'),
+                onError: (error) => pushToast(error instanceof Error ? error.message : '测试没成功', undefined, 'error'),
               })
             }
           >
@@ -204,7 +204,7 @@ export function ChannelEditor({
       },
       {
         onSuccess: () => {
-          pushToast(editing ? '渠道已更新' : '渠道已创建，记得发条测试消息');
+          pushToast(editing ? '渠道已更新' : '渠道已创建，记得发条测试消息', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -329,7 +329,7 @@ export function DeliveryList({ deliveries }: { deliveries: NotificationDelivery[
               disabled={retry.isPending}
               aria-label={`重新投递${one.notification.title}`}
               onClick={() =>
-                retry.mutate(one.id, { onSuccess: () => pushToast('已排进重试队列') })
+                retry.mutate(one.id, { onSuccess: () => pushToast('已排进重试队列', undefined, 'success') })
               }
             >
               重投

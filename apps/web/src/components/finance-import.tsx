@@ -174,7 +174,7 @@ export function ImportDialog({
       { id: preview.id, rows: plan.rows, includeAll: plan.includeAll },
       {
         onSuccess: (result) => {
-          pushToast(`导入 ${result.imported} 笔，跳过 ${result.skipped + result.duplicates} 笔`);
+          pushToast(`导入 ${result.imported} 笔，跳过 ${result.skipped + result.duplicates} 笔`, undefined, 'success');
           onDone(result.imported > 0 && preview.rangeTo ? preview.rangeTo.slice(0, 7) : null);
           onClose();
         },

@@ -67,7 +67,7 @@ export function TaskDetail({ item, onClose }: { item: TaskOccurrence; onClose: (
           body: { assigneeId: nextAssignee },
         });
       }
-      pushToast('任务改好了');
+      pushToast('任务改好了', undefined, 'success');
       onClose();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '没改成功');
@@ -77,7 +77,7 @@ export function TaskDetail({ item, onClose }: { item: TaskOccurrence; onClose: (
   async function removeAll() {
     try {
       await archive.mutateAsync(item.taskId);
-      pushToast(repeating ? `「${item.task.title}」以后都不会再出现` : `「${item.task.title}」已删除`);
+      pushToast(repeating ? `「${item.task.title}」以后都不会再出现` : `「${item.task.title}」已删除`, undefined, 'success');
       onClose();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '没删成功');
@@ -91,7 +91,7 @@ export function TaskDetail({ item, onClose }: { item: TaskOccurrence; onClose: (
         dueDate: item.dueDate,
         body: { status: 'skipped' },
       });
-      pushToast(`${item.dueDate} 这一次不做了`);
+      pushToast(`${item.dueDate} 这一次不做了`, undefined, 'success');
       onClose();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '没删成功');

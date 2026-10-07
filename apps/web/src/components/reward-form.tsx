@@ -34,7 +34,7 @@ export function RewardForm({ editing, onClose }: { editing: Reward | null; onClo
       },
       {
         onSuccess: (reward) => {
-          pushToast(editing ? '奖励已更新' : `奖励「${reward.name}」已上架`);
+          pushToast(editing ? '奖励已更新' : `奖励「${reward.name}」已上架`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -144,7 +144,7 @@ export function AdjustmentForm({
       },
       {
         onSuccess: () => {
-          pushToast(`${account.member.name} 的积分已${amount > 0 ? '发放' : '扣减'} ${Math.abs(amount)}`);
+          pushToast(`${account.member.name} 的积分已${amount > 0 ? '发放' : '扣减'} ${Math.abs(amount)}`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '调整没成功'),

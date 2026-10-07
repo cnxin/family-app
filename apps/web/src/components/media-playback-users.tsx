@@ -44,7 +44,7 @@ export function MediaPlaybackUsersPanel() {
         if (!user.mapping) return;
         await unmap.mutateAsync(user.mapping.id);
         setResult({ message: `已取消 ${user.name} 的成员关联`, ok: true });
-        pushToast(`已取消 ${user.name} 的成员关联`);
+        pushToast(`已取消 ${user.name} 的成员关联`, undefined, 'success');
         return;
       }
       const member = members.data?.find((one) => one.id === value);
@@ -54,7 +54,7 @@ export function MediaPlaybackUsersPanel() {
         memberId: value,
       });
       setResult({ message: `已把 ${user.name} 关联到 ${member?.name ?? '家庭成员'}`, ok: true });
-      pushToast(`已把 ${user.name} 关联到 ${member?.name ?? '家庭成员'}`);
+      pushToast(`已把 ${user.name} 关联到 ${member?.name ?? '家庭成员'}`, undefined, 'success');
     } catch (error) {
       setResult({ message: error instanceof Error ? error.message : '关联失败', ok: false });
     }

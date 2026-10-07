@@ -144,7 +144,7 @@ function ManualAdd({ date }: { date: string }) {
         onSuccess: () => {
           setName('');
           setQty('1');
-          pushToast(`已添加「${trimmed}」`);
+          pushToast(`已添加「${trimmed}」`, undefined, 'success');
         },
       },
     );
@@ -253,7 +253,7 @@ export function ShoppingView() {
                 pushToast(
                   next.length
                     ? `清单已刷新：共 ${next.length} 项`
-                    : '这天接单的菜都不缺食材（常备调料不进清单）',
+                    : '这天接单的菜都不缺食材（常备调料不进清单）', undefined, 'success',
                 ),
             })
           }
@@ -350,7 +350,7 @@ export function ShoppingView() {
                 onClick={() =>
                   remove.mutate(deleting.id, {
                     onSuccess: () => {
-                      pushToast(`已删除「${itemName(deleting)}」`);
+                      pushToast(`已删除「${itemName(deleting)}」`, undefined, 'success');
                       setDeleting(null);
                     },
                   })

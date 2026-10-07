@@ -372,7 +372,7 @@ export function CalendarPage() {
                 onClick={() =>
                   remove.mutate(deleting.sourceId, {
                     onSuccess: () => {
-                      pushToast(`已删除「${deleting.title}」`);
+                      pushToast(`已删除「${deleting.title}」`, undefined, 'success');
                       setDeleting(null);
                     },
                   })

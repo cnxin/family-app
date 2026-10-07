@@ -40,7 +40,7 @@ export function useRoomRestructure({ locations, viewBox, snap, select, confirm }
   const [busy, setBusy] = useState(false);
   const byId = new Map(locations.map((one) => [one.id, one]));
   const refresh = () => client.invalidateQueries({ queryKey: locationKeys.all });
-  const fail = (error: unknown) => pushToast(error instanceof ApiError ? error.message : '没做成，检查一下网络');
+  const fail = (error: unknown) => pushToast(error instanceof ApiError ? error.message : '没做成，检查一下网络', undefined, 'error');
 
   const candidates = (sourceId: string) => {
     const source = byId.get(sourceId);
@@ -82,7 +82,7 @@ export function useRoomRestructure({ locations, viewBox, snap, select, confirm }
       await refresh();
       setPlan(null);
       select(result.created.id);
-      pushToast(`拆出了「${name}」`);
+      pushToast(`拆出了「${name}」`, undefined, 'success');
       navigator.vibrate?.(12);
     } catch (error) {
       fail(error);
@@ -117,7 +117,7 @@ export function useRoomRestructure({ locations, viewBox, snap, select, confirm }
             await api<MergeLocationResult>(`/locations/${source.id}/merge`, { method: 'POST', body: { intoId: target.id, shape: { type: 'polygon', points: shape } } });
             await refresh();
             select(target.id);
-            pushToast(`「${source.name}」并进了「${target.name}」`);
+            pushToast(`「${source.name}」并进了「${target.name}」`, undefined, 'success');
           } catch (error) {
             fail(error);
           }

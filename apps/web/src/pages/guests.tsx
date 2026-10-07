@@ -98,12 +98,12 @@ export function GuestsPage() {
                   onCancel={() =>
                     upsertVisit.mutate(
                       { id: visit.id, body: { status: 'cancelled' } },
-                      { onSuccess: () => pushToast('来访已取消，相关邀请一并作废') },
+                      { onSuccess: () => pushToast('来访已取消，相关邀请一并作废', undefined, 'success') },
                     )
                   }
                   onRevokeInvitation={(invitationId, guestName) =>
                     revokeInvitation.mutate(invitationId, {
-                      onSuccess: () => pushToast(`给「${guestName}」的邀请已撤销`),
+                      onSuccess: () => pushToast(`给「${guestName}」的邀请已撤销`, undefined, 'success'),
                     })
                   }
                 />
@@ -236,7 +236,7 @@ export function GuestsPage() {
                     onClick={() =>
                       review.mutate(
                         { id: request.id, status: 'accepted' },
-                        { onSuccess: () => pushToast(`已接受「${request.dishName}」`) },
+                        { onSuccess: () => pushToast(`已接受「${request.dishName}」`, undefined, 'success') },
                       )
                     }
                   >
@@ -250,7 +250,7 @@ export function GuestsPage() {
                     onClick={() =>
                       review.mutate(
                         { id: request.id, status: 'rejected' },
-                        { onSuccess: () => pushToast('已婉拒，访客能看到') },
+                        { onSuccess: () => pushToast('已婉拒，访客能看到', undefined, 'success') },
                       )
                     }
                   >
@@ -308,7 +308,7 @@ export function GuestsPage() {
                 onClick={() =>
                   anonymize.mutate(anonymizing.id, {
                     onSuccess: () => {
-                      pushToast('访客资料已匿名化');
+                      pushToast('访客资料已匿名化', undefined, 'success');
                       setAnonymizing(null);
                     },
                   })

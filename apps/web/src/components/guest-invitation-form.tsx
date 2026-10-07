@@ -39,7 +39,7 @@ export function InvitationForm({
               className="flex-1"
               onClick={async () => {
                 if (await copyText(link)) {
-                  pushToast('链接已复制');
+                  pushToast('链接已复制', undefined, 'success');
                   return;
                 }
                 selectText(document.querySelector('[data-copy-fallback="guest-link"]'));

@@ -73,7 +73,7 @@ export function PollCard({
     vote.mutate(
       { id: poll.id, optionIds: selected },
       {
-        onSuccess: () => pushToast(selected.length ? '投票已提交，还能再改' : '已撤回你的选择'),
+        onSuccess: () => pushToast(selected.length ? '投票已提交，还能再改' : '已撤回你的选择', undefined, 'success'),
         onError: (error) => setHint(error instanceof Error ? error.message : '投票没成功'),
       },
     );

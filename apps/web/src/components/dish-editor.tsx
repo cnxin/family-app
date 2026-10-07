@@ -42,7 +42,7 @@ export function DishEditor({
     try {
       setPhotoUrl(await uploadPhoto(file));
     } catch {
-      pushToast('照片没传上去，再试一次');
+      pushToast('照片没传上去，再试一次', undefined, 'error');
     } finally {
       setUploading(false);
     }
@@ -64,7 +64,7 @@ export function DishEditor({
         { id: editing.id, body },
         {
           onSuccess: () => {
-            pushToast('菜品已更新');
+            pushToast('菜品已更新', undefined, 'success');
             onClose();
           },
         },
@@ -72,7 +72,7 @@ export function DishEditor({
     } else {
       create.mutate(body, {
         onSuccess: (dish) => {
-          pushToast(`已新建「${dish.name}」`);
+          pushToast(`已新建「${dish.name}」`, undefined, 'success');
           onCreated?.(dish);
           onClose();
         },
@@ -95,7 +95,7 @@ export function DishEditor({
                 onClick={() =>
                   remove.mutate(editing.id, {
                     onSuccess: () => {
-                      pushToast(`「${editing.name}」已下架`);
+                      pushToast(`「${editing.name}」已下架`, undefined, 'success');
                       onClose();
                     },
                   })

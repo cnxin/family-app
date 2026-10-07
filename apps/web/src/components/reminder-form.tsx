@@ -175,7 +175,7 @@ export function ReminderForm({
       },
       {
         onSuccess: () => {
-          pushToast(editing ? '提醒已更新' : `会在设定时间提醒「${selected.title}」`);
+          pushToast(editing ? '提醒已更新' : `会在设定时间提醒「${selected.title}」`, undefined, 'success');
           onClose();
         },
         onError: (mutationError) =>

@@ -40,7 +40,7 @@ export default function HomePage() {
       onHide={manager ? () => {
         const previous = modules.state(segment.key)?.override ?? null;
         update.mutate({ key: segment.key, override: 'off' }, { onSuccess: () => {
-          pushToast(`已收起${segment.label}`, undefined, { label: '撤销', run: () => {
+          pushToast(`已收起${segment.label}`, undefined, 'success', { label: '撤销', run: () => {
             update.mutate({ key: segment.key, override: previous });
           } });
         } });

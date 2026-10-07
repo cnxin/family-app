@@ -17,9 +17,9 @@ const queryClient = new QueryClient({
     onError: (error) => {
       if (error instanceof ApiError) {
         if (error.status === 401) return; // 401 会自动续期或登出，不打扰
-        pushToast(error.message, error.requestId);
+        pushToast(error.message, error.requestId, 'error');
       } else {
-        pushToast('操作没成功，网络或服务可能有问题');
+        pushToast('操作没成功，网络或服务可能有问题', undefined, 'error');
       }
     },
   }),

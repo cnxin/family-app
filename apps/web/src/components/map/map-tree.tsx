@@ -43,9 +43,9 @@ export function MapTree({
         onSuccess: (created) => {
           setName('');
           onSelect(created.id);
-          if (!manager) pushToast(`「${value}」先放在「未整理」里，管理员回头会归位`);
+          if (!manager) pushToast(`「${value}」先放在「未整理」里，管理员回头会归位`, undefined, 'success');
         },
-        onError: (error) => pushToast(error.message),
+        onError: (error) => pushToast(error.message, undefined, 'error'),
       },
     );
   };

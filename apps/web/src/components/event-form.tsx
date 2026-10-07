@@ -50,7 +50,7 @@ export function EventForm({
       },
       {
         onSuccess: () => {
-          pushToast(editing ? '事件已更新' : `已添加「${title.trim()}」`);
+          pushToast(editing ? '事件已更新' : `已添加「${title.trim()}」`, undefined, 'success');
           onClose();
         },
       },

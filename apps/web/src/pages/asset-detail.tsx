@@ -67,7 +67,7 @@ export function AssetDetailPage() {
       {
         onSuccess: () => {
           setAsking(false);
-          pushToast(retired ? `「${data.name}」恢复使用` : `「${data.name}」已停用，相关待发提醒一并取消`);
+          pushToast(retired ? `「${data.name}」恢复使用` : `「${data.name}」已停用，相关待发提醒一并取消`, undefined, 'success');
         },
       },
     );

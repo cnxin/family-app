@@ -280,7 +280,7 @@ export function RemindersPage() {
                 onClick={() =>
                   cancel.mutate(cancelling.id, {
                     onSuccess: () => {
-                      pushToast('提醒已取消');
+                      pushToast('提醒已取消', undefined, 'success');
                       setCancelling(null);
                     },
                   })

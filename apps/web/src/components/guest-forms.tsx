@@ -30,7 +30,7 @@ export function GuestForm({ editing, onClose }: { editing: Guest | null; onClose
       },
       {
         onSuccess: () => {
-          pushToast(editing ? '访客资料已更新' : `已记下访客「${name.trim()}」`);
+          pushToast(editing ? '访客资料已更新' : `已记下访客「${name.trim()}」`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -144,7 +144,7 @@ export function VisitForm({
       },
       {
         onSuccess: () => {
-          pushToast(editing ? '来访计划已更新' : '来访已安排好');
+          pushToast(editing ? '来访计划已更新' : '来访已安排好', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -283,7 +283,7 @@ export function WifiForm({
       },
       {
         onSuccess: () => {
-          pushToast(editing ? 'Wi-Fi 配置已更新' : 'Wi-Fi 配置已保存');
+          pushToast(editing ? 'Wi-Fi 配置已更新' : 'Wi-Fi 配置已保存', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

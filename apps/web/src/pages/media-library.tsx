@@ -79,7 +79,7 @@ export function MediaLibraryPage() {
             : current,
         );
         // 后端会回 added：重复加不是新加，说清楚免得人以为加了两遍
-        pushToast(result.added ? `「${item.title}」加进片单了` : `「${item.title}」本来就在片单里`);
+        pushToast(result.added ? `「${item.title}」加进片单了` : `「${item.title}」本来就在片单里`, undefined, 'success');
       },
     });
   }
@@ -108,7 +108,7 @@ export function MediaLibraryPage() {
                 onSuccess: (result) => {
                   const scanned = result.results.reduce((sum, one) => sum + one.itemCount, 0);
                   const matched = result.results.reduce((sum, one) => sum + one.matchedCount, 0);
-                  pushToast(`同步好了 ${scanned} 部，其中 ${matched} 部对上了片单`);
+                  pushToast(`同步好了 ${scanned} 部，其中 ${matched} 部对上了片单`, undefined, 'success');
                 },
               })
             }

@@ -31,7 +31,7 @@ export function ApplyTemplateDialog({ plan, onClose }: { plan: TravelPlan; onClo
       },
       {
         onSuccess: () => {
-          pushToast(`加了 ${picked.items.length} 项到清单`);
+          pushToast(`加了 ${picked.items.length} 项到清单`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没加进去'),

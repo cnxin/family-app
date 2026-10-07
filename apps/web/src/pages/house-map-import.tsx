@@ -88,7 +88,7 @@ export function HouseMapImportPage() {
       // 默认框住房间所在的那块（App 的按钮、图例是白灰黑，框在外面）；算不出来就整张
       suggestCropInWorker(next).then(setCrop, () => undefined);
     };
-    next.onerror = () => pushToast('这张图打不开，换一张试试');
+    next.onerror = () => pushToast('这张图打不开，换一张试试', undefined, 'error');
     next.src = url;
   };
 
@@ -119,12 +119,12 @@ export function HouseMapImportPage() {
       }
       await client.invalidateQueries({ queryKey: locationKeys.all });
       navigator.vibrate?.(12);
-      pushToast(`地图导好了：${drafts.length} 个房间`);
+      pushToast(`地图导好了：${drafts.length} 个房间`, undefined, 'success');
       navigate('/house/map');
     } catch (error) {
       console.error('导入地图失败', error);
       // 服务端的错误本来就是给人看的中文；别的（网络断、脚本异常）只说一句能照着做的
-      pushToast(error instanceof ApiError ? error.message : '地图没导进去，检查一下网络再点「完成」');
+      pushToast(error instanceof ApiError ? error.message : '地图没导进去，检查一下网络再点「完成」', undefined, 'error');
     } finally {
       setSaving(false);
     }

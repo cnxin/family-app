@@ -28,7 +28,7 @@ export function AssetDocumentsPanel({ asset }: { asset: HomeAsset }) {
       else window.open(url, '_blank', 'noopener,noreferrer');
     } catch (error) {
       tab?.close();
-      pushToast(error instanceof Error ? error.message : `「${document.title}」暂时打不开`);
+      pushToast(error instanceof Error ? error.message : `「${document.title}」暂时打不开`, undefined, 'error');
     } finally {
       setOpeningId(null);
     }
@@ -106,7 +106,7 @@ export function AssetDocumentsPanel({ asset }: { asset: HomeAsset }) {
                     {
                       onSuccess: () => {
                         setRemoving(null);
-                        pushToast('这条资料已删除');
+                        pushToast('这条资料已删除', undefined, 'success');
                       },
                     },
                   )

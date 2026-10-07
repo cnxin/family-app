@@ -308,7 +308,7 @@ export function RecipesPage() {
                         disabled={cart.has(dish.id)}
                         onClick={() => {
                           cart.add(dish);
-                          pushToast(`${dish.name} 已加进${MEAL_LABELS[cart.mealType]}的菜单`);
+                          pushToast(`${dish.name} 已加进${MEAL_LABELS[cart.mealType]}的菜单`, undefined, 'success');
                         }}
                       >
                         {cart.has(dish.id) ? '在菜单里' : '加进菜单'}

@@ -59,7 +59,7 @@ export function MemberEditor({
           pushToast(
             !isSelf && saved.role !== member.role
               ? `${saved.name} 现在是${memberRoleLabel(saved.role)}（对方需要重新登录）`
-              : '成员资料已更新',
+              : '成员资料已更新', undefined, 'success',
           );
           onClose();
         },
@@ -185,7 +185,7 @@ export function InviteForm({ onClose }: { onClose: () => void }) {
     if (!created) return;
     if (await copyText(joinLink)) {
       setCopied(true);
-      pushToast('邀请链接已复制');
+      pushToast('邀请链接已复制', undefined, 'success');
       return;
     }
     selectText(document.querySelector('[data-copy-fallback="join-link"]'));

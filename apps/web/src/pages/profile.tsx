@@ -102,7 +102,7 @@ export function ProfilePage() {
               const next = !cooking;
               setCooking(next);
               updatePreference.mutate(next, {
-                onSuccess: () => pushToast(next ? '已标记经常掌勺' : '已取消经常掌勺'),
+                onSuccess: () => pushToast(next ? '已标记经常掌勺' : '已取消经常掌勺', undefined, 'success'),
                 onError: () => setCooking(!next),
               });
             }}
@@ -128,13 +128,13 @@ export function ProfilePage() {
                 { memoryEnabled: !current.memoryEnabled, expectedVersion: current.version },
                 {
                   onSuccess: (saved) =>
-                    pushToast(saved.memoryEnabled ? '小管家会记住你的偏好了' : '已关掉小管家的记忆'),
+                    pushToast(saved.memoryEnabled ? '小管家会记住你的偏好了' : '已关掉小管家的记忆', undefined, 'success'),
                   onError: (error) =>
                     pushToast(
                       // 乐观锁失败：别处刚改过，刷新再来，别静默失败
                       error instanceof Error && /版本|version/.test(error.message)
                         ? '刚才别处改过这个设置，刷新一下再试'
-                        : '没改成功，再试一次',
+                        : '没改成功，再试一次', undefined, 'error',
                     ),
                 },
               );
@@ -161,7 +161,7 @@ export function ProfilePage() {
                     expectedRoutineVersion: nightly.version,
                   },
                   {
-                    onSuccess: () => pushToast(nightlyOn ? '已关掉夜间汇总推送' : '夜间汇总会推给你'),
+                    onSuccess: () => pushToast(nightlyOn ? '已关掉夜间汇总推送' : '夜间汇总会推给你', undefined, 'success'),
                   },
                 );
               }}
@@ -263,7 +263,7 @@ function PasswordForm({ onClose }: { onClose: () => void }) {
       { currentPassword: needsCurrent ? current || undefined : undefined, newPassword: next },
       {
         onSuccess: () => {
-          pushToast('密码已更新，其他设备需要重新登录');
+          pushToast('密码已更新，其他设备需要重新登录', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没改成功'),

@@ -58,7 +58,7 @@ export function objectActions(selection: Selection, ctx: Context): { actions: To
                 if (!result) pushToast('旁边没有贴得够近的墙');
                 else {
                   ctx.commitShapes([{ id: room.id, shape: result.shape }], '对齐相邻');
-                  pushToast(`拉齐了 ${result.moved} 面墙`);
+                  pushToast(`拉齐了 ${result.moved} 面墙`, undefined, 'success');
                 }
               },
             },

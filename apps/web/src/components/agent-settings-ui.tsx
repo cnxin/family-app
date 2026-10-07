@@ -178,7 +178,7 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
                       onClick={() =>
                         revokeChannel.mutate(
                           { id: one.id, expectedVersion: one.version },
-                          { onSuccess: () => pushToast('渠道已解绑'), onError },
+                          { onSuccess: () => pushToast('渠道已解绑', undefined, 'success'), onError },
                         )
                       }
                     >
@@ -212,7 +212,7 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
                       disabled={revokePairing.isPending}
                       onClick={() =>
                         revokePairing.mutate(one.id, {
-                          onSuccess: () => pushToast('配对码已作废'),
+                          onSuccess: () => pushToast('配对码已作废', undefined, 'success'),
                           onError,
                         })
                       }

@@ -332,7 +332,7 @@ export function AssistantPage() {
                   aria-label={`归档对话${one.title}`}
                   disabled={archive.isPending}
                   onClick={() =>
-                    archive.mutate(one.id, { onSuccess: () => pushToast('对话已归档') })
+                    archive.mutate(one.id, { onSuccess: () => pushToast('对话已归档', undefined, 'success') })
                   }
                   className="grid size-7 shrink-0 place-items-center rounded-lg text-[13px] text-ink-soft transition-colors duration-150 hover:bg-muted hover:text-danger"
                 >

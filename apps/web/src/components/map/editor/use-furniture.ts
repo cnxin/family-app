@@ -90,7 +90,7 @@ export function useFurniture({ locations, decorations, selectedId, centre, push,
       buzz();
       return true;
     } catch (error) {
-      pushToast(error instanceof Error ? error.message : '没放上，检查一下网络');
+      pushToast(error instanceof Error ? error.message : '没放上，检查一下网络', undefined, 'error');
       return false;
     }
   };
@@ -138,11 +138,11 @@ export function useFurniture({ locations, decorations, selectedId, centre, push,
         await update.mutateAsync({ id, parentId: roomId });
         await saveNow([{ id, shape: turned }]);
       } catch (error) {
-        pushToast(error instanceof Error ? error.message : '没挪成，检查一下网络');
+        pushToast(error instanceof Error ? error.message : '没挪成，检查一下网络', undefined, 'error');
         return;
       }
     }
-    pushToast(`挪到了「${target.name}」`);
+    pushToast(`挪到了「${target.name}」`, undefined, 'success');
     select(id);
     focus(rect);
     buzz();

@@ -17,7 +17,7 @@ function CategoryForm({ onClose }: { onClose: () => void }) {
       { name: name.trim(), kind },
       {
         onSuccess: () => {
-          pushToast(`分类「${name.trim()}」已添加`);
+          pushToast(`分类「${name.trim()}」已添加`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

@@ -87,7 +87,7 @@ export function PollsPage() {
                 onReopen={() =>
                   setStatus.mutate(
                     { id: poll.id, action: 'reopen' },
-                    { onSuccess: () => pushToast(`「${poll.title}」重新开放投票`) },
+                    { onSuccess: () => pushToast(`「${poll.title}」重新开放投票`, undefined, 'success') },
                   )
                 }
                 onArchive={() => setPending({ type: 'archive', poll })}
@@ -128,7 +128,7 @@ export function PollsPage() {
                   const { poll } = pending;
                   const done = () => {
                     setPending(null);
-                    pushToast(pending.type === 'close' ? `「${poll.title}」已结束` : `「${poll.title}」已删除`);
+                    pushToast(pending.type === 'close' ? `「${poll.title}」已结束` : `「${poll.title}」已删除`, undefined, 'success');
                   };
                   if (pending.type === 'close') {
                     setStatus.mutate({ id: poll.id, action: 'close' }, { onSuccess: done });

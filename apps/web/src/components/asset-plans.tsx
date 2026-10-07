@@ -80,7 +80,7 @@ export function AssetPlansPanel({ asset }: { asset: HomeAsset }) {
       {
         onSuccess: () =>
           pushToast(
-            plan.isEnabled ? `「${plan.title}」已停用，待发的提醒一并取消` : `「${plan.title}」已启用`,
+            plan.isEnabled ? `「${plan.title}」已停用，待发的提醒一并取消` : `「${plan.title}」已启用`, undefined, 'success',
           ),
       },
     );
@@ -220,7 +220,7 @@ export function AssetPlansPanel({ asset }: { asset: HomeAsset }) {
                     {
                       onSuccess: () => {
                         setRemoving(null);
-                        pushToast('耗材关联已移除');
+                        pushToast('耗材关联已移除', undefined, 'success');
                       },
                     },
                   )

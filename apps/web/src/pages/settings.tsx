@@ -114,10 +114,10 @@ export function SettingsPage() {
             }
             update.mutate(zone, {
               onSuccess: () => {
-                pushToast('家庭时区已更新');
+                pushToast('家庭时区已更新', undefined, 'success');
                 setPicking(false);
               },
-              onError: (error) => pushToast(error instanceof Error ? error.message : '没改成'),
+              onError: (error) => pushToast(error instanceof Error ? error.message : '没改成', undefined, 'error'),
             });
           }}
         />

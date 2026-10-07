@@ -44,7 +44,7 @@ export function AssetLocation({ asset }: { asset: HomeAsset }) {
             setOpen(false);
             setLocation.mutate(
               { target: 'asset', id: asset.id, locationId: location?.id ?? null },
-              { onSuccess: () => pushToast(location ? `记下了：${location.pathLabel}` : '不记位置了'), onError: (error) => pushToast(error.message) },
+              { onSuccess: () => pushToast(location ? `记下了：${location.pathLabel}` : '不记位置了', undefined, 'success'), onError: (error) => pushToast(error.message, undefined, 'error') },
             );
           }}
         />

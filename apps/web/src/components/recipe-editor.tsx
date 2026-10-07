@@ -79,7 +79,7 @@ export function RecipeEditor({
       setSteps((current) =>
         current.map((step, i) => (i === index ? { ...step, uploading: false } : step)),
       );
-      pushToast('照片没传上去，换一张试试');
+      pushToast('照片没传上去，换一张试试', undefined, 'error');
     }
   }
 
@@ -110,7 +110,7 @@ export function RecipeEditor({
       { dishId, variantId: editing?.id, body },
       {
         onSuccess: () => {
-          pushToast(editing ? '做法已更新' : `「${name.trim()}」已加进${dishName}`);
+          pushToast(editing ? '做法已更新' : `「${name.trim()}」已加进${dishName}`, undefined, 'success');
           onClose();
         },
       },
@@ -335,7 +335,7 @@ export function RecipeEditor({
             onClick={() =>
               archive.mutate(editing.id, {
                 onSuccess: () => {
-                  pushToast('做法已归档');
+                  pushToast('做法已归档', undefined, 'success');
                   onClose();
                 },
               })
