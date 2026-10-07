@@ -85,9 +85,12 @@ export type FinanceCreateSource = {
   /** K1 导入：交易单号（按家庭 + 来源唯一）与交易对方 */
   externalId?: string | null;
   merchant?: string | null;
+  /** K5 改金额 / 账户另记的新笔：记在原来那笔的记账人名下（不是改的人），记录时间沿用原笔（列表里位置不变） */
+  actor?: { memberId: string; name: string };
+  createdAt?: Date;
 };
 
-function amount(value: number | string) {
+export function amount(value: number | string) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_AMOUNT) {
     throw new BadRequestException(`金额必须在 0.01 到 ${MAX_AMOUNT} 之间`);
@@ -104,7 +107,7 @@ function normalized(value?: string | null) {
   return value?.trim() || null;
 }
 
-function assertDate(value: string) {
+export function assertDate(value: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
     throw new BadRequestException('记账日期不是有效的日历日期');
@@ -334,8 +337,8 @@ export class FinanceService {
         note: normalized(dto.note),
         occurredOn: dto.occurredOn,
         categoryId: prepared.category?.id ?? null,
-        actorId: user.memberId,
-        actorName: user.name,
+        actorId: source.actor?.memberId ?? user.memberId,
+        actorName: source.actor?.name ?? user.name,
         sourceType: source.sourceType,
         sourceId: source.sourceId ?? randomUUID(),
         externalId: source.externalId ?? null,
@@ -343,6 +346,7 @@ export class FinanceService {
         idempotencyKey: dto.idempotencyKey,
         requestFingerprint,
         reversalOfId: null,
+        ...(source.createdAt ? { createdAt: source.createdAt } : {}),
       }),
     );
     const postings = manager.getRepository(FinancePosting);
@@ -418,30 +422,12 @@ export class FinanceService {
         }
         return this.findTransaction(duplicate.id, user.householdId, manager);
       }
-      const reversal = await repository.save(repository.create({
-        householdId: user.householdId,
-        type: 'reversal',
-        amount: original.amount,
-        currency: 'CNY',
-        title: `撤销：${original.title}`.slice(0, 120),
-        note: normalized(dto.note),
-        occurredOn: await this.today(user.householdId),
-        categoryId: original.categoryId,
-        actorId: user.memberId,
-        actorName: user.name,
-        sourceType: 'finance_transaction',
-        sourceId: original.id,
+      const reversal = await this.insertReversal(manager, original, user, {
         idempotencyKey: dto.idempotencyKey,
         requestFingerprint,
-        reversalOfId: original.id,
-      }));
-      const postings = manager.getRepository(FinancePosting);
-      await postings.save(original.postings.map((posting) => postings.create({
-        householdId: user.householdId,
-        transactionId: reversal.id,
-        accountId: posting.accountId,
-        delta: (-money(posting.delta)).toFixed(2),
-      })));
+        note: normalized(dto.note),
+        occurredOn: await this.today(user.householdId),
+      });
       await recordActivity(manager, user, {
         module: 'finance',
         action: 'finance_transaction_reversed',
@@ -452,6 +438,44 @@ export class FinanceService {
       });
       return this.findTransaction(reversal.id, user.householdId, manager);
     });
+  }
+
+  /**
+   * 冲销一笔：另记一笔 reversal，分录金额全部取反。调用方负责校验能不能冲销、锁住原笔。
+   * K5 的改金额 / 删除也走这里（冲销笔记在原笔那天，列表里和原笔一起折叠）。
+   */
+  async insertReversal(
+    manager: EntityManager,
+    original: FinanceTransaction,
+    user: JwtUser,
+    options: { idempotencyKey: string; requestFingerprint?: string; note?: string | null; occurredOn: string },
+  ) {
+    const repository = manager.getRepository(FinanceTransaction);
+    const reversal = await repository.save(repository.create({
+      householdId: user.householdId,
+      type: 'reversal',
+      amount: original.amount,
+      currency: 'CNY',
+      title: `撤销：${original.title}`.slice(0, 120),
+      note: options.note ?? null,
+      occurredOn: options.occurredOn,
+      categoryId: original.categoryId,
+      actorId: user.memberId,
+      actorName: user.name,
+      sourceType: 'finance_transaction',
+      sourceId: original.id,
+      idempotencyKey: options.idempotencyKey,
+      requestFingerprint: options.requestFingerprint ?? fingerprint({ reversalOfId: original.id, note: options.note ?? null }),
+      reversalOfId: original.id,
+    }));
+    const postings = manager.getRepository(FinancePosting);
+    await postings.save(original.postings.map((posting) => postings.create({
+      householdId: user.householdId,
+      transactionId: reversal.id,
+      accountId: posting.accountId,
+      delta: (-money(posting.delta)).toFixed(2),
+    })));
+    return reversal;
   }
 
   private async today(householdId: string): Promise<string> {
@@ -476,6 +500,26 @@ export class FinanceService {
       .take(query.limit ?? 100);
     if (query.type) builder.andWhere('transaction.type = :type', { type: query.type });
     if (query.accountId) builder.andWhere('posting.accountId = :accountId', { accountId: query.accountId });
+    // K5：改金额 / 删除时记的冲销笔不进列表（它们是账本内部的一对）；被替代、删除的原笔要「显示已删除」才列
+    builder.andWhere(
+      `NOT (transaction.type = 'reversal' AND EXISTS (
+         SELECT 1 FROM finance_transactions hidden
+          WHERE hidden.id = transaction."reversalOfId"
+            AND (hidden."deletedAt" IS NOT NULL OR hidden."supersededById" IS NOT NULL)))`,
+    );
+    if (query.includeDeleted !== 'true') {
+      builder.andWhere('transaction.deletedAt IS NULL AND transaction.supersededById IS NULL');
+    }
+    const keyword = query.q?.trim();
+    if (keyword) {
+      const pattern = `%${keyword.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+      builder.andWhere(
+        '(transaction.title ILIKE :q OR transaction.merchant ILIKE :q OR transaction.note ILIKE :q)',
+        { q: pattern },
+      );
+    }
+    if (query.categoryId) builder.andWhere('transaction.categoryId = :categoryId', { categoryId: query.categoryId });
+    if (query.memberId) builder.andWhere('transaction.actorId = :memberId', { memberId: query.memberId });
     const rows = await builder.getMany();
     return this.presentTransactions(rows, user.householdId);
   }
@@ -493,6 +537,7 @@ export class FinanceService {
          LEFT JOIN "finance_transactions" r ON r."reversalOfId" = t.id
          WHERE t."householdId" = $1 AND t.type = 'expense'
            AND t."occurredOn" >= $2 AND t."occurredOn" < $3 AND r.id IS NULL
+           AND t."deletedAt" IS NULL AND t."supersededById" IS NULL
          GROUP BY t."categoryId"`,
         [user.householdId, start, end],
       ) as Promise<{ categoryId: string; spent: string }[]>,
@@ -502,6 +547,7 @@ export class FinanceService {
          LEFT JOIN "finance_transactions" r ON r."reversalOfId" = t.id
          WHERE t."householdId" = $1 AND t.type IN ('expense', 'income')
            AND t."occurredOn" >= $2 AND t."occurredOn" < $3 AND r.id IS NULL
+           AND t."deletedAt" IS NULL AND t."supersededById" IS NULL
          GROUP BY t.type`,
         [user.householdId, start, end],
       ) as Promise<{ type: 'expense' | 'income'; amount: string }[]>,
@@ -724,10 +770,19 @@ export class FinanceService {
       select: { id: true, reversalOfId: true },
     });
     const reversed = new Map(reversals.map((row) => [row.reversalOfId, row.id]));
+    const replacedIds = rows.map((row) => row.supersededById).filter((id): id is string => Boolean(id));
+    const replacements = replacedIds.length
+      ? await this.transactions.find({ where: { householdId, id: In(replacedIds) }, select: { id: true, amount: true, type: true } })
+      : [];
+    const replacedBy = new Map(replacements.map((row) => [row.id, { id: row.id, amount: money(row.amount), type: row.type }]));
     return rows.map((row) => ({
       ...row,
       amount: money(row.amount),
-      postings: row.postings.map((posting) => ({ ...posting, delta: money(posting.delta) })),
+      supersededBy: row.supersededById ? replacedBy.get(row.supersededById) ?? null : null,
+      // 分录顺序原来随查询计划变：固定成先写的在前，同一刻写的负数（转出）在前
+      postings: [...row.postings]
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || Number(a.delta) - Number(b.delta))
+        .map((posting) => ({ ...posting, delta: money(posting.delta) })),
       reversed: reversed.has(row.id),
       reversalId: reversed.get(row.id) ?? null,
     }));
@@ -738,7 +793,7 @@ export class FinanceService {
     return this.findTransaction(id, householdId, this.dataSource.manager);
   }
 
-  private async findTransaction(id: string, householdId: string, manager: EntityManager) {
+  async findTransaction(id: string, householdId: string, manager: EntityManager) {
     const row = await manager.getRepository(FinanceTransaction).findOne({
       where: { id, householdId },
       relations: { category: true, actor: true, postings: { account: true } },
@@ -747,7 +802,7 @@ export class FinanceService {
     return (await this.presentTransactions([row], householdId))[0];
   }
 
-  private lockIdempotency(manager: EntityManager, householdId: string, key: string) {
+  lockIdempotency(manager: EntityManager, householdId: string, key: string) {
     return manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
       `${householdId}:finance:${key}`,
     ]);

@@ -148,12 +148,31 @@ export const financeTransactionSchema = z
     externalId: z.string().nullable().optional(),
     attachmentPath: z.string().nullable().optional(),
     reversalOfId: uuid.nullable(),
+    /** K5：改金额 / 账户 / 收支方向后指向替代它的新笔；删除时间。两者都有值的笔默认不在列表里 */
+    supersededById: uuid.nullable(),
+    deletedAt: nullableDateTime,
+    /** 被替代时，新的那笔的金额与类型（「已改为 →」显示用） */
+    supersededBy: z.object({ id: uuid, amount: z.number(), type: financeTransactionType }).nullable(),
     postings: z.array(financePostingSchema),
     reversed: z.boolean(),
     reversalId: uuid.nullable(),
     createdAt: isoDateTime,
   });
 export type FinanceTransaction = z.infer<typeof financeTransactionSchema>;
+
+/** PATCH /finance/transactions/:id 回传：改后的那笔 + 同商户还有几笔分类不一样（改了分类时才有，否则 0） */
+export const updatedFinanceTransactionSchema = financeTransactionSchema.extend({
+  sameMerchantPending: z.number().int(),
+  sameMerchantIds: z.array(uuid),
+});
+export type UpdatedFinanceTransaction = z.infer<typeof updatedFinanceTransactionSchema>;
+
+export const FINANCE_BATCH_ACTIONS = ['category', 'account', 'delete'] as const;
+export const financeBatchResultSchema = z.object({
+  done: z.number().int(),
+  skipped: z.array(z.object({ id: uuid, reason: z.string() })),
+});
+export type FinanceBatchResult = z.infer<typeof financeBatchResultSchema>;
 
 /** 预算实体 + 月度执行情况（summary / GET budgets）。 */
 export const financeBudgetSchema = z
@@ -345,6 +364,11 @@ export const financeTransactionQuery = financeMonthQuery.extend({
   type: financeTransactionType.optional(),
   accountId: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
+  /** K5：名称 / 商户 / 备注里找；分类、谁记的；连已删除 / 已改过的一起看 */
+  q: z.string().trim().min(1).max(80).optional(),
+  categoryId: uuid.optional(),
+  memberId: uuid.optional(),
+  includeDeleted: z.enum(['true', 'false']).optional(),
 });
 export const includeInactiveQuery = z.object({
   includeInactive: z.enum(['true', 'false']).optional(),
@@ -395,6 +419,30 @@ export const createFinanceTransactionBody = z.object({
   idempotencyKey: z.string().min(1).max(180),
 });
 export type CreateFinanceTransactionBody = z.infer<typeof createFinanceTransactionBody>;
+/**
+ * K5 改一笔：名称 / 分类 / 备注 / 日期 / 商户原地改；金额 / 账户 / 转入账户 / 收支方向有变化时冲销原笔、按新值另记一笔。
+ * 没传的字段沿用原值。
+ */
+export const updateFinanceTransactionBody = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  categoryId: uuid.nullish(),
+  note: z.string().max(1000).nullish(),
+  occurredOn: dateOnly.optional(),
+  merchant: z.string().max(120).nullish(),
+  amount: z.number().min(0.01).max(MAX_AMOUNT).optional(),
+  accountId: uuid.optional(),
+  toAccountId: uuid.nullish(),
+  type: z.enum(['expense', 'income', 'transfer']).optional(),
+});
+export type UpdateFinanceTransactionBody = z.infer<typeof updateFinanceTransactionBody>;
+/** K5 批量：一次最多 200 笔；改分类要带 categoryId，改账户要带 accountId */
+export const batchFinanceTransactionsBody = z.object({
+  ids: z.array(uuid).min(1).max(200),
+  action: z.enum(FINANCE_BATCH_ACTIONS),
+  categoryId: uuid.optional(),
+  accountId: uuid.optional(),
+});
+export type BatchFinanceTransactionsBody = z.infer<typeof batchFinanceTransactionsBody>;
 export const reverseFinanceTransactionBody = z.object({
   note: z.string().max(1000).nullish(),
   idempotencyKey: z.string().min(1).max(180),
@@ -507,16 +555,38 @@ export const finance = {
   transactions: defineEndpoint({
     method: 'GET',
     path: '/finance/transactions',
-    summary: '月度流水（含撤销标记）',
+    summary: '月度流水（含撤销标记；可按关键词 / 分类 / 账户 / 成员筛；默认不含已删除、已改过的）',
     query: financeTransactionQuery,
     response: z.array(financeTransactionSchema),
   }),
   createTransaction: defineEndpoint({
     method: 'POST',
     path: '/finance/transactions',
-    summary: '记一笔收入/支出/转账（不可修改，幂等）',
+    summary: '记一笔收入/支出/转账（幂等）',
     body: createFinanceTransactionBody,
     response: financeTransactionSchema,
+  }),
+  updateTransaction: defineEndpoint({
+    method: 'PATCH',
+    path: '/finance/transactions/:id',
+    summary: '改一笔：不动钱的字段原地改；动钱的冲销后另记一笔（成员只能改自己记的）',
+    params: idParams,
+    body: updateFinanceTransactionBody,
+    response: updatedFinanceTransactionSchema,
+  }),
+  deleteTransaction: defineEndpoint({
+    method: 'DELETE',
+    path: '/finance/transactions/:id',
+    summary: '删一笔：冲销并标记删除（成员只能删自己记的）',
+    params: idParams,
+    response: financeTransactionSchema,
+  }),
+  batchTransactions: defineEndpoint({
+    method: 'POST',
+    path: '/finance/transactions/batch',
+    summary: '批量改分类 / 改账户 / 删除（≤ 200 笔，逐条按权限，不够权限的跳过）',
+    body: batchFinanceTransactionsBody,
+    response: financeBatchResultSchema,
   }),
   reverseTransaction: defineEndpoint({
     method: 'POST',

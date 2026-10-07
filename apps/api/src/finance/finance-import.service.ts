@@ -17,8 +17,9 @@ import { recordActivity } from '../activities/activity-log';
 import { assertCapability } from '../auth/capabilities';
 import { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
-import { FinanceAccount, FinanceImport, FinanceMerchantRule } from '../entities';
+import { FinanceAccount, FinanceImport } from '../entities';
 import { buildPreviewRows, previewStats, type StoredPreview, type StoredPreviewRow } from './finance-import.preview';
+import { learnMerchantRule } from './finance-merchant-rules';
 import { FinanceService } from './finance.service';
 import { IMPORT_MAX_BYTES, IMPORT_TOO_LARGE, STATEMENT_FORMATS } from './import/import-formats';
 import {
@@ -207,18 +208,7 @@ export class FinanceImportService {
           learned.push({ pattern, kind: type, categoryId });
         }
       }
-      for (const rule of learned) {
-        await manager
-          .createQueryBuilder()
-          .insert()
-          .into(FinanceMerchantRule)
-          .values({ householdId: user.householdId, pattern: rule.pattern, kind: rule.kind, categoryId: rule.categoryId, hits: 1 })
-          .onConflict(
-            `("householdId", "pattern", "kind") DO UPDATE SET "categoryId" = EXCLUDED."categoryId",
-              "hits" = "finance_merchant_rules"."hits" + 1, "updatedAt" = now()`,
-          )
-          .execute();
-      }
+      for (const rule of learned) await learnMerchantRule(manager, { householdId: user.householdId, ...rule });
       record.status = 'committed';
       record.importedRows = imported;
       record.duplicateRows = duplicates;

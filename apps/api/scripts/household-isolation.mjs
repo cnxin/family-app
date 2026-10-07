@@ -881,6 +881,39 @@ try {
     '账单导入只在本家庭：导不进别人家的账户；别人家的批次看、选列、确认、放弃都是 404；导入记录互相列不出',
   );
 
+  // K5 流水编辑：别人家的流水改不了、删不了，批量里也只会被跳过；按成员筛也筛不出别人家的
+  const editAccount = await request('/finance/accounts', defaultToken, 'POST', {
+    name: `隔离改账账户-${randomUUID().slice(0, 6)}`,
+    type: 'cash',
+  });
+  const ownEntry = await request('/finance/transactions', defaultToken, 'POST', {
+    type: 'expense', amount: 9, accountId: editAccount.body.data.id, categoryId: ownExpense.id,
+    title: '默认家庭的一笔', occurredOn: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()),
+    idempotencyKey: randomUUID(),
+  });
+  const crossEdit = await Promise.all([
+    request(`/finance/transactions/${ownEntry.body.data.id}`, foreignToken, 'PATCH', { title: '隔离家庭改的' }),
+    request(`/finance/transactions/${ownEntry.body.data.id}`, foreignToken, 'DELETE'),
+    request('/finance/transactions/batch', foreignToken, 'POST', { ids: [ownEntry.body.data.id], action: 'delete' }),
+    request('/finance/transactions/batch', foreignToken, 'POST', {
+      ids: [ownEntry.body.data.id], action: 'account', accountId: editAccount.body.data.id,
+    }),
+    request(`/finance/transactions?memberId=${ownEntry.body.data.actorId}`, foreignToken),
+  ]);
+  const stillThere = await request(`/finance/transactions/${ownEntry.body.data.id}`, defaultToken, 'PATCH', { note: '还是我的' });
+  await request(`/finance/transactions/${ownEntry.body.data.id}`, defaultToken, 'DELETE');
+  await request(`/finance/accounts/${editAccount.body.data.id}`, defaultToken, 'PATCH', {
+    isActive: false,
+    expectedVersion: editAccount.body.data.version,
+  });
+  assert(
+    ownEntry.status === 201 && crossEdit[0].status === 404 && crossEdit[1].status === 404 &&
+      crossEdit[2].status === 201 && crossEdit[2].body.data.done === 0 && crossEdit[2].body.data.skipped[0]?.reason === '财务流水不存在' &&
+      crossEdit[3].status === 404 && crossEdit[4].status === 200 && crossEdit[4].body.data.length === 0 &&
+      stillThere.status === 200 && stillThere.body.data.title === '默认家庭的一笔',
+    '流水编辑只在本家庭：别人家的流水改、删 404；批量删只会跳过（「不存在」）；改到别人家的账户 404；按成员筛不出别人家的',
+  );
+
   // J2 助理原话：两边各记一条，互相列不出、删不掉
   const foreignUtterance = await request('/assistant/utterances', foreignToken, 'POST', {
     clientId: randomUUID(), text: '隔离家庭的原话', source: 'command_palette', outcome: 'no_match',
