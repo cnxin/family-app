@@ -1,6 +1,6 @@
 // H3 E3 黑盒：HA → 小管家 webhook。签名 / 时间戳不对 401、重放按事件 id 去重 10 分钟、三条联动各自产生
 // 正确的对象（晾衣服家务 + 通知；扫地打勾；换滤芯家务 + 提醒 + 购物清单）、联动开关、密钥轮换 24 小时宽限、
-// 先发 smart-home 再发联动写到的域。签名算法与设置页生成的 HA 模板一致。
+// 先发 smart-home、结果落库后再发 smart-home + 联动写到的域。签名算法与设置页生成的 HA 模板一致。
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { changedDomains, openEventStream } from './events-client.mjs';
@@ -125,6 +125,17 @@ try {
     smartHomeAt && tasksAt && stream.frames.indexOf(smartHomeAt) < stream.frames.indexOf(tasksAt) &&
       changedDomains(tasksAt).includes('notifications'),
     '/events 先推 smart-home，再推联动写到的 tasks、notifications',
+  );
+  // 第一次推送时结果还没落库：落库后必须再推一次 smart-home，ping 这种不写别的域的也一样，否则页面停在「—」
+  const sincePing = stream.frames.length;
+  const pinged = await send(householdId, secret, event('ping'));
+  const smartHomeFrames = () => stream.frames.slice(sincePing).filter((frame) => changedDomains(frame).includes('smart-home'));
+  const settled = await stream.waitFor((frame) => frame === smartHomeFrames()[1], 1_500, sincePing);
+  const [latest] = (await request('/smart-home/webhook-settings/events', owner)).body.data;
+  assert(
+    pinged.status === 200 && settled && changedDomains(tasksAt).includes('smart-home') &&
+      latest.event === 'ping' && latest.result === '连通了',
+    '结果落库后再推一次 smart-home（连同联动写到的域）：ping 也推两次，第二次时事件流水里已经是「连通了」',
   );
   const replay = await send(householdId, secret, laundry);
   const replayNotices = await db.query(
