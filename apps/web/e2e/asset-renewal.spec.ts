@@ -63,3 +63,45 @@ test('订阅资产：列表显示下次续费，详情里标记已续费后顺�
     await api.patch(`/assets/${asset.id}`, { status: 'retired' });
   }
 });
+
+test('订阅资产：填「每次续费金额」后，财务概览的固定支出按它折算', async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chrome', '桌面验一次');
+  const api = apiClient(request);
+  const name = stamp('季付会员');
+  const asset = await api.post<{ id: string }>('/assets', {
+    name,
+    category: 'subscription',
+    purchaseDate: householdToday('Asia/Shanghai'),
+    purchasePrice: 90,
+    renewsOn: addDays(householdToday('Asia/Shanghai'), 30),
+    renewalIntervalMonths: 3,
+  });
+  const assetsMonthly = async () =>
+    (await api.get<{ fixedCosts: { assets: number } }>('/finance/summary')).fixedCosts.assets;
+  const yuan = (value: number) => `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  try {
+    const byPurchase = await assetsMonthly();
+    await page.goto(`/house/assets/${asset.id}`);
+    await page.getByRole('button', { name: '编辑' }).click();
+    const form = page.getByRole('dialog', { name: `编辑「${name}」` });
+    await expect(form.getByLabel('每次续费金额')).toHaveAttribute('placeholder', '不填就按购买价 90');
+    await form.getByLabel('每次续费金额').fill('120');
+    const saved = page.waitForResponse(
+      (response) => response.request().method() === 'PATCH' && new URL(response.url()).pathname.endsWith(`/assets/${asset.id}`),
+    );
+    await form.getByRole('button', { name: '保存资产' }).click();
+    expect((await saved).status(), await (await saved).text()).toBe(200);
+    await expect(form).toBeHidden();
+    await expect(page.getByText('每次续费')).toBeVisible();
+    await expect(page.getByText('¥120')).toBeVisible();
+
+    // 季付 120 折每月 40，比按购买价 90（每月 30）多 10
+    const expected = Math.round((byPurchase + 10) * 100) / 100;
+    expect(await assetsMonthly()).toBe(expected);
+    await page.goto('/house/finance');
+    await expect(page.getByText(`资产续费 ${yuan(expected)}`)).toBeVisible();
+  } finally {
+    await api.patch(`/assets/${asset.id}`, { status: 'retired' });
+  }
+});

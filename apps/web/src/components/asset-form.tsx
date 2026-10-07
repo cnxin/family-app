@@ -79,10 +79,14 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
   const [renewInterval, setRenewInterval] = useState<AssetRenewalIntervalMonths>(
     editing?.renewalIntervalMonths ?? 1,
   );
+  const [renewalPrice, setRenewalPrice] = useState(
+    editing?.renewalPrice ? String(Number(editing.renewalPrice)) : '',
+  );
   const [note, setNote] = useState(editing?.note ?? '');
   const [message, setMessage] = useState<string | null>(null);
 
   const price = purchasePrice.trim() ? Number(purchasePrice) : null;
+  const renewal = renewalPrice.trim() ? Number(renewalPrice) : null;
   const isSubscription = category === 'subscription';
   const hasWarranty = WARRANTY_CATEGORIES.includes(category);
 
@@ -90,6 +94,9 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
     if (!name.trim()) return setMessage('先给这件东西起个名字');
     if (price !== null && (!Number.isFinite(price) || price < 0)) {
       return setMessage('购买价格填个数字');
+    }
+    if (renewal !== null && (!Number.isFinite(renewal) || renewal < 0)) {
+      return setMessage('每次续费金额填个数字');
     }
     setMessage(null);
     // 每次都发全字段：把分类改成家电时，原来的续费信息要被显式清成 null，
@@ -109,6 +116,7 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
           warrantyExpiresOn: hasWarranty && warrantyOn ? warrantyExpiresOn : null,
           renewsOn: isSubscription && renewalOn ? renewsOn : null,
           renewalIntervalMonths: isSubscription && renewalOn ? renewInterval : null,
+          renewalPrice: isSubscription && renewalOn ? renewal : null,
           note: note.trim() || null,
         },
       },
@@ -247,6 +255,17 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
                     </button>
                   ))}
                 </div>
+                <label className="mt-2 block">
+                  <span className={label}>每次续费金额（选填）</span>
+                  <Input
+                    inputMode="decimal"
+                    value={renewalPrice}
+                    aria-label="每次续费金额"
+                    placeholder={price !== null && purchaseOn ? `不填就按购买价 ${price}` : '比如 25'}
+                    onChange={(event) => setRenewalPrice(event.target.value)}
+                  />
+                  <span className="mt-1 block text-[12px] text-ink-soft">财务里「固定支出」按它折成每月多少钱。</span>
+                </label>
               </div>
             ) : null}
           </div>

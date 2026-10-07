@@ -170,6 +170,13 @@ class CreateAssetDto {
   @IsIn(RENEWAL_INTERVALS)
   renewalIntervalMonths?: AssetRenewalIntervalMonths | null;
 
+  /** 只对 subscription 生效；空时按购买价格算续费月均 */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(9_999_999_999.99)
+  renewalPrice?: number | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(1000)
@@ -235,6 +242,13 @@ class UpdateAssetDto {
   @IsOptional()
   @IsIn(RENEWAL_INTERVALS)
   renewalIntervalMonths?: AssetRenewalIntervalMonths | null;
+
+  /** 只对 subscription 生效；空时按购买价格算续费月均 */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(9_999_999_999.99)
+  renewalPrice?: number | null;
 
   @IsOptional()
   @IsIn(['active', 'retired'])
@@ -562,6 +576,10 @@ export class AssetsService {
       dto.category === 'subscription'
         ? (dto.renewalIntervalMonths ?? null)
         : null;
+    const renewalPrice =
+      dto.category === 'subscription' && dto.renewalPrice != null
+        ? String(dto.renewalPrice)
+        : null;
     this.assertWarrantyDates(purchaseDate, warrantyExpiresOn);
     const assetId = await this.dataSource.transaction(async (manager) => {
       const assets = manager.getRepository(HomeAsset);
@@ -580,6 +598,7 @@ export class AssetsService {
           warrantyExpiresOn,
           renewsOn,
           renewalIntervalMonths,
+          renewalPrice,
           status: 'active',
           note: nullableText(dto.note),
           createdById: user.memberId,
@@ -692,6 +711,11 @@ export class AssetsService {
         nextCategory !== 'subscription'
       ) {
         asset.renewalIntervalMonths = effectiveRenewalInterval;
+      }
+      if (nextCategory !== 'subscription') {
+        asset.renewalPrice = null;
+      } else if (Object.prototype.hasOwnProperty.call(dto, 'renewalPrice')) {
+        asset.renewalPrice = dto.renewalPrice == null ? null : String(dto.renewalPrice);
       }
       if (Object.prototype.hasOwnProperty.call(dto, 'note')) {
         asset.note = nullableText(dto.note);

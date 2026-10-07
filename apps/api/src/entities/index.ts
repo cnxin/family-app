@@ -3578,6 +3578,7 @@ export class ReminderRecipient {
   'CHK_home_assets_renewal_interval',
   `"renewalIntervalMonths" IS NULL OR "renewalIntervalMonths" IN (1, 3, 6, 12)`,
 )
+@Check('CHK_home_assets_renewal_price', `"renewalPrice" IS NULL OR "renewalPrice" >= 0`)
 @Index('IDX_home_assets_household_status', ['householdId', 'status'])
 @Index('IDX_home_assets_household_category', ['householdId', 'category'])
 @Index('IDX_home_assets_location', ['locationId'])
@@ -3635,6 +3636,10 @@ export class HomeAsset {
 
   @Column({ type: 'smallint', nullable: true })
   renewalIntervalMonths: AssetRenewalIntervalMonths | null;
+
+  /** K 收尾：订阅每次续费多少钱；空时按购买价格算（财务「固定支出」里的资产续费月均） */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  renewalPrice: string | null;
 
   @Column({ type: 'varchar', length: 16, default: 'active' })
   status: AssetStatus;

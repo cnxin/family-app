@@ -85,6 +85,7 @@ export interface AssetBody {
   serialNumber?: string | null;
   purchaseDate?: string | null;
   purchasePrice?: number | null;
+  renewalPrice?: number | null;
   warrantyExpiresOn?: string | null;
   renewsOn?: string | null;
   renewalIntervalMonths?: AssetRenewalIntervalMonths | null;
