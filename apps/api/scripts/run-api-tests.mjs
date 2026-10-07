@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,11 +9,14 @@ import { join } from 'node:path';
 const API_PORT = Number(process.env.TEST_API_PORT || 3199);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const TEST_DATABASE = `family_app_test_${randomUUID().replaceAll('-', '')}`;
+// API 的标准输出同时写一份到这个文件，脚本可以数日志（比如「落失败只记一次」）
+const API_LOG_FILE = join(tmpdir(), `family-app-api-log-${randomUUID()}.log`);
 const TEST_UPLOAD_DIR = join(
   tmpdir(),
   `family-app-api-test-${randomUUID().replaceAll('-', '')}`,
 );
 const testEnvironment = {
+  API_LOG_FILE,
   ...process.env,
   API_URL,
   BOOTSTRAP_SECRET: 'family-app-api-test-bootstrap-secret',
@@ -219,6 +223,7 @@ const fullRun = !cliOptions.only;
 
 function startApi() {
   activeApiOutput = '';
+  writeFileSync(API_LOG_FILE, '');
   const child = spawn(process.execPath, ['-r', 'ts-node/register', 'src/main.ts'], {
     env: testEnvironment,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -227,10 +232,12 @@ function startApi() {
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', (chunk) => {
     activeApiOutput += chunk;
+    appendFileSync(API_LOG_FILE, chunk);
     process.stdout.write(chunk);
   });
   child.stderr.on('data', (chunk) => {
     activeApiOutput += chunk;
+    appendFileSync(API_LOG_FILE, chunk);
     process.stderr.write(chunk);
   });
   return child;
@@ -440,4 +447,5 @@ try {
   }
   await admin.end();
   await rm(TEST_UPLOAD_DIR, { recursive: true, force: true });
+  await rm(API_LOG_FILE, { force: true });
 }

@@ -3,6 +3,7 @@ import {
   FinanceBudgetAttentionRule,
   FinanceCreditDueProvider,
   FinanceRecurringDueProvider,
+  FinanceRecurringFailedProvider,
 } from './finance-attention';
 import { TodayModule } from '../today/today.module';
 import {
@@ -67,7 +68,8 @@ import { FinanceEditController, FinanceEditService } from './finance-edit.servic
 import { FinanceImportController } from './finance-import.controller';
 import { FinanceImportService } from './finance-import.service';
 import { FinanceRecurringScheduler } from './finance-recurring.scheduler';
-import { FinanceRecurringController, FinanceRecurringService } from './finance-recurring.service';
+import { FinanceRecurringController } from './finance-recurring.controller';
+import { FinanceRecurringService } from './finance-recurring.service';
 
 export { FinanceService } from './finance.service';
 
@@ -434,6 +436,7 @@ export class FinanceController {
     FinanceBudgetAttentionRule,
     FinanceRecurringDueProvider,
     FinanceCreditDueProvider,
+    FinanceRecurringFailedProvider,
     FinanceAttention,
   ],
   exports: [FinanceService],

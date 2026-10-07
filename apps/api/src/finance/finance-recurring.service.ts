@@ -1,32 +1,16 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Controller,
-  Delete,
-  Get,
-  Injectable,
-  NotFoundException,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  createFinanceRecurringBody,
-  deleteFinanceRecurringQuery,
-  payFinanceRecurringBody,
-  updateFinanceRecurringBody,
-  uuid,
-  type CreateFinanceRecurringBody,
-  type PayFinanceRecurringBody,
-  type UpdateFinanceRecurringBody,
+import type {
+  CreateFinanceRecurringBody,
+  PayFinanceRecurringBody,
+  UpdateFinanceRecurringBody,
 } from '@family/contracts';
 import { addDays, householdToday } from '@family/shared';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
-import { RequireCapabilities } from '../auth/capabilities';
-import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { assertCapability } from '../auth/capabilities';
+import { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
-import { ZodBody, ZodParam, ZodQuery } from '../common/zod';
 import {
   FinanceAccount,
   FinanceCategory,
@@ -40,6 +24,7 @@ import {
   firstOccurrenceOnOrAfter,
   monthlyAverage,
   nextOccurrenceAfter,
+  postingCutoff,
   RECURRING_NOTICE_DAYS,
   recurringIdempotencyKey,
 } from './finance-recurring.schedule';
@@ -144,6 +129,9 @@ export class FinanceRecurringService {
         const from = rule.lastPostedOn && addDays(rule.lastPostedOn, 1) > today ? addDays(rule.lastPostedOn, 1) : today;
         rule.nextDueOn = firstOccurrenceOnOrAfter(rule.anchorOn, rule.cadence, from);
       }
+      // 管理员改过这条（换账户、停用……）就算处理过自动记账失败了：清掉原因，调度下一轮再试
+      rule.lastError = null;
+      rule.lastErrorAt = null;
       rule.updatedById = user.memberId;
       rule.version += 1;
       // 关系对象是 lock() 不带的，save 只写列
@@ -316,6 +304,39 @@ export class FinanceRecurringService {
     return this.present(row, today);
   }
 
+  /**
+   * 自动记账落失败：记下给人看的原因（账户 / 分类停用说清楚，别的取错误消息），调度不再重试这条，进管理员的留意。
+   */
+  async recordFailure(id: string, error: unknown) {
+    const rule = await this.rules.findOne({ where: { id }, relations: { account: true, category: true } });
+    if (!rule) return null;
+    const reason = !rule.account.isActive
+      ? '账户已停用'
+      : !rule.category.isActive
+        ? '分类已停用'
+        : (error instanceof Error ? error.message : String(error)) || '记账出错了';
+    await this.rules.update({ id }, { lastError: reason.slice(0, 200), lastErrorAt: this.clock.now() });
+    return reason;
+  }
+
+  /** 管理员「重试」：清掉失败原因，按调度同样的口径把到期的期落下来；还失败就记下新原因并 409。 */
+  async retry(id: string, user: JwtUser) {
+    assertCapability(user, 'manage_finance');
+    const rule = await this.rules.findOneBy({ id, householdId: user.householdId });
+    if (!rule) throw new NotFoundException('周期账单不存在');
+    if (!rule.isActive || !rule.autoPost) throw new ConflictException('这条不是在用的自动记账，不用重试');
+    await this.rules.update({ id }, { lastError: null, lastErrorAt: null });
+    const household = await this.dataSource.getRepository(Household).findOneByOrFail({ id: user.householdId });
+    let posted: number;
+    try {
+      posted = await this.postDue(id, postingCutoff(household.timezone || 'Asia/Shanghai', this.clock.now()));
+    } catch (error) {
+      const reason = await this.recordFailure(id, error);
+      throw new ConflictException(`还是没记上：${reason}`);
+    }
+    return { recurring: await this.findOne(id, user.householdId, await this.today(user.householdId)), posted };
+  }
+
   async today(householdId: string) {
     const household = await this.dataSource.getRepository(Household).findOneByOrFail({ id: householdId });
     return householdToday(household.timezone, this.clock.now());
@@ -339,6 +360,8 @@ export class FinanceRecurringService {
       nextDueOn: row.nextDueOn,
       autoPost: row.autoPost,
       lastPostedOn: row.lastPostedOn,
+      lastError: row.lastError,
+      lastErrorAt: row.lastErrorAt,
       isActive: row.isActive,
       payable: row.isActive && !row.autoPost && row.nextDueOn <= addDays(today, RECURRING_NOTICE_DAYS),
       version: row.version,
@@ -347,52 +370,5 @@ export class FinanceRecurringService {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
-  }
-}
-
-@Controller('finance/recurring')
-@RequireCapabilities('view_finance')
-export class FinanceRecurringController {
-  constructor(private readonly service: FinanceRecurringService) {}
-
-  @Get()
-  list(@CurrentUser() user: JwtUser) {
-    return this.service.list(user);
-  }
-
-  @Post()
-  @RequireCapabilities('manage_finance')
-  create(@ZodBody(createFinanceRecurringBody) body: CreateFinanceRecurringBody, @CurrentUser() user: JwtUser) {
-    return this.service.create(body, user);
-  }
-
-  @Patch(':id')
-  @RequireCapabilities('manage_finance')
-  update(
-    @ZodParam('id', uuid) id: string,
-    @ZodBody(updateFinanceRecurringBody) body: UpdateFinanceRecurringBody,
-    @CurrentUser() user: JwtUser,
-  ) {
-    return this.service.update(id, body, user);
-  }
-
-  @Delete(':id')
-  @RequireCapabilities('manage_finance')
-  remove(
-    @ZodParam('id', uuid) id: string,
-    @ZodQuery(deleteFinanceRecurringQuery) query: { expectedVersion: number },
-    @CurrentUser() user: JwtUser,
-  ) {
-    return this.service.remove(id, query.expectedVersion, user);
-  }
-
-  @Post(':id/pay')
-  @RequireCapabilities('record_finance')
-  pay(
-    @ZodParam('id', uuid) id: string,
-    @ZodBody(payFinanceRecurringBody) body: PayFinanceRecurringBody,
-    @CurrentUser() user: JwtUser,
-  ) {
-    return this.service.pay(id, body, user);
   }
 }

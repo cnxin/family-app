@@ -803,6 +803,7 @@ try {
     request(`/finance/recurring/${foreignFinance.recurring}?expectedVersion=1`, defaultToken, 'DELETE'),
     request(`/finance/recurring/${foreignFinance.recurring}/pay`, defaultToken, 'POST', { dueOn: TEST_DATE }),
     request(`/finance/recurring/${ownRecurring.body.data.id}/pay`, foreignToken, 'POST', { dueOn: TEST_DATE }),
+    request(`/finance/recurring/${foreignFinance.recurring}/retry`, defaultToken, 'POST'),
     request('/finance/recurring', defaultToken, 'POST', {
       title: '挂到别人家账户', type: 'expense', amount: 1, accountId: foreignFinance.account,
       categoryId: ownExpense.id, cadence: 'monthly', anchorOn: TEST_DATE,
@@ -819,7 +820,7 @@ try {
       !foreignRecurringList.body.data.some((one) => one.id === ownRecurring.body.data.id) &&
       foreignRecurringList.body.data.some((one) => one.id === foreignFinance.recurring) &&
       crossRecurring.every((response) => response.status === 404),
-    '周期账单只在本家庭：互相列不出；改、删、「已付」别人家的都是 404，也不能挂到别人家的账户上',
+    '周期账单只在本家庭：互相列不出；改、删、「已付」、重试别人家的都是 404，也不能挂到别人家的账户上',
   );
   // K4 信用卡：别人家今天到还款日、欠着钱的卡，不出现在本家庭的账户和留意里
   const foreignCard = randomUUID();

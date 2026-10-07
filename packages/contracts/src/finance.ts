@@ -221,6 +221,9 @@ export const financeRecurringSchema = z.object({
   nextDueOn: dateOnly,
   autoPost: z.boolean(),
   lastPostedOn: dateOnly.nullable(),
+  /** K 收尾：自动记账落失败的原因与时间；有值时不再自动重试，等管理员「重试」或改这条规则 */
+  lastError: z.string().nullable(),
+  lastErrorAt: nullableDateTime,
   isActive: z.boolean(),
   /** 现在能不能点「已付」：在用、不是自动记账、下一期在 3 天内到期或已经过了 */
   payable: z.boolean(),
@@ -704,5 +707,12 @@ export const finance = {
     params: idParams,
     body: payFinanceRecurringBody,
     response: z.object({ recurring: financeRecurringSchema, transaction: financeTransactionSchema }),
+  }),
+  retryRecurring: defineEndpoint({
+    method: 'POST',
+    path: '/finance/recurring/:id/retry',
+    summary: '自动记账失败后重试：清掉失败原因、把到期的期落下来；还失败就记下新原因并 409（管理员）',
+    params: idParams,
+    response: z.object({ recurring: financeRecurringSchema, posted: z.number().int() }),
   }),
 };

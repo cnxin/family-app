@@ -5150,6 +5150,13 @@ export class FinanceRecurring {
   @Column({ type: 'date', nullable: true })
   lastPostedOn: string | null;
 
+  /** K 收尾：自动记账落失败的原因（给人看的一句话）与时间；有值时调度不再重试，管理员重试或改规则后清空 */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  lastError: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastErrorAt: Date | null;
+
   @Column({ default: true })
   isActive: boolean;
 
