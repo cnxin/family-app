@@ -1,5 +1,6 @@
 // K3 周期账单黑盒（docs/finance-plan.md §2.4、§3-K3、§5-K3）：增删改与权限、「已付」幂等、下一期推算。
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import pg from 'pg';
 
 const { Client } = pg;
@@ -389,6 +390,59 @@ try {
     '订阅填了每次续费 150（季付）后资产续费月均 +20、合计跟着变；清空后回到按购买价算',
   );
   await request(`/assets/${subscription.data.id}`, owner.accessToken, 'PATCH', { status: 'retired' });
+
+  console.log('7. 自动记账落失败：记下原因、只记一次日志、进管理员留意；重试成功后流水落下、留意消失；停用也算处理');
+  const failRow = async (id) =>
+    (await db.query('SELECT "lastError", "lastErrorAt" FROM finance_recurring WHERE id = $1', [id])).rows[0];
+  const failedCards = async (token) =>
+    (await request('/today/attention', token)).data.items.filter((one) => one.domain === 'finance' && one.kinds.includes('recurring-failed'));
+  const failLogLines = (id) =>
+    process.env.API_LOG_FILE
+      ? readFileSync(process.env.API_LOG_FILE, 'utf8').split('\n').filter((line) => line.includes(`finance_recurring_post_failed recurring=${id}`)).length
+      : 1;
+  const doomed = (await request('/finance/accounts', owner.accessToken, 'POST', {
+    name: `会停用的卡-${suffix}`, type: 'bank', openingBalance: 1000,
+  })).data;
+  const failing = await create({ title: `停卡房租-${suffix}`, amount: 800, anchorOn: yesterday, autoPost: true, accountId: doomed.id });
+  const stopped = (await request(`/finance/accounts/${doomed.id}`, owner.accessToken, 'PATCH', { isActive: false, expectedVersion: doomed.version })).data;
+  await db.query('UPDATE finance_recurring SET "nextDueOn" = "anchorOn" WHERE id = $1', [failing.id]);
+  const firstFailure = await waitFor(async () => ((await failRow(failing.id)).lastError ? failRow(failing.id) : null));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const laterFailure = await failRow(failing.id);
+  const ownerCards = await failedCards(owner.accessToken);
+  const memberCards = await failedCards(member.accessToken);
+  const listedRule = (await request('/finance/recurring', owner.accessToken)).data.find((one) => one.id === failing.id);
+  assert(
+    firstFailure?.lastError === '账户已停用' && laterFailure.lastErrorAt.getTime() === firstFailure.lastErrorAt.getTime() &&
+      failLogLines(failing.id) === 1 && (await postedFor(failing.id)).length === 0 &&
+      ownerCards.length === 1 && (ownerCards[0].count > 1 || ownerCards[0].entity?.name === `「停卡房租-${suffix}」自动记账失败：账户已停用`) &&
+      memberCards.length === 0 && listedRule.lastError === '账户已停用' && listedRule.lastErrorAt,
+    '账户停用后到期：记下「账户已停用」、之后的几轮不再重试（日志只一条）、没落流水；管理员留意里出现「「…」自动记账失败：账户已停用」，成员看不到',
+  );
+  const stillStopped = await request(`/finance/recurring/${failing.id}/retry`, owner.accessToken, 'POST');
+  const memberRetry = await request(`/finance/recurring/${failing.id}/retry`, member.accessToken, 'POST');
+  await request(`/finance/accounts/${doomed.id}`, owner.accessToken, 'PATCH', { isActive: true, expectedVersion: stopped.version });
+  const retried = await request(`/finance/recurring/${failing.id}/retry`, owner.accessToken, 'POST');
+  assert(
+    stillStopped.status === 409 && stillStopped.error.message === '还是没记上：账户已停用' && memberRetry.status === 403 &&
+      retried.status === 201 && retried.data.posted === 1 && retried.data.recurring.lastError === null &&
+      (await postedFor(failing.id)).length === 1 && (await failRow(failing.id)).lastError === null &&
+      (await failedCards(owner.accessToken)).length === 0,
+    '账户没启用时重试 409 说明原因；成员不能重试；账户重新启用后重试：落下这一期、原因清空、留意消失',
+  );
+  const doomed2 = (await request('/finance/accounts', owner.accessToken, 'POST', {
+    name: `又停用的卡-${suffix}`, type: 'bank', openingBalance: 0,
+  })).data;
+  const failing2 = await create({ title: `停卡物业-${suffix}`, amount: 99, anchorOn: yesterday, autoPost: true, accountId: doomed2.id });
+  await request(`/finance/accounts/${doomed2.id}`, owner.accessToken, 'PATCH', { isActive: false, expectedVersion: doomed2.version });
+  await db.query('UPDATE finance_recurring SET "nextDueOn" = "anchorOn" WHERE id = $1', [failing2.id]);
+  await waitFor(async () => ((await failRow(failing2.id)).lastError ? true : null));
+  const failingRule = (await request('/finance/recurring', owner.accessToken)).data.find((one) => one.id === failing2.id);
+  const pausedFailing = await request(`/finance/recurring/${failing2.id}`, owner.accessToken, 'PATCH', { isActive: false, expectedVersion: failingRule.version });
+  assert(
+    pausedFailing.status === 200 && pausedFailing.data.lastError === null && (await failedCards(owner.accessToken)).length === 0,
+    '管理员把失败的那条停用：原因清空、留意消失',
+  );
 
   // 收尾：停掉本脚本建的，免得后面的调度把自动记账的那几条落下来
   for (const row of (await request('/finance/recurring', owner.accessToken)).data.filter((one) => one.title.endsWith(suffix))) {

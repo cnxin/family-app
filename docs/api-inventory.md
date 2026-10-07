@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 335 个端点（POST 131 / GET 110 / PATCH 50 / DELETE 33 / PUT 11），公开端点 28 个，已定义契约 335 个。
+共 336 个端点（POST 132 / GET 110 / PATCH 50 / DELETE 33 / PUT 11），公开端点 28 个，已定义契约 336 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -16,7 +16,7 @@
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
 | events | 1 | 1 |
-| finance | 27 | 27 |
+| finance | 28 | 28 |
 | guests | 21 | 21 |
 | households | 1 | 1 |
 | inventory | 14 | 14 |
@@ -168,7 +168,7 @@
 | --- | --- | --- | --- | :-: | --- |
 | GET | `/events` | `EventsController.stream` | 登录 | ✓ | `apps/api/src/events/events.controller.ts` |
 
-## finance（27）
+## finance（28）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -187,11 +187,12 @@
 | DELETE | `/finance/imports/:id` | `FinanceImportController.discard` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
 | POST | `/finance/imports/:id/commit` | `FinanceImportController.commit` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
 | POST | `/finance/imports/:id/mapping` | `FinanceImportController.map` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
-| GET | `/finance/recurring` | `FinanceRecurringController.list` | `view_finance` | ✓ | `apps/api/src/finance/finance-recurring.service.ts` |
-| POST | `/finance/recurring` | `FinanceRecurringController.create` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.service.ts` |
-| PATCH | `/finance/recurring/:id` | `FinanceRecurringController.update` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.service.ts` |
-| DELETE | `/finance/recurring/:id` | `FinanceRecurringController.remove` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.service.ts` |
-| POST | `/finance/recurring/:id/pay` | `FinanceRecurringController.pay` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-recurring.service.ts` |
+| GET | `/finance/recurring` | `FinanceRecurringController.list` | `view_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
+| POST | `/finance/recurring` | `FinanceRecurringController.create` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
+| PATCH | `/finance/recurring/:id` | `FinanceRecurringController.update` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
+| DELETE | `/finance/recurring/:id` | `FinanceRecurringController.remove` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
+| POST | `/finance/recurring/:id/pay` | `FinanceRecurringController.pay` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
+| POST | `/finance/recurring/:id/retry` | `FinanceRecurringController.retry` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
 | GET | `/finance/summary` | `FinanceController.summary` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
 | GET | `/finance/transactions` | `FinanceController.transactions` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
 | POST | `/finance/transactions` | `FinanceController.createTransaction` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |

@@ -304,6 +304,13 @@ export function useRemoveFinanceRecurring() {
   );
 }
 
+/** 自动记账失败后「重试」（管理员）：落下到期的期；还失败会 409，消息里带原因。 */
+export function useRetryFinanceRecurring() {
+  return useFinanceMutation<string, { recurring: FinanceRecurring; posted: number }>((id) =>
+    api<{ recurring: FinanceRecurring; posted: number }>(`/finance/recurring/${id}/retry`, { method: 'POST' }),
+  );
+}
+
 /** 「已付」带上看到的那一期：重复点同一期后端返回同一笔，不会记成两笔。 */
 export function usePayFinanceRecurring() {
   return useFinanceMutation<

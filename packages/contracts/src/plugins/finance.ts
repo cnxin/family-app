@@ -58,6 +58,16 @@ export const financeManifest = {
         title: '{name} {soon}到还款日',
         mergedTitle: '{n} 张信用卡该还款了',
       },
+      {
+        // K 收尾：自动记账落失败（账户 / 分类停用等），不再自动重试，等管理员在固定支出里重试或停用；名字里带原因
+        kind: 'recurring-failed',
+        server: 'finance.recurring-failed',
+        actionLabel: '去处理',
+        path: '/house/finance?view=recurring',
+        capability: 'manage_finance',
+        title: '{name}',
+        mergedTitle: '{n} 笔自动记账失败了',
+      },
     ],
   },
   actions: [

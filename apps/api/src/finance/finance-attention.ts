@@ -78,6 +78,33 @@ export class FinanceRecurringDueProvider implements AttentionSource {
 }
 
 /**
+ * K 收尾：自动记账落失败的周期账单（原因记在 lastError），管理员看得到（能力门槛在 manifest）；
+ * 名字里带原因：「「房租」自动记账失败：账户已停用」。管理员重试或改规则后消失。
+ */
+@Injectable()
+export class FinanceRecurringFailedProvider implements AttentionSource {
+  readonly domain = 'finance' as const;
+  readonly kinds = ['recurring-failed'] as const;
+
+  constructor(private readonly db: DataSource) {}
+
+  run({ householdId }: AttentionRuleContext) {
+    return this.db.query<AttentionCandidate[]>(
+      `SELECT 'finance' AS domain, 'recurring-failed' AS kind,
+              r.id, '「' || r.title || '」自动记账失败：' || r."lastError" AS name,
+              NULL::text AS "dueOn", false AS overdue
+         FROM finance_recurring r
+        WHERE r."householdId" = $1
+          AND r."isActive"
+          AND r."autoPost"
+          AND r."lastError" IS NOT NULL
+        ORDER BY r."lastErrorAt", r.id`,
+      [householdId],
+    );
+  }
+}
+
+/**
  * K4：信用卡还款日（每月几号，短月按月末）前 3 天到当天，而且还欠着钱（余额为负）。名字里带上欠多少，
  * 标题模板是「{name} {soon}到还款日」。还款就是转账，成员也能记，不设能力门槛；过了还款日就看下个月的，不标逾期。
  */
@@ -123,11 +150,13 @@ export class FinanceAttention implements OnModuleInit {
     private readonly financeBudget: FinanceBudgetAttentionRule,
     private readonly financeRecurring: FinanceRecurringDueProvider,
     private readonly financeCredit: FinanceCreditDueProvider,
+    private readonly financeRecurringFailed: FinanceRecurringFailedProvider,
   ) {}
 
   onModuleInit() {
     this.registry.register(this.financeBudget);
     this.registry.register(this.financeRecurring);
     this.registry.register(this.financeCredit);
+    this.registry.register(this.financeRecurringFailed);
   }
 }

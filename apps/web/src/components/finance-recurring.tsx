@@ -6,6 +6,7 @@ import {
   recurringDueText,
   usePayFinanceRecurring,
   useRemoveFinanceRecurring,
+  useRetryFinanceRecurring,
   useSaveFinanceRecurring,
   yuan,
 } from '../lib/queries';
@@ -33,8 +34,18 @@ function RecurringRow({
   const today = useHouseholdToday();
   const pay = usePayFinanceRecurring();
   const save = useSaveFinanceRecurring();
+  const retry = useRetryFinanceRecurring();
   const due = recurringDueText(row.nextDueOn, today);
-  const busy = pay.isPending || save.isPending;
+  const busy = pay.isPending || save.isPending || retry.isPending;
+
+  function retryPosting() {
+    navigator.vibrate?.(10);
+    retry.mutate(row.id, {
+      onSuccess: (result) =>
+        pushToast(result.posted ? `「${row.title}」补记上了 ${result.posted} 期` : `「${row.title}」恢复自动记账了，下一期到期再记`),
+      onError: (error) => pushToast(errorText(error, '还是没记上')),
+    });
+  }
 
   function markPaid() {
     navigator.vibrate?.(10);
@@ -85,11 +96,22 @@ function RecurringRow({
             {row.autoPost ? ' · 到期自动记' : ''}
           </p>
         ) : null}
+        {row.isActive && row.lastError ? (
+          <p className="mt-0.5 text-[12px] text-danger">
+            自动记账失败：{row.lastError}
+            {canManage ? '。改好后点「重试」，或者先停用' : '，等管理员处理'}
+          </p>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center justify-end gap-1">
         {row.payable ? (
           <Button className="h-8 px-3 text-[13px]" aria-label={`已付${row.title}`} disabled={busy} onClick={markPaid}>
             {pay.isPending ? '记录中…' : '已付'}
+          </Button>
+        ) : null}
+        {canManage && row.isActive && row.lastError ? (
+          <Button className="h-8 px-3 text-[13px]" aria-label={`重试${row.title}`} disabled={busy} onClick={retryPosting}>
+            {retry.isPending ? '重试中…' : '重试'}
           </Button>
         ) : null}
         {canManage ? (

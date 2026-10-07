@@ -10,13 +10,15 @@ import { FinanceRecurringService } from './finance-recurring.service';
  * 每天自动记账（docs/finance-plan.md §3-K3）：和助理例行任务一样用进程内定时轮询（默认每分钟，测试 100～200ms），
  * 家庭当地 06:00 起落当天到期的那一期；NAS 关机漏跑的几天，下一轮逐期补上，每期一条，靠幂等键不重复。
  * 非自动记账的不在这里落，到期前 3 天进留意，有人点「已付」才落。
+ * 落失败（账户 / 分类停用等）记到规则的 lastError 上，之后不再重试这条（日志只记一次），进管理员的留意，
+ * 等管理员「重试」或改这条规则（K 收尾）。
  */
 @Injectable()
 export class FinanceRecurringScheduler implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger('FinanceRecurring');
   private timer: NodeJS.Timeout | null = null;
   private dispatching = false;
-  /** 同一条规则同一天落失败（比如账户被停用）只记一次警告，不每分钟刷屏；第二天或改好之后再试。 */
+  /** 失败原因连库都没写进去时的兜底：同一条规则同一天只试一次，不每分钟刷屏。 */
   private readonly failedOn = new Map<string, string>();
 
   constructor(
@@ -50,7 +52,7 @@ export class FinanceRecurringScheduler implements OnApplicationBootstrap, OnAppl
         `SELECT r.id, r."householdId", h.timezone
            FROM finance_recurring r
            JOIN households h ON h.id = r."householdId"
-          WHERE r."isActive" AND r."autoPost" AND r."nextDueOn" <= $1::date
+          WHERE r."isActive" AND r."autoPost" AND r."lastError" IS NULL AND r."nextDueOn" <= $1::date
           ORDER BY r."nextDueOn", r.id
           LIMIT 200`,
         [addDays(now.toISOString().slice(0, 10), 1)],
@@ -63,9 +65,14 @@ export class FinanceRecurringScheduler implements OnApplicationBootstrap, OnAppl
           if ((await this.recurring.postDue(row.id, cutoff)) > 0) touched.add(row.householdId);
           this.failedOn.delete(row.id);
         } catch (error) {
-          this.failedOn.set(row.id, cutoff);
+          const reason = await this.recurring.recordFailure(row.id, error).catch(() => {
+            this.failedOn.set(row.id, cutoff);
+            return null;
+          });
+          // 失败原因进了库，这条就会出现在管理员的留意里
+          if (reason) touched.add(row.householdId);
           this.logger.warn(
-            `finance_recurring_post_failed recurring=${row.id} ${error instanceof Error ? error.message : String(error)}`,
+            `finance_recurring_post_failed recurring=${row.id} reason=${reason ?? (error instanceof Error ? error.message : String(error))}`,
           );
         }
       }
