@@ -736,7 +736,7 @@ test('资产维护：排计划、关联耗材、完成一次、加条资料再�
   }
 });
 
-test('财务：新建账户、记一笔支出、再撤销', async ({ page, request }) => {
+test('财务：新建账户、记一笔支出、再删除', async ({ page, request }) => {
   const api = apiClient(request);
   const accountName = stamp('账户');
   const title = stamp('聚餐');
@@ -770,16 +770,16 @@ test('财务：新建账户、记一笔支出、再撤销', async ({ page, reque
 
     // 流水里能看到，金额带负号
     await page.getByRole('tab', { name: '流水' }).click();
-    // 撤销之后会多出一条「撤销：<标题>」，名字是包含关系，所以这里必须 exact
     const entry = page.getByRole('article', { name: title, exact: true });
     await expect(entry).toContainText('-¥88.80');
 
-    // 撤销：原流水留着，标成已撤销
-    await entry.getByRole('button', { name: `撤销${title}` }).click();
-    const reversed = waitFor(page, 'POST', /\/finance\/transactions\/[^/]+\/reverse$/);
-    await page.getByRole('dialog', { name: '撤销这笔流水？' }).getByRole('button', { name: '确认撤销' }).click();
-    expect((await reversed).status()).toBe(201);
-    await expect(entry).toContainText('已经被一笔反向流水撤销');
+    // K5：点这一笔打开「改一笔」，底部删除（二次确认）；删掉后列表里就没了（账本里留冲销记录）
+    await entry.click();
+    await page.getByRole('dialog', { name: '改一笔' }).getByRole('button', { name: '删除' }).click();
+    const removed = waitFor(page, 'DELETE', /\/finance\/transactions\/[^/]+$/);
+    await page.getByRole('dialog', { name: '删除这笔？' }).getByRole('button', { name: '确认删除' }).click();
+    expect((await removed).status()).toBe(200);
+    await expect(entry).toBeHidden();
   } finally {
     // 账本不可删，停用就行；余额和流水都留在历史里
     const accounts = await api.get<{ id: string; name: string; version: number }[]>(

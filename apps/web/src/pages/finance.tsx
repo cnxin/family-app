@@ -11,6 +11,7 @@ import {
   useFinanceCategories,
   useFinanceRecurring,
   useFinanceSummary,
+  useMembers,
   yuan,
 } from '../lib/queries';
 import { useAuth } from '../lib/auth';
@@ -65,6 +66,7 @@ export function FinancePage() {
   const accounts = useFinanceAccounts();
   const categories = useFinanceCategories();
   const recurring = useFinanceRecurring();
+  const members = useMembers();
   const fixed = summary.data?.fixedCosts;
 
   const rows = accounts.data ?? [];
@@ -143,7 +145,14 @@ export function FinancePage() {
     >
       {view === 'ledger' ? (
         <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <LedgerPanel month={month} canManage={canManage} />
+          <LedgerPanel
+            month={month}
+            canManage={canManage}
+            memberId={session?.member.id}
+            accounts={rows}
+            categories={categories.data ?? []}
+            members={members.data ?? []}
+          />
           <ImportHistory />
         </div>
       ) : view === 'recurring' ? (
