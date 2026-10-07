@@ -314,6 +314,22 @@ try {
     '按商户名关键词找出那 3 笔；按成员、按分类筛；「%」按字面找，不当通配符',
   );
 
+  // K 收尾：搜索框纯数字按金额精确找，「a-b」按金额范围（反着写也认），不是数字的仍按文字
+  for (const amount of [4321.09, 4399, 4401]) {
+    await record(member.accessToken, {
+      type: 'expense', amount, accountId: bank.id, categoryId: byKey.expense_food, title: `金额搜索-${amount}-${suffix}`,
+    });
+  }
+  const exactAmount = await list(owner.accessToken, { q: '4321.09', accountId: bank.id });
+  const rangeAmount = await list(owner.accessToken, { q: '4400-4300', accountId: bank.id });
+  const textNumber = await list(owner.accessToken, { q: `金额搜索-4399-${suffix}` });
+  assert(
+    exactAmount.length === 1 && exactAmount[0].amount === 4321.09 &&
+      rangeAmount.map((one) => one.amount).sort((a, b) => a - b).join() === '4321.09,4399',
+    '搜「4321.09」只出这一笔；搜「4400-4300」出 4300～4400 之间的两笔（反着写也认），4401 不在里面',
+  );
+  assert(textNumber.length === 1 && textNumber[0].amount === 4399, '带字的照旧按名称找');
+
   console.log('8. 超预算留意不算已删除 / 已改过的');
   const budget = await request('/finance/budgets', owner.accessToken, 'PUT', { categoryId: byKey.expense_repair, month, amount: 40 });
   createdBudgets.push(budget.data);

@@ -107,6 +107,24 @@ function normalized(value?: string | null) {
   return value?.trim() || null;
 }
 
+/**
+ * 流水搜索框（K5；K 收尾加金额）：纯数字（可带小数点）按金额精确找，「100-200」按金额范围找（两头都算，反着写也认），
+ * 别的按文字找名称 / 商户 / 备注。返回 null 表示没填。
+ */
+export function parseLedgerSearch(raw: string | undefined | null) {
+  const text = raw?.trim();
+  if (!text) return null;
+  const number = String.raw`\d+(?:\.\d{1,2})?`;
+  const exact = text.match(new RegExp(`^(${number})$`));
+  if (exact) return { kind: 'amount' as const, min: Number(exact[1]).toFixed(2), max: Number(exact[1]).toFixed(2) };
+  const range = text.match(new RegExp(`^(${number})\\s*[-~～—－]\\s*(${number})$`));
+  if (range) {
+    const [low, high] = [Number(range[1]), Number(range[2])].sort((a, b) => a - b);
+    return { kind: 'amount' as const, min: low.toFixed(2), max: high.toFixed(2) };
+  }
+  return { kind: 'text' as const, text };
+}
+
 export function assertDate(value: string) {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
@@ -510,9 +528,11 @@ export class FinanceService {
     if (query.includeDeleted !== 'true') {
       builder.andWhere('transaction.deletedAt IS NULL AND transaction.supersededById IS NULL');
     }
-    const keyword = query.q?.trim();
-    if (keyword) {
-      const pattern = `%${keyword.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const search = parseLedgerSearch(query.q);
+    if (search?.kind === 'amount') {
+      builder.andWhere('transaction.amount BETWEEN :minAmount AND :maxAmount', { minAmount: search.min, maxAmount: search.max });
+    } else if (search?.kind === 'text') {
+      const pattern = `%${search.text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
       builder.andWhere(
         '(transaction.title ILIKE :q OR transaction.merchant ILIKE :q OR transaction.note ILIKE :q)',
         { q: pattern },

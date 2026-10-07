@@ -181,3 +181,35 @@ test('流水编辑：成员能改自己记的，别人记的不出编辑入口',
     if (one) await admin.patch(`/finance/accounts/${one.id}`, { isActive: false, expectedVersion: one.version });
   }
 });
+
+test('流水搜索：纯数字按金额找，「a-b」按金额范围找', async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chrome', '桌面验一次');
+  const admin = apiClient(request);
+  const accountName = stamp('金额搜索');
+  const account = await admin.post<{ id: string }>('/finance/accounts', { name: accountName, type: 'cash', openingBalance: 0 });
+  const categories = await admin.get<{ id: string; systemKey: string | null }[]>('/finance/categories');
+  const food = categories.find((one) => one.systemKey === 'expense_food')!.id;
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  for (const amount of [4391.27, 4391.5, 4500]) {
+    await admin.post('/finance/transactions', {
+      type: 'expense', amount, accountId: account.id, categoryId: food, title: stamp(`搜金额${amount}`),
+      occurredOn: today, idempotencyKey: `${accountName}-${amount}`,
+    });
+  }
+
+  try {
+    await page.goto('/house/finance?view=ledger');
+    const box = page.getByLabel('搜流水');
+    await expect(box).toHaveAttribute('placeholder', '名称、商户、备注，或金额如 439 / 100-200');
+    await search(page, '4391.27');
+    await expect(page.getByRole('article')).toHaveCount(1);
+    await expect(page.getByRole('article')).toContainText('-¥4,391.27');
+    await search(page, '4392-4391');
+    await expect(page.getByRole('article')).toHaveCount(2);
+    await expect(page.getByRole('article').filter({ hasText: '-¥4,500.00' })).toHaveCount(0);
+  } finally {
+    const accounts = await admin.get<{ id: string; name: string; version: number }[]>('/finance/accounts?includeInactive=true');
+    const one = accounts.find((item) => item.name === accountName);
+    if (one) await admin.patch(`/finance/accounts/${one.id}`, { isActive: false, expectedVersion: one.version });
+  }
+});
