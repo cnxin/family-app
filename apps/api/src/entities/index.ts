@@ -4825,6 +4825,10 @@ export class FinanceCategory {
   'CHK_finance_transactions_reversal',
   `("type" = 'reversal' AND "reversalOfId" IS NOT NULL) OR ("type" <> 'reversal' AND "reversalOfId" IS NULL)`,
 )
+@Check(
+  'CHK_finance_transactions_hidden',
+  `("supersededById" IS NULL OR "deletedAt" IS NULL) AND ("type" <> 'reversal' OR ("supersededById" IS NULL AND "deletedAt" IS NULL))`,
+)
 @Index(
   'UQ_finance_transactions_household_idempotency',
   ['householdId', 'idempotencyKey'],
@@ -4833,6 +4837,10 @@ export class FinanceCategory {
 @Index('UQ_finance_transactions_reversal', ['reversalOfId'], {
   unique: true,
   where: '"reversalOfId" IS NOT NULL',
+})
+@Index('UQ_finance_transactions_superseded_by', ['supersededById'], {
+  unique: true,
+  where: '"supersededById" IS NOT NULL',
 })
 @Index(
   'UQ_finance_transactions_household_external',
@@ -4932,6 +4940,21 @@ export class FinanceTransaction {
 
   @Column({ type: 'uuid', nullable: true })
   reversalOfId: string | null;
+
+  /** K5：改金额 / 账户 / 收支方向时冲销本笔、另记一笔，这里指向新的那笔 */
+  @ManyToOne(() => FinanceTransaction, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'supersededById',
+    foreignKeyConstraintName: 'FK_finance_transactions_superseded_by',
+  })
+  supersededBy: FinanceTransaction | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  supersededById: string | null;
+
+  /** K5：删除 = 冲销 + 记下删除时间（列表默认不显示） */
+  @Column({ type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
 
   @OneToMany(() => FinancePosting, (posting) => posting.transaction, {
     eager: true,

@@ -63,6 +63,7 @@ const TRANSACTION_TYPES: Exclude<FinanceTransactionType, 'reversal'>[] = [
   'transfer',
 ];
 import { FinanceService, MAX_AMOUNT } from './finance.service';
+import { FinanceEditController, FinanceEditService } from './finance-edit.service';
 import { FinanceImportController } from './finance-import.controller';
 import { FinanceImportService } from './finance-import.service';
 import { FinanceRecurringScheduler } from './finance-recurring.scheduler';
@@ -91,6 +92,27 @@ export class FinanceTransactionQueryDto extends FinanceMonthQueryDto {
   @Min(1)
   @Max(200)
   limit?: number;
+
+  /** K5：名称 / 商户 / 备注里找 */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  q?: string;
+
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  /** 谁记的（actorId） */
+  @IsOptional()
+  @IsUUID()
+  memberId?: string;
+
+  /** 连已删除、已改过（被替代）的一起列 */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  includeDeleted?: 'true' | 'false';
 }
 
 export class CreateFinanceAccountDto {
@@ -402,9 +424,10 @@ export class FinanceController {
       FinanceTransaction,
     ]),
   ],
-  controllers: [FinanceController, FinanceRecurringController, FinanceImportController],
+  controllers: [FinanceController, FinanceRecurringController, FinanceImportController, FinanceEditController],
   providers: [
     FinanceService,
+    FinanceEditService,
     FinanceImportService,
     FinanceRecurringService,
     FinanceRecurringScheduler,

@@ -313,8 +313,9 @@ try {
 
   let transactionUpdateBlocked = false;
   let postingDeleteBlocked = false;
+  // K5 起名称、分类、备注、日期、商户可以原地改（见 finance-edit.mjs）；金额等动钱的列仍然不许改
   try {
-    await db.query('UPDATE finance_transactions SET title = $1 WHERE id = $2', ['不应更新', income.data.id]);
+    await db.query('UPDATE finance_transactions SET amount = $1 WHERE id = $2', [1, income.data.id]);
   } catch (error) {
     transactionUpdateBlocked = error?.code === '55000';
   }
@@ -323,7 +324,7 @@ try {
   } catch (error) {
     postingDeleteBlocked = error?.code === '55000';
   }
-  assert(transactionUpdateBlocked && postingDeleteBlocked, '数据库拒绝更新交易或删除过账明细');
+  assert(transactionUpdateBlocked && postingDeleteBlocked, '数据库拒绝改交易金额或删除过账明细');
 
   console.log('4. Hermes 财务查询和确认式记账提案');
   await request('/agent/settings', owner.accessToken);

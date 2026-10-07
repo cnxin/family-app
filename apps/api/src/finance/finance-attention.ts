@@ -37,6 +37,8 @@ export class FinanceBudgetAttentionRule implements AttentionSource {
               AND t.type = 'expense'
               AND t."occurredOn" >= $3::date
               AND t."occurredOn" < $4::date
+              AND t."deletedAt" IS NULL
+              AND t."supersededById" IS NULL
               AND NOT EXISTS (
                 SELECT 1
                   FROM finance_transactions reversal

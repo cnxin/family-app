@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 332 个端点（POST 130 / GET 110 / PATCH 49 / DELETE 32 / PUT 11），公开端点 28 个，已定义契约 332 个。
+共 335 个端点（POST 131 / GET 110 / PATCH 50 / DELETE 33 / PUT 11），公开端点 28 个，已定义契约 335 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -16,7 +16,7 @@
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
 | events | 1 | 1 |
-| finance | 24 | 24 |
+| finance | 27 | 27 |
 | guests | 21 | 21 |
 | households | 1 | 1 |
 | inventory | 14 | 14 |
@@ -168,7 +168,7 @@
 | --- | --- | --- | --- | :-: | --- |
 | GET | `/events` | `EventsController.stream` | 登录 | ✓ | `apps/api/src/events/events.controller.ts` |
 
-## finance（24）
+## finance（27）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -195,7 +195,10 @@
 | GET | `/finance/summary` | `FinanceController.summary` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
 | GET | `/finance/transactions` | `FinanceController.transactions` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
 | POST | `/finance/transactions` | `FinanceController.createTransaction` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| PATCH | `/finance/transactions/:id` | `FinanceEditController.update` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-edit.service.ts` |
+| DELETE | `/finance/transactions/:id` | `FinanceEditController.remove` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-edit.service.ts` |
 | POST | `/finance/transactions/:id/reverse` | `FinanceController.reverseTransaction` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| POST | `/finance/transactions/batch` | `FinanceEditController.batch` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-edit.service.ts` |
 
 ## guests（21）
 
