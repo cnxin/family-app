@@ -29,7 +29,7 @@
 
 金额使用 PostgreSQL `numeric(14,2)`，首批币种固定为 `CNY`。账户余额不存冗余可变字段，始终按 `openingBalance + SUM(postings.delta)` 计算。
 
-`finance_transactions` 与 `finance_postings` 由数据库触发器拒绝 UPDATE/DELETE。误记通过新增 `reversal` 交易和金额相反的 posting 修正；原流水、操作者和来源永久保留。`householdId + idempotencyKey` 唯一，请求指纹阻止同一幂等键复用不同参数；`reversalOfId` 部分唯一索引阻止重复撤销。
+`finance_transactions` 与 `finance_postings` 由数据库触发器拒绝 UPDATE/DELETE（2026-10-07 K5 起流水放宽为只许改名称、分类、备注、日期、商户和打删除 / 替代标记，金额与分录仍不可改、仍不许删，见 [finance-plan.md](finance-plan.md) §3-K5、§8.6）。误记通过新增 `reversal` 交易和金额相反的 posting 修正；原流水、操作者和来源永久保留。`householdId + idempotencyKey` 唯一，请求指纹阻止同一幂等键复用不同参数；`reversalOfId` 部分唯一索引阻止重复撤销。
 
 ## 4. API
 
