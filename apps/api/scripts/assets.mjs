@@ -176,6 +176,35 @@ try {
     '未设置周期或非订阅资产不能标记已续费',
   );
 
+  // K 收尾：每次续费金额。财务「固定支出」里的资产续费月均优先用它，空了退回购买价格
+  const assetsMonthly = async () => (await request('/finance/summary', token)).data.fixedCosts.assets;
+  const monthlyBefore = await assetsMonthly();
+  const video = await request('/assets', token, 'POST', {
+    name: '资产回归视频会员', category: 'subscription', purchaseDate: '2026-01-01', purchasePrice: 90,
+    renewsOn: '2026-04-01', renewalIntervalMonths: 3,
+  });
+  const byPurchase = await assetsMonthly();
+  const priced = await request(`/assets/${video.data.id}`, token, 'PATCH', { renewalPrice: 120 });
+  const byRenewal = await assetsMonthly();
+  const cleared = await request(`/assets/${video.data.id}`, token, 'PATCH', { renewalPrice: null });
+  const backToPurchase = await assetsMonthly();
+  const negative = await request(`/assets/${video.data.id}`, token, 'PATCH', { renewalPrice: -1 });
+  const toAppliance = await request(`/assets/${video.data.id}`, token, 'PATCH', { renewalPrice: 120 });
+  const recategorized = await request(`/assets/${video.data.id}`, token, 'PATCH', { category: 'electronics' });
+  const applianceRenewal = await request('/assets', token, 'POST', {
+    name: '资产回归带续费价的家电', category: 'appliance', renewalPrice: 50,
+  });
+  assert(
+    video.status === 201 && video.data.renewalPrice === null &&
+      byPurchase === Math.round((monthlyBefore + 30) * 100) / 100 &&
+      priced.status === 200 && priced.data.renewalPrice === '120.00' && byRenewal === Math.round((monthlyBefore + 40) * 100) / 100 &&
+      cleared.status === 200 && cleared.data.renewalPrice === null && backToPurchase === byPurchase &&
+      negative.status === 400 && toAppliance.data.renewalPrice === '120.00' &&
+      recategorized.status === 200 && recategorized.data.renewalPrice === null &&
+      applianceRenewal.status === 201 && applianceRenewal.data.renewalPrice === null,
+    '季付 90 的订阅按购买价月均 +30；填每次续费 120 后 +40；清空退回 +30；负数 400；改成非订阅或非订阅登记时续费金额清空',
+  );
+
   const unsafeDocument = await request(
     `/assets/${asset.data.id}/documents`,
     token,

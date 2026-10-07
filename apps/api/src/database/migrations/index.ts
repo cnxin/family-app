@@ -14,6 +14,7 @@ import { AddFinanceRecurring1785233800000 } from './1785233800000-add-finance-re
 import { AddFinanceCreditAccounts1785233900000 } from './1785233900000-add-finance-credit-accounts';
 import { AddFinanceImports1785234000000 } from './1785234000000-add-finance-imports';
 import { AddFinanceTransactionEdits1785234100000 } from './1785234100000-add-finance-transaction-edits';
+import { AddAssetRenewalPrice1785234200000 } from './1785234200000-add-asset-renewal-price';
 import { SmartHomeDevicesByDevice1785233000000 } from './1785233000000-smart-home-devices-by-device';
 import { AddSmartHomeCommandSource1785233100000 } from './1785233100000-add-smart-home-command-source';
 import { InitialSchema1785226400000 } from './1785226400000-initial-schema';
@@ -156,4 +157,5 @@ export const ALL_MIGRATIONS = [
   AddFinanceCreditAccounts1785233900000,
   AddFinanceImports1785234000000,
   AddFinanceTransactionEdits1785234100000,
+  AddAssetRenewalPrice1785234200000,
 ];

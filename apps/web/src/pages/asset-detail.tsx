@@ -170,6 +170,18 @@ export function AssetDetailPage() {
                   : '未记录'
               }
             />
+            {data.category === 'subscription' && data.renewalIntervalMonths ? (
+              <Info
+                label="每次续费"
+                value={
+                  data.renewalPrice
+                    ? `¥${Number(data.renewalPrice).toLocaleString('zh-CN')}`
+                    : data.purchasePrice
+                      ? '同购入价格'
+                      : '未记录'
+                }
+              />
+            ) : null}
             <Info label="当前状态" value={retired ? '已停用' : '使用中'} />
           </dl>
           {data.note ? (

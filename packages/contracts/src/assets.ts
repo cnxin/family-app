@@ -79,6 +79,8 @@ export const homeAssetRecordSchema = z.object({
   warrantyExpiresOn: dateOnly.nullable(),
   renewsOn: dateOnly.nullable(),
   renewalIntervalMonths: assetRenewalIntervalMonths.nullable(),
+  /** 订阅每次续费金额；空时按购买价格算续费月均 */
+  renewalPrice: numericString.nullable(),
   status: assetStatus,
   note: z.string().nullable(),
   createdById: uuid,
@@ -278,6 +280,8 @@ export const createAssetBody = z.object({
   /** 只对 subscription 生效 */
   renewsOn: dateOnly.nullish(),
   renewalIntervalMonths: assetRenewalIntervalMonths.nullish(),
+  /** 只对 subscription 生效；空时按购买价格算续费月均 */
+  renewalPrice: money.nullish(),
   note: z.string().max(1000).nullish(),
 });
 export const updateAssetBody = createAssetBody

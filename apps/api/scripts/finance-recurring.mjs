@@ -364,9 +364,9 @@ try {
   const activeExpense = (await request('/finance/recurring', owner.accessToken)).data.filter((one) => one.isActive && one.type === 'expense');
   const expectedRecurring = Math.round(activeExpense.reduce((sum, one) => sum + one.monthlyAmount, 0) * 100) / 100;
   const [{ monthly }] = (await db.query(
-    `SELECT COALESCE(SUM("purchasePrice" / "renewalIntervalMonths"), 0) AS monthly FROM home_assets
+    `SELECT COALESCE(SUM(COALESCE("renewalPrice", "purchasePrice") / "renewalIntervalMonths"), 0) AS monthly FROM home_assets
       WHERE "householdId" = $1 AND category = 'subscription' AND status = 'active'
-        AND "renewalIntervalMonths" IS NOT NULL AND "purchasePrice" IS NOT NULL`,
+        AND "renewalIntervalMonths" IS NOT NULL AND COALESCE("renewalPrice", "purchasePrice") IS NOT NULL`,
     [householdId],
   )).rows;
   const expectedAssets = Math.round(Number(monthly) * 100) / 100;
@@ -376,6 +376,17 @@ try {
       summary.data.fixedCosts.total === Math.round((expectedRecurring + expectedAssets) * 100) / 100 &&
       !activeExpense.some((one) => one.type === 'income'),
     '固定支出三项合计正确：周期账单只算在用的支出（季付 90 元的视频会员折每月 30 元算进资产续费）',
+  );
+  // K 收尾：填了每次续费金额（季付 150）就按它算，月均 50；清空退回购买价
+  await request(`/assets/${subscription.data.id}`, owner.accessToken, 'PATCH', { renewalPrice: 150 });
+  const withRenewal = (await request('/finance/summary', owner.accessToken)).data.fixedCosts;
+  await request(`/assets/${subscription.data.id}`, owner.accessToken, 'PATCH', { renewalPrice: null });
+  const withoutRenewal = (await request('/finance/summary', owner.accessToken)).data.fixedCosts;
+  assert(
+    withRenewal.assets === Math.round((expectedAssets + 20) * 100) / 100 &&
+      withRenewal.total === Math.round((expectedRecurring + expectedAssets + 20) * 100) / 100 &&
+      withoutRenewal.assets === expectedAssets && withoutRenewal.total === summary.data.fixedCosts.total,
+    '订阅填了每次续费 150（季付）后资产续费月均 +20、合计跟着变；清空后回到按购买价算',
   );
   await request(`/assets/${subscription.data.id}`, owner.accessToken, 'PATCH', { status: 'retired' });
 
