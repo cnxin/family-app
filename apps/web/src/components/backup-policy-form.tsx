@@ -86,7 +86,7 @@ export function BackupPolicyPanel({ policy }: { policy: BackupPolicy }) {
         weeklyDay: form.frequency === 'weekly' ? form.weeklyDay : null,
       },
       {
-        onSuccess: () => pushToast('备份策略已保存'),
+        onSuccess: () => pushToast('备份策略已保存', undefined, 'success'),
         onError: (error) => setMessage(error instanceof Error ? error.message : '策略没保存成功'),
       },
     );

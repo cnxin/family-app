@@ -104,7 +104,7 @@ export function InventoryView() {
           unit: item.unit,
         });
       }
-      pushToast(`已把 ${targets.length} 项加进今天的购物清单`);
+      pushToast(`已把 ${targets.length} 项加进今天的购物清单`, undefined, 'success');
     } finally {
       setRestocking(false);
     }
@@ -320,7 +320,7 @@ export function InventoryView() {
                 onClick={() =>
                   remove.mutate(deleting.id, {
                     onSuccess: () => {
-                      pushToast(`已删除「${deleting.name}」`);
+                      pushToast(`已删除「${deleting.name}」`, undefined, 'success');
                       setDeleting(null);
                     },
                   })

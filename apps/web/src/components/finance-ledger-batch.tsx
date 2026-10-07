@@ -88,10 +88,10 @@ export function BatchDialog({
         onSuccess: (result) => {
           if (action === 'category' && categoryId) rememberCategory(categoryId);
           const verb = action === 'delete' ? '已删' : '已改';
-          pushToast(`${verb} ${result.done} 笔，跳过 ${result.skipped.length} 笔`);
+          pushToast(`${verb} ${result.done} 笔，跳过 ${result.skipped.length} 笔`, undefined, 'success');
           onDone();
         },
-        onError: (error) => pushToast(error instanceof Error ? error.message : '没改成'),
+        onError: (error) => pushToast(error instanceof Error ? error.message : '没改成', undefined, 'error'),
       },
     );
   }

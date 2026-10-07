@@ -76,14 +76,14 @@ export function LedgerPanel({
     if (!saved.sameMerchantPending || !saved.category) return;
     const { sameMerchantIds: ids, sameMerchantPending: count } = saved;
     const category = saved.category;
-    pushToast(`「${saved.merchant ?? saved.title}」还有 ${count} 笔不是「${category.name}」`, undefined, {
+    pushToast(`「${saved.merchant ?? saved.title}」还有 ${count} 笔不是「${category.name}」`, undefined, 'info', {
       label: `同时改另外 ${count} 笔`,
       run: () =>
         followUp.mutate(
           { ids, action: 'category', categoryId: category.id },
           {
-            onSuccess: (result) => pushToast(`已改 ${result.done} 笔，跳过 ${result.skipped.length} 笔`),
-            onError: (error) => pushToast(error instanceof Error ? error.message : '没改成'),
+            onSuccess: (result) => pushToast(`已改 ${result.done} 笔，跳过 ${result.skipped.length} 笔`, undefined, 'success'),
+            onError: (error) => pushToast(error instanceof Error ? error.message : '没改成', undefined, 'error'),
           },
         ),
     });

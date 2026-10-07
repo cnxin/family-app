@@ -58,7 +58,7 @@ function SourceCard({ config }: { config: MediaSourceConfig }) {
       setCredential('');
       setClearing(false);
       setResult({ message: '已保存', ok: true });
-      pushToast(`${config.name} 已保存`);
+      pushToast(`${config.name} 已保存`, undefined, 'success');
     } catch (error) {
       setResult({ message: error instanceof Error ? error.message : '保存失败', ok: false });
     }

@@ -367,7 +367,7 @@ export function MapEditor({
           onCreate={(name) =>
             create.mutate(
               { parentId: drawn.parentId, name, kind: drawn.kind === 'room' ? undefined : 'container' },
-              { onSuccess: (location) => void place(location, true), onError: (error) => pushToast(error.message) },
+              { onSuccess: (location) => void place(location, true), onError: (error) => pushToast(error.message, undefined, 'error') },
             )
           }
         />

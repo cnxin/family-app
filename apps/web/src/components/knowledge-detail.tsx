@@ -60,7 +60,7 @@ export function KnowledgeDetail({
           onSuccess: (saved) => {
             setAsking(null);
             onChanged(saved);
-            pushToast(archived ? '已经恢复回「使用中」' : '已归档，置顶也一起取消了');
+            pushToast(archived ? '已经恢复回「使用中」' : '已归档，置顶也一起取消了', undefined, 'success');
           },
         },
       );
@@ -77,7 +77,7 @@ export function KnowledgeDetail({
             setAsking(null);
             setShowHistory(false);
             onChanged(saved);
-            pushToast(`已经还原到 v${asking.version}，现在的内容也留在历史里`);
+            pushToast(`已经还原到 v${asking.version}，现在的内容也留在历史里`, undefined, 'success');
           },
         },
       );

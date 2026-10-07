@@ -57,7 +57,7 @@ function DirectoryRow({ entry, standalone }: { entry: SmartHomeDirectoryEntry; s
                 {
                   onSuccess: () => {
                     confirmHaptic();
-                    pushToast(`「${entry.fullName}」已加进智能家居`);
+                    pushToast(`「${entry.fullName}」已加进智能家居`, undefined, 'success');
                   },
                 },
               )
@@ -122,7 +122,7 @@ function DeviceCard({
                 {
                   onSuccess: (created) => {
                     confirmHaptic();
-                    pushToast(`「${created.displayName}」已加进智能家居`);
+                    pushToast(`「${created.displayName}」已加进智能家居`, undefined, 'success');
                   },
                 },
               )

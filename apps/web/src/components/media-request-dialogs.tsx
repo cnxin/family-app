@@ -31,7 +31,7 @@ export function SubscriptionDialog({
       { mediaId: entry.id, season: value },
       {
         onSuccess: () => {
-          pushToast('订阅提交了，MoviePilot 去找片了');
+          pushToast('订阅提交了，MoviePilot 去找片了', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没提交成功'),
@@ -94,7 +94,7 @@ export function MetadataLinkDialog({
       { id: entry.id, externalRefs: [{ provider: 'tmdb', externalId: value }] },
       {
         onSuccess: () => {
-          pushToast('TMDB ID 补上了');
+          pushToast('TMDB ID 补上了', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没补上'),

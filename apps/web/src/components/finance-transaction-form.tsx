@@ -95,7 +95,7 @@ export function TransactionForm({
       {
         onSuccess: () => {
           if (mode !== 'transfer') rememberCategory(categoryId);
-          pushToast(`记下了「${title.trim()}」`);
+          pushToast(`记下了「${title.trim()}」`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没记上'),

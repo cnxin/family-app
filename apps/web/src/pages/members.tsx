@@ -59,7 +59,7 @@ export function MembersPage() {
         {
           onSuccess: () => {
             setAsk(null);
-            pushToast(enabled ? `${ask.member.name} 可以重新登录了` : `${ask.member.name} 的家庭访问已停用`);
+            pushToast(enabled ? `${ask.member.name} 可以重新登录了` : `${ask.member.name} 的家庭访问已停用`, undefined, 'success');
           },
         },
       );
@@ -67,7 +67,7 @@ export function MembersPage() {
       revoke.mutate(ask.invitation.id, {
         onSuccess: () => {
           setAsk(null);
-          pushToast(`给「${ask.invitation.memberName}」的邀请已撤销`);
+          pushToast(`给「${ask.invitation.memberName}」的邀请已撤销`, undefined, 'success');
         },
       });
     }

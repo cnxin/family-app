@@ -48,7 +48,7 @@ export function LocationNode({
   const archived = Boolean(location.archivedAt);
   const system = Boolean(location.systemKey);
   const index = siblings.findIndex((one) => one.id === location.id);
-  const fail = (error: Error) => pushToast(error.message);
+  const fail = (error: Error) => pushToast(error.message, undefined, 'error');
 
   const swap = (offset: -1 | 1) => {
     const other = siblings[index + offset];
@@ -123,7 +123,7 @@ export function LocationNode({
           onClose={() => setMoving(false)}
           onPick={(target) => {
             setMoving(false);
-            if (target) update.mutate({ id: location.id, parentId: target.id }, { onSuccess: () => pushToast(`已挪到「${target.pathLabel}」`), onError: fail });
+            if (target) update.mutate({ id: location.id, parentId: target.id }, { onSuccess: () => pushToast(`已挪到「${target.pathLabel}」`, undefined, 'success'), onError: fail });
           }}
         />
       ) : null}
@@ -141,7 +141,7 @@ export function LocationNode({
                 </Button>
               ) : null}
               <Button className="ml-auto" disabled={archive.isPending}
-                onClick={() => archive.mutate(location.id, { onSuccess: () => { setConfirmArchive(false); pushToast(`已归档「${location.name}」`); }, onError: fail })}>
+                onClick={() => archive.mutate(location.id, { onSuccess: () => { setConfirmArchive(false); pushToast(`已归档「${location.name}」`, undefined, 'success'); }, onError: fail })}>
                 归档
               </Button>
             </div>

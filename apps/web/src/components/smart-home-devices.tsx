@@ -279,7 +279,7 @@ function WhitelistRow({ device, focused, pinnedOthers }: { device: SmartHomeDevi
           <Button
             className="min-h-11"
             disabled={busy || !draft.name.trim()}
-            onClick={() => update.mutate({ id: device.id, body }, { onSuccess: () => pushToast(`已保存「${draft.name.trim()}」`) })}
+            onClick={() => update.mutate({ id: device.id, body }, { onSuccess: () => pushToast(`已保存「${draft.name.trim()}」`, undefined, 'success') })}
           >
             保存
           </Button>
@@ -292,7 +292,7 @@ function WhitelistRow({ device, focused, pinnedOthers }: { device: SmartHomeDevi
           className="min-h-11"
           aria-label={`把${device.displayName}移出智能家居`}
           disabled={busy}
-          onClick={() => remove.mutate(device.id, { onSuccess: () => pushToast(`「${device.displayName}」已移出`) })}
+          onClick={() => remove.mutate(device.id, { onSuccess: () => pushToast(`「${device.displayName}」已移出`, undefined, 'success') })}
         >
           移出
         </Button>

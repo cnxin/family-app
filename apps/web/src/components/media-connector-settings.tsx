@@ -78,7 +78,7 @@ function ConnectorCard({ config }: { config: MediaConnectorSettings }) {
       setClearing(false);
       if (!alsoTest) {
         setResult({ message: '已保存', ok: true });
-        pushToast(`${config.name} 已保存`);
+        pushToast(`${config.name} 已保存`, undefined, 'success');
         return;
       }
       const status = await test.mutateAsync(config.kind);

@@ -63,7 +63,7 @@ export function RecurringForm({
       },
       {
         onSuccess: (saved) => {
-          pushToast(editing ? `「${saved.title}」改好了` : `已建好「${saved.title}」，下一期 ${saved.nextDueOn}`);
+          pushToast(editing ? `「${saved.title}」改好了` : `已建好「${saved.title}」，下一期 ${saved.nextDueOn}`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

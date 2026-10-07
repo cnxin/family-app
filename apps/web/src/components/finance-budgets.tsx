@@ -50,7 +50,7 @@ function BudgetForm({
       },
       {
         onSuccess: () => {
-          pushToast(`${category.name}的预算记好了`);
+          pushToast(`${category.name}的预算记好了`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -209,7 +209,7 @@ export function BudgetsPanel({
                     {
                       onSuccess: () => {
                         setRemoving(null);
-                        pushToast('预算已删除');
+                        pushToast('预算已删除', undefined, 'success');
                       },
                     },
                   )

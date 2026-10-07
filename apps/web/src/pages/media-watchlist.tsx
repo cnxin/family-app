@@ -231,7 +231,7 @@ export function MediaWatchlistPage() {
                   const request = requestByMedia.get(entry.id);
                   if (request) {
                     refreshRequest.mutate(request.id, {
-                      onSuccess: () => pushToast('订阅状态刷新了'),
+                      onSuccess: () => pushToast('订阅状态刷新了', undefined, 'success'),
                     });
                   }
                 }}
@@ -239,7 +239,7 @@ export function MediaWatchlistPage() {
                   const request = requestByMedia.get(entry.id);
                   if (request) {
                     cancelRequest.mutate(request.id, {
-                      onSuccess: () => pushToast('订阅取消了'),
+                      onSuccess: () => pushToast('订阅取消了', undefined, 'success'),
                     });
                   }
                 }}
@@ -296,7 +296,7 @@ export function MediaWatchlistPage() {
                   removeEntry.mutate(removing.id, {
                     onSuccess: () => {
                       setRemoving(null);
-                      pushToast(`「${removing.mediaTitle.title}」移出片单了`);
+                      pushToast(`「${removing.mediaTitle.title}」移出片单了`, undefined, 'success');
                     },
                   })
                 }

@@ -85,7 +85,7 @@ export function InventoryEditor({
       },
       {
         onSuccess: () => {
-          pushToast(item ? `已更新「${name.trim()}」` : `已添加「${name.trim()}」`);
+          pushToast(item ? `已更新「${name.trim()}」` : `已添加「${name.trim()}」`, undefined, 'success');
           onClose();
         },
       },
@@ -230,7 +230,7 @@ export function BatchDialog({
 
   const submit = () => {
     if (!valid || pending) return;
-    const done = { onSuccess: () => { pushToast(batch ? '批次已更新' : '批次已登记'); onClose(); } };
+    const done = { onSuccess: () => { pushToast(batch ? '批次已更新' : '批次已登记', undefined, 'success'); onClose(); } };
     if (batch) {
       if (location !== undefined && location !== batch.locationId) {
         setBatchLocation.mutate({ target: 'batch', id: batch.id, locationId: location });

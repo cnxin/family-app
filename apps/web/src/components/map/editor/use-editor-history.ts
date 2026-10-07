@@ -53,7 +53,7 @@ export function useEditorHistory({ locations, saver, decor }: { locations: Stora
           await update.mutateAsync(typeof value === 'string' ? { id: resolve(step.id), name: value } : { id: resolve(step.id), name: value.name, icon: value.icon as never });
           return { ok: true };
         } catch (error) {
-          pushToast(error instanceof ApiError ? error.message : '没改成，检查一下网络');
+          pushToast(error instanceof ApiError ? error.message : '没改成，检查一下网络', undefined, 'error');
           return { ok: false };
         }
       }
@@ -63,7 +63,7 @@ export function useEditorHistory({ locations, saver, decor }: { locations: Stora
             await api(`/locations/${resolve(step.id)}`, { method: 'DELETE' });
             return { ok: true };
           } catch (error) {
-            pushToast(error instanceof ApiError && error.status === 409 ? `「${step.name}」里已经记了东西，撤不掉了` : '没撤掉，检查一下网络');
+            pushToast(error instanceof ApiError && error.status === 409 ? `「${step.name}」里已经记了东西，撤不掉了` : '没撤掉，检查一下网络', undefined, 'error');
             return { ok: false };
           }
         }
@@ -75,7 +75,7 @@ export function useEditorHistory({ locations, saver, decor }: { locations: Stora
           await saver.saveNow([{ id: created.id, shape: step.shape }]);
           return { ok: true, newId: created.id };
         } catch (error) {
-          pushToast(error instanceof ApiError ? error.message : '没重做成，检查一下网络');
+          pushToast(error instanceof ApiError ? error.message : '没重做成，检查一下网络', undefined, 'error');
           return { ok: false };
         }
       }
@@ -121,7 +121,7 @@ export function useEditorHistory({ locations, saver, decor }: { locations: Stora
         {
           onSuccess: () =>
             history.push({ kind: 'icon', label: '换家具', id: location.id, before: { icon: location.icon, name: location.name }, after: { icon, name } }),
-          onError: (error) => pushToast(error.message),
+          onError: (error) => pushToast(error.message, undefined, 'error'),
         },
       );
     },
@@ -134,7 +134,7 @@ export function useEditorHistory({ locations, saver, decor }: { locations: Stora
         { id: location.id, name },
         {
           onSuccess: () => history.push({ kind: 'rename', label: '改名', id: location.id, before: location.name, after: name }),
-          onError: (error) => pushToast(error.message),
+          onError: (error) => pushToast(error.message, undefined, 'error'),
         },
       );
     },

@@ -246,7 +246,7 @@ export function UtteranceLog({ manager, capturing }: { manager: boolean; capturi
     try {
       await downloadUtterancesCsv();
     } catch (error) {
-      pushToast(error instanceof Error ? error.message : '导出失败');
+      pushToast(error instanceof Error ? error.message : '导出失败', undefined, 'error');
     } finally {
       setExporting(false);
     }
@@ -258,8 +258,8 @@ export function UtteranceLog({ manager, capturing }: { manager: boolean; capturi
       return;
     }
     clear.mutate(undefined, {
-      onSuccess: (result) => pushToast(result.deleted ? `清掉了 ${result.deleted} 条` : '没有要清的'),
-      onError: (error) => pushToast(error instanceof Error ? error.message : '没清掉，再试一次'),
+      onSuccess: (result) => pushToast(result.deleted ? `清掉了 ${result.deleted} 条` : '没有要清的', undefined, 'success'),
+      onError: (error) => pushToast(error instanceof Error ? error.message : '没清掉，再试一次', undefined, 'error'),
       onSettled: () => setConfirming(false),
     });
   }

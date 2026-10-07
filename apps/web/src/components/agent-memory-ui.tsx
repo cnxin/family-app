@@ -112,7 +112,7 @@ export function MemoryDetail({
   const onError = (error: unknown) =>
     setMessage(error instanceof Error ? error.message : '没成功，刷新一下再试');
   const done = (text: string) => () => {
-    pushToast(text);
+    pushToast(text, undefined, 'success');
     onClose();
   };
 
@@ -282,7 +282,7 @@ export function AddMemoryForm({ onClose }: { onClose: () => void }) {
                 { content: content.trim(), memoryKey, kind: 'preference' },
                 {
                   onSuccess: () => {
-                    pushToast('记下了，在「待确认」里点一下确认就生效');
+                    pushToast('记下了，在「待确认」里点一下确认就生效', undefined, 'success');
                     onClose();
                   },
                   onError: (error) =>

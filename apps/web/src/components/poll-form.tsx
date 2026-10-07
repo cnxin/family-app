@@ -101,7 +101,7 @@ export function PollForm({ poll, onClose, onSaved }: {
       },
       {
         onSuccess: (saved) => {
-          pushToast(poll ? '投票已更新' : `投票「${saved.title}」已发起`);
+          pushToast(poll ? '投票已更新' : `投票「${saved.title}」已发起`, undefined, 'success');
           onSaved(saved);
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

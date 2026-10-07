@@ -171,7 +171,7 @@ function Manage({ panel }: { panel: SmartHomePanel }) {
               onClick={() =>
                 update.mutate(
                   { id: device.id, body: { acceptEntityIds: panel.pending.map((one) => one.entityId) } },
-                  { onSuccess: () => pushToast('放出来了') },
+                  { onSuccess: () => pushToast('放出来了', undefined, 'success') },
                 )
               }
             >

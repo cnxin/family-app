@@ -59,7 +59,7 @@ export function PlanForm({
       },
       {
         onSuccess: (plan) => {
-          pushToast(editing ? '行程已更新' : `「${plan.title}」安排上了`);
+          pushToast(editing ? '行程已更新' : `「${plan.title}」安排上了`, undefined, 'success');
           onSaved(plan);
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -185,7 +185,7 @@ export function ItemForm({
       },
       {
         onSuccess: () => {
-          pushToast(editing ? '清单项已更新' : '加进清单了');
+          pushToast(editing ? '清单项已更新' : '加进清单了', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

@@ -99,7 +99,7 @@ export function InventoryLog() {
                 onClick={() =>
                   reverse.mutate(pending.id, {
                     onSuccess: () => {
-                      pushToast('已追加反向流水，库存恢复');
+                      pushToast('已追加反向流水，库存恢复', undefined, 'success');
                       setPending(null);
                     },
                   })

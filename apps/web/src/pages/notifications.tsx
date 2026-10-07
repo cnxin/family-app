@@ -154,7 +154,7 @@ export function NotificationsPage() {
               disabled={markAll.isPending}
               onClick={() =>
                 markAll.mutate(undefined, {
-                  onSuccess: (result) => pushToast(`已把 ${result.updated} 条标为已读`),
+                  onSuccess: (result) => pushToast(`已把 ${result.updated} 条标为已读`, undefined, 'success'),
                 })
               }
             >
@@ -288,7 +288,7 @@ export function NotificationsPage() {
                 onClick={() =>
                   deleteChannel.mutate(deleting.id, {
                     onSuccess: () => {
-                      pushToast(`渠道「${deleting.name}」已删除`);
+                      pushToast(`渠道「${deleting.name}」已删除`, undefined, 'success');
                       setDeleting(null);
                     },
                   })

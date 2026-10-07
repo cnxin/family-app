@@ -53,7 +53,7 @@ export function MemoryDetail({
           setFile(null);
           setCaption('');
           if (fileRef.current) fileRef.current.value = '';
-          pushToast('照片放进这条回忆了');
+          pushToast('照片放进这条回忆了', undefined, 'success');
         },
         // 传失败时故意留着已选的文件和说明，直接再点一次就能重试
         onError: (error) => setMessage(error instanceof Error ? error.message : '照片没传上去'),
@@ -209,7 +209,7 @@ export function MemoryDetail({
                       onSuccess: () => {
                         setAsking(false);
                         onArchived();
-                        pushToast(archived ? '已经恢复回来了' : '已归档，照片和记录都留着');
+                        pushToast(archived ? '已经恢复回来了' : '已归档，照片和记录都留着', undefined, 'success');
                       },
                     },
                   )

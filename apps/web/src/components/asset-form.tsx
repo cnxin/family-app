@@ -122,7 +122,7 @@ export function AssetForm({ editing, onClose }: { editing: HomeAsset | null; onC
       },
       {
         onSuccess: (saved) => {
-          pushToast(editing ? `「${saved.name}」的档案已更新` : `已登记「${saved.name}」`);
+          pushToast(editing ? `「${saved.name}」的档案已更新` : `已登记「${saved.name}」`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

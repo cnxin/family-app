@@ -65,7 +65,7 @@ export function AccountForm({
         : { name: name.trim(), type, openingBalance: credit ? -Number(raw) : Number(raw), credit: creditFields },
       {
         onSuccess: () => {
-          pushToast(editing ? '账户已更新' : `已建好账户「${name.trim()}」`);
+          pushToast(editing ? '账户已更新' : `已建好账户「${name.trim()}」`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -246,7 +246,7 @@ export function AccountsPanel({
                       { id: one.id, isActive: !one.isActive, expectedVersion: one.version },
                       {
                         onSuccess: () =>
-                          pushToast(one.isActive ? `「${one.name}」已停用` : `「${one.name}」已启用`),
+                          pushToast(one.isActive ? `「${one.name}」已停用` : `「${one.name}」已启用`, undefined, 'success'),
                       },
                     )
                   }

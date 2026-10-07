@@ -34,7 +34,7 @@ export function SmartHomeConnectorCard({ settings }: { settings: SmartHomeConnec
       setClearing(false);
       if (!alsoTest) {
         setResult({ message: '已保存', ok: true });
-        pushToast('Home Assistant 连接已保存');
+        pushToast('Home Assistant 连接已保存', undefined, 'success');
         return;
       }
       const status = await test.mutateAsync();

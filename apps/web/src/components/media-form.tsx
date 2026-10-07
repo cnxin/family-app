@@ -86,7 +86,7 @@ export function MediaForm({
         },
         {
           onSuccess: () => {
-            pushToast('安排改好了');
+            pushToast('安排改好了', undefined, 'success');
             onClose();
           },
           onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),
@@ -121,7 +121,7 @@ export function MediaForm({
       },
       {
         onSuccess: (entry) => {
-          pushToast(`「${entry.mediaTitle.title}」加进片单了`);
+          pushToast(`「${entry.mediaTitle.title}」加进片单了`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没加进去'),

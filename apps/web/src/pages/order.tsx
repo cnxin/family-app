@@ -134,7 +134,7 @@ export function OrderPage() {
           const count = cart.entries.length;
           cart.clear();
           setCartOpen(false);
-          pushToast(`${count} 道菜已加进${MEAL_LABELS[cart.mealType]}`);
+          pushToast(`${count} 道菜已加进${MEAL_LABELS[cart.mealType]}`, undefined, 'success');
         },
       },
     );

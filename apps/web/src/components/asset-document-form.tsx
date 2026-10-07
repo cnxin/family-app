@@ -35,7 +35,7 @@ export function DocumentForm({
   const busy = createLink.isPending || upload.isPending;
 
   function done() {
-    pushToast('资料已收好');
+    pushToast('资料已收好', undefined, 'success');
     onClose();
   }
   function fail(error: unknown) {

@@ -66,7 +66,7 @@ export function StockDialog({ item, onClose }: { item: ShoppingItem; onClose: ()
           pushToast(
             result.alreadyConfirmed
               ? `「${name}」已经入过库，没有重复增加`
-              : `已入库 ${num(transaction?.delta)} ${transaction?.unit ?? ''}，当前 ${num(transaction?.quantityAfter)} ${transaction?.unit ?? ''}${trackBatch ? '，并记了批次' : ''}`,
+              : `已入库 ${num(transaction?.delta)} ${transaction?.unit ?? ''}，当前 ${num(transaction?.quantityAfter)} ${transaction?.unit ?? ''}${trackBatch ? '，并记了批次' : ''}`, undefined, 'success',
           );
           onClose();
         },

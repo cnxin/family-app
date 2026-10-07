@@ -73,7 +73,7 @@ export function TemplateForm({
       },
       {
         onSuccess: () => {
-          pushToast(editing ? '模板已更新' : `模板「${title.trim()}」建好了`);
+          pushToast(editing ? '模板已更新' : `模板「${title.trim()}」建好了`, undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

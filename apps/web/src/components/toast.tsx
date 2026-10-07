@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { Toast } from '../lib/toast';
+import type { Toast, ToastTone } from '../lib/toast';
 import { dismissToast, subscribeToasts } from '../lib/toast';
 
-/** 失败提示停在屏幕下方，带 requestId——报问题时把它给我，我能直接定位那条请求。 */
+// 语气只改颜色点、边框和读屏的打断程度：失败打断（assertive），成功 / 信息不打断（polite）。
+// role 一律是 alert（页面行为与原来一致，用例也按 alert 找提示）。
+const TONE: Record<ToastTone, { dot: string; border: string; live: 'assertive' | 'polite' }> = {
+  success: { dot: 'bg-accent', border: 'border-border', live: 'polite' },
+  info: { dot: 'bg-ink-soft/60', border: 'border-border', live: 'polite' },
+  error: { dot: 'bg-danger', border: 'border-danger/30', live: 'assertive' },
+};
+
+/** 提示停在屏幕下方；失败的带 requestId——报问题时把它给我，我能直接定位那条请求。 */
 export function ToastHost() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   useEffect(() => subscribeToasts(setToasts), []);
@@ -13,9 +21,11 @@ export function ToastHost() {
         <div
           key={toast.id}
           role="alert"
-          className={`pointer-events-auto flex w-full max-w-[520px] items-start gap-3 rounded-xl border bg-surface px-4 py-3 shadow-lg ${toast.action ? 'border-border' : 'border-danger/30'}`}
+          aria-live={TONE[toast.tone].live}
+          data-tone={toast.tone}
+          className={`pointer-events-auto flex w-full max-w-[520px] items-start gap-3 rounded-xl border bg-surface px-4 py-3 shadow-lg ${TONE[toast.tone].border}`}
         >
-          <span className={`mt-1.5 size-2 shrink-0 rounded-full ${toast.action ? 'bg-accent' : 'bg-danger'}`} />
+          <span aria-hidden className={`mt-1.5 size-2 shrink-0 rounded-full ${TONE[toast.tone].dot}`} />
           <div className="min-w-0 flex-1">
             <p className="text-sm text-ink">{toast.message}</p>
             {toast.requestId ? (

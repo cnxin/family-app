@@ -108,7 +108,7 @@ export function TravelPlanPage() {
                 ? '放回待处理'
                 : action === 'skip'
                   ? '这项跳过'
-                  : '这项移除了',
+                  : '这项移除了', undefined, 'success',
           );
         },
       },
@@ -128,7 +128,7 @@ export function TravelPlanPage() {
       {
         onSuccess: () => {
           setAsk(null);
-          pushToast('行程状态更新了');
+          pushToast('行程状态更新了', undefined, 'success');
         },
       },
     );

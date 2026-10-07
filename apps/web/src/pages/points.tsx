@@ -89,7 +89,7 @@ export function PointsPage() {
     if (!ask) return;
     const done = (text: string) => () => {
       setAsk(null);
-      pushToast(text);
+      pushToast(text, undefined, 'success');
     };
     if (ask.kind === 'redeem') {
       redeem.mutate({ rewardId: ask.reward.id }, { onSuccess: done(`已申请兑换「${ask.reward.name}」，等确认`) });

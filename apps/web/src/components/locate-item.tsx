@@ -78,7 +78,7 @@ export function LocateItemFlow({
             onClick={() =>
               setLocation.mutate(
                 { target: 'item', id: item.id, locationId: where.id },
-                { onSuccess: () => { pushToast(`记下了：${item.name}上次放在 ${where.pathLabel}`); close(); }, onError: (error) => pushToast(error.message) },
+                { onSuccess: () => { pushToast(`记下了：${item.name}上次放在 ${where.pathLabel}`, undefined, 'success'); close(); }, onError: (error) => pushToast(error.message, undefined, 'error') },
               )
             }
             className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-left text-[14px] transition-colors duration-150 hover:bg-muted disabled:opacity-50"

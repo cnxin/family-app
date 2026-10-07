@@ -77,7 +77,7 @@ export function CompletionForm({
           pushToast(
             result.alreadyCompleted
               ? '这次维护已经记过了，日期没有重复往后推'
-              : `维护记下了，下次安排在 ${assetDateLabel(result.plan.nextDueDate)}`,
+              : `维护记下了，下次安排在 ${assetDateLabel(result.plan.nextDueDate)}`, undefined, 'success',
           );
           onClose();
         },
@@ -205,7 +205,7 @@ export function CompletionForm({
                         pushToast(
                           result.items.length
                             ? `购物清单：新增 ${result.createdCount} 项，已有 ${result.existingCount} 项`
-                            : '现有库存其实够用，没往清单里加',
+                            : '现有库存其实够用，没往清单里加', undefined, 'success',
                         ),
                       onError: (error) =>
                         setMessage(error instanceof Error ? error.message : '没加进购物清单'),

@@ -157,7 +157,7 @@ function RulesCard({ settings }: { settings: SmartHomeWebhookSettings }) {
             <Button
               className="min-h-11"
               disabled={save.isPending}
-              onClick={() => save.mutate(rules, { onSuccess: () => pushToast('联动设置已保存；改了触发实体要重新生成 HA 配置') })}
+              onClick={() => save.mutate(rules, { onSuccess: () => pushToast('联动设置已保存；改了触发实体要重新生成 HA 配置', undefined, 'success') })}
             >
               保存联动设置
             </Button>
@@ -183,7 +183,7 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
           aria-label={`复制${label}`}
           onClick={async () => {
             if (await copyText(text)) {
-              pushToast('已复制');
+              pushToast('已复制', undefined, 'success');
               return;
             }
             // 局域网 IP 打开时浏览器不给复制：把下面整段选中，长按 / ⌘C 复制

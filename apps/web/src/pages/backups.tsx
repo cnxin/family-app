@@ -90,7 +90,7 @@ export function BackupsPage() {
     if (!ask) return;
     const done = (text: string) => () => {
       setAsk(null);
-      pushToast(text);
+      pushToast(text, undefined, 'success');
     };
     if (ask.kind === 'backup') {
       queue.mutate(

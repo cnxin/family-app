@@ -42,8 +42,8 @@ function RecurringRow({
     navigator.vibrate?.(10);
     retry.mutate(row.id, {
       onSuccess: (result) =>
-        pushToast(result.posted ? `「${row.title}」补记上了 ${result.posted} 期` : `「${row.title}」恢复自动记账了，下一期到期再记`),
-      onError: (error) => pushToast(errorText(error, '还是没记上')),
+        pushToast(result.posted ? `「${row.title}」补记上了 ${result.posted} 期` : `「${row.title}」恢复自动记账了，下一期到期再记`, undefined, 'success'),
+      onError: (error) => pushToast(errorText(error, '还是没记上'), undefined, 'error'),
     });
   }
 
@@ -53,8 +53,8 @@ function RecurringRow({
       { id: row.id, dueOn: row.nextDueOn },
       {
         onSuccess: (result) =>
-          pushToast(`记下了「${row.title}」这一期，下一期 ${recurringDueText(result.recurring.nextDueOn, today).text}`),
-        onError: (error) => pushToast(errorText(error, '没记上')),
+          pushToast(`记下了「${row.title}」这一期，下一期 ${recurringDueText(result.recurring.nextDueOn, today).text}`, undefined, 'success'),
+        onError: (error) => pushToast(errorText(error, '没记上'), undefined, 'error'),
       },
     );
   }
@@ -63,8 +63,8 @@ function RecurringRow({
     save.mutate(
       { id: row.id, expectedVersion: row.version, body },
       {
-        onSuccess: () => pushToast(done),
-        onError: (error) => pushToast(errorText(error, '没改成')),
+        onSuccess: () => pushToast(done, undefined, 'success'),
+        onError: (error) => pushToast(errorText(error, '没改成'), undefined, 'error'),
       },
     );
   }
@@ -257,9 +257,9 @@ export function RecurringPanel({
                       onSuccess: () => {
                         navigator.vibrate?.(10);
                         setRemoving(null);
-                        pushToast('周期账单已删除');
+                        pushToast('周期账单已删除', undefined, 'success');
                       },
-                      onError: (error) => pushToast(errorText(error, '没删掉')),
+                      onError: (error) => pushToast(errorText(error, '没删掉'), undefined, 'error'),
                     },
                   )
                 }

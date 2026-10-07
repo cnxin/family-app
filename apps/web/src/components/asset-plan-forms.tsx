@@ -39,7 +39,7 @@ export function PlanForm({
       { assetId, title: title.trim(), frequencyDays: days, nextDueDate, note: note.trim() || null },
       {
         onSuccess: () => {
-          pushToast(`「${title.trim()}」已排进维护计划`);
+          pushToast(`「${title.trim()}」已排进维护计划`, undefined, 'success');
           onClose();
         },
         // 同一件资产下重名会 409，后端的话比我们兜底的更准
@@ -146,7 +146,7 @@ export function ConsumableForm({
       { assetId, planId: plan.id, consumableId: editing?.id, inventoryItemId, quantity: amount },
       {
         onSuccess: () => {
-          pushToast(editing ? '耗材已更新' : '耗材已关联');
+          pushToast(editing ? '耗材已更新' : '耗材已关联', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

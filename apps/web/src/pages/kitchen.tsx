@@ -220,7 +220,7 @@ function MealSection({
                   disabled={!preview.data.canConfirm || confirm.isPending}
                   onClick={() =>
                     confirm.mutate(menu.id, {
-                      onSuccess: () => pushToast('已确认扣库，库存流水里能看到'),
+                      onSuccess: () => pushToast('已确认扣库，库存流水里能看到', undefined, 'success'),
                     })
                   }
                 >
@@ -293,7 +293,7 @@ export function KitchenPage() {
                   pushToast(
                     list.length
                       ? `清单已生成：共 ${list.length} 项食材，去「购物清单」看`
-                      : '接单的菜都不缺食材（常备调料不进清单）',
+                      : '接单的菜都不缺食材（常备调料不进清单）', undefined, 'success',
                   ),
               })
             }

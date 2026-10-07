@@ -61,7 +61,7 @@ export function useShapeSaver() {
           }
         }
       }
-      if (failed) pushToast(`地图没保存上（${message}），已退回原来的样子`);
+      if (failed) pushToast(`地图没保存上（${message}），已退回原来的样子`, undefined, 'error');
       setStatus(failed ? 'failed' : pending.current.size ? 'saving' : 'saved');
     });
     return running.current;

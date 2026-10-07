@@ -58,7 +58,7 @@ export function MemoryEditor({
       },
       {
         onSuccess: (memory) => {
-          pushToast(editing ? '这条回忆已更新' : '记下了');
+          pushToast(editing ? '这条回忆已更新' : '记下了', undefined, 'success');
           onSaved(memory);
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

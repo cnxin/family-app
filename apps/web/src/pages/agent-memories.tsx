@@ -134,7 +134,7 @@ export function AgentMemoriesPage() {
                 onClick={() =>
                   clear.mutate(undefined, {
                     onSuccess: (result) => {
-                      pushToast(`已忘掉 ${result.forgottenCount} 条`);
+                      pushToast(`已忘掉 ${result.forgottenCount} 条`, undefined, 'success');
                       setClearing(false);
                     },
                   })

@@ -34,7 +34,7 @@ export function useDecorations(map: HouseholdMap) {
           if (pending.current === 1) client.setQueryData(mapKeys.map, next);
           return true;
         } catch (error) {
-          pushToast(error instanceof ApiError && error.status === 409 ? '家具刚在别的设备上改过，已重新载入' : '家具没保存上，检查一下网络');
+          pushToast(error instanceof ApiError && error.status === 409 ? '家具刚在别的设备上改过，已重新载入' : '家具没保存上，检查一下网络', undefined, 'error');
           await client.invalidateQueries({ queryKey: mapKeys.map });
           // 重拉回来的是服务端现在的版本：接着用它（上面的 effect 在请求还挂着时不会同步）
           version.current = client.getQueryData<HouseholdMap | null>(mapKeys.map)?.decorationsVersion ?? version.current;

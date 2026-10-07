@@ -62,7 +62,7 @@ function LinkRow({ link, deviceName }: { link: SmartHomeLink; deviceName: string
         className="min-h-11 shrink-0 px-2"
         aria-label={`删掉联动${link.name}`}
         disabled={busy}
-        onClick={() => remove.mutate(link.id, { onSuccess: () => pushToast(`已删掉「${link.name}」`) })}
+        onClick={() => remove.mutate(link.id, { onSuccess: () => pushToast(`已删掉「${link.name}」`, undefined, 'success') })}
       >
         删掉
       </Button>
@@ -109,7 +109,7 @@ function NewLinkForm({ devices }: { devices: { id: string; displayName: string; 
           {
             onSuccess: () => {
               navigator.vibrate?.(10);
-              pushToast(`联动「${name.trim()}」建好了`);
+              pushToast(`联动「${name.trim()}」建好了`, undefined, 'success');
               setName('');
               setKeyword('');
             },

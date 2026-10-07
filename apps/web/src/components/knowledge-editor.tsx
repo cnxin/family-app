@@ -84,7 +84,7 @@ export function KnowledgeEditor({
       },
       {
         onSuccess: (article) => {
-          pushToast(editing ? '这篇已经更新' : `已写下「${article.title}」`);
+          pushToast(editing ? '这篇已经更新' : `已写下「${article.title}」`, undefined, 'success');
           onSaved(article);
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没保存成功'),

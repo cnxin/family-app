@@ -49,7 +49,7 @@ export function MediaPollDialog({
       },
       {
         onSuccess: () => {
-          pushToast('投票发起了');
+          pushToast('投票发起了', undefined, 'success');
           onCreated();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没发起来'),
@@ -64,7 +64,7 @@ export function MediaPollDialog({
       { id: poll.id, optionIds: picked },
       {
         onSuccess: () => {
-          pushToast(picked.length ? '选择记下了' : '撤回了选择');
+          pushToast(picked.length ? '选择记下了' : '撤回了选择', undefined, 'success');
           onClose();
         },
         onError: (error) => setMessage(error instanceof Error ? error.message : '没投上'),

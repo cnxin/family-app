@@ -97,7 +97,7 @@ export function TransactionEditor({
       {
         onSuccess: (saved) => {
           if (body.categoryId) rememberCategory(body.categoryId);
-          pushToast(moneyChanged ? `改好了：「${saved.title}」重记了一笔，原来的留在历史里` : `改好了：「${saved.title}」`);
+          pushToast(moneyChanged ? `改好了：「${saved.title}」重记了一笔，原来的留在历史里` : `改好了：「${saved.title}」`, undefined, 'success');
           onSaved(saved);
           onClose();
         },
@@ -110,7 +110,7 @@ export function TransactionEditor({
     navigator.vibrate?.(10);
     remove.mutate(entry.id, {
       onSuccess: () => {
-        pushToast(`删掉了「${entry.title}」，余额已经回到记这笔之前`);
+        pushToast(`删掉了「${entry.title}」，余额已经回到记这笔之前`, undefined, 'success');
         onClose();
       },
       onError: (error) => {

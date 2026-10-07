@@ -93,7 +93,7 @@ export function ExpiryCard({ asset }: { asset: HomeAsset }) {
                     {
                       onSuccess: (saved) => {
                         setAsking(false);
-                        pushToast(`已记下这次续费，下次是 ${assetDateLabel(saved.renewsOn)}`);
+                        pushToast(`已记下这次续费，下次是 ${assetDateLabel(saved.renewsOn)}`, undefined, 'success');
                       },
                     },
                   )

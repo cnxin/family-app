@@ -98,7 +98,7 @@ export function TemplatesPanel({
                           },
                           {
                             onSuccess: () =>
-                              pushToast(archived ? '模板恢复了' : '模板归档了，已经用过的清单不受影响'),
+                              pushToast(archived ? '模板恢复了' : '模板归档了，已经用过的清单不受影响', undefined, 'success'),
                           },
                         )
                       }
