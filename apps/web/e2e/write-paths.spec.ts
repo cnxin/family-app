@@ -864,7 +864,8 @@ test('知识库：写一篇、改一版、还原回上一版、归档', async ({
     articleId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
 
     // 保存完直接停在这篇的详情上
-    const detail = page.getByRole('dialog', { name: title });
+    // exact：保存后「编辑「…」」那个对话框可能还没关掉，名字里也含标题
+    const detail = page.getByRole('dialog', { name: title, exact: true });
     await expect(detail).toContainText('第一版');
 
     // 改一版
@@ -930,7 +931,8 @@ test('回忆：记一条、放一张照片、归档', async ({ page, request }) 
     memoryId = ((await createdResponse.json()) as { data: { id: string } }).data.id;
 
     // 保存完直接停在详情上，往里放一张照片
-    const detail = page.getByRole('dialog', { name: title });
+    // exact：保存后「编辑「…」」那个对话框可能还没关掉，名字里也含标题
+    const detail = page.getByRole('dialog', { name: title, exact: true });
     await detail.getByLabel('选择回忆照片').setInputFiles({
       name: 'e2e.png',
       mimeType: 'image/png',

@@ -119,12 +119,15 @@ export function ImportPreviewList({
   categories,
   transferTargets,
   onChange,
+  onIncludeMany,
 }: {
   rows: FinanceImportPreviewRow[];
   decisions: Record<number, RowDecision>;
   categories: FinanceCategory[];
   transferTargets: FinanceAccount[];
   onChange: (rowNo: number, next: Partial<RowDecision>) => void;
+  /** 全选 / 全不选 / 反选：只动当前筛选出来、能勾的行 */
+  onIncludeMany: (included: Record<number, boolean>) => void;
 }) {
   const desktop = useMediaQuery('(min-width: 768px)');
   const [filter, setFilter] = useState<'all' | 'included' | 'flagged'>('all');
@@ -133,6 +136,13 @@ export function ImportPreviewList({
     filter === 'included' ? decisions[row.rowNo]?.included : filter === 'flagged' ? row.flags.length > 0 : true,
   );
   const shown = visible.slice(0, limit);
+  const pickable = visible.filter((row) => row.selectable);
+  const bulk = (mode: 'all' | 'none' | 'invert') =>
+    onIncludeMany(
+      Object.fromEntries(
+        pickable.map((row) => [row.rowNo, mode === 'all' ? true : mode === 'none' ? false : !decisions[row.rowNo].included]),
+      ),
+    );
   const select = (row: FinanceImportPreviewRow, className?: string) => (
     <CategorySelect
       row={row}
@@ -154,19 +164,32 @@ export function ImportPreviewList({
 
   return (
     <div className="flex flex-col gap-3">
-      <Segmented
-        label="筛选预览行"
-        value={filter}
-        onChange={(next) => {
-          setFilter(next);
-          setLimit(PAGE);
-        }}
-        options={[
-          { value: 'all' as const, label: `全部 ${rows.length}` },
-          { value: 'included' as const, label: '要导入的' },
-          { value: 'flagged' as const, label: '有标记的' },
-        ]}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Segmented
+          label="筛选预览行"
+          value={filter}
+          onChange={(next) => {
+            setFilter(next);
+            setLimit(PAGE);
+          }}
+          options={[
+            { value: 'all' as const, label: `全部 ${rows.length}` },
+            { value: 'included' as const, label: '要导入的' },
+            { value: 'flagged' as const, label: '有标记的' },
+          ]}
+        />
+        <div className="flex items-center gap-1" aria-label="批量勾选">
+          <Button variant="ghost" className="h-8 px-2 text-[13px]" disabled={!pickable.length} onClick={() => bulk('all')}>
+            全选
+          </Button>
+          <Button variant="ghost" className="h-8 px-2 text-[13px]" disabled={!pickable.length} onClick={() => bulk('none')}>
+            全不选
+          </Button>
+          <Button variant="ghost" className="h-8 px-2 text-[13px]" disabled={!pickable.length} onClick={() => bulk('invert')}>
+            反选
+          </Button>
+        </div>
+      </div>
       {shown.length === 0 ? (
         <p className="py-8 text-center text-[13px] text-ink-soft">这里没有行</p>
       ) : desktop ? (
