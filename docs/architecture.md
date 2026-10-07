@@ -553,7 +553,7 @@ export class PointsTaskHooks implements OnModuleInit {
 | `inventory` | `consumeForMaintenance(tx, …)`、`listIngredientStock(tx, …)`、`listShoppingReceipts(…)`、`hasShoppingReceipt(…)` | 资产（维护记出库，同一事务）、购物（生成清单扣库存、已入库的自动项保留；列表的入库确认；删除前检查） |
 | `menus` | `listIngredientNeeds(tx, householdId, date)` | 购物（按某天已接受 / 在做的菜生成清单） |
 | `shopping` | `hasUncheckedItem(tx, householdId, customName)` | 智能家居（滤芯低时清单里是否已有没买的滤芯） |
-| `assets` | `monthlyRecurringCost(householdId)`（Phase K3 加） | 财务（汇总页「固定支出」里的资产续费月均） |
+| `assets` | `monthlyRecurringCost(householdId)`（Phase K3 加；K 收尾起每期金额优先用资产的「每次续费金额」`renewalPrice`，空了退回购买价格，都没有的不算） | 财务（汇总页「固定支出」里的资产续费月均） |
 
 `dependsOn` 结果：calendar `[tasks]`、reminders `[calendar]`、smart-home `[tasks, shopping]`、inventory `[locations]`、assets `[locations, inventory]`、shopping `[menus, inventory]`、finance `[assets]`（Phase K3）。
 
@@ -567,7 +567,7 @@ export class PointsTaskHooks implements OnModuleInit {
 
 **插件事件**：`tasks.completed`（任务，提交后）→ 智能家居联动规则（`smart-home-links.service.ts`）。原来任务目录的 `TaskEvents` 删掉，语义照旧。
 
-**Phase K 第一批新加的留意**（走 J1.7 的 `AttentionRegistry`，kind 与文案在财务 manifest）：`finance.recurring`（没开自动记账的周期账单，到期前 3 天起，逾期标出来，`FinanceRecurringDueProvider`）、`finance.credit`（信用卡还款日前 3 天到当天、还欠着钱，`FinanceCreditDueProvider`）。见 `docs/finance-plan.md` §8。
+**Phase K 新加的留意**（走 J1.7 的 `AttentionRegistry`，kind 与文案在财务 manifest）：`finance.recurring`（没开自动记账的周期账单，到期前 3 天起，逾期标出来，`FinanceRecurringDueProvider`）、`finance.credit`（信用卡还款日前 3 天到当天、还欠着钱，`FinanceCreditDueProvider`）、`finance.recurring-failed`（K 收尾：自动记账落失败，只给管理员 `manage_finance`，名字里带原因，`FinanceRecurringFailedProvider`）。见 `docs/finance-plan.md` §8。
 
 **纯函数**：`taskOccursOn`、`buildRecipeSnapshot` 挪进 `packages/shared`（单测随之搬到 `kernel-units.check.ts`）；`usableLocationId` 要查库，归位置门面。
 
