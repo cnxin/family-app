@@ -166,12 +166,14 @@ export class SmartHomeWebhookService {
       record.status = outcome.status;
       record.result = outcome.result.slice(0, 300);
       await this.events.save(record);
-      if (outcome.domains.length) this.bus.publish({ householdId, domains: outcome.domains });
+      // 结果写好后再推一次：上面那次推的时候结果还是空的，刚好那时去取的页面会一直停在「—」（ping 这类没有别的域要推）
+      this.bus.publish({ householdId, domains: [...new Set(['smart-home' as const, ...outcome.domains])] });
       return { accepted: true, duplicate: false, result: outcome.result };
     } catch (error) {
       record.status = 'failed';
       record.result = (error instanceof Error ? error.message : '联动失败').slice(0, 300);
       await this.events.save(record);
+      this.bus.publish({ householdId, domains: ['smart-home'] });
       this.logger.warn(`smart_home_webhook_failed household=${householdId} event=${body.event} ${record.result}`);
       return { accepted: true, duplicate: false, result: `联动失败：${record.result}` };
     }
