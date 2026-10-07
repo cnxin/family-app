@@ -1,48 +1,101 @@
-import { useState } from 'react';
-import type { FinanceTransaction, FinanceTransactionType } from '@family/contracts';
-import { useFinanceTransactions, useReverseFinanceTransaction, yuan } from '../lib/queries';
+import { useEffect, useMemo, useState } from 'react';
+import type { FinanceAccount, FinanceCategory, FinanceTransaction, FinanceTransactionType, UpdatedFinanceTransaction } from '@family/contracts';
+import { recentCategoryIds } from '../lib/finance-recent';
+import { canEditTransaction, LEDGER_LIMIT, useBatchFinanceTransactions, useFinanceTransactions } from '../lib/queries';
 import { pushToast } from '../lib/toast';
+import { BatchBar, BatchDialog, type BatchAction } from './finance-ledger-batch';
+import { FilterChips, FilterDialog, type LedgerFilters } from './finance-ledger-filters';
+import { LedgerRow } from './finance-ledger-row';
+import { TransactionEditor } from './finance-transaction-edit';
 import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
-import { Button, Dialog, EmptyState, Panel, Segmented } from './ui';
+import { Button, EmptyState, Input, Panel, Segmented } from './ui';
 
-const TYPE_STYLE: Record<FinanceTransactionType, { emoji: string; className: string }> = {
-  expense: { emoji: '↗', className: 'text-danger' },
-  income: { emoji: '↙', className: 'text-accent' },
-  transfer: { emoji: '⇄', className: 'text-ink' },
-  reversal: { emoji: '↺', className: 'text-ink-soft' },
-};
-
-function amountText(entry: FinanceTransaction) {
-  if (entry.type === 'expense') return `-${yuan(entry.amount)}`;
-  if (entry.type === 'income') return `+${yuan(entry.amount)}`;
-  return yuan(entry.amount);
+function useDebounced<T>(value: T, ms: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return debounced;
 }
 
-/** 转账两条分录的顺序由数据库决定，按 delta 正负排一下才能稳定显示成「转出 → 转入」。 */
-function accountPath(entry: FinanceTransaction) {
-  return [...entry.postings]
-    .sort((a, b) => a.delta - b.delta)
-    .map((posting) => posting.account?.name)
-    .filter(Boolean)
-    .join(' → ');
-}
+/**
+ * 「流水」分段（K5）：搜索（300 ms 防抖）+ 筛选抽屉（分类 / 账户 / 成员 / 显示已删除，摆成可删的小标签），和月份叠加；
+ * 点一笔改（成员只能改自己记的）；「选择」进批量模式改分类 / 改账户 / 删除。
+ */
+export function LedgerPanel({
+  month,
+  canManage,
+  memberId,
+  accounts,
+  categories,
+  members,
+}: {
+  month: string;
+  canManage: boolean;
+  memberId: string | undefined;
+  accounts: FinanceAccount[];
+  categories: FinanceCategory[];
+  members: { id: string; name: string }[];
+}) {
+  const [type, setType] = useState<FinanceTransactionType | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const q = useDebounced(search, 300);
+  const [filters, setFilters] = useState<LedgerFilters>({});
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchAction, setBatchAction] = useState<BatchAction | null>(null);
+  const [editing, setEditing] = useState<FinanceTransaction | null>(null);
+  const list = useFinanceTransactions(month, { type, q, ...filters });
+  const followUp = useBatchFinanceTransactions();
+  const rows = useMemo(() => list.data ?? [], [list.data]);
+  const recent = useMemo(() => recentCategoryIds(rows), [rows]);
+  const editable = (entry: FinanceTransaction) => canEditTransaction(entry, memberId, canManage);
+  const filterCount = Object.values(filters).filter(Boolean).length;
+  const chosen = rows.filter((entry) => selected.has(entry.id));
+  const majorityKind = chosen.filter((entry) => entry.type === 'income').length > chosen.length / 2 ? 'income' : 'expense';
 
-export function LedgerPanel({ month, canManage }: { month: string; canManage: boolean }) {
-  const [filter, setFilter] = useState<FinanceTransactionType | 'all'>('all');
-  const list = useFinanceTransactions(month, filter);
-  const reverse = useReverseFinanceTransaction();
-  const [reversing, setReversing] = useState<FinanceTransaction | null>(null);
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
-  const rows = list.data ?? [];
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  /** 改了分类、同商户还有别的笔分类不一样：toast 带按钮「同时改另外 N 笔」（面板一直在，编辑框关了按钮也能用） */
+  function offerSameMerchant(saved: UpdatedFinanceTransaction) {
+    if (!saved.sameMerchantPending || !saved.category) return;
+    const { sameMerchantIds: ids, sameMerchantPending: count } = saved;
+    const category = saved.category;
+    pushToast(`「${saved.merchant ?? saved.title}」还有 ${count} 笔不是「${category.name}」`, undefined, {
+      label: `同时改另外 ${count} 笔`,
+      run: () =>
+        followUp.mutate(
+          { ids, action: 'category', categoryId: category.id },
+          {
+            onSuccess: (result) => pushToast(`已改 ${result.done} 笔，跳过 ${result.skipped.length} 笔`),
+            onError: (error) => pushToast(error instanceof Error ? error.message : '没改成'),
+          },
+        ),
+    });
+  }
 
   return (
     <Panel
       title="流水"
       right={
         <Segmented
-          value={filter}
-          onChange={setFilter}
+          value={type}
+          onChange={setType}
           options={[
             { value: 'all' as const, label: '全部' },
             { value: 'expense' as const, label: '支出' },
@@ -52,103 +105,91 @@ export function LedgerPanel({ month, canManage }: { month: string; canManage: bo
         />
       }
     >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <Input
+          type="search"
+          value={search}
+          aria-label="搜流水"
+          placeholder="搜名称、商户、备注"
+          className="h-9 min-w-0 flex-1"
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <Button variant="outline" className="h-9 shrink-0 px-3 text-[13px]" onClick={() => setFilterOpen(true)}>
+          筛选{filterCount ? ` · ${filterCount}` : ''}
+        </Button>
+        {selecting ? null : (
+          <Button variant="outline" className="h-9 shrink-0 px-3 text-[13px]" onClick={() => setSelecting(true)}>
+            选择
+          </Button>
+        )}
+      </div>
+      <FilterChips filters={filters} categories={categories} accounts={accounts} members={members} onChange={setFilters} />
+      {selecting ? <BatchBar count={selected.size} onAction={setBatchAction} onCancel={stopSelecting} /> : null}
+
       <QueryFrame query={list} skeleton={<div className="p-3"><ListSkeleton rows={4} /></div>}>
         {rows.length === 0 ? (
-        <EmptyState emoji="🧾" title="这个月还没有流水" hint="右上角「记一笔」开始记" />
-      ) : (
-        rows.map((entry, index) => {
-          const style = TYPE_STYLE[entry.type];
-          return (
-            <article
-              key={entry.id}
-              aria-label={entry.title}
-              className={
-                'flex items-center gap-2 px-3.5 py-3 ' +
-                (index ? 'border-t border-border ' : '') +
-                (entry.reversed ? 'opacity-60' : '')
-              }
-            >
-              <span className={`grid size-8 shrink-0 place-items-center rounded-lg bg-muted ${style.className}`}>
-                {style.emoji}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-medium">{entry.title}</p>
-                <p className="truncate text-[12px] text-ink-soft">
-                  {[
-                    entry.occurredOn,
-                    entry.category?.name,
-                    accountPath(entry),
-                    entry.sourceType === 'import' ? `${entry.actorName}导入` : entry.actorName,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-                {entry.note ? (
-                  <p className="truncate text-[12px] text-ink-soft">{entry.note}</p>
-                ) : null}
-                {entry.reversed ? (
-                  <p className="text-[12px] text-warm">已经被一笔反向流水撤销</p>
-                ) : null}
-              </div>
-              {/* 金额和撤销放同一列，手机上才不会把「撤销」甩到下一行去 */}
-              <div className="flex shrink-0 items-center gap-1">
-                <span className={`text-[14px] font-semibold tabular-nums ${style.className}`}>
-                  {amountText(entry)}
-                </span>
-                {canManage && entry.type !== 'reversal' && !entry.reversed ? (
-                  <Button
-                    variant="ghost"
-                    className="h-8 px-2 text-[13px]"
-                    aria-label={`撤销${entry.title}`}
-                    onClick={() => setReversing(entry)}
-                  >
-                    撤销
-                  </Button>
-                ) : null}
-              </div>
-            </article>
-          );
-        })
-      )}
+          q || filterCount ? (
+            <EmptyState emoji="🔍" title="没有对得上的流水" hint="换个关键词，或者去掉几个筛选" />
+          ) : (
+            <EmptyState emoji="🧾" title="这个月还没有流水" hint="右上角「记一笔」开始记" />
+          )
+        ) : (
+          <>
+            {rows.map((entry, index) => (
+              <LedgerRow
+                key={entry.id}
+                entry={entry}
+                first={index === 0}
+                editable={editable(entry)}
+                selecting={selecting}
+                selected={selected.has(entry.id)}
+                onToggle={() => toggle(entry.id)}
+                onEdit={() => setEditing(entry)}
+              />
+            ))}
+            {rows.length >= LEDGER_LIMIT ? (
+              <p className="border-t border-border px-3.5 py-3 text-center text-[12px] text-ink-soft">
+                只列了前 {LEDGER_LIMIT} 笔：用搜索或筛选缩小范围
+              </p>
+            ) : null}
+          </>
+        )}
       </QueryFrame>
 
-      {reversing ? (
-        <Dialog
-          title="撤销这笔流水？"
-          onClose={() => setReversing(null)}
-          footer={
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setReversing(null)}>
-                取消
-              </Button>
-              <Button
-                className="flex-1"
-                disabled={reverse.isPending}
-                onClick={() =>
-                  reverse.mutate(
-                    {
-                      id: reversing.id,
-                      idempotencyKey: `finance:transaction:reverse:${reversing.id}:${Date.now()}`,
-                    },
-                    {
-                      onSuccess: () => {
-                        setReversing(null);
-                        pushToast(`「${reversing.title}」已撤销`);
-                      },
-                    },
-                  )
-                }
-              >
-                {reverse.isPending ? '撤销中…' : '确认撤销'}
-              </Button>
-            </div>
-          }
-        >
-          <p className="text-[13px] text-ink-soft">
-            原来那笔留着不动，另记一笔金额相反的撤销流水；账户余额和本月统计会跟着回到撤销前。
-            撤销流水记在今天，所以如果撤的是往月的账，它会出现在这个月的列表里。
-          </p>
-        </Dialog>
+      {filterOpen ? (
+        <FilterDialog
+          filters={filters}
+          categories={categories}
+          accounts={accounts}
+          members={members}
+          onClose={() => setFilterOpen(false)}
+          onApply={setFilters}
+        />
+      ) : null}
+      {editing ? (
+        <TransactionEditor
+          entry={editing}
+          accounts={accounts}
+          categories={categories}
+          recent={recent}
+          onClose={() => setEditing(null)}
+          onSaved={offerSameMerchant}
+        />
+      ) : null}
+      {batchAction ? (
+        <BatchDialog
+          action={batchAction}
+          ids={[...selected]}
+          kind={majorityKind}
+          accounts={accounts}
+          categories={categories}
+          recent={recent}
+          onClose={() => setBatchAction(null)}
+          onDone={() => {
+            setBatchAction(null);
+            stopSelecting();
+          }}
+        />
       ) : null}
     </Panel>
   );

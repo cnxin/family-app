@@ -7,7 +7,9 @@ import {
   monthLabel,
   useCreateFinanceTransaction,
 } from '../lib/queries';
+import { readRecentCategories, rememberCategory } from '../lib/finance-recent';
 import { pushToast } from '../lib/toast';
+import { CategoryGrid } from './finance-category-grid';
 import { Button, Dialog, Input, Segmented } from './ui';
 
 const label = 'mb-1 block text-[12px] text-ink-soft';
@@ -58,7 +60,7 @@ export function TransactionForm({
     () => `finance:transaction:create:${Date.now()}:${Math.random().toString(36).slice(2)}`,
   );
 
-  const pickable = categories.filter((one) => one.isActive && one.kind === mode);
+  const [recent] = useState(readRecentCategories);
 
   function changeMode(next: Mode) {
     setMode(next);
@@ -92,6 +94,7 @@ export function TransactionForm({
       },
       {
         onSuccess: () => {
+          if (mode !== 'transfer') rememberCategory(categoryId);
           pushToast(`记下了「${title.trim()}」`);
           onClose();
         },
@@ -115,9 +118,7 @@ export function TransactionForm({
       }
     >
       <div className="flex flex-col gap-3">
-        <p className="text-[12px] text-ink-soft">
-          记进去的流水不能改，记错了可以由家庭管理员撤销。
-        </p>
+        <p className="text-[12px] text-ink-soft">记错了在流水里点那一笔就能改、能删。</p>
 
         <Segmented
           value={mode}
@@ -185,19 +186,14 @@ export function TransactionForm({
         ) : (
           <div>
             <span className={label}>{mode === 'expense' ? '支出分类' : '收入分类'}</span>
-            <div className="flex flex-wrap gap-1.5">
-              {pickable.map((one) => (
-                <button
-                  key={one.id}
-                  type="button"
-                  aria-pressed={categoryId === one.id}
-                  className={chip(categoryId === one.id)}
-                  onClick={() => setCategoryId(one.id)}
-                >
-                  {one.name}
-                </button>
-              ))}
-            </div>
+            <CategoryGrid
+              categories={categories}
+              kind={mode}
+              value={categoryId}
+              recent={recent}
+              label={mode === 'expense' ? '支出分类' : '收入分类'}
+              onChange={(category) => setCategoryId(category.id)}
+            />
           </div>
         )}
 

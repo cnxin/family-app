@@ -114,13 +114,33 @@ export function useFinanceCategories() {
   });
 }
 
-export function useFinanceTransactions(month: string, type: FinanceTransactionType | 'all') {
+/** 流水列表的筛选（K5）：类型、关键词、分类、账户、谁记的、连已删除 / 已改过的一起看；和月份叠加。 */
+export interface LedgerFilter {
+  type: FinanceTransactionType | 'all';
+  q?: string;
+  categoryId?: string;
+  accountId?: string;
+  memberId?: string;
+  includeDeleted?: boolean;
+}
+
+/** 一页最多 200 笔（接口上限）：导入一个月的账单就可能上百笔。 */
+export const LEDGER_LIMIT = 200;
+
+export function useFinanceTransactions(month: string, filter: LedgerFilter) {
   return useQuery({
-    queryKey: ['finance', 'transactions', month, type],
-    queryFn: () =>
-      api<FinanceTransaction[]>(
-        `/finance/transactions?month=${month}&limit=100${type === 'all' ? '' : `&type=${type}`}`,
-      ),
+    queryKey: ['finance', 'transactions', month, filter],
+    queryFn: () => {
+      const params = new URLSearchParams({ month, limit: String(LEDGER_LIMIT) });
+      if (filter.type !== 'all') params.set('type', filter.type);
+      if (filter.q?.trim()) params.set('q', filter.q.trim());
+      if (filter.categoryId) params.set('categoryId', filter.categoryId);
+      if (filter.accountId) params.set('accountId', filter.accountId);
+      if (filter.memberId) params.set('memberId', filter.memberId);
+      if (filter.includeDeleted) params.set('includeDeleted', 'true');
+      return api<FinanceTransaction[]>(`/finance/transactions?${params}`);
+    },
+    placeholderData: (previous) => previous,
   });
 }
 
