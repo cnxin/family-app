@@ -11,6 +11,9 @@ import {
   type StatementField,
   type StatementFormat,
 } from './import-formats';
+import { cleanNote, cleanTitle } from './text-cleaning';
+
+export { cleanNote, cleanTitle } from './text-cleaning';
 
 export type StatementDirection = 'expense' | 'income' | 'not_counted';
 export type StatementStatus = 'success' | 'closed' | 'refund';
@@ -150,8 +153,9 @@ export function parseStatement(buffer: Buffer, source: ImportSource): ParsedStat
       rowNo: rows.length + 1,
       line,
       occurredOn,
-      merchant: cell(row, 'merchant'),
-      title: cell(row, 'title'),
+      // K5：去掉订单号、「收款方备注:」之类的垃圾再入库
+      merchant: cleanTitle(cell(row, 'merchant')) ?? '',
+      title: cleanNote(cell(row, 'title')) ?? '',
       amount: Math.abs(amount),
       direction: directionOf(format, cell(row, 'direction')),
       status: statusOf(format, cell(row, 'status')),
@@ -216,13 +220,13 @@ export function parseGenericRows(table: ReturnType<typeof readGenericTable>, map
     else if (GENERIC_DIRECTIONS.expense.some((word) => rawDirection.includes(word))) direction = 'expense';
     else if (GENERIC_DIRECTIONS.income.some((word) => rawDirection.includes(word))) direction = 'income';
     else direction = 'not_counted';
-    const merchant = at(row, 'merchant');
+    const merchant = cleanTitle(at(row, 'merchant')) ?? '';
     rows.push({
       rowNo: rows.length + 1,
       line,
       occurredOn,
       merchant,
-      title: at(row, 'note') || merchant,
+      title: cleanNote(at(row, 'note')) ?? merchant,
       amount: Math.abs(amount),
       direction,
       status: 'success',

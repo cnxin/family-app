@@ -99,7 +99,8 @@ try {
   const row = (preview, rowNo) => preview.rows.find((one) => one.rowNo === rowNo);
   /** 预期余额变化：勾上的行按建议类型算（转账从本账户转出） */
   const delta = (rows) => round(rows.reduce((sum, one) => sum + (one.suggestedType === 'income' ? one.amount : -one.amount), 0));
-  const commit = (id, rows = []) => request(`/finance/imports/${id}/commit`, member.accessToken, 'POST', { rows });
+  const commit = (id, rows = [], includeAll) =>
+    request(`/finance/imports/${id}/commit`, member.accessToken, 'POST', { rows, ...(includeAll === undefined ? {} : { includeAll }) });
   const wechatFile = fixture('wechat-sample.csv');
   const wechatName = '微信支付账单(20260901-20260930).csv';
 
@@ -170,6 +171,13 @@ try {
     [householdId],
   );
   assert(activity.rows[0]?.summary === '妈妈导入了微信账单 46 笔', '动态里记一条整批的「导入了微信账单 46 笔」，不是 46 条');
+  const qrNotes = (await db.query(
+    `SELECT DISTINCT title, note FROM finance_transactions WHERE "sourceId" = $1 AND merchant = '楼下便利店'`, [w.id],
+  )).rows;
+  assert(
+    qrNotes.length === 1 && qrNotes[0].title === '楼下便利店' && qrNotes[0].note === null,
+    'K5 清洗：商品说明「收款方备注:二维码收款」清成空，不写备注',
+  );
 
   console.log('3. 同一份文件再导一次：整份「以前导过」，确认 0 新增');
   const again = await upload(member.accessToken, { source: 'wechat', accountId: wallet.id }, wechatFile, wechatName);
@@ -315,7 +323,11 @@ try {
       ].join('\n'),
     );
   const fiveThousand = await upload(member.accessToken, { source: 'wechat', accountId: wallet.id }, wechatRows(5000));
-  if (fiveThousand.data) await request(`/finance/imports/${fiveThousand.data.id}`, member.accessToken, 'DELETE');
+  // K5：确认成批写入，5000 行目标 5 秒内（CI 机器慢，这里放宽到 20 秒，实际用时打出来）
+  const commitStarted = Date.now();
+  const fiveThousandCommit = fiveThousand.data ? await commit(fiveThousand.data.id) : null;
+  const commitMs = Date.now() - commitStarted;
+  console.log(`    确认 5000 行用时 ${commitMs} ms`);
   const overRows = await upload(member.accessToken, { source: 'wechat', accountId: wallet.id }, wechatRows(5001));
   const genericOver = await upload(
     member.accessToken,
@@ -325,9 +337,30 @@ try {
   assert(
     tooBig.status === 413 && tooBig.error.message.includes('5 MB') && muchTooBig.status === 413 && muchTooBig.error.message.includes('5 MB') &&
       fiveThousand.status === 201 && fiveThousand.data.stats.total === 5000 && fiveThousand.data.stats.suggested === 5000 &&
+      fiveThousandCommit.status === 201 && fiveThousandCommit.data.imported === 5000 &&
+      (await importedCount(fiveThousand.data.id)) === 5000 && commitMs < 20_000 &&
       overRows.status === 400 && overRows.error.message.includes('5000') &&
       genericOver.status === 400 && genericOver.error.message.includes('5000'),
-    '超过 5 MB 413（刚过线、远超都是中文提示）；5000 行能预览，5001 行 400（支付宝 / 微信与通用 CSV 都拦）',
+    '超过 5 MB 413（刚过线、远超都是中文提示）；5000 行能预览、能一次确认（成批写入）；5001 行 400（支付宝 / 微信与通用 CSV 都拦）',
+  );
+  const ledgerOk = (await db.query(
+    `SELECT count(*)::int AS bad FROM finance_transactions t
+      WHERE t."sourceId" = $1 AND (SELECT COALESCE(SUM(p.delta), 0) FROM finance_postings p WHERE p."transactionId" = t.id) <> -t.amount`,
+    [fiveThousand.data.id],
+  )).rows[0].bad;
+  assert(ledgerOk === 0, '成批写入的 5000 笔每笔都有对应的分录（支出 = 一条负的分录）');
+
+  console.log('7b. 确认时以「全选 / 全不选」为底，只发和底不一样的行');
+  const freshStatement = (tag) =>
+    Buffer.from(wechatFile.toString('utf8').replace(/42000(\d{23})/g, (_, rest) => `${tag}${suffix}${rest}`));
+  const pickOne = await upload(member.accessToken, { source: 'wechat', accountId: wallet.id }, freshStatement('NONE'));
+  const pickOneCommit = await commit(pickOne.data.id, [{ rowNo: 1, included: true }], false);
+  const allButOne = await upload(member.accessToken, { source: 'wechat', accountId: wallet.id }, freshStatement('ALL'));
+  const allButOneCommit = await commit(allButOne.data.id, [{ rowNo: 1, included: false }], true);
+  assert(
+    pickOneCommit.status === 201 && pickOneCommit.data.imported === 1 &&
+      allButOneCommit.status === 201 && allButOneCommit.data.imported === 50 && allButOneCommit.data.duplicates === 1,
+    '以「全不选」为底只勾第 1 行：导 1 笔；以「全选」为底只去掉第 1 行：导 50 笔（52 行减重复单号 1、减去掉的 1；不计收支 / 退款 / 关闭也导）',
   );
 
   console.log('8. 预览 30 分钟过期：再看、选列、确认都 410，放弃可以；上传新文件顺手收掉过期的预览');

@@ -19,8 +19,8 @@ import { JwtUser } from '../auth/jwt.guard';
 import { Clock } from '../common/clock';
 import { FinanceAccount, FinanceImport } from '../entities';
 import { buildPreviewRows, previewStats, type StoredPreview, type StoredPreviewRow } from './finance-import.preview';
+import { insertImportedRows, type PlannedImportRow } from './finance-import.writer';
 import { learnMerchantRule } from './finance-merchant-rules';
-import { FinanceService } from './finance.service';
 import { IMPORT_MAX_BYTES, IMPORT_TOO_LARGE, STATEMENT_FORMATS } from './import/import-formats';
 import {
   parseGenericRows,
@@ -55,7 +55,6 @@ export class FinanceImportService {
   constructor(
     @InjectRepository(FinanceImport)
     private readonly imports: Repository<FinanceImport>,
-    private readonly finance: FinanceService,
     private readonly dataSource: DataSource,
     private readonly clock: Clock,
   ) {}
@@ -161,53 +160,30 @@ export class FinanceImportService {
           )
         ).map((row: { externalId: string }) => row.externalId),
       );
-      let imported = 0;
       let duplicates = 0;
+      const planned: PlannedImportRow[] = [];
       const learned: { pattern: string; kind: 'expense' | 'income'; categoryId: string }[] = [];
       for (const row of stored.rows) {
         const decision = decisions.get(row.rowNo);
-        const included = decision ? decision.included : row.included;
         if (!row.selectable || (row.externalId && existing.has(row.externalId))) {
           duplicates += 1;
           continue;
         }
-        if (!included) continue;
+        // includeAll：true 以「全选」为底、false 以「全不选」为底，不传按预览的建议；rows 里只列和底不一样的行
+        const base = body.includeAll == null ? row.included : body.includeAll;
+        if (!(decision ? decision.included : base)) continue;
         const type = decision?.type ?? row.suggestedType;
         const categoryId = type === 'transfer' ? null : (decision?.categoryId !== undefined ? decision.categoryId : row.suggestedCategoryId);
         const toAccountId = type === 'transfer' ? (decision?.toAccountId ?? row.toAccountId) : null;
-        if (type !== 'transfer' && !categoryId) throw new BadRequestException(`第 ${row.rowNo} 行没选分类`);
-        if (type === 'transfer' && !toAccountId) throw new BadRequestException(`第 ${row.rowNo} 行记成转账要选转入账户`);
-        // 流水名字用交易对方（「康安大药房-望京店」比「药品」好认），商品说明放备注
-        const product = row.title && row.title !== '/' && row.title !== row.merchant ? row.title : null;
-        const title = (row.merchant || product || SOURCE_LABELS[record.source]).slice(0, 120);
-        await this.finance.insertWithinTransaction(
-          {
-            type,
-            amount: row.amount,
-            accountId: account.id,
-            toAccountId,
-            categoryId,
-            title,
-            note: row.merchant ? (product?.slice(0, 1000) ?? null) : null,
-            occurredOn: row.occurredOn,
-            idempotencyKey: `import:${record.id}:${row.externalId ?? `row-${row.rowNo}`}`.slice(0, 180),
-          },
-          user,
-          manager,
-          {
-            sourceType: 'import',
-            sourceId: record.id,
-            externalId: row.externalId ? row.externalId.slice(0, 64) : null,
-            merchant: row.merchant ? row.merchant.slice(0, 120) : null,
-          },
-        );
-        if (row.externalId) existing.add(row.externalId);
-        imported += 1;
+        planned.push({ row, type, categoryId: categoryId ?? null, toAccountId: toAccountId ?? null });
         const pattern = normalizeMerchant(row.merchant).slice(0, 120);
         if (type !== 'transfer' && categoryId && categoryId !== row.suggestedCategoryId && pattern) {
           learned.push({ pattern, kind: type, categoryId });
         }
       }
+      const imported = await insertImportedRows(manager, {
+        user, importId: record.id, fallbackTitle: SOURCE_LABELS[record.source], account, rows: planned,
+      });
       for (const rule of learned) await learnMerchantRule(manager, { householdId: user.householdId, ...rule });
       record.status = 'committed';
       record.importedRows = imported;

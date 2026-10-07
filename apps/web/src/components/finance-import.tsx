@@ -143,29 +143,35 @@ export function ImportDialog({
       return row.selectable && decision.included && decision.type !== 'transfer' && !decision.categoryId;
     });
     if (missing) return setMessage(`第 ${missing.rowNo} 行还没选分类`);
-    // 只把和建议不一样的行发过去，其余按预览的默认
-    const changed = rows.flatMap((row) => {
-      const decision = decisions[row.rowNo];
-      if (!row.selectable) return [];
-      const same =
-        decision.included === row.included &&
-        decision.type === row.suggestedType &&
-        decision.categoryId === row.suggestedCategoryId &&
-        decision.toAccountId === row.toAccountId;
-      if (same) return [];
-      const transfer = decision.type === 'transfer';
-      return [{
-        rowNo: row.rowNo,
-        included: decision.included,
-        type: decision.type,
-        categoryId: transfer ? null : decision.categoryId,
-        toAccountId: transfer ? decision.toAccountId : null,
-      }];
-    });
+    // 只发和「底」不一样的行：底可以是预览的建议、全选或全不选，挑要发的行最少的那个（请求体不超 100 KB）
+    const changedFrom = (base: boolean | null) =>
+      rows.flatMap((row) => {
+        const decision = decisions[row.rowNo];
+        if (!row.selectable) return [];
+        const baseIncluded = base === null ? row.included : base;
+        if (!decision.included && !baseIncluded) return [];
+        const same =
+          decision.included === baseIncluded &&
+          decision.type === row.suggestedType &&
+          decision.categoryId === row.suggestedCategoryId &&
+          decision.toAccountId === row.toAccountId;
+        if (same) return [];
+        const transfer = decision.type === 'transfer';
+        return [{
+          rowNo: row.rowNo,
+          included: decision.included,
+          type: decision.type,
+          categoryId: transfer ? null : decision.categoryId,
+          toAccountId: transfer ? decision.toAccountId : null,
+        }];
+      });
+    const plan = ([null, true, false] as const)
+      .map((includeAll) => ({ includeAll, rows: changedFrom(includeAll) }))
+      .reduce((best, one) => (one.rows.length < best.rows.length ? one : best));
     setMessage(null);
     navigator.vibrate?.(10);
     commit.mutate(
-      { id: preview.id, rows: changed },
+      { id: preview.id, rows: plan.rows, includeAll: plan.includeAll },
       {
         onSuccess: (result) => {
           pushToast(`导入 ${result.imported} 笔，跳过 ${result.skipped + result.duplicates} 笔`);
@@ -284,6 +290,13 @@ export function ImportDialog({
             categories={categories}
             transferTargets={usable.filter((one) => one.id !== preview.accountId)}
             onChange={(rowNo, next) => setDecisions((current) => ({ ...current, [rowNo]: { ...current[rowNo], ...next } }))}
+            onIncludeMany={(included) =>
+              setDecisions((current) => {
+                const next = { ...current };
+                for (const [rowNo, value] of Object.entries(included)) next[Number(rowNo)] = { ...next[Number(rowNo)], included: value };
+                return next;
+              })
+            }
           />
         </div>
       ) : null}

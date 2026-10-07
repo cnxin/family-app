@@ -1,13 +1,15 @@
 // K1 商户名归一化与分类建议（docs/finance-plan.md §2.3）。纯函数，单测见 scripts/finance-import.check.ts。
 import { DEFAULT_INCOME_RULES, DEFAULT_MERCHANT_RULES } from './default-merchant-rules';
+import { cleanTitle } from './text-cleaning';
 
 /**
  * 商户名归一化：去掉「-」及其后面的门店 / 业务名（「美团-望京店」→「美团」、「滴滴出行-快车」→「滴滴出行」），
  * 去掉括号里的内容和门店编号（「星巴克(国贸店)」「全家便利店#1024」），去空白、转小写。
+ * K5：先按导入清洗去掉订单号样式的词（「Z2204…-金帝星隆城」→「金帝星隆城」），清完只剩占位话的归一成空。
  * 家庭学到的规则按归一化后的名字存（finance_merchant_rules.pattern）。
  */
 export function normalizeMerchant(raw: string): string {
-  let value = raw.trim();
+  let value = cleanTitle(raw) ?? '';
   // 「-」前至少两个字才切（「7-ELEVEN」不切）
   const dash = value.search(/[-－—–]/);
   if (dash > 1) value = value.slice(0, dash);
@@ -51,7 +53,8 @@ export function suggestCategory(
     .sort((a, b) => b.pattern.length - a.pattern.length || b.hits - a.hits)[0];
   if (hit) return { categoryId: hit.categoryId };
   const table = input.kind === 'income' ? DEFAULT_INCOME_RULES : DEFAULT_MERCHANT_RULES;
-  const text = `${merchant} ${title}`;
+  // 关键词看完整的商户名（K5：「淘宝-某某女装旗舰店」要认出「女装」，归一化会把「-」后面切掉）
+  const text = `${(cleanTitle(input.merchant) ?? '').toLowerCase()} ${title}`;
   const keyword = table.find((rule) => rule.keywords.some((word) => text.includes(word.toLowerCase())));
   if (keyword) return { systemKey: keyword.systemKey };
   const platform = input.platformCategory ? platformCategories[input.platformCategory] : undefined;

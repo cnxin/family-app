@@ -5,8 +5,16 @@
 export const DEFAULT_MERCHANT_RULES: readonly { systemKey: string; keywords: readonly string[] }[] = [
   // 宠物排在医疗前面：「宠物医院」是宠物
   { systemKey: 'expense_pet', keywords: ['宠物'] },
-  { systemKey: 'expense_food', keywords: ['美团', '饿了么', '肯德基', '麦当劳', '星巴克', '瑞幸', '喜茶', '必胜客', '外卖', '餐厅', '饭店', '面馆'] },
-  { systemKey: 'expense_transport', keywords: ['滴滴', '高德', '地铁', '公交', '曹操出行', '哈啰', '铁路', '12306', '航空', '加油', '石化', '停车', 'etc'] },
+  // K5：服饰排在购物前面（「淘宝-某某女装」归服饰）
+  { systemKey: 'expense_clothing', keywords: ['女装', '男装', '服饰', '服装', '鞋'] },
+  {
+    systemKey: 'expense_food',
+    keywords: ['美团', '饿了么', '肯德基', '麦当劳', '星巴克', '瑞幸', '喜茶', '必胜客', '外卖', '餐厅', '饭店', '面馆', '糕点', '蛋糕', '面包', '奶茶', '咖啡'],
+  },
+  {
+    systemKey: 'expense_transport',
+    keywords: ['滴滴', '高德', '地铁', '公交', '曹操出行', '哈啰', '铁路', '12306', '航空', '加油', '石化', '停车', '充电桩', 'etc'],
+  },
   { systemKey: 'expense_utilities', keywords: ['国家电网', '电力', '供电', '燃气', '水务', '自来水', '热力'] },
   { systemKey: 'expense_telecom', keywords: ['中国移动', '中国联通', '中国电信', '移动', '联通', '电信', '宽带'] },
   { systemKey: 'expense_health', keywords: ['药房', '药店', '医药', '医院', '诊所', '卫生院'] },

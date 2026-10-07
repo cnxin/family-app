@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { decodeText, decodeUnknown, parseCsv } from '../src/finance/import/csv';
 import { IMPORT_MAX_ROWS, STATEMENT_FORMATS } from '../src/finance/import/import-formats';
 import {
+  cleanNote,
+  cleanTitle,
   parseAmount,
   parseDate,
   parseGenericRows,
@@ -166,6 +168,38 @@ check('建议顺序：家庭规则（长的优先、对得上收支）→ 内置
   assert.deepEqual(suggestCategory({ ...base, merchant: '某某', kind: 'expense' }, [], kindOf, platform), { systemKey: 'expense_other' });
   assert.deepEqual(suggestCategory({ merchant: '美团', title: '退款-美团订单', kind: 'income', platformCategory: null }, [], kindOf, platform), { systemKey: 'income_refund' });
   assert.deepEqual(suggestCategory({ ...base, merchant: '张三', kind: 'income' }, [], kindOf, platform), { systemKey: 'income_other' });
+});
+
+console.log('K5 导入清洗');
+check('名称 / 备注去订单号样式的词和固定前缀；清完只剩占位话的当空（King 真实账单里的几种写法）', () => {
+  assert.equal(cleanTitle('Z22047260030026100500099580-金帝星隆城'), '金帝星隆城');
+  assert.equal(cleanNote('转账备注:微信转账'), null);
+  assert.equal(cleanNote('收款方备注:二维码收款'), null);
+  assert.equal(cleanTitle('柯桥东升路停车场-停车缴费-浙AGS6398'), '柯桥东升路停车场-停车缴费-浙AGS6398');
+  assert.equal(cleanNote('商品说明：会员年卡'), '会员年卡');
+  assert.equal(cleanNote('付款方备注:房租 9 月'), '房租 9 月');
+  assert.equal(cleanTitle('美团订单 4200001766520260930656609'), '美团订单');
+  assert.equal(cleanTitle('京东-1234567890123456789-家电'), '京东-家电');
+  assert.equal(cleanNote('/'), null);
+  assert.equal(cleanNote('   '), null);
+  assert.equal(cleanTitle('VIP 会员连续包月'), 'VIP 会员连续包月');
+  assert.equal(cleanTitle('滴滴出行－快车'), '滴滴出行－快车');
+  assert.equal(normalizeMerchant('Z22047260030026100500099580-金帝星隆城'), '金帝星隆城');
+  assert.equal(normalizeMerchant('收款方备注:二维码收款'), '');
+});
+check('解析时就清洗：微信「/」商品说明清成空，商户不变；内置关键词补了服饰、糕点奶茶咖啡、充电桩', () => {
+  const wechat = parseStatement(fixture('wechat-sample.csv'), 'wechat');
+  const card = wechat.rows.find((row) => row.merchant === '招行信用卡')!;
+  assert.equal(card.title, '');
+  const kindOf = () => 'expense' as const;
+  const suggest = (merchant: string, title = '') =>
+    suggestCategory({ merchant, title, kind: 'expense', platformCategory: null }, [], kindOf, {});
+  assert.deepEqual(suggest('淘宝-某某女装旗舰店'), { systemKey: 'expense_clothing' });
+  assert.deepEqual(suggest('某某鞋业'), { systemKey: 'expense_clothing' });
+  assert.deepEqual(suggest('楼下面包房'), { systemKey: 'expense_food' });
+  assert.deepEqual(suggest('某某', '珍珠奶茶'), { systemKey: 'expense_food' });
+  assert.deepEqual(suggest('小区充电桩'), { systemKey: 'expense_transport' });
+  assert.deepEqual(suggest('柯桥东升路停车场-停车缴费-浙AGS6398'), { systemKey: 'expense_transport' });
 });
 
 console.log(`账单导入解析单测全部通过（${passed} 条）`);

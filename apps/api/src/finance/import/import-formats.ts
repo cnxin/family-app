@@ -121,6 +121,18 @@ export const GENERIC_DIRECTIONS = {
   income: ['收入', '收', '入', 'income', 'credit'],
 } as const;
 
+/**
+ * K5 导入清洗（cleanTitle / cleanNote，见 text-cleaning.ts）：交易对方、商品说明里的垃圾去掉再入库。
+ * - prefixes：开头的固定前缀（后面跟半角或全角冒号）去掉；
+ * - placeholders：去掉前缀后只剩这些话的，当没写（不写备注 / 名称退回交易对方）；
+ * - orderTokens：按「-」分段、段内按空白分词，整个词像订单号的去掉（Z + 一串数字、含 ≥ 16 位连续数字）。
+ */
+export const TEXT_CLEANING = {
+  prefixes: ['转账备注', '收款方备注', '付款方备注', '商品说明', '商品详情'],
+  placeholders: ['微信转账', '二维码收款', '转账', '/', '无', '-'],
+  orderTokens: [/^Z\d{6,}$/i, /\d{16,}/],
+} as const;
+
 /** 上限（§3-K1）：文件 ≤ 5 MB、数据 ≤ 5000 行。 */
 export const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
 export const IMPORT_MAX_ROWS = 5000;

@@ -493,6 +493,8 @@ export const commitFinanceImportBody = z.object({
       }),
     )
     .max(5000),
+  /** K5：true 以「全选」为底、false 以「全不选」为底，不传按预览的建议；rows 只列和底不一样的行（请求体不超 100 KB） */
+  includeAll: z.boolean().nullish(),
 });
 export type CommitFinanceImportBody = z.infer<typeof commitFinanceImportBody>;
 

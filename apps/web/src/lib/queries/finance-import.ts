@@ -83,10 +83,10 @@ export function useMapFinanceImport() {
 export function useCommitFinanceImport() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, rows }: { id: string; rows: CommitFinanceImportBody['rows'] }) =>
+    mutationFn: ({ id, rows, includeAll }: { id: string; rows: CommitFinanceImportBody['rows']; includeAll?: boolean | null }) =>
       api<{ import: FinanceImport; imported: number; skipped: number; duplicates: number }>(
         `/finance/imports/${id}/commit`,
-        { method: 'POST', body: { rows } },
+        { method: 'POST', body: { rows, includeAll: includeAll ?? null } },
       ),
     onSuccess: () => {
       void invalidateModules(client);
