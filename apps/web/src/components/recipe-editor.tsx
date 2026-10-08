@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { DishRecipeVariant, UpsertRecipeVariantBody } from '@family/contracts';
-import { uploadPhoto } from '../lib/api';
+import { uploadErrorMessage, uploadPhoto } from '../lib/api';
 import { useArchiveVariant, useUpsertVariant } from '../lib/queries';
 import { pushToast } from '../lib/toast';
 import { Button, Input } from './ui';
@@ -75,11 +75,11 @@ export function RecipeEditor({
       setSteps((current) =>
         current.map((step, i) => (i === index ? { ...step, imageUrl: url, uploading: false } : step)),
       );
-    } catch {
+    } catch (error) {
       setSteps((current) =>
         current.map((step, i) => (i === index ? { ...step, uploading: false } : step)),
       );
-      pushToast('照片没传上去，换一张试试', undefined, 'error');
+      pushToast(uploadErrorMessage(error, '照片没传上去，换一张试试'), undefined, 'error');
     }
   }
 
