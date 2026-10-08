@@ -79,15 +79,15 @@
 
 ## 4. 分笔（叠加分支，每笔一个 PR，规矩照旧）
 
-| 笔 | 内容 | 量 |
-| --- | --- | --- |
-| J4.0 | `packages/agent-core`：`ModelProvider`（OpenAI 兼容，流式 + tool_calls + images）、`ToolRegistry`、`runLoop`、上限与围栏；**单测用录制的模型响应回放**（含：一次工具调用、连续三次、工具报错、超步数、流式分片、恶意上下文注入围栏） | L |
-| J4.1 | 工具从 manifest 生成：`queries` → 读工具（走门面）、`actions(propose)` → `propose_*`；core-assistant 7 个；30 个旧名别名；agent 目录对插件 Service 的直接 import 全部改走门面（§9.5 那条）；`check-plugins` 断言「工具集合 == manifest 推导」 | M |
-| J4.2 | `NativeAgentRuntime` + `AgentService` 接线：会话 / 历史 / 允许的工具（按家庭模块开关裁剪，§3.3）/ 提案落库 / 事件写 `agent_tool_events`；`runtimeKind: 'native'`；`FakeAgentRuntime` 保留；全部 `agent*.mjs` 黑盒在 native 下通过（用 Fake provider 回放，不打真模型） | L |
-| J4.3 | 云端档配置：`agent_settings` 新列 + 加密存 key；设置页「云端助理」分段加服务商下拉、模型、key（只显示末 4 位）、「测一下」（发一条 1 token 请求）、`tier2Scope`；每日上限与脱敏接到 AgentService；脱敏单测（真名 / 手机 / 车牌 / 卡号样式） | M |
-| J4.4 | SSE：`/agent/runs/:id/events`（复用 H2 通道鉴权），前端小管家页消息区改订阅、去掉 2 秒轮询；取消按钮走 `cancel` | M |
-| J4.5 | 外围回归：例行任务（nightly_digest / weekly_report）、外部渠道、记忆工具在 native 下跑通；用量报告加「云端档每日用量」；文档：§4 J4 ☑、§9.5 更新、family-guide 不动（试用期家里人看不到） | S |
-| J4.6 | Hermes 下线（拍板 #8 的条件满足后）：删 runtime / compose / deploy/hermes / 契约脚本，迁移 `'hermes'` → `'native'`，升级脚本与 deploy-c2 相应改 | S |
+| 笔 | 内容 | 量 | 提交 | 合并 | CI |
+| --- | --- | --- | --- | --- | --- |
+| J4.0 | `packages/agent-core`：`ModelProvider`（OpenAI 兼容，流式 + tool_calls + images）、`ToolRegistry`、`runLoop`、上限与围栏；**单测用录制的模型响应回放**（含：一次工具调用、连续三次、工具报错、超步数、流式分片、恶意上下文注入围栏） | L | `d72d586` | `4ca3405` | 分支 #37824739021、main #37828165900，均一次过 |
+| J4.1 | 工具从 manifest 生成：`queries` → 读工具（走门面）、`actions(propose)` → `propose_*`；core-assistant 7 个；30 个旧名别名；agent 目录对插件 Service 的直接 import 全部改走门面（§9.5 那条）；`check-plugins` 断言「工具集合 == manifest 推导」 | M | `057baa8` | `cb9033f` | 分支 #37828855005、main #37832187109，均一次过 |
+| J4.2 | `NativeAgentRuntime` + `AgentService` 接线：会话 / 历史 / 允许的工具（按家庭模块开关裁剪，§3.3）/ 提案落库 / 事件写 `agent_tool_events`；`runtimeKind: 'native'`；`FakeAgentRuntime` 保留；全部 `agent*.mjs` 黑盒在 native 下通过（用 Fake provider 回放，不打真模型） | L | | | |
+| J4.3 | 云端档配置：`agent_settings` 新列 + 加密存 key；设置页「云端助理」分段加服务商下拉、模型、key（只显示末 4 位）、「测一下」（发一条 1 token 请求）、`tier2Scope`；每日上限与脱敏接到 AgentService；脱敏单测（真名 / 手机 / 车牌 / 卡号样式） | M | | | |
+| J4.4 | SSE：`/agent/runs/:id/events`（复用 H2 通道鉴权），前端小管家页消息区改订阅、去掉 2 秒轮询；取消按钮走 `cancel` | M | | | |
+| J4.5 | 外围回归：例行任务（nightly_digest / weekly_report）、外部渠道、记忆工具在 native 下跑通；用量报告加「云端档每日用量」；文档：§4 J4 ☑、§9.5 更新、family-guide 不动（试用期家里人看不到） | S | | | |
+| J4.6 | Hermes 下线（拍板 #8 的条件满足后）：删 runtime / compose / deploy/hermes / 契约脚本，迁移 `'hermes'` → `'native'`，升级脚本与 deploy-c2 相应改 | S | | | |
 
 验收总则：每笔前后 `agent*.mjs` 黑盒全过；J4.2 起用「录制回放」的 Fake provider 做确定性测试，真模型只在 J4.3 的「测一下」和 King 实测时碰；演示栈升级只在升级窗口，且 `tier2Scope=admins` 保证家里人无感。
 
