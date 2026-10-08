@@ -85,7 +85,9 @@ export function FloatingToolbar({
   }
 
   const hidden = moving || !barSize;
-  const button = 'flex h-9 min-w-9 items-center justify-center rounded-lg px-2.5 text-[13px] transition-colors duration-150 hover:bg-muted disabled:opacity-40';
+  // 按下态（「更多」展开）不能带 hover:bg-muted：Tailwind 按字母排，hover:bg-muted 排在 hover:bg-accent 后面会盖掉实底
+  const buttonBase = 'flex h-9 min-w-9 items-center justify-center rounded-lg px-2.5 text-[13px] transition-colors duration-150 disabled:opacity-40';
+  const button = buttonBase + ' hover:bg-muted';
 
   let content: ReactNode;
   if (rename) {
@@ -122,7 +124,7 @@ export function FloatingToolbar({
         ))}
         {more?.length ? (
           <button type="button" aria-expanded={open} aria-label="更多" onClick={() => setOpen(!open)}
-            className={button + (open ? ' bg-accent text-white hover:bg-accent' : '')}>
+            className={open ? buttonBase + ' bg-accent text-on-accent' : button}>
             ··· 更多
           </button>
         ) : null}

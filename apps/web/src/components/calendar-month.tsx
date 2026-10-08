@@ -144,7 +144,7 @@ export function CalendarMonth({
                 'relative flex aspect-square flex-col items-center justify-center rounded-lg ' +
                 'text-[13px] transition-colors duration-150 ' +
                 (selected
-                  ? 'bg-accent font-semibold text-white'
+                  ? 'bg-accent font-semibold text-on-accent'
                   : isToday
                     ? 'border border-accent font-semibold hover:bg-muted'
                     : 'hover:bg-muted') +
@@ -164,7 +164,7 @@ export function CalendarMonth({
                   {dots.map((tone) => (
                     <span
                       key={tone}
-                      className={`size-1 rounded-full ${selected ? 'bg-white/80' : tone}`}
+                      className={`size-1 rounded-full ${selected ? 'bg-on-accent/80' : tone}`}
                     />
                   ))}
                 </span>
@@ -177,7 +177,7 @@ export function CalendarMonth({
                   className={
                     'absolute -right-0.5 -top-0.5 grid min-w-[15px] place-items-center rounded-full ' +
                     'px-[3px] text-[9px] font-semibold leading-[15px] ' +
-                    (selected ? 'bg-white text-accent' : 'bg-warm text-white')
+                    (selected ? 'bg-on-accent text-accent' : 'bg-warm text-on-warm')
                   }
                 >
                   {marker.menu > 9 ? '9+' : marker.menu}

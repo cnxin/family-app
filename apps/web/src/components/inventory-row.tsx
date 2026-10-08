@@ -44,7 +44,7 @@ export function InventoryRow({
           <span className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium">{item.name}</span>
             {isLow ? (
-              <span className="shrink-0 rounded-full bg-warm px-1.5 py-0.5 text-[10px] font-medium text-white">待补货</span>
+              <span className="shrink-0 rounded-full bg-warm px-1.5 py-0.5 text-[10px] font-medium text-on-warm">待补货</span>
             ) : null}
             {summary?.earliestExpiresOn ? (
               <span

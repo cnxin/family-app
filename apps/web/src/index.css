@@ -15,6 +15,10 @@
   --color-warm: oklch(0.57 0.125 52);
   --color-warm-soft: oklch(0.948 0.038 58);
   --color-danger: oklch(0.52 0.16 25);
+  /* 压在 accent / warm / danger 实底上的字和图标：浅色用白，深色用深底色（见下方深色块） */
+  --color-on-accent: oklch(1 0 0);
+  --color-on-warm: oklch(1 0 0);
+  --color-on-danger: oklch(1 0 0);
   --radius-card: 0.85rem;
 }
 
@@ -33,6 +37,10 @@ html[data-theme='dark'] {
   --color-warm: oklch(0.775 0.10 58);
   --color-warm-soft: oklch(0.315 0.045 58);
   --color-danger: oklch(0.68 0.15 25);
+  /* 深色的三种实底都很亮，白字只有 2～3:1；改用页面底色那种深可可色（≥ 5.9:1） */
+  --color-on-accent: var(--color-bg);
+  --color-on-warm: var(--color-bg);
+  --color-on-danger: var(--color-bg);
 }
 
 html { color-scheme: light; }

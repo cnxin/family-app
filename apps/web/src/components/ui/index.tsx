@@ -12,7 +12,7 @@ const base =
   'focus-visible:ring-offset-bg disabled:pointer-events-none disabled:opacity-50 active:scale-[.985]';
 
 const variants = {
-  primary: 'bg-accent text-white hover:brightness-110 active:brightness-95',
+  primary: 'bg-accent text-on-accent hover:brightness-110 active:brightness-95',
   ghost: 'text-ink-soft hover:bg-muted hover:text-ink',
   outline: 'border border-border bg-surface text-ink hover:bg-muted',
 } as const;
@@ -81,14 +81,14 @@ export function Checkbox({
         'grid size-[22px] shrink-0 place-items-center rounded-full border transition-[background-color,border-color,transform] ' +
         'duration-150 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ' +
         'disabled:opacity-40 ' +
-        (checked ? 'border-accent bg-accent' : 'border-border hover:border-ink-soft/50')
+        (checked ? 'border-accent bg-accent text-on-accent' : 'border-border hover:border-ink-soft/50')
       }
     >
       <svg viewBox="0 0 24 24" className={`size-3 ${checked ? 'opacity-100' : 'opacity-0'}`}>
         <path
           d="M4 12.5l5.2 5.2L20 6.8"
           fill="none"
-          stroke="white"
+          stroke="currentColor"
           strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"

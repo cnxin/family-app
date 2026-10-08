@@ -18,7 +18,7 @@ export function ConfirmDialog({ request, onClose }: { request: ConfirmRequest; o
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button className="bg-danger hover:bg-danger" onClick={() => { request.run(); onClose(); navigator.vibrate?.(12); }}>
+          <Button className="bg-danger text-on-danger hover:bg-danger" onClick={() => { request.run(); onClose(); navigator.vibrate?.(12); }}>
             {request.action}
           </Button>
         </div>

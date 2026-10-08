@@ -303,7 +303,7 @@ export function GuestsPage() {
                 再想想
               </Button>
               <Button
-                className="flex-1 bg-danger hover:brightness-110"
+                className="flex-1 bg-danger text-on-danger hover:brightness-110"
                 disabled={anonymize.isPending}
                 onClick={() =>
                   anonymize.mutate(anonymizing.id, {

@@ -283,7 +283,7 @@ export function NotificationsPage() {
                 再想想
               </Button>
               <Button
-                className="flex-1 bg-danger hover:brightness-110"
+                className="flex-1 bg-danger text-on-danger hover:brightness-110"
                 disabled={deleteChannel.isPending}
                 onClick={() =>
                   deleteChannel.mutate(deleting.id, {

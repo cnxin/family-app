@@ -345,7 +345,7 @@ export function ShoppingView() {
                 取消
               </Button>
               <Button
-                className="flex-1 bg-danger"
+                className="flex-1 bg-danger text-on-danger"
                 disabled={remove.isPending}
                 onClick={() =>
                   remove.mutate(deleting.id, {

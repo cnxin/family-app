@@ -136,7 +136,7 @@ export function PollCard({
                 className={
                   'grid size-5 shrink-0 place-items-center border text-[11px] transition-colors duration-150 ' +
                   (poll.voteMode === 'single' ? 'rounded-full ' : 'rounded-[5px] ') +
-                  (active ? 'border-accent bg-accent text-white' : 'border-ink-soft/40 bg-surface')
+                  (active ? 'border-accent bg-accent text-on-accent' : 'border-ink-soft/40 bg-surface')
                 }
               >
                 {active ? '✓' : ''}

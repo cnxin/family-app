@@ -73,7 +73,7 @@ export function MemoryCard({ item, onOpen }: { item: AgentMemoryItem; onOpen: ()
             {MEMORY_KEY_LABEL[item.memoryKey] ?? item.category}
           </span>
           {candidate ? (
-            <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+            <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-on-accent">
               待确认
             </span>
           ) : null}

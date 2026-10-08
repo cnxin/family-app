@@ -246,7 +246,7 @@ export function MembersPage() {
               <Button
                 className={
                   'flex-1 ' +
-                  (ask.kind === 'status' && !ask.member.disabledAt ? 'bg-danger hover:brightness-110' : '')
+                  (ask.kind === 'status' && !ask.member.disabledAt ? 'bg-danger text-on-danger hover:brightness-110' : '')
                 }
                 disabled={setStatus.isPending || revoke.isPending}
                 onClick={confirm}
