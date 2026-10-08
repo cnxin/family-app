@@ -111,8 +111,16 @@ try {
   const doneMs = Date.now() - startedAt;
   assert(await until(() => calls('start').length === 1, 2_000), `妈妈把「打扫卫生」打勾：扫地机收到 vacuum.start（打勾接口 ${doneMs}ms 就回了）`);
   assert(done.status === 200 && done.body.data.status === 'done', '打勾本身照常成功');
-  const audit = await db.query(`SELECT service, status FROM smart_home_commands WHERE service = 'vacuum.start'`);
-  const firstRun = (await request('/smart-home/links', owner)).body.data.find((one) => one.id === sweep.body.data.id).lastRun;
+  // 假 HA 一收到调用就记下，API 这时可能还在等 HA 回包：审计行还是 pending；运行记录先以 pending 落一行，
+  // 命令执行完（审计行落定之后）才改成结果。两个都不再是 pending 再断言
+  let audit;
+  let firstRun;
+  await until(async () => {
+    audit = await db.query(`SELECT service, status FROM smart_home_commands WHERE service = 'vacuum.start'`);
+    firstRun = (await request('/smart-home/links', owner)).body.data.find((one) => one.id === sweep.body.data.id).lastRun;
+    const settled = (status) => status !== undefined && status !== 'pending';
+    return settled(audit.rows[0]?.status) && settled(firstRun?.status);
+  }, 3_000);
   assert(
     audit.rows.length === 1 && audit.rows[0].status === 'succeeded' && firstRun.status === 'succeeded' &&
       firstRun.message.startsWith('「打扫卫生」打勾了'),
