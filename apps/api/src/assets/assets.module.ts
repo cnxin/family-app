@@ -48,6 +48,7 @@ import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { jwtSecret } from '../common/config';
 import { Clock } from '../common/clock';
+import { multipartLimits } from '../common/multipart';
 import {
   AssetCategory,
   AssetDocument,
@@ -1901,7 +1902,7 @@ export class AssetsController {
               new BadRequestException('资产资料只支持图片或 PDF 文件'),
               false,
             ),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: multipartLimits({ fileSize: 10 * 1024 * 1024 }),
     }),
   )
   uploadDocument(

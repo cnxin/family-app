@@ -10,6 +10,7 @@ import {
   type PutMapDecorationsBody,
 } from '@family/contracts';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { multipartLimits } from '../common/multipart';
 import { ZodBody } from '../common/zod';
 import { MAP_BACKGROUND_TYPES, MapService } from './map.service';
 
@@ -41,7 +42,7 @@ export class MapController {
         MAP_BACKGROUND_TYPES.has(file.mimetype)
           ? callback(null, true)
           : callback(new BadRequestException('底图只支持 PNG、JPEG、WebP 图片'), false),
-      limits: { fileSize: MAP_BACKGROUND_MAX_BYTES },
+      limits: multipartLimits({ fileSize: MAP_BACKGROUND_MAX_BYTES }),
     }),
   )
   uploadBackground(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: JwtUser) {

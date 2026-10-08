@@ -17,6 +17,7 @@ import {
   normalizedRequestPath,
   summarizeException,
 } from './observability';
+import { multerErrorToHttp } from './multipart';
 
 @Injectable()
 export class TransformInterceptor implements NestInterceptor {
@@ -29,7 +30,9 @@ export class TransformInterceptor implements NestInterceptor {
 export class AllExceptionsFilter implements ExceptionFilter {
   constructor(private readonly logger: StructuredLogger) {}
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(raw: unknown, host: ArgumentsHost) {
+    // Nest 10 按英文文案认 multer 错误，multer 2.4 改了文案、加了新码：先按 code 换成 400 / 413（common/multipart.ts）
+    const exception = multerErrorToHttp(raw) ?? raw;
     const http = host.switchToHttp();
     const req = http.getRequest<ObservedRequest>();
     const res = http.getResponse<Response>();

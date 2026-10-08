@@ -25,6 +25,7 @@ import { memoryStorage } from 'multer';
 import { catchError, throwError } from 'rxjs';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
+import { multipartLimits } from '../common/multipart';
 import { ZodBody, ZodParam } from '../common/zod';
 import { FinanceImportService } from './finance-import.service';
 import { IMPORT_MAX_BYTES, IMPORT_TOO_LARGE } from './import/import-formats';
@@ -67,7 +68,7 @@ export class FinanceImportController {
   @Post()
   @UseInterceptors(
     ImportTooLargeMessage,
-    FileInterceptor('file', { storage: memoryStorage(), fileFilter: csvOnly, limits: { fileSize: IMPORT_MAX_BYTES } }),
+    FileInterceptor('file', { storage: memoryStorage(), fileFilter: csvOnly, limits: multipartLimits({ fileSize: IMPORT_MAX_BYTES }) }),
   )
   upload(
     @ZodBody(createFinanceImportBody) body: CreateFinanceImportBody,
