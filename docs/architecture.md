@@ -188,7 +188,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | **J0 盘点**（不改代码） | 列出 15 个域在七处登记的现状差异；起草 `PluginManifest` 类型；选 3 个域（购物、任务、智能家居）做 manifest 草稿看是否表达得下 | S | — |
 | **J1 插件注册表** | `packages/contracts/src/plugins/`；nav / modules / events 映射 / attention 挂载 / settings 行 / usage 表改为从 manifest 生成；CI 断言全覆盖；15 个域逐个迁（每域一提交，页面不动） | L（约 1.5 周） | J0 |
 | **J2 助理数据与开关** | `assistant_utterances` 表；助理三档的家庭级开关与配置页（第 0 档默认开、1/2 默认关）；⌘K 输入原话落表（试用期就开始攒句子） | M | J1 |
-| **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认。**输入 = `assistant_utterances` 导出的 CSV**（设置页「原话记录 → 导出 CSV」，`chosenKind` / `chosenId` 当人工标注）。**补 ⌘K 动作时**：给点菜补一条动作，把 `propose_menu` 从 manifest 顶层 `proposals` 挪回 `actions[].propose`，然后删掉 `proposals` 字段（J1.4 加的过渡结构，2026-10-06 King 认定） | L（约 2 周） | J1；**模板需要试用期攒的原话** |
+| **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认。**输入 = `assistant_utterances` 导出的 CSV**（设置页「原话记录 → 导出 CSV」，`chosenKind` / `chosenId` 当人工标注）。**补 ⌘K 动作时**：给点菜补一条动作，把 `propose_menu` 从 manifest 顶层 `proposals` 挪回 `actions[].propose`，然后删掉 `proposals` 字段（J1.4 加的过渡结构，2026-10-06 King 认定） | L（约 2 周） | J1；**试用满两周 且 `assistant_utterances` ≥ 100 条 且 覆盖 ≥ 5 个域**（三条同时满足，2026-10-08 King 拍板；怎么数见 `c2-feedback.md`「每周用量」） |
 | **J4 agent 重建为 manifest 消费者** | refactor-plan 3.2 的自研 loop 落到 `packages/agent-core`；工具由 manifest 生成；28 个旧工具名做别名；`/events` 推运行状态（H2 已备）；第 2 档路由接入；脱敏与每日上限 | XL（约 3 周） | J1、J3 |
 | **J5 第 1 档本地模型** | OpenAI 兼容适配；Ollama 探测；仅做意图 + 槽位；评测集（用 J2 攒的原话）；默认关 | M | J3 |
 | **J6 收口** | 删 Hermes 相关（compose、配置）；文档；开源版的「写一个插件」指南 | S | J4 |
@@ -617,7 +617,7 @@ main 上 `105926f`（J1b.2 合并）、`a14ee3a`（J1b.3 合并）两次 CI 被�
 | J1 插件注册表（18 域） | ☑ | 见 §8.7 | 18 / 18 个插件都有 manifest，14 处登记里插件的条目全部由 manifest 导出，check-plugins 全量断言；剩余手写项与 J1b 输入见 §8.7 末尾；J1.7 合完后升演示栈 |
 | J1b 跨插件解耦 | ☑ | 见 §9 | 插件目录之间零 import（check-plugins 断言）；门面 6 个、事务内钩子 3 个、插件事件 1 个，manifest 的 `dependsOn` / `hooks` 与代码一致；assistant 内核工具清单收进 `core-assistant.ts`；实体层的跨插件读写与内核（agent）→ 插件的 import 不在范围，见 §9「没解的」；演示栈随本批升级，人工走查由 King 本人做 |
 | J2 助理数据与开关 | ☑ | 见 §8.8 | `assistant_utterances` 表与接口、三档开关、⌘K 原话落表；演示栈随本批升级，King 本人去 ⌘K 输几句再看「原话记录」做人工验收 |
-| J3 第 0 档引擎 | ☐ | | 等试用原话；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
+| J3 第 0 档引擎 | ☐ | | 等试用满两周且原话 ≥ 100 条、覆盖 ≥ 5 个域（2026-10-08 拍板）；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | ☐ | | |
 | J5 本地模型档 | ☐ | | |
 | J6 收口 | ☐ | | |

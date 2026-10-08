@@ -1,6 +1,6 @@
 # C2 家庭试用反馈
 
-> 试用两周，起止：【开始日期】～【结束日期】。取代 `manual-acceptance.md` 里 C2 那一行，试用期的问题都记在这里。
+> 试用两周，起止：2026-10-15 ～ 2026-10-28（开始日按 King 最终定的那天改）。在 Mac mini 演示栈上跑（`http://192.168.50.148:8088`，家里 Wi-Fi 走 HTTP，见 `deploy-c2.md` §0.1）。取代 `manual-acceptance.md` 里 C2 那一行，试用期的问题都记在这里。
 > 家里人的反馈入口见 `docs/family-guide.md`（开头写「反馈：」）；当面说的、微信里说的也照记。
 > **原话照抄，不改写**。判断和处理是记录的人写的。
 
@@ -22,7 +22,18 @@
 
 ## 每周用量
 
-每周末在 NAS 上跑一次 `apps/api/scripts/usage-report.mjs --days 7`（命令见脚本开头），把输出贴在下面，只贴表格。某个域两周都是 0，说明要么没人用，要么没找到：结合上面的反馈判断，别直接下结论。
+每周日由执行 agent 在 Mac mini 上跑一次 `apps/api/scripts/usage-report.mjs --days 7`，把输出贴在下面：各家庭的「域 × 成员」表格，加上 C2 批 1 新增的「助理原话（J2）」一段（只有条数和合计行，不含原话本身）。只读，借 api 镜像里的 node 跑，不直接在检出里跑（快进后检出里的 `packages/contracts/dist` 可能是旧的）：
+
+```bash
+cd ~/AI/family-app || exit 1
+docker compose --env-file deploy/.env.production -f docker-compose.prod.yml run --rm --no-deps -T \
+  -v "$PWD/apps/api/scripts/usage-report.mjs:/app/apps/api/usage-report.mjs:ro" \
+  api node usage-report.mjs --days 7
+```
+
+某个域两周都是 0，说明要么没人用，要么没找到：结合上面的反馈判断，别直接下结论。
+
+**J3 的门槛**（2026-10-08 King 拍板，`architecture.md` §4）：原话 ≥ 100 条、覆盖 ≥ 5 个域、**且**试用满两周，三条同时满足才开 J3。条数看用量报告的「全部时间共 N 条」；「覆盖几个域」报告里看不出来（原话按成员、入口、结果统计），要从「家里 → 问问小管家 → 设置 → 原话记录」导出 CSV，按 `chosenKind` / `chosenId` 和人工标注数。
 
 ### 第 1 周
 
@@ -36,3 +47,4 @@
 
 - 今天页顶部三张统计卡（今天要做 / 要买的 / 待提醒）去留：
 - 留意阈值要不要调：
+- 原话够不够开 J3（≥ 100 条、覆盖 ≥ 5 个域、满两周）：
