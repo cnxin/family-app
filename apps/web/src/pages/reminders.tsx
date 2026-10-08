@@ -57,11 +57,11 @@ function ReminderRow({
   const source = reminder.source;
   const manageable = reminder.status === 'scheduled' && reminder.canManage;
 
-  // 菜单、任务、日历直接去对应页；其余来源用契约给的 targetPath 经 toNewRoute 换成新路径
+  // 菜单、日历直接去对应页；任务带着 targetPath 的 taskId / date 去（任务页高亮那一次）；其余来源用 targetPath 经 toNewRoute 换成新路径
   const open = () => {
     if (!source) return;
     if (source.module === 'menu') navigate(`/eat/kitchen?date=${source.date ?? ''}`);
-    else if (source.module === 'task') navigate('/schedule/tasks');
+    else if (source.module === 'task') navigate(toNewRoute(source.targetPath) ?? '/schedule/tasks');
     else if (source.module === 'calendar') navigate('/schedule/calendar');
     else {
       const route = toNewRoute(source.targetPath);
