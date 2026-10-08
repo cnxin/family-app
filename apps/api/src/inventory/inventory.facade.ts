@@ -4,12 +4,17 @@ import type { JwtUser } from '../auth/jwt.guard';
 import { InventoryItem, InventoryTransaction } from '../entities';
 import { fromPluginTransaction } from '../system/plugin-facades.registry';
 import type { InventoryTransactionsService } from './inventory-transactions.service';
+import type { InventoryService } from './inventory.module';
 
 /**
  * 库存门面的实现（J1b，接口见 contracts/plugins/inventory.facade.ts），InventoryModule 启动时注册。
  * 维护出库沿用 InventoryTransactionsService 原来给资产调的 createTransaction / applyBatchConsumption，写法与搬家前逐行一致。
  */
-export function inventoryFacade(ledger: InventoryTransactionsService, dataSource: DataSource): InventoryFacade {
+export function inventoryFacade(
+  ledger: InventoryTransactionsService,
+  dataSource: DataSource,
+  inventory: InventoryService,
+): InventoryFacade {
   const managerOf = (transaction?: PluginTransaction) =>
     transaction ? fromPluginTransaction(transaction) : dataSource.manager;
   return {
@@ -105,5 +110,48 @@ export function inventoryFacade(ledger: InventoryTransactionsService, dataSource
         sourceId: shoppingItemId,
         type: 'receipt',
       }),
+    // 下面两段查询原样搬自小管家的 get_inventory_alerts / get_inventory_summary（J4.1）
+    async lowStockItems(householdId, limit) {
+      const rows = await dataSource
+        .getRepository(InventoryItem)
+        .createQueryBuilder('item')
+        .where('item.householdId = :householdId', { householdId })
+        .andWhere('item.quantity <= item.lowStockThreshold')
+        .orderBy('item.quantity', 'ASC')
+        .addOrderBy('item.name', 'ASC')
+        .take(limit)
+        .getMany();
+      return rows.map((item) => ({
+        id: item.id,
+        name: item.name,
+        quantity: Number(item.quantity),
+        unit: item.unit,
+        lowStockThreshold: Number(item.lowStockThreshold),
+      }));
+    },
+    async listStockWithExpiry(householdId) {
+      const rows = await dataSource
+        .getRepository(InventoryItem)
+        .createQueryBuilder('item')
+        .leftJoinAndSelect('item.batches', 'batch', 'batch.quantity > 0')
+        .where('item.householdId = :householdId', { householdId })
+        .orderBy('item.name', 'ASC')
+        .getMany();
+      return rows.map((item) => {
+        const expiryDates = (item.batches ?? [])
+          .filter((batch) => Number(batch.quantity) > 0 && batch.expiresOn)
+          .map((batch) => batch.expiresOn as string)
+          .sort();
+        return {
+          id: item.id,
+          name: item.name,
+          quantity: Number(item.quantity),
+          unit: item.unit,
+          lowStockThreshold: Number(item.lowStockThreshold),
+          earliestExpiresOn: expiryDates[0] ?? null,
+        };
+      });
+    },
+    listStockStatus: (householdId) => inventory.list(householdId),
   };
 }

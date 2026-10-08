@@ -39,7 +39,7 @@ export const travelManifest = {
     { id: 'travel.create', label: '新建行程', keywords: ['旅行'], deepLink: '/life/travel?create=1' },
   ],
   queries: [
-    { id: 'travel.checklist', label: '行程的协作清单', server: 'travel.checklist', legacyTool: 'get_travel_checklist' },
+    { id: 'travel.checklist', label: '行程的协作清单', server: 'travel.checklist' },
   ],
   usage: { label: '出行', activityModules: ['travel'] },
 } as const satisfies PluginManifest;

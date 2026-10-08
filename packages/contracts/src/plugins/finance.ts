@@ -77,7 +77,7 @@ export const financeManifest = {
       keywords: ['记账', '花钱'],
       deepLink: '/house/finance?create=1&kind=expense',
       // 一个提案工具同时管收入和支出
-      propose: { legacyTool: 'propose_finance_transaction', actionType: 'finance', label: '家庭记账', grouped: false },
+      propose: { toolName: 'propose_finance_transaction', actionType: 'finance', label: '家庭记账', grouped: false },
       capability: 'record_finance',
     },
     {
@@ -89,7 +89,7 @@ export const financeManifest = {
     },
   ],
   queries: [
-    { id: 'finance.summary', label: '本月家庭财务', server: 'finance.summary', legacyTool: 'get_finance_summary', capability: 'view_finance' },
+    { id: 'finance.summary', label: '本月家庭财务', server: 'finance.summary', capability: 'view_finance' },
   ],
   usage: { label: '财务', activityModules: ['finance'] },
   capabilities: [

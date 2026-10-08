@@ -142,9 +142,12 @@ export type PluginSlotType =
   | 'member' | 'location' | 'device' | 'item' | 'dish' | 'room';
 export type PluginSlot = PluginSlotType | `${PluginSlotType}?`;
 
-/** agent 写提案：现有工具名、agent_action_proposals.actionType 现值、提案卡上的类型名、能否放进 propose_plan。 */
+/** agent 写提案：工具名、agent_action_proposals.actionType 现值、提案卡上的类型名、能否放进 propose_plan。 */
 export interface PluginProposal {
-  legacyTool?: string;
+  /** 工具名；缺省按规则生成 `propose_<actionType>`（plugins/agent-tools.ts）。 */
+  toolName?: string;
+  /** 工具的旧名：改名后旧名仍能调到（黑盒脚本与渠道配置依赖旧名）。 */
+  toolAliases?: readonly string[];
   actionType: string;
   label: string;
   grouped?: boolean;
@@ -164,7 +167,7 @@ export interface PluginAction {
   /** 第 0 档模板；J3 前允许为空。 */
   templates?: readonly string[];
   /**
-   * 生成 agent 的写提案工具。`legacyTool` 是现有工具名（J4 保留为别名），
+   * 生成 agent 的写提案工具（J4.1 起工具名单由它推导）。`toolName` 缺省为 `propose_<actionType>`，
    * `actionType` 是 agent_action_proposals.actionType 的现值，`label` 是提案卡上的类型名；
    * `grouped: false` 表示不能放进 propose_plan 的一组里，必须单独确认（财务）。
    */
@@ -183,8 +186,10 @@ export interface PluginQuery {
   server: string;
   /** 第 0 档的答复模板，`{field}` 取查询结果字段。复杂答复写 `server` 由服务端拼。 */
   answer?: string | { server: string };
-  /** 现有 agent 读工具名（J4 保留为别名）。 */
-  legacyTool?: string;
+  /** 每个查询都生成一个 agent 读工具（J4.1）。工具名缺省按规则生成 `get_<插件>_<动词>`（id 里的 - 换成 _）。 */
+  toolName?: string;
+  /** 工具的旧名：改名后旧名仍能调到。 */
+  toolAliases?: readonly string[];
   capability?: string;
 }
 

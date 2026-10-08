@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idParams, isoDateTime, nullableDateTime, uuid } from './common';
+import { AGENT_PROPOSAL_TOOLS, AGENT_READ_TOOLS } from './plugins/agent-tools';
 import { defineEndpoint } from './registry';
 
 // 对应 apps/api/src/agent/*.ts 与 docs/m14-agent-acceptance.md
@@ -149,49 +150,8 @@ export const agentChannelPairingStatus = z.enum(AGENT_CHANNEL_PAIRING_STATUSES);
 export type AgentChannelPairingStatus = z.infer<typeof agentChannelPairingStatus>;
 
 
-export const AGENT_READ_TOOLS = [
-  'get_today_summary',
-  'get_calendar',
-  'get_tasks',
-  'get_shopping_list',
-  'get_meal_plan',
-  'get_inventory_alerts',
-  'search_knowledge',
-  'get_travel_checklist',
-  'get_watch_candidates',
-  'get_recent_memories',
-  'get_member_tasks',
-  'get_family_schedule',
-  'get_inventory_summary',
-  'search_recipes',
-  'get_dish_plan',
-  'get_weather',
-  'get_member_profile',
-  'get_asset_detail',
-  'get_finance_summary',
-  'find_item',
-  'list_location_contents',
-] as const;
-export const AGENT_PROPOSAL_TOOLS = [
-  'propose_task',
-  'propose_reminder',
-  'propose_poll',
-  'propose_menu',
-  'propose_shopping_items',
-  'propose_plan',
-  'propose_finance_transaction',
-] as const;
-
-/** 记忆工具：个人偏好的回顾与候选。J1 起 agent 工具名单只此一份，apps/api 从这里取。 */
-export const AGENT_MEMORY_TOOLS = [
-  'recall_preferences',
-  'remember_preference',
-] as const;
-
-export type AgentReadToolName = (typeof AGENT_READ_TOOLS)[number];
-export type AgentProposalToolName = (typeof AGENT_PROPOSAL_TOOLS)[number];
-export type AgentMemoryToolName = (typeof AGENT_MEMORY_TOOLS)[number];
-export type AgentToolName = AgentReadToolName | AgentProposalToolName | AgentMemoryToolName;
+// agent 工具名单（AGENT_READ_TOOLS / AGENT_PROPOSAL_TOOLS / AGENT_MEMORY_TOOLS 及其字面量类型）
+// J4.1 起由 manifest + core-assistant.ts 推导，在 plugins/agent-tools.ts。
 
 const expectedVersion = z.number().int().min(1);
 const clientRequestId = z.string().min(1).max(180);

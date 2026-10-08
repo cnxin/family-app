@@ -13,6 +13,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@family/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
       '@family/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

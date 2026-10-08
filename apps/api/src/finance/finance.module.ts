@@ -11,7 +11,9 @@ import {
   Controller,
   Delete,
   Get,
+  Injectable,
   Module,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -64,6 +66,8 @@ const TRANSACTION_TYPES: Exclude<FinanceTransactionType, 'reversal'>[] = [
   'transfer',
 ];
 import { FinanceService, MAX_AMOUNT } from './finance.service';
+import { financeFacade } from './finance.facade';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import { FinanceEditController, FinanceEditService } from './finance-edit.service';
 import { FinanceImportController } from './finance-import.controller';
 import { FinanceImportService } from './finance-import.service';
@@ -412,6 +416,19 @@ export class FinanceController {
   }
 }
 
+/** 把财务门面注册到内核（J4.1）：小管家读账本汇总、记账提案的预览与确认后入账走这里。 */
+@Injectable()
+export class FinanceFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly finance: FinanceService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('finance', financeFacade(this.finance));
+  }
+}
+
 @Module({
   imports: [
     TodayModule,
@@ -438,6 +455,7 @@ export class FinanceController {
     FinanceCreditDueProvider,
     FinanceRecurringFailedProvider,
     FinanceAttention,
+    FinanceFacadeProvider,
   ],
   exports: [FinanceService],
 })

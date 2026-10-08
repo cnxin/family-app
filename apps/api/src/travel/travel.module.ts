@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -16,6 +17,8 @@ import {
 import { TravelChecklistAttentionRule, TravelAttention } from './travel-attention';
 import { TodayModule } from '../today/today.module';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { travelFacade } from './travel.facade';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -1690,6 +1693,19 @@ export class TravelController {
   }
 }
 
+/** 把出行门面注册到内核（J4.1）：小管家读行程清单走这里。 */
+@Injectable()
+export class TravelFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly travel: TravelService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('travel', travelFacade(this.travel));
+  }
+}
+
 @Module({
   imports: [
     TodayModule,
@@ -1705,7 +1721,7 @@ export class TravelController {
     ]),
   ],
   controllers: [TravelController],
-  providers: [TravelService, TravelChecklistAttentionRule, TravelAttention],
+  providers: [TravelService, TravelChecklistAttentionRule, TravelAttention, TravelFacadeProvider],
   exports: [TravelService],
 })
 export class TravelModule {}

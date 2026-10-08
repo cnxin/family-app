@@ -71,7 +71,7 @@ export const assetsManifest = {
     { id: 'assets.create', label: '登记一件资产', keywords: ['家电'], deepLink: '/house/assets?create=1', capability: 'manage_assets' },
   ],
   queries: [
-    { id: 'assets.detail', label: '某件资产的详情', server: 'assets.detail', legacyTool: 'get_asset_detail' },
+    { id: 'assets.detail', label: '某件资产的详情', server: 'assets.detail', toolName: 'get_asset_detail' },
   ],
   usage: { label: '资产', activityModules: ['asset'] },
   capabilities: [{ key: 'manage_assets', roles: ['owner', 'admin', 'member'] }],

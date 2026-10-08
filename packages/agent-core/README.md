@@ -11,7 +11,7 @@
 | `OpenAICompatibleProvider({ baseUrl, apiKey, model, extraHeaders?, quirks?, fetch? })` | POST `{baseUrl}/chat/completions`（stream），自解析 SSE、按 index 拼 tool_calls、归一 finish_reason；非 2xx 抛 `ProviderError`（`status` + 服务商原文，key 打码）；取消 / 超时走 `signal` |
 | `providerQuirks` / `quirksFor(key)` | 各家差异表（`generic`、`deepseek`、`qwen`），含预填 baseUrl 与推荐模型 |
 | `ProviderError`（`code`：http、network、aborted、bad_stream、images_unsupported、replay_mismatch） | provider 层错误 |
-| `ToolRegistry<C>` | `register({ name, description, schema: z.object, kind: 'read' \| 'propose', aliases?, execute(ctx, args) })`；`get` / `resolve`（认旧名）、`list`、`names`、`toModelTools(allowed?)`、`canonicalSet`、`execute(name, ctx, rawArgs, { signal })` → `ToolOutcome` |
+| `ToolRegistry<C>` | `register({ name, description, schema: z.object, kind: 'read' \| 'propose', aliases?, execute(ctx, args) })`；`get` / `resolve`（认旧名）、`list`、`names`、`toModelTools(allowed?)`、`canonicalSet`；`execute(name, ctx, rawArgs, { signal })` → `ToolOutcome`（不抛，循环用）；`invoke(...)` 同样校验执行但出错直接抛（`ToolInvocationError` 带 code，工具自己的异常原样抛；MCP 等适配层用） |
 | `ReadToolContext<C>` / `ProposeToolContext<C>` / `ProposalReceipt` | 提案工具的 `execute` 只能返回 `ctx.receipt(proposalId)`：普通对象过不了编译，运行时再认一遍，交给模型的只有 `{ proposalId }` |
 | `toJsonSchema(schema)` | zod → JSON Schema，与 MCP SDK 同口径（draft-7、输入侧），去掉 `$schema` |
 | `runLoop(provider, registry, input, limits) → AsyncIterable<AgentEvent>` | `input`：`system`、`history`、`message`、`images`、`untrusted: [{label, content}]`、`allowedTools`、`context`、`signal`；`limits`：`maxSteps`（默认 8）、`maxToolCalls`（默认 12）、`maxOutputTokens`、`maxWallMs` |

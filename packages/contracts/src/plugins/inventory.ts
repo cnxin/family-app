@@ -44,8 +44,8 @@ export const inventoryManifest = {
     ],
   },
   queries: [
-    { id: 'inventory.alerts', label: '库存提醒', server: 'inventory.alerts', legacyTool: 'get_inventory_alerts' },
-    { id: 'inventory.summary', label: '库存摘要', server: 'inventory.summary', legacyTool: 'get_inventory_summary' },
+    { id: 'inventory.alerts', label: '库存提醒', server: 'inventory.alerts' },
+    { id: 'inventory.summary', label: '库存摘要', server: 'inventory.summary' },
   ],
   usage: {
     label: '库存',

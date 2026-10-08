@@ -31,12 +31,12 @@ export const tasksManifest = {
       keywords: ['待办'],
       deepLink: '/schedule/tasks?create=1',
       // 任务会出现在日历上
-      propose: { legacyTool: 'propose_task', actionType: 'task', label: '家庭任务', domains: ['tasks', 'calendar'] },
+      propose: { actionType: 'task', label: '家庭任务', domains: ['tasks', 'calendar'] },
     },
   ],
   queries: [
-    { id: 'tasks.household', label: '家里的任务', server: 'tasks.household', legacyTool: 'get_tasks' },
-    { id: 'tasks.member', label: '某个成员的任务', server: 'tasks.member', legacyTool: 'get_member_tasks' },
+    { id: 'tasks.household', label: '家里的任务', server: 'tasks.household', toolName: 'get_tasks' },
+    { id: 'tasks.member', label: '某个成员的任务', server: 'tasks.member', toolName: 'get_member_tasks' },
   ],
   usage: {
     label: '任务',

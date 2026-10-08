@@ -6,94 +6,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { CORE_TOOL_SOURCES, pluginToolSources } from '@family/contracts';
-import { AssetsService } from '../assets/assets.module';
+import { ToolInvocationError, type ToolRegistry } from '@family/agent-core';
 import { JwtUser } from '../auth/jwt.guard';
-import { CalendarService } from '../calendar/calendar.module';
-import { openweatherApiKey, openweatherBaseUrl } from '../common/config';
 import {
   AgentMemberProfile,
   AgentRun,
   AgentToolEvent,
-  Dish,
-  InventoryItem,
   Member,
 } from '../entities';
-import { KnowledgeService } from '../knowledge/knowledge.module';
-import { MediaService } from '../media/media.module';
-import { MemoriesService } from '../memories/memories.module';
-import { MenusService } from '../menus/menus.module';
-import { ShoppingService } from '../shopping/shopping.module';
-import { TasksService } from '../tasks/tasks.module';
-import { TravelService } from '../travel/travel.module';
-import { FinanceService } from '../finance/finance.module';
-import {
-  AGENT_MEMORY_KEYS,
-  AGENT_READ_TOOLS,
-  AgentMemoryKey,
-  AgentReadToolName,
-  AgentToolName,
-  isAgentMemoryTool,
-} from './agent.types';
-import {
-  AgentProposalsService,
-  isAgentProposalTool,
-} from './agent-proposals.service';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { AgentProposalsService } from './agent-proposals.service';
 import { encryptAgentContent } from './agent.crypto';
 import { AgentMemoryService } from './agent-memory.service';
 import { AgentProposalGroupsService } from './agent-proposal-groups.service';
-import { findItemTool, listLocationContentsTool } from './agent-location-tools';
-import { addDays, daysBetween, todayInShanghai } from '@family/shared';
+import { createAgentToolRegistry, type AgentToolContext } from './tools';
+import { SEARCH_RECIPES_LIMIT_ERROR } from './tools/recipes';
 
-const MAX_RESULT_ITEMS = 20;
-const MAX_EXTENDED_RESULT_ITEMS = 50;
 const MAX_RESPONSE_BYTES = 48_000;
-const SEARCH_RECIPES_RUN_LIMIT = 2;
-const SEARCH_RECIPES_LIMIT_ERROR = 'recipe_search_limit_reached';
-
-function dateOnly(value: unknown, fallback: string) {
-  const normalized = typeof value === 'string' ? value : fallback;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    throw new BadRequestException('日期必须使用 YYYY-MM-DD 格式');
-  }
-  const parsed = new Date(`${normalized}T00:00:00.000Z`);
-  if (
-    Number.isNaN(parsed.getTime()) ||
-    parsed.toISOString().slice(0, 10) !== normalized
-  ) {
-    throw new BadRequestException('日期不是有效的日历日期');
-  }
-  return normalized;
-}
-
-function limited(value: unknown, fallback = 10) {
-  const parsed = Number(value ?? fallback);
-  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
-  return Math.min(parsed, MAX_RESULT_ITEMS);
-}
-
-function boundedInteger(
-  value: unknown,
-  fallback: number,
-  maximum: number,
-  label: string,
-) {
-  const parsed = Number(value ?? fallback);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum) {
-    throw new BadRequestException(`${label}必须是 1 到 ${maximum} 之间的整数`);
-  }
-  return parsed;
-}
-
-function normalizedTerms(value: unknown, maximum: number) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => entry.trim().toLocaleLowerCase('zh-CN'))
-    .filter(Boolean)
-    .slice(0, maximum);
-}
 
 function userFor(run: AgentRun, member: Member): JwtUser {
   return {
@@ -435,6 +366,9 @@ function outputItemCount(output: unknown) {
 
 @Injectable()
 export class AgentToolsService {
+  /** 30 个工具（J4.1，apps/api/src/agent/tools/）；MCP 控制器按它注册，内置运行时经 execute 调。 */
+  readonly registry: ToolRegistry<AgentToolContext>;
+
   constructor(
     @InjectRepository(AgentRun) private readonly runs: Repository<AgentRun>,
     @InjectRepository(AgentToolEvent)
@@ -442,35 +376,28 @@ export class AgentToolsService {
     private readonly eventBus: EventBus,
     @InjectRepository(Member) private readonly members: Repository<Member>,
     @InjectRepository(AgentMemberProfile)
-    private readonly memberProfiles: Repository<AgentMemberProfile>,
-    @InjectRepository(Dish) private readonly dishes: Repository<Dish>,
-    @InjectRepository(InventoryItem)
-    private readonly inventory: Repository<InventoryItem>,
-    private readonly calendar: CalendarService,
-    private readonly knowledge: KnowledgeService,
-    private readonly travel: TravelService,
-    private readonly media: MediaService,
-    private readonly memories: MemoriesService,
-    private readonly menus: MenusService,
-    private readonly shopping: ShoppingService,
-    private readonly tasks: TasksService,
-    private readonly proposals: AgentProposalsService,
-    private readonly proposalGroups: AgentProposalGroupsService,
-    private readonly agentMemory: AgentMemoryService,
-    private readonly finance: FinanceService,
-    private readonly assets: AssetsService,
-    private readonly dataSource: DataSource,
-  ) {}
+    memberProfiles: Repository<AgentMemberProfile>,
+    proposals: AgentProposalsService,
+    proposalGroups: AgentProposalGroupsService,
+    agentMemory: AgentMemoryService,
+    facades: PluginFacadeRegistry,
+  ) {
+    this.registry = createAgentToolRegistry({
+      facades,
+      members,
+      memberProfiles,
+      toolEvents: events,
+      proposals,
+      proposalGroups,
+      agentMemory,
+    });
+  }
 
   async execute(
     toolName: string,
     input: Record<string, unknown>,
   ): Promise<unknown> {
-    if (
-      !AGENT_READ_TOOLS.includes(toolName as AgentReadToolName) &&
-      !isAgentProposalTool(toolName) &&
-      !isAgentMemoryTool(toolName)
-    ) {
+    if (!this.registry.get(toolName)) {
       throw new BadRequestException('未开放的智能体工具');
     }
     const runId = typeof input.runId === 'string' ? input.runId : '';
@@ -495,7 +422,7 @@ export class AgentToolsService {
     const startedAt = new Date();
     const user = userFor(run, member);
     try {
-      const output = await this.callTool(toolName as AgentToolName, input, user, run);
+      const output = await this.callTool(toolName, input, user, run);
       const serialized = JSON.stringify(output);
       if (Buffer.byteLength(serialized, 'utf8') > MAX_RESPONSE_BYTES) {
         throw new BadRequestException('工具返回内容超过大小限制');
@@ -512,726 +439,29 @@ export class AgentToolsService {
     }
   }
 
+  /**
+   * 经注册表执行：参数按工具的 zod 校验（MCP 入口已按同一份 schema 校验过）。
+   * 提案工具交给模型的只有 proposalId；这里收下工具交出的完整提案原样返回，Hermes 看到的与 J4.1 前一致。
+   */
   private async callTool(
-    toolName: AgentToolName,
+    toolName: string,
     input: Record<string, unknown>,
     user: JwtUser,
     run: AgentRun,
   ) {
-    if (toolName === 'propose_plan') {
-      return this.proposalGroups.createFromRun(input, run, user);
-    }
-    if (isAgentProposalTool(toolName)) {
-      return this.proposals.createFromRun(toolName, input, run, user);
-    }
-    if (isAgentMemoryTool(toolName)) {
-      if (toolName === 'recall_preferences') {
-        const memoryKey =
-          typeof input.memoryKey === 'string' &&
-          AGENT_MEMORY_KEYS.includes(input.memoryKey as AgentMemoryKey)
-            ? (input.memoryKey as AgentMemoryKey)
-            : undefined;
-        if (input.memoryKey != null && !memoryKey) {
-          throw new BadRequestException('不支持的记忆分类键');
-        }
-        return this.agentMemory.search(
-          {
-            scope:
-              input.scope === 'household' ? 'household' : 'member_private',
-            memoryKey,
-            limit: limited(input.limit),
-          },
-          user,
-        );
-      }
-      return this.agentMemory.createCandidate(
-        {
-          content: typeof input.content === 'string' ? input.content : '',
-          memoryKey: input.memoryKey as AgentMemoryKey,
-          sourceType: 'agent_tool',
-          sourceId: run.id,
-          sourceConversationId: run.conversationId,
-          confidenceSource: 'summary_candidate',
-        },
-        user,
-      );
-    }
-    if (toolName === 'get_today_summary') {
-      const date = todayInShanghai();
-      const [entries, alerts] = await Promise.all([
-        this.calendar.list(date, date, user),
-        this.inventoryAlerts(user.householdId, 8),
-      ]);
-      return {
-        date,
-        entries: entries.slice(0, MAX_RESULT_ITEMS).map((entry) => ({
-          module: entry.module,
-          date: entry.date,
-          title: entry.title,
-          status: entry.status,
-          summary: entry.summary ? String(entry.summary).slice(0, 200) : null,
-          targetPath: entry.targetPath,
-        })),
-        inventoryAlerts: alerts,
-      };
-    }
-    if (toolName === 'get_calendar') {
-      const start = dateOnly(input.start, todayInShanghai());
-      const end = dateOnly(input.end, addDays(start, 6));
-      const days = Math.round(
-        (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) /
-          86_400_000,
-      );
-      if (days < 0 || days > 31) {
-        throw new BadRequestException('智能体日历单次最多查询 32 天');
-      }
-      const entries = await this.calendar.list(start, end, user);
-      return entries.slice(0, MAX_RESULT_ITEMS).map((entry) => ({
-        module: entry.module,
-        date: entry.date,
-        title: entry.title,
-        status: entry.status,
-        summary: entry.summary ? String(entry.summary).slice(0, 200) : null,
-        targetPath: entry.targetPath,
-      }));
-    }
-    if (toolName === 'get_tasks') {
-      const start = dateOnly(input.start, todayInShanghai());
-      const end = dateOnly(input.end, addDays(start, 6));
-      const days = Math.round(
-        (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) /
-          86_400_000,
-      );
-      if (days < 0 || days > 31) {
-        throw new BadRequestException('智能体任务单次最多查询 32 天');
-      }
-      const includeCompleted = input.includeCompleted === true;
-      const rows = await this.tasks.list(start, end, user);
-      return rows
-        .filter((row) => includeCompleted || row.status === 'pending')
-        .slice(0, limited(input.limit))
-        .map((row) => ({
-          id: row.id,
-          taskId: row.taskId,
-          title: row.task.title,
-          dueDate: row.dueDate,
-          status: row.status,
-          assigneeName: row.assignee?.name ?? row.task.defaultAssignee?.name ?? null,
-          rewardPoints: row.task.rewardPoints,
-          targetPath: `/tasks?date=${row.dueDate}&taskId=${row.taskId}`,
-        }));
-    }
-    if (toolName === 'get_member_tasks') {
-      const memberId =
-        typeof input.memberId === 'string' ? input.memberId : user.memberId;
-      const member = await this.requireHouseholdMember(memberId, user);
-      const status = input.status ?? 'pending';
-      if (!['pending', 'completed', 'all'].includes(String(status))) {
-        throw new BadRequestException('不支持的任务状态');
-      }
-      const limit = boundedInteger(
-        input.limit,
-        20,
-        MAX_EXTENDED_RESULT_ITEMS,
-        '返回条数',
-      );
-      const start = addDays(todayInShanghai(), -90);
-      const end = addDays(todayInShanghai(), 90);
-      const rows = await this.tasks.list(start, end, user);
-      const matched = rows.filter((row) => {
-        if (row.assigneeId !== member.id) return false;
-        if (status === 'pending') return row.status === 'pending';
-        if (status === 'completed') return row.status === 'done';
-        return true;
-      });
-      return {
-        tasks: matched.slice(0, limit).map((row) => ({
-          id: row.id,
-          taskId: row.taskId,
-          title: row.task.title,
-          dueDate: row.dueDate,
-          status: row.status === 'done' ? 'completed' : row.status,
-          priority: row.task.rewardPoints > 0 ? 'rewarded' : 'normal',
-          assignedToMemberId: member.id,
-          assignedMemberName: member.name,
-          targetPath: `/tasks?date=${row.dueDate}&taskId=${row.taskId}`,
-          untrustedContent: true,
-        })),
-        total: matched.length,
-      };
-    }
-    if (toolName === 'get_family_schedule') {
-      const startDate = dateOnly(input.startDate, todayInShanghai());
-      const days = boundedInteger(input.days, 7, 30, '查询天数');
-      const endDate = addDays(startDate, days - 1);
-      const entries = await this.calendar.list(startDate, endDate, user);
-      return {
-        events: entries.slice(0, MAX_EXTENDED_RESULT_ITEMS).map((entry) => {
-          const metadata = entry.metadata as Record<string, unknown>;
-          const participants = [
-            metadata.createdByName,
-            metadata.assigneeName,
-            metadata.hostMemberName,
-          ].filter(
-            (value): value is string =>
-              typeof value === 'string' && Boolean(value),
-          );
-          return {
-            id: entry.id,
-            title: entry.title,
-            eventDate: entry.date,
-            date: entry.date,
-            eventType: entry.module,
-            participants: [...new Set(participants)],
-            status: entry.status,
-            summary: entry.summary ? String(entry.summary).slice(0, 200) : null,
-            targetPath: entry.targetPath,
-            untrustedContent: true,
-          };
-        }),
-        total: entries.length,
-      };
-    }
-    if (toolName === 'get_inventory_summary') {
-      const filter = input.filter ?? 'low_stock';
-      if (!['low_stock', 'expiring_soon', 'all'].includes(String(filter))) {
-        throw new BadRequestException('不支持的库存过滤条件');
-      }
-      return this.inventorySummary(user.householdId, String(filter));
-    }
-    if (toolName === 'get_shopping_list') {
-      const date = dateOnly(input.date, todayInShanghai());
-      const status = input.status;
-      if (
-        status != null &&
-        !['pending', 'purchased', 'all'].includes(String(status))
-      ) {
-        throw new BadRequestException('不支持的购物清单状态');
-      }
-      const includeChecked = input.includeChecked === true || status === 'all';
-      const rows = await this.shopping.list(user.householdId, date);
-      return rows
-        .filter((row) => {
-          if (status === 'pending') return !row.checked;
-          if (status === 'purchased') return row.checked;
-          return includeChecked || !row.checked;
-        })
-        .slice(0, limited(input.limit))
-        .map((row) => ({
-          id: row.id,
-          date: row.date,
-          name: row.ingredient?.name ?? row.customName ?? '未命名采购项',
-          quantity: row.totalQty == null ? null : Number(row.totalQty),
-          unit: row.unit,
-          checked: row.checked,
-          status: row.checked ? 'purchased' : 'pending',
-          source: row.source,
-          inventoryLinked: row.inventoryItemId != null,
-          targetPath: `/shopping?date=${row.date}`,
-          untrustedContent: true,
-        }));
-    }
-    if (toolName === 'search_recipes') {
-      const searchCount = await this.events.countBy({
-        runId: run.id,
-        toolName: 'search_recipes',
-      });
-      if (searchCount >= SEARCH_RECIPES_RUN_LIMIT) {
-        return {
-          error: SEARCH_RECIPES_LIMIT_ERROR,
-          message:
-            '本次对话已达菜谱搜索上限，请基于已有搜索结果继续规划',
-          recipes: [],
-          total: 0,
-        };
-      }
-      return this.searchRecipes(input, user);
-    }
-    if (toolName === 'get_dish_plan') {
-      const startDate = dateOnly(input.startDate, todayInShanghai());
-      const days = boundedInteger(input.days, 7, 30, '查询天数');
-      const dates = Array.from({ length: days }, (_, index) =>
-        addDays(startDate, index),
-      );
-      const menuGroups = await Promise.all(
-        dates.map((date) =>
-          this.menus.listExistingByDate(user.householdId, date),
-        ),
-      );
-      const plans = menuGroups
-        .flat()
-        .flatMap((menu) =>
-          menu.items
-            .filter((item) => item.status !== 'rejected')
-            .map((item) => ({
-              id: item.id,
-              date: menu.date,
-              mealType: menu.mealType,
-              recipeName: item.dish.name,
-              recipeId: item.dishId,
-              recipeVariantId: item.recipeVariantId,
-              status: item.status,
-              requestedByMemberId: item.requestedById,
-              targetPath: `/kitchen?date=${menu.date}&mealType=${menu.mealType}`,
-              untrustedContent: true,
-            })),
-        );
-      return {
-        plans: plans.slice(0, MAX_EXTENDED_RESULT_ITEMS),
-        total: plans.length,
-      };
-    }
-    if (toolName === 'get_weather') {
-      return this.weatherForecast(input);
-    }
-    if (toolName === 'get_member_profile') {
-      const memberId =
-        typeof input.memberId === 'string' ? input.memberId : user.memberId;
-      const member = await this.requireHouseholdMember(memberId, user);
-      const profile = await this.memberProfiles.findOneBy({
-        householdId: user.householdId,
-        memberId: member.id,
-      });
-      return {
-        id: member.id,
-        name: member.name,
-        role: member.role,
-        avatar: member.avatarEmoji,
-        prefersCooking: member.prefersCooking,
-        assistantName: profile?.assistantName ?? null,
-        memoryEnabled: profile?.memoryEnabled ?? null,
-        responseStyle: profile?.responseStyle ?? null,
-        untrustedContent: true,
-      };
-    }
-    if (toolName === 'get_asset_detail') {
-      const assetId =
-        typeof input.assetId === 'string' ? input.assetId.trim() : '';
-      if (!assetId) {
-        return {
-          error: 'asset_id_required',
-          message: '缺少 assetId，请先确认用户指的是哪件资产，不得自行选择',
-        };
-      }
-      const asset = await this.assets.get(assetId, user.householdId);
-      const expiresAt = asset.warrantyExpiresOn;
-      const warrantyDelta = expiresAt
-        ? daysBetween(todayInShanghai(), expiresAt)
-        : null;
-      const nextMaintenanceAt = asset.maintenancePlans
-        .filter((plan) => plan.isEnabled)
-        .map((plan) => plan.nextDueDate)
-        .sort()[0] ?? null;
-      return {
-        id: asset.id,
-        name: asset.name,
-        category: asset.category,
-        status: asset.status,
-        location: asset.location,
-        brand: asset.brand,
-        model: asset.model,
-        brandModel: [asset.brand, asset.model].filter(Boolean).join(' ') || null,
-        purchaseDate: asset.purchaseDate,
-        expiresAt,
-        warrantyStatus:
-          warrantyDelta == null
-            ? 'unknown'
-            : warrantyDelta >= 0
-              ? 'active'
-              : 'expired',
-        isUnderWarranty:
-          warrantyDelta == null ? null : warrantyDelta >= 0,
-        warrantyDaysRemaining:
-          warrantyDelta != null && warrantyDelta >= 0 ? warrantyDelta : null,
-        warrantyDaysExpired:
-          warrantyDelta != null && warrantyDelta < 0
-            ? Math.abs(warrantyDelta)
-            : null,
-        nextMaintenanceAt,
-        targetPath: `/asset/${asset.id}`,
-        untrustedContent: true,
-      };
-    }
-    if (toolName === 'find_item') {
-      return findItemTool(this.dataSource.manager, user.householdId, input);
-    }
-    if (toolName === 'list_location_contents') {
-      return listLocationContentsTool(this.dataSource.manager, user.householdId, input);
-    }
-    if (toolName === 'get_finance_summary') {
-      const month = typeof input.month === 'string' ? input.month : undefined;
-      return this.finance.summary(month, user);
-    }
-    if (toolName === 'get_meal_plan') {
-      const date = dateOnly(input.date, todayInShanghai());
-      const menus = await this.menus.listExistingByDate(user.householdId, date);
-      const mealOrder = { breakfast: 0, lunch: 1, dinner: 2 } as const;
-      return menus
-        .sort((left, right) => mealOrder[left.mealType] - mealOrder[right.mealType])
-        .map((menu) => ({
-          id: menu.id,
-          date: menu.date,
-          mealType: menu.mealType,
-          status: menu.status,
-          chefName: menu.chef?.name ?? null,
-          items: menu.items
-            .filter((item) => item.status !== 'rejected')
-            .slice(0, MAX_RESULT_ITEMS)
-            .map((item) => ({
-              id: item.id,
-              dishName: item.dish.name,
-              status: item.status,
-              requestedByName: item.requestedBy.name,
-              assignedToName: item.assignedTo?.name ?? null,
-            })),
-          targetPath: `/kitchen?date=${menu.date}&mealType=${menu.mealType}`,
-        }));
-    }
-    if (toolName === 'get_inventory_alerts') {
-      return this.inventoryAlerts(user.householdId, limited(input.limit));
-    }
-    if (toolName === 'search_knowledge') {
-      const query = typeof input.query === 'string' ? input.query.trim().slice(0, 80) : '';
-      const rows = await this.knowledge.list(
-        { status: 'active', q: query || undefined, limit: limited(input.limit) },
-        user,
-      );
-      return rows.map((article) => ({
-        id: article.id,
-        title: article.title,
-        category: article.category,
-        summary: article.summary?.slice(0, 300) ?? null,
-        tags: article.tags,
-        referenceUrl: article.referenceUrl,
-        targetPath: `/knowledge?articleId=${article.id}`,
-        untrustedContent: true,
-      }));
-    }
-    if (toolName === 'get_travel_checklist') {
-      const planId =
-        typeof input.travelPlanId === 'string' ? input.travelPlanId.trim() : '';
-      if (!planId) {
-        return {
-          error: 'travel_plan_id_required',
-          message: '缺少 travelPlanId，请先确认用户指的是哪个行程，不得自行选择',
-        };
-      }
-      const plan = await this.travel.detail(planId, user);
-      return {
-        id: plan.id,
-        title: plan.title,
-        destination: plan.destination,
-        startDate: plan.startDate,
-        endDate: plan.endDate,
-        status: plan.status,
-        items: plan.items.slice(0, MAX_RESULT_ITEMS).map((item) => ({
-          id: item.id,
-          title: item.title,
-          category: item.category,
-          quantity: item.quantity,
-          status: item.status,
-          assignedMemberName: item.assignedMember?.name ?? null,
-        })),
-        targetPath: `/travel?planId=${plan.id}`,
-      };
-    }
-    if (toolName === 'get_watch_candidates') {
-      const rows = await this.media.list({ status: 'all' }, user);
-      return rows
-        .filter((entry) => !['completed', 'dropped'].includes(entry.status))
-        .slice(0, limited(input.limit))
-        .map((entry) => ({
-          id: entry.id,
-          title: entry.mediaTitle.title,
-          type: entry.mediaTitle.type,
-          year: entry.mediaTitle.year,
-          status: entry.status,
-          scheduledFor: entry.scheduledFor,
-          targetPath: `/media?mediaId=${entry.id}`,
-        }));
-    }
-    const rows = await this.memories.list(
-      { status: 'active', limit: limited(input.limit) },
-      user,
-    );
-    return rows.map((memory) => ({
-      id: memory.id,
-      title: memory.title,
-      happenedOn: memory.happenedOn,
-      category: memory.category,
-      tags: memory.tags,
-      targetPath: `/memories?memoryId=${memory.id}`,
-      untrustedContent: true,
-    }));
-  }
-
-  private async requireHouseholdMember(memberId: string, user: JwtUser) {
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        memberId,
-      )
-    ) {
-      throw new BadRequestException('成员 ID 格式无效');
-    }
-    const member = await this.members.findOneBy({
-      id: memberId,
-      householdId: user.householdId,
-    });
-    if (!member || member.disabledAt) {
-      throw new NotFoundException('家庭成员不存在');
-    }
-    return member;
-  }
-
-  private async inventorySummary(householdId: string, filter: string) {
-    const rows = await this.inventory
-      .createQueryBuilder('item')
-      .leftJoinAndSelect('item.batches', 'batch', 'batch.quantity > 0')
-      .where('item.householdId = :householdId', { householdId })
-      .orderBy('item.name', 'ASC')
-      .getMany();
-    const expiryBoundary = addDays(todayInShanghai(), 7);
-    const matched = rows
-      .map((item) => {
-        const expiryDates = (item.batches ?? [])
-          .filter((batch) => Number(batch.quantity) > 0 && batch.expiresOn)
-          .map((batch) => batch.expiresOn as string)
-          .sort();
-        const expiresAt = expiryDates[0] ?? null;
-        const lowStock = Number(item.quantity) <= Number(item.lowStockThreshold);
-        const expiringSoon = expiresAt != null && expiresAt <= expiryBoundary;
-        return {
-          id: item.id,
-          name: item.name,
-          quantity: Number(item.quantity),
-          unit: item.unit,
-          lowStockThreshold: Number(item.lowStockThreshold),
-          expiresAt,
-          alert:
-            lowStock && expiringSoon
-              ? 'low_stock_and_expiring'
-              : lowStock
-                ? 'low_stock'
-                : expiringSoon
-                  ? 'expiring_soon'
-                  : 'normal',
-          targetPath: '/shopping',
-          lowStock,
-          expiringSoon,
-        };
-      })
-      .filter((item) => {
-        if (filter === 'low_stock') return item.lowStock;
-        if (filter === 'expiring_soon') return item.expiringSoon;
-        return true;
-      });
-    return {
-      items: matched
-        .slice(0, MAX_EXTENDED_RESULT_ITEMS)
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit,
-          lowStockThreshold: item.lowStockThreshold,
-          expiresAt: item.expiresAt,
-          alert: item.alert,
-          targetPath: item.targetPath,
-          untrustedContent: true,
-        })),
-      total: matched.length,
-    };
-  }
-
-  private async searchRecipes(
-    input: Record<string, unknown>,
-    user: JwtUser,
-  ) {
-    const query =
-      typeof input.query === 'string'
-        ? input.query.trim().toLocaleLowerCase('zh-CN').slice(0, 80)
-        : '';
-    const ingredients = normalizedTerms(input.ingredients, 10);
-    const tags = normalizedTerms(input.tags, 10);
-    const limit = boundedInteger(
-      input.limit,
-      10,
-      MAX_EXTENDED_RESULT_ITEMS,
-      '返回条数',
-    );
-    const dishes = await this.dishes
-      .createQueryBuilder('dish')
-      .leftJoinAndSelect('dish.ingredients', 'dishIngredient')
-      .leftJoinAndSelect('dishIngredient.ingredient', 'dishIngredientEntity')
-      .leftJoinAndSelect('dish.recipeVariants', 'recipeVariant')
-      .leftJoinAndSelect('recipeVariant.ingredients', 'variantIngredient')
-      .leftJoinAndSelect('variantIngredient.ingredient', 'variantIngredientEntity')
-      .where('dish.householdId = :householdId', {
-        householdId: user.householdId,
-      })
-      .andWhere('dish.isActive = true')
-      .orderBy('dish.createdAt', 'DESC')
-      .getMany();
-    const matches = dishes
-      .map((dish) => {
-        const variants = (dish.recipeVariants ?? []).filter(
-          (variant) => !variant.isArchived,
-        );
-        const ingredientNames = [
-          ...(dish.ingredients ?? []).map((entry) => entry.ingredient.name),
-          ...variants.flatMap((variant) =>
-            (variant.ingredients ?? []).map((entry) => entry.ingredient.name),
-          ),
-        ];
-        const normalizedIngredientNames = ingredientNames.map((name) =>
-          name.toLocaleLowerCase('zh-CN'),
-        );
-        const haystack = [
-          dish.name,
-          dish.category,
-          ...variants.map((variant) => variant.name),
-          ...ingredientNames,
-        ]
-          .join('\n')
-          .toLocaleLowerCase('zh-CN');
-        if (query && !haystack.includes(query)) return null;
-        if (
-          ingredients.some(
-            (term) =>
-              !normalizedIngredientNames.some((name) => name.includes(term)),
-          )
-        ) {
-          return null;
-        }
-        const category = dish.category.toLocaleLowerCase('zh-CN');
-        if (tags.some((tag) => !category.includes(tag))) return null;
-        const preferredVariant =
-          variants.find((variant) => variant.isDefault) ?? variants[0];
-        return {
-          id: dish.id,
-          name: dish.name,
-          category: dish.category,
-          cookingTime: preferredVariant?.estMinutes ?? dish.estMinutes,
-          difficulty: dish.difficulty,
-          tags: [dish.category],
-          ingredients: [...new Set(ingredientNames)].slice(0, 20),
-          defaultRecipeVariantId: preferredVariant?.id ?? null,
-          targetPath: `/kitchen?dishId=${dish.id}`,
-          untrustedContent: true,
-        };
-      })
-      .filter((dish): dish is NonNullable<typeof dish> => dish != null);
-    return { recipes: matches.slice(0, limit), total: matches.length };
-  }
-
-  private async weatherForecast(input: Record<string, unknown>) {
-    const city =
-      typeof input.city === 'string' && input.city.trim()
-        ? input.city.trim().slice(0, 80)
-        : '深圳';
-    const days = boundedInteger(input.days, 3, 5, '预报天数');
-    const apiKey = openweatherApiKey();
-    if (!apiKey) return { error: 'weather_api_not_configured' };
-
+    const { runId: _runId, ...args } = input;
+    let presented: unknown;
     try {
-      const url = new URL(`${openweatherBaseUrl()}/forecast`);
-      url.searchParams.set('q', city);
-      url.searchParams.set('cnt', String(days * 8));
-      url.searchParams.set('appid', apiKey);
-      url.searchParams.set('units', 'metric');
-      url.searchParams.set('lang', 'zh_cn');
-      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
-      if (!response.ok) return { error: 'weather_api_unavailable' };
-      const payload = (await response.json()) as Record<string, unknown>;
-      const rawEntries = Array.isArray(payload.list) ? payload.list : [];
-      const groups = new Map<
-        string,
-        { temperatures: number[]; weather: string; description: string }
-      >();
-      for (const rawEntry of rawEntries) {
-        if (!rawEntry || typeof rawEntry !== 'object') continue;
-        const entry = rawEntry as Record<string, unknown>;
-        const date =
-          typeof entry.dt_txt === 'string' ? entry.dt_txt.slice(0, 10) : '';
-        const main =
-          entry.main && typeof entry.main === 'object'
-            ? (entry.main as Record<string, unknown>)
-            : null;
-        const temperature = Number(main?.temp);
-        const weatherEntry =
-          Array.isArray(entry.weather) &&
-          entry.weather[0] &&
-          typeof entry.weather[0] === 'object'
-            ? (entry.weather[0] as Record<string, unknown>)
-            : null;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(temperature)) {
-          continue;
-        }
-        const current = groups.get(date) ?? {
-          temperatures: [],
-          weather: '',
-          description: '',
-        };
-        current.temperatures.push(temperature);
-        if (!current.weather && typeof weatherEntry?.main === 'string') {
-          current.weather = weatherEntry.main.slice(0, 80);
-        }
-        if (!current.description && typeof weatherEntry?.description === 'string') {
-          current.description = weatherEntry.description.slice(0, 120);
-        }
-        groups.set(date, current);
-      }
-      const forecasts = [...groups.entries()]
-        .slice(0, days)
-        .map(([date, group]) => ({
-          date,
-          temp: Number(
-            (
-              group.temperatures.reduce((sum, value) => sum + value, 0) /
-              group.temperatures.length
-            ).toFixed(1),
-          ),
-          minTemp: Number(Math.min(...group.temperatures).toFixed(1)),
-          maxTemp: Number(Math.max(...group.temperatures).toFixed(1)),
-          weather: group.weather,
-          description: group.description,
-          untrustedContent: true,
-        }));
-      if (!forecasts.length) return { error: 'weather_api_unavailable' };
-      const payloadCity =
-        payload.city && typeof payload.city === 'object'
-          ? (payload.city as Record<string, unknown>).name
-          : null;
-      return {
-        city:
-          typeof payloadCity === 'string' && payloadCity.trim()
-            ? payloadCity.trim().slice(0, 80)
-            : city,
-        forecasts,
-        untrustedContent: true,
-      };
-    } catch {
-      return { error: 'weather_api_unavailable' };
+      const outcome = await this.registry.invoke(
+        toolName,
+        { user, run, onProposal: (value) => (presented = value) },
+        args,
+      );
+      return outcome.kind === 'propose' ? presented : outcome.result;
+    } catch (error) {
+      if (error instanceof ToolInvocationError) throw new BadRequestException(error.message);
+      throw error;
     }
-  }
-
-  private async inventoryAlerts(householdId: string, limit: number) {
-    const rows = await this.inventory
-      .createQueryBuilder('item')
-      .where('item.householdId = :householdId', { householdId })
-      .andWhere('item.quantity <= item.lowStockThreshold')
-      .orderBy('item.quantity', 'ASC')
-      .addOrderBy('item.name', 'ASC')
-      .take(limit)
-      .getMany();
-    return rows.map((item) => ({
-      id: item.id,
-      name: item.name,
-      quantity: Number(item.quantity),
-      unit: item.unit,
-      lowStockThreshold: Number(item.lowStockThreshold),
-      targetPath: '/shopping',
-    }));
   }
 
   private async saveEvent(

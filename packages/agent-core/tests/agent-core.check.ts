@@ -10,6 +10,7 @@ import {
   ProviderError,
   RecordingProvider,
   ReplayProvider,
+  ToolInvocationError,
   ToolRegistry,
   UNTRUSTED_NOTICE,
   fenceUntrusted,
@@ -218,6 +219,16 @@ void (async () => {
     const fine = await familyRegistry().execute('propose_task', ctx, '{"title":"倒垃圾","startsOn":"2026-10-09"}');
     assert.deepEqual(fine, { ok: true, kind: 'propose', result: { proposalId: 'proposal-2' } });
     assert.deepEqual(Object.keys((fine as { result: object }).result), ['proposalId']);
+  });
+
+  await check('invoke：判出的错误抛 ToolInvocationError（带 code），工具自己的异常原样抛出', async () => {
+    const registry = familyRegistry();
+    const ctx = input().context;
+    await assert.rejects(registry.invoke('nope', ctx, {}), (error: unknown) => error instanceof ToolInvocationError && error.code === 'unknown_tool');
+    await assert.rejects(registry.invoke('get_tasks', ctx, { start: 1 }), (error: unknown) => error instanceof ToolInvocationError && error.code === 'invalid_arguments');
+    await assert.rejects(registry.invoke('flaky_tool', ctx, {}), (error: unknown) => !(error instanceof ToolInvocationError) && error instanceof Error && error.message === '数据库暂时连不上');
+    assert.deepEqual(await registry.invoke('propose_task', ctx, { title: '扫地', startsOn: '2026-10-09', extra: 1 }), { kind: 'propose', result: { proposalId: 'proposal-1' } });
+    assert.deepEqual(ctx.db.proposals[0].payload, { title: '扫地', startsOn: '2026-10-09' }, 'schema 外的字段在 execute 之前被去掉');
   });
 
   console.log('OpenAI 兼容 provider');

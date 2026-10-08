@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -15,6 +16,8 @@ import {
 import { PollAttentionRule, PollsAttention } from './polls-attention';
 import { TodayModule } from '../today/today.module';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { pollsFacade } from './polls.facade';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
@@ -881,6 +884,19 @@ export class PollsController {
   }
 }
 
+/** 把投票门面注册到内核（J4.1）：小管家投票提案确认后走这里建投票。 */
+@Injectable()
+export class PollsFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly polls: PollsService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('polls', pollsFacade(this.polls));
+  }
+}
+
 @Module({
   imports: [
     TodayModule,
@@ -894,7 +910,7 @@ export class PollsController {
     ]),
   ],
   controllers: [PollsController],
-  providers: [PollsService, PollAttentionRule, PollsAttention],
+  providers: [PollsService, PollAttentionRule, PollsAttention, PollsFacadeProvider],
   exports: [PollsService],
 })
 export class PollsModule {}

@@ -1,6 +1,4 @@
-import { AGENT_MEMORY_TOOLS, type AgentMemoryToolName } from '@family/contracts';
-
-// 工具名单只此一份，在 packages/contracts/src/agent.ts（J1.0）。
+// 工具名单只此一份：J4.1 起由插件 manifest + core-assistant.ts 推导（packages/contracts/src/plugins/agent-tools.ts）。
 export {
   AGENT_MEMORY_TOOLS,
   AGENT_PROPOSAL_TOOLS,
@@ -25,10 +23,6 @@ export const AGENT_MEMORY_KEYS = [
 ] as const;
 
 export type AgentMemoryKey = (typeof AGENT_MEMORY_KEYS)[number];
-
-export function isAgentMemoryTool(value: string): value is AgentMemoryToolName {
-  return AGENT_MEMORY_TOOLS.includes(value as AgentMemoryToolName);
-}
 
 export interface AgentChatInput {
   runId: string;

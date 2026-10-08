@@ -16,33 +16,20 @@ import {
   AgentActionType,
   AgentRun,
   AgentSetting,
-  Dish,
-  DishRecipeVariant,
   Member,
-  Menu,
 } from '../entities';
-import { AddItemsDto, MenusService } from '../menus/menus.module';
-import { PollsService } from '../polls/polls.module';
 import {
   AGENT_ACTION_TYPES,
   pluginProposals,
   type CreatePollBody,
+  type CreateReminderBody,
   type CreateTaskBody,
 } from '@family/contracts';
 import {
-  CreateReminderDto,
-  RemindersService,
-} from '../reminders/reminders.module';
-import { ManualItemDto, ShoppingService } from '../shopping/shopping.module';
-import { TasksService } from '../tasks/tasks.module';
-import {
-  CreateFinanceTransactionDto,
-  FinanceService,
-} from '../finance/finance.module';
-import {
-  AGENT_PROPOSAL_TOOLS,
-  AgentProposalToolName,
-} from './agent.types';
+  PluginFacadeRegistry,
+  toPluginTransaction,
+} from '../system/plugin-facades.registry';
+import { AgentProposalToolName } from './agent.types';
 import { fingerprint as proposalFingerprint } from '../common/fingerprint';
 import { isUniqueViolation } from '@family/shared';
 
@@ -237,12 +224,8 @@ export class AgentProposalsService {
     @InjectRepository(AgentActionProposal)
     private readonly proposals: Repository<AgentActionProposal>,
     private readonly dataSource: DataSource,
-    private readonly tasks: TasksService,
-    private readonly reminders: RemindersService,
-    private readonly polls: PollsService,
-    private readonly menus: MenusService,
-    private readonly shopping: ShoppingService,
-    private readonly finance: FinanceService,
+    // 插件的预览校验与确认后的写入都经门面（J4.1），本文件不 import 插件目录
+    private readonly facades: PluginFacadeRegistry,
   ) {}
 
   async createFromRun(
@@ -515,16 +498,15 @@ export class AgentProposalsService {
     }
     if (actionType === 'reminder') {
       const reminder = payload as ReminderPayload;
-      const { source, members } = await this.reminders.previewSource(
-        reminder as CreateReminderDto,
-        user,
-      );
+      const { source, recipientNames } = await this.facades
+        .get('reminders')
+        .previewSource(reminder as CreateReminderBody, user);
       return {
         title: source.title,
         summary: '确认后为现有家庭事项新增提醒',
         changes: [
           { label: '提醒时间', value: reminder.remindAt },
-          { label: '接收成员', value: members.map((member) => member.name).join('、') },
+          { label: '接收成员', value: recipientNames.join('、') },
           { label: '关联事项', value: source.title },
         ],
         targetPath: source.targetPath,
@@ -545,42 +527,9 @@ export class AgentProposalsService {
     }
     if (actionType === 'menu') {
       const menu = payload as MenuPayload;
-      const existing = await this.dataSource.getRepository(Menu).findOneBy({
-        householdId: user.householdId,
-        date: menu.date,
-        mealType: menu.mealType,
-      });
-      if (existing?.status === 'done') {
-        throw new ConflictException('这餐已经结束，不能再生成点菜提案');
-      }
-      const dishIds = menu.items.map((item) => item.dishId);
-      if (new Set(dishIds).size !== dishIds.length) {
-        throw new ConflictException('一次点菜中不能重复选择同一道菜');
-      }
-      const dishes = await this.dataSource.getRepository(Dish).find({
-        where: { householdId: user.householdId, id: In(dishIds), isActive: true },
-      });
-      if (dishes.length !== dishIds.length) {
-        throw new NotFoundException('菜品不存在或已经停用');
-      }
-      const variants = await this.dataSource.getRepository(DishRecipeVariant).find({
-        where: { householdId: user.householdId, dishId: In(dishIds), isArchived: false },
-      });
-      const names = menu.items.map((item) => {
-        const dish = dishes.find((entry) => entry.id === item.dishId)!;
-        const variant = item.recipeVariantId
-          ? variants.find(
-              (entry) =>
-                entry.id === item.recipeVariantId && entry.dishId === item.dishId,
-            )
-          : variants.find((entry) => entry.dishId === item.dishId && entry.isDefault);
-        if (!variant) {
-          throw new NotFoundException(
-            item.recipeVariantId ? '所选做法不存在' : '菜品缺少家庭默认做法',
-          );
-        }
-        return `${dish.name}（${variant.name}）`;
-      });
+      const names = await this.facades
+        .get('menus')
+        .previewOrder(user.householdId, menu.date, menu.mealType, { items: menu.items });
       return {
         title: `${menu.date} ${MEAL_LABELS[menu.mealType]}`,
         summary: `确认后向菜单加入 ${menu.items.length} 道菜`,
@@ -590,10 +539,9 @@ export class AgentProposalsService {
     }
     if (actionType === 'finance') {
       const finance = payload as FinancePayload;
-      const preview = await this.finance.previewTransaction(
-        { ...finance, idempotencyKey: 'agent-preview' } as CreateFinanceTransactionDto,
-        user,
-      );
+      const preview = await this.facades
+        .get('finance')
+        .previewTransaction({ ...finance, idempotencyKey: 'agent-preview' }, user);
       const typeLabel = {
         expense: '支出',
         income: '收入',
@@ -638,58 +586,46 @@ export class AgentProposalsService {
     manager: EntityManager,
   ) {
     const payload = parsePayload(proposal.actionType, proposal.payload);
+    const transaction = toPluginTransaction(manager);
     if (proposal.actionType === 'task') {
       return {
         module: 'task',
-        id: await this.tasks.createWithinTransaction(
-          payload as CreateTaskBody,
-          user,
-          manager,
-        ),
+        id: await this.facades
+          .get('tasks')
+          .createTask(transaction, payload as CreateTaskBody, user),
       };
     }
     if (proposal.actionType === 'reminder') {
       return {
         module: 'reminder',
-        id: await this.reminders.createWithinTransaction(
-          payload as CreateReminderDto,
-          user,
-          manager,
-        ),
+        id: await this.facades
+          .get('reminders')
+          .createReminder(transaction, payload as CreateReminderBody, user),
       };
     }
     if (proposal.actionType === 'poll') {
       return {
         module: 'poll',
-        id: await this.polls.createWithinTransaction(
-          payload as CreatePollBody,
-          user,
-          manager,
-        ),
+        id: await this.facades
+          .get('polls')
+          .createPoll(transaction, payload as CreatePollBody, user),
       };
     }
     if (proposal.actionType === 'menu') {
       const menu = payload as MenuPayload;
       return {
         module: 'menu',
-        id: await this.menus.addItemsForAgent(
-          menu.date,
-          menu.mealType,
-          { items: menu.items } as AddItemsDto,
-          user,
-          manager,
-        ),
+        id: await this.facades
+          .get('menus')
+          .addItemsForAgent(transaction, menu.date, menu.mealType, { items: menu.items }, user),
       };
     }
     if (proposal.actionType === 'finance') {
       const finance = payload as FinancePayload;
-      const saved = await this.finance.createWithinTransaction(
-        {
-          ...finance,
-          idempotencyKey: `agent-proposal:${proposal.id}`,
-        } as CreateFinanceTransactionDto,
+      const saved = await this.facades.get('finance').createTransaction(
+        transaction,
+        { ...finance, idempotencyKey: `agent-proposal:${proposal.id}` },
         user,
-        manager,
         { sourceType: 'agent', sourceId: proposal.id },
       );
       return { module: 'finance', id: saved.id };
@@ -699,11 +635,9 @@ export class AgentProposalsService {
     const saved: { id: string }[] = [];
     for (const item of shopping.items) {
       saved.push(
-        await this.shopping.addManualWithinTransaction(
-          { date: shopping.date, ...item } as ManualItemDto,
-          user.householdId,
-          manager,
-        ),
+        await this.facades
+          .get('shopping')
+          .addManualItem(transaction, user.householdId, { date: shopping.date, ...item }),
       );
     }
     return { module: 'shopping', id: saved[0].id };
@@ -759,10 +693,4 @@ export class AgentProposalsService {
       await manager.save(proposal);
     });
   }
-}
-
-export function isAgentProposalTool(
-  toolName: string,
-): toolName is AgentProposalToolName {
-  return AGENT_PROPOSAL_TOOLS.includes(toolName as AgentProposalToolName);
 }

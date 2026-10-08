@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, Injectable, Module, OnModuleInit, Patch, Post } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import {
   createStorageLocationBody,
   itemLocationQuery,
@@ -105,10 +106,13 @@ export class LocationsController {
 /** 把位置门面注册到内核（J1b）：库存、资产引用位置前的检查走这里，不再 import location-refs。 */
 @Injectable()
 export class LocationsFacadeProvider implements OnModuleInit {
-  constructor(private readonly registry: PluginFacadeRegistry) {}
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly dataSource: DataSource,
+  ) {}
 
   onModuleInit() {
-    this.registry.register('locations', locationsFacade());
+    this.registry.register('locations', locationsFacade(this.dataSource));
   }
 }
 

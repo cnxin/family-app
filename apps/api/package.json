@@ -24,6 +24,7 @@
     "demo": "node scripts/demo-data.mjs"
   },
   "dependencies": {
+    "@family/agent-core": "workspace:*",
     "@family/contracts": "workspace:*",
     "@family/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.1",

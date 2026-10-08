@@ -26,7 +26,7 @@ export const calendarManifest = {
     { id: 'calendar.create', label: '加日程', keywords: ['事件'], deepLink: '/schedule/calendar?create=1' },
   ],
   queries: [
-    { id: 'calendar.range', label: '一段日子里的日程', server: 'calendar.range', legacyTool: 'get_calendar' },
+    { id: 'calendar.range', label: '一段日子里的日程', server: 'calendar.range', toolName: 'get_calendar' },
   ],
   usage: {
     label: '日历',

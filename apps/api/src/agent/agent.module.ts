@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AssetsModule } from '../assets/assets.module';
-import { CalendarModule } from '../calendar/calendar.module';
 import {
   AgentConversation,
   AgentActionProposal,
@@ -18,21 +16,9 @@ import {
   AgentRoutineItem,
   AgentSetting,
   AgentToolEvent,
-  Dish,
-  InventoryItem,
   Member,
 } from '../entities';
-import { KnowledgeModule } from '../knowledge/knowledge.module';
-import { InventoryModule } from '../inventory/inventory.module';
-import { MediaModule } from '../media/media.module';
-import { MemoriesModule } from '../memories/memories.module';
-import { MenusModule } from '../menus/menus.module';
-import { PollsModule } from '../polls/polls.module';
-import { RemindersModule } from '../reminders/reminders.module';
-import { ShoppingModule } from '../shopping/shopping.module';
-import { TasksModule } from '../tasks/tasks.module';
-import { TravelModule } from '../travel/travel.module';
-import { FinanceModule } from '../finance/finance.module';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import { AgentController } from './agent.controller';
 import { AgentChannelInternalController } from './agent-channel-internal.controller';
 import { AgentMcpController } from './agent-mcp.controller';
@@ -43,7 +29,15 @@ import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
 import { AgentRetentionService } from './agent-retention.service';
 import { AgentMemoryService } from './agent-memory.service';
-import { AgentRoutineService } from './agent-routine.service';
+import {
+  AgentRoutineService,
+  ROUTINE_CALENDAR,
+  ROUTINE_INVENTORY,
+  ROUTINE_SHOPPING,
+  type RoutineCalendarReader,
+  type RoutineInventoryReader,
+  type RoutineShoppingReader,
+} from './agent-routine.service';
 import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 
 @Module({
@@ -64,23 +58,8 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
       AgentMessage,
       AgentRun,
       AgentToolEvent,
-      Dish,
-      InventoryItem,
       Member,
     ]),
-    AssetsModule,
-    CalendarModule,
-    InventoryModule,
-    FinanceModule,
-    KnowledgeModule,
-    TravelModule,
-    MediaModule,
-    MemoriesModule,
-    TasksModule,
-    RemindersModule,
-    PollsModule,
-    MenusModule,
-    ShoppingModule,
   ],
   controllers: [
     AgentController,
@@ -98,6 +77,29 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
     AgentMemoryService,
     AgentRoutineService,
     AgentProposalGroupsService,
+    // 例行任务的每晚汇总 / 每周回顾经门面读日历、购物、库存（J4.1：agent 目录不 import 插件目录）；
+    // 门面在插件 onModuleInit 时才注册，所以用到时再 get
+    {
+      provide: ROUTINE_CALENDAR,
+      inject: [PluginFacadeRegistry],
+      useFactory: (facades: PluginFacadeRegistry): RoutineCalendarReader => ({
+        list: (start, end, user) => facades.get('calendar').listEntries(start, end, user),
+      }),
+    },
+    {
+      provide: ROUTINE_SHOPPING,
+      inject: [PluginFacadeRegistry],
+      useFactory: (facades: PluginFacadeRegistry): RoutineShoppingReader => ({
+        list: (householdId, date) => facades.get('shopping').listItems(householdId, date),
+      }),
+    },
+    {
+      provide: ROUTINE_INVENTORY,
+      inject: [PluginFacadeRegistry],
+      useFactory: (facades: PluginFacadeRegistry): RoutineInventoryReader => ({
+        list: (householdId) => facades.get('inventory').listStockStatus(householdId),
+      }),
+    },
   ],
 })
 export class AgentModule {}
