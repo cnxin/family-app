@@ -7,6 +7,7 @@
  *   - 主表新增：不写流水的域，直接数各域主表最近 N 天新增的行（created_at + 创建人列）。
  *     智能家居控制按来源（手动 / 联动）分开数，HA 打来的事件没有成员、记在「系统」一列。
  *   - 位置（I1）另起一段现状快照：库存 / 批次 / 资产各有多少条记着位置。
+ *   - 助理原话（J2）也另起一段：最近 N 天按「成员 × 入口 source × 结果 outcome」数 assistant_utterances 的条数（不打印原话），不是写操作次数。
  * 统计不到的（没有创建时间或创建人列的表）列在末尾，不猜。
  *
  * 本机（开发库）：
@@ -90,6 +91,21 @@ const SNAPSHOTS = generated.snapshots.map((snapshot) => {
 // 统计不到的写操作（manifest 的 usage.uncounted）
 const UNCOUNTED = generated.uncounted;
 
+// 助理原话（J2）：⌘K / 今天页搜索条 / 小管家对话每「一次输入结束」一条。不是写操作，单独一段，只数条数、不打印原话。
+// 助理层是内核、不是插件，SQL 写在这里。createdAt 是 timestamptz，与流水同口径：现在往前 N×24 小时，不按家庭时区切日。
+// 排序用契约的枚举顺序；取不到（镜像里的契约早于 J2）就保持 SQL 的字母序。
+const UTTERANCE_SOURCES = contracts.ASSISTANT_UTTERANCE_SOURCES ?? [];
+const UTTERANCE_OUTCOMES = contracts.ASSISTANT_UTTERANCE_OUTCOMES ?? [];
+const UTTERANCE_RECENT = `
+  SELECT "householdId" AS household, "memberId" AS member, source, outcome,
+         COUNT(*)::int AS count, COUNT("chosenKind")::int AS chosen
+    FROM assistant_utterances
+   WHERE "createdAt" >= now() - make_interval(days => $1)
+   GROUP BY 1, 2, 3, 4
+   ORDER BY 3, 4`;
+const UTTERANCE_TOTAL = 'SELECT "householdId" AS household, COUNT(*)::int AS count FROM assistant_utterances GROUP BY 1';
+const rank = (list, value) => (list.includes(value) ? list.indexOf(value) : list.length);
+
 const client = new pg.Client({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
@@ -138,6 +154,12 @@ try {
   for (const snapshot of SNAPSHOTS) {
     snapshotRows.push(new Map((await client.query(snapshot.sql, [DAYS])).rows.map((row) => [row.household, row])));
   }
+  // J2 迁移之前的库（NAS 上仓库比镜像新时）没有这张表：跳过这一段，不让整份报告失败
+  const hasUtterances = (await client.query("SELECT to_regclass('public.assistant_utterances') IS NOT NULL AS ok")).rows[0].ok;
+  const utteranceRows = hasUtterances ? (await client.query(UTTERANCE_RECENT, [DAYS])).rows : [];
+  const utteranceTotals = new Map(
+    hasUtterances ? (await client.query(UTTERANCE_TOTAL)).rows.map((row) => [row.household, row.count]) : [],
+  );
   await client.query('COMMIT');
 
   console.log(`# 小管家用量：最近 ${DAYS} 天的写操作次数\n`);
@@ -161,9 +183,35 @@ try {
         console.log('');
       });
     };
+    const printUtterances = () => {
+      if (!hasUtterances) return;
+      console.log(`**助理原话（J2，最近 ${DAYS} 天的输入条数，不是写操作次数）**\n`);
+      const order = people.map((member) => member.id);
+      const mine = utteranceRows
+        .filter((row) => row.household === household.id)
+        .sort(
+          (left, right) =>
+            rank(order, left.member) - rank(order, right.member) ||
+            rank(UTTERANCE_SOURCES, left.source) - rank(UTTERANCE_SOURCES, right.source) ||
+            rank(UTTERANCE_OUTCOMES, left.outcome) - rank(UTTERANCE_OUTCOMES, right.outcome),
+        );
+      if (mine.length) {
+        console.log('| 成员 | 入口 source | 结果 outcome | 条数 | 其中带 chosenKind |');
+        console.log('| --- | --- | --- | ---: | ---: |');
+        for (const row of mine) {
+          const name = people.find((member) => member.id === row.member)?.name ?? '已删成员';
+          console.log(`| ${name} | ${row.source} | ${row.outcome} | ${row.count} | ${row.chosen} |`);
+        }
+        console.log('');
+      }
+      const recent = mine.reduce((sum, row) => sum + row.count, 0);
+      const chosen = mine.reduce((sum, row) => sum + row.chosen, 0);
+      console.log(`- 最近 ${DAYS} 天共 ${recent} 条，其中带 chosenKind 的 ${chosen} 条；全部时间共 ${utteranceTotals.get(household.id) ?? 0} 条\n`);
+    };
     if (!domains.length) {
       console.log('这段时间没有写操作。\n');
       printSnapshots();
+      printUtterances();
       continue;
     }
     console.log(`| 域 | ${columns.map((column) => column.name).join(' | ')} | 合计 | 计数来源 |`);
@@ -184,7 +232,9 @@ try {
     }
     console.log('');
     printSnapshots();
+    printUtterances();
   }
+  if (!hasUtterances) console.log('**助理原话（J2）**：库里还没有 assistant_utterances（J2 迁移之前），这一段跳过\n');
   console.log('**没有计入的写操作**\n');
   for (const line of UNCOUNTED) console.log(`- ${line}`);
 } catch (error) {
