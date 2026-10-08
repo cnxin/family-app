@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useCreateIntent } from '../lib/create-intent';
+import { useDishIntent } from '../lib/dish-intent';
 import type { DishCategory, RecipeDish } from '@family/contracts';
 import { DISH_CATEGORIES } from '@family/contracts';
 import { CATEGORY_EMOJI, useCart } from '../lib/cart';
@@ -152,6 +153,8 @@ export function RecipesPage() {
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<DishCategory | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // ?dish=<id>：⌘K 选菜品跳进来，菜谱到了就打开那道菜的做法；菜不在只抹参数
+  useDishIntent(recipes, setOpen);
 
   // 做法弹窗要从完整列表里取：换了搜索词或分类也不该把已经打开的那一份关掉
   const openDish = (recipes.data ?? []).find((dish) => dish.id === open) ?? null;
