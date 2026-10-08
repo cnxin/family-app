@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { Dish, DishCategory, RecipeDish } from '@family/contracts';
 import { DISH_CATEGORIES } from '@family/contracts';
 import { useCreateDish, useRemoveDish, useUpdateDish } from '../lib/queries';
-import { uploadPhoto } from '../lib/api';
+import { uploadErrorMessage, uploadPhoto } from '../lib/api';
 import { pushToast } from '../lib/toast';
 import { Button, Dialog, Input } from './ui';
 
@@ -41,8 +41,8 @@ export function DishEditor({
     setUploading(true);
     try {
       setPhotoUrl(await uploadPhoto(file));
-    } catch {
-      pushToast('照片没传上去，再试一次', undefined, 'error');
+    } catch (error) {
+      pushToast(uploadErrorMessage(error, '照片没传上去，再试一次'), undefined, 'error');
     } finally {
       setUploading(false);
     }

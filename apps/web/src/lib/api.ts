@@ -124,6 +124,13 @@ export async function postForm<T>(path: string, form: FormData): Promise<T> {
   }
 }
 
+/** 上传失败给人看的话：太大、类型不支持时用服务端的原因（不然用户会拿同一张图反复重试），其余用 fallback。 */
+export function uploadErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError && error.status === 413) return '照片太大了，不能超过 10 MB';
+  if (error instanceof ApiError && error.status === 400) return error.message;
+  return fallback;
+}
+
 /** 上传一张图片，返回 /uploads/<filename>。 */
 export async function uploadPhoto(file: File): Promise<string> {
   const form = new FormData();

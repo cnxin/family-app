@@ -1,5 +1,6 @@
 // C2 批 1 黑盒：通用图片上传 POST /upload（apps/api/src/upload/upload.module.ts）。
 // 要登录（全局 JwtAuthGuard，守卫在 multer 之前，未登录不解析请求体）；只收白名单里的图片类型，扩展名按类型定；≤ 10 MB；
+// 拒收时说清楚收哪些（前端把这句原样提示给用户）。
 // diskStorage 落到 UPLOAD_DIR（run-api-tests 给的是临时目录，结束整目录删），经 /uploads/<名> 公开可取。
 // multer 2.4.0 起 LIMIT_UNEXPECTED_FILE 文案变了、多了字段名错误码，Nest 10 认不出会漏成 500，由 common/multipart.ts 按 code 兜底。
 // 这里钉住：都是 4xx、被拒或中途断开的上传不在磁盘上留文件。单独跑要给和 API 相同的 UPLOAD_DIR。
@@ -20,6 +21,7 @@ const PNG = Buffer.from(
   'base64',
 );
 const RUN = randomUUID().slice(0, 8);
+const UNSUPPORTED = '只支持 JPG、PNG、WebP、GIF、HEIC、BMP 图片';
 
 function assert(condition, message) {
   if (!condition) throw new Error(`断言失败: ${message}`);
@@ -165,16 +167,25 @@ try {
   });
   const jpeg = await upload(token, { file: { bytes: PNG, type: 'image/jpeg', name: 'no-extension' } });
   keep(jpeg.body?.data?.url);
+  // 非标准的 image/jpg 和桌面上的 bmp 也收，扩展名照样由类型定
+  const jpgAlias = await upload(token, { file: { bytes: PNG, type: 'image/jpg', name: 'a.html' } });
+  keep(jpgAlias.body?.data?.url);
+  const bmp = await upload(token, { file: { bytes: PNG, type: 'image/bmp', name: 'photo.bmp' } });
+  keep(bmp.body?.data?.url);
   assert(
     disguised.status === 201 &&
       /\.png$/.test(disguised.body.data.url) &&
       (disguisedServed.headers.get('content-type') ?? '').startsWith('image/png') &&
       svg.status === 400 &&
-      svg.body.error.message === '只支持图片文件' &&
+      svg.body.error.message === UNSUPPORTED &&
       jpeg.status === 201 &&
       /\.jpg$/.test(jpeg.body.data.url) &&
-      (await newFiles(beforeDisguise)).length === 2,
-    'x.html 声明成 image/png 存成 .png、以 image/png 返回；image/svg+xml 400；没扩展名的 JPEG 存成 .jpg',
+      jpgAlias.status === 201 &&
+      /\.jpg$/.test(jpgAlias.body.data.url) &&
+      bmp.status === 201 &&
+      /\.bmp$/.test(bmp.body.data.url) &&
+      (await newFiles(beforeDisguise)).length === 4,
+    'x.html 声明成 image/png 存成 .png、以 image/png 返回；image/svg+xml 400 且说明收哪些；没扩展名的 JPEG、image/jpg、bmp 都收、扩展名按类型',
   );
 
   console.log('4. 超过 10 MB 413、不留半截文件；刚好 10 MB 收（multer ≥ 2.3 的边界，也是 Nest 那份 multer 已被 override 的端到端探针）');
@@ -202,7 +213,7 @@ try {
   const health = await fetch(`${BASE}/health/ready`);
   assert(
     notImage.status === 400 &&
-      notImage.body.error.message === '只支持图片文件' &&
+      notImage.body.error.message === UNSUPPORTED &&
       noFile.status === 400 &&
       noFile.body.error.message === '没有收到文件' &&
       wrongField.status === 400 &&
