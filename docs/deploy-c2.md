@@ -2,6 +2,7 @@
 
 > 给在 NAS 上动手的人。命令都在仓库根目录执行。**2026-09-30 刷新**：从 NAS 当前的 `2127c70` 一路升到 main `75f0222`（中间 9 个迁移），在一份真实形态的数据上（演示栈 H1 升级前的备份，迁移终点与 `2127c70` 相同）用本文的步骤完整走了一遍：升级、升级后确认（含智能家居与位置）、情形 B 回滚，都通过（见文末「演练记录」）。情形 C 里单独换回 web 的命令没有单独演练。
 > 应用代码不在这里改；compose 与脚本见 `docker-compose.prod.yml`、`scripts/upgrade-prod.sh`、`scripts/backup-prod.sh`、`scripts/restore-prod.sh`。
+> **2026-10-08 King 拍板：家庭试用两周（10-15 前后起）先在 Mac mini 演示栈上跑，不迁 NAS**，试用结束、稳定后再整库搬。试用期的访问方式见 §0.1；本文其余部分是试用后搬 NAS 时用的。
 
 ## 0. 前提
 
@@ -13,6 +14,26 @@
 | 配置 | `deploy/.env.production` 与 `deploy/secrets/*` 已存在；**`TZ=Asia/Shanghai` 写明在 `.env.production` 里**（示例文件已有这一行，别删） |
 | 仓库状态 | `git status` 干净。升级脚本发现有未提交改动会直接停 |
 | 磁盘 | 备份目录（默认 `backups-production/`）放得下一份数据库导出 + 附件压缩包 |
+
+## 0.1 局域网试用例外（C2 试用期）
+
+试用期间家里人用 **`http://192.168.50.148:8088`**（Mac mini 的局域网地址，只在家里 Wi-Fi 里能打开），**不走 HTTPS**。
+这和 `production-deployment.md` §1、`m2-acceptance.md` 第 10 条「要 HTTPS」不一致，是 2026-10-08 King 明确接受的试用期例外：
+只在家里 Wi-Fi 里用，登录密码在局域网里是明文传的；外面访问等试用后再定。
+
+- 地址是路由器分配的，Mac mini 重启后可能变：在路由器里给 Mac mini 固定这个地址（King 做）。变了就同步改 `family-guide.md`。
+- 演示栈的升级照 §2 的脚本，在 `~/AI/family-app` 里执行 `./scripts/upgrade-prod.sh --no-pull`；试用期什么时候能升、能上什么，见 `execution-plan.md` 进度表「试用期间允许上线的改动」。
+- 浏览器在 HTTP 下不给的能力（「安全上下文」才有的），小管家里的情况（2026-10-08 全仓核过；`scripts/check-secure-context.mjs` 守着，以后谁直接调这些 API，lint 直接红）：
+
+| 功能 | 用到的浏览器能力 | HTTP 下 | 小管家里怎么处理 |
+| --- | --- | --- | --- |
+| 复制邀请链接、访客链接、HA 配置 | `navigator.clipboard` | 没有 | 已降级（教训 49）：`copyText()` 复制不了就把那段文字全选好，提示「长按或 ⌘C 复制」 |
+| 生成本地 id（幂等键、草稿） | `crypto.randomUUID` | 没有 | 已降级：`newId()` 改用 `crypto.getRandomValues` 拼 |
+| 点按钮的轻微振动 | `navigator.vibrate` | 能用（不要求安全上下文） | iOS 本来就不支持，`?.` 调用，没有就什么都不做 |
+| 实时更新、上传照片、导入账单、地图底图、导出 CSV | `EventSource`、文件选择、`FileReader`、canvas、`Blob` 下载 | 能用 | 不用改 |
+| 摄像头 / 麦克风 / 定位 / 推送通知 / 离线缓存 / 系统分享 / 屏幕常亮 | `mediaDevices`、`geolocation`、`Notification`、`serviceWorker`、`share`、`wakeLock` | 没有 | 没用到；守门脚本禁止直接调，要用得先写降级封装 |
+
+另外两处和 HTTPS 有关的设置在 HTTP 下不碍事：Caddy 发的 `Strict-Transport-Security` 浏览器只在 HTTPS 下认（对 IP 地址也不生效）；CSP 里没有 `upgrade-insecure-requests`。登录态存在浏览器本地（不靠 Cookie），没有 `Secure` Cookie 的问题。
 
 ## 1. 这次升级会变什么（`2127c70` → 当前 main）
 
