@@ -1,6 +1,7 @@
-// J2 助理原话黑盒：写入与幂等、成员只能删 / 看自己的、管理员列表（游标分页）与 CSV 导出、家庭隔离、不推事件。
+// J2 助理原话黑盒：写入与幂等、成员只能删 / 看自己的、管理员列表（游标分页）与 CSV 导出、家庭隔离、不推事件、用量统计原话段。
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { usageReport } from './usage-report-probe.mjs';
 
 const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
@@ -47,6 +48,7 @@ const db = new Client({
 await db.connect();
 
 const other = { householdId: randomUUID(), memberId: randomUUID(), utteranceId: randomUUID() };
+const staleId = randomUUID();
 
 try {
   const owner = await login('爸爸');
@@ -207,8 +209,58 @@ try {
   });
   assert(restored.status === 200 && restored.data.tier1BaseUrl === null && restored.data.captureUtterances === true, '传 null 清空地址，设置恢复默认');
 
+  console.log('8. 用量统计里的原话段（usage-report.mjs）');
+  const searched = await request('/assistant/utterances', member.accessToken, 'POST', {
+    clientId: randomUUID(), text: '冰箱里还有什么', source: 'today_search', outcome: 'navigated', chosenKind: 'page', chosenId: '/inventory',
+  });
+  const missed = await request('/assistant/utterances', member.accessToken, 'POST', {
+    clientId: randomUUID(), text: '周末去哪玩', source: 'today_search', outcome: 'no_match',
+  });
+  // 三天前的一条：只进「全部时间」，不进最近 1 天
+  await db.query(
+    `INSERT INTO assistant_utterances (id, "householdId", "memberId", "clientId", text, source, outcome, "createdAt")
+     VALUES ($1, $2, $3, $4, '三天前的原话', 'today_search', 'no_match', now() - interval '3 days')`,
+    [staleId, owner.member.householdId, member.member.id, randomUUID()],
+  );
+  const report = await usageReport(1);
+  const [{ name: householdName }] = (await db.query('SELECT name FROM households WHERE id = $1', [owner.member.householdId])).rows;
+  const sectionOf = (name) => report.split('\n## ').find((part) => part.startsWith(`${name}（`)) ?? '';
+  const section = sectionOf(householdName);
+  const otherSection = sectionOf('原话隔离家庭');
+  const cells = (text, prefix) => {
+    const line = text.split('\n').find((row) => row.startsWith(prefix));
+    return line ? line.split('|').slice(4, 6).map((cell) => Number(cell.trim())).join(',') : null;
+  };
+  const [expected] = (
+    await db.query(
+      `SELECT count(*) FILTER (WHERE "createdAt" >= now() - interval '1 day')::int AS recent,
+              count(*) FILTER (WHERE "createdAt" >= now() - interval '1 day' AND "chosenKind" IS NOT NULL)::int AS chosen,
+              count(*)::int AS total
+         FROM assistant_utterances WHERE "householdId" = $1`,
+      [owner.member.householdId],
+    )
+  ).rows;
+  const reportOk =
+    searched.status === 201 && missed.status === 201 &&
+    cells(section, '| 妈妈 | today_search | navigated |') === '1,1' &&
+    cells(section, '| 妈妈 | today_search | no_match |') === '1,0' &&
+    expected.total === expected.recent + 1 &&
+    section.includes(`- 最近 1 天共 ${expected.recent} 条，其中带 chosenKind 的 ${expected.chosen} 条；全部时间共 ${expected.total} 条`) &&
+    cells(otherSection, '| 隔离成员 | command_palette | no_match |') === '1,0' &&
+    otherSection.includes('- 最近 1 天共 1 条，其中带 chosenKind 的 0 条；全部时间共 1 条') &&
+    !report.includes('冰箱里还有什么') && !report.includes('别人家的原话');
+  if (!reportOk) {
+    const at = section.indexOf('**助理原话');
+    console.log(at >= 0 ? section.slice(at) : `没找到原话段，家庭段落：\n${section || report.slice(0, 3000)}`);
+  }
+  assert(
+    reportOk,
+    `用量统计的原话段按「成员 × 入口 × 结果」计数、带 chosenKind 单列，三天前的只进全部时间（最近 ${expected.recent} / 全部 ${expected.total}），按家庭分开，不打印原话`,
+  );
+
   console.log('助理原话黑盒全部通过');
 } finally {
+  await db.query('DELETE FROM assistant_utterances WHERE id = $1', [staleId]).catch(() => undefined);
   await db.query('DELETE FROM assistant_utterances WHERE "householdId" = $1', [other.householdId]).catch(() => undefined);
   await db.query('DELETE FROM members WHERE id = $1', [other.memberId]).catch(() => undefined);
   await db.query('DELETE FROM households WHERE id = $1', [other.householdId]).catch(() => undefined);
