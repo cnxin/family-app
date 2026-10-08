@@ -162,3 +162,52 @@ test('任务页缓存过期时先等重取：看过任务页再去消息页点�
     await mom.delete(`/tasks/${task.id}`);
   }
 });
+
+test('日历「流」视图点任务条目：带着 taskId / date 到任务页，亮那一次', async ({ page, request }) => {
+  const admin = apiClient(request);
+  const today = householdToday('Asia/Shanghai');
+  const target = addDays(today, 2);
+  const title = stamp('日历进任务');
+  const task = await admin.post<{ id: string }>('/tasks', { title, startsOn: target });
+  try {
+    await page.goto('/schedule/calendar?view=agenda');
+    // 流视图里点这一条先打开那天的弹层，弹层里的条目才跳转（calendar.tsx useOpenEntry）
+    await page.getByRole('button').filter({ hasText: title }).first().click();
+    const day = page.locator('[data-dialog-place="center"]');
+    await expect(day).toBeVisible();
+    await day.getByRole('button').filter({ hasText: title }).click();
+    const row = occurrenceRow(page, task.id, target);
+    await expect(row).toHaveAttribute('data-highlighted', 'true');
+    await expect(row).toBeInViewport();
+    await expect(page).toHaveURL(/\/schedule\/tasks$/);
+  } finally {
+    await admin.patch(`/tasks/${task.id}`, { isArchived: true });
+  }
+});
+
+test('提醒页点任务来源的提醒：带着 taskId / date 到任务页，亮那一次', async ({ page, request }) => {
+  const admin = apiClient(request);
+  const today = householdToday('Asia/Shanghai');
+  const target = addDays(today, 2);
+  const title = stamp('提醒进任务');
+  const task = await admin.post<{ id: string }>('/tasks', { title, startsOn: target });
+  const reminder = await admin.post<{ id: string }>('/reminders', {
+    sourceModule: 'task',
+    sourceId: task.id,
+    occurrenceDate: target,
+    remindAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+    recipientIds: [admin.memberId],
+  });
+  try {
+    await page.goto('/schedule/reminders');
+    // 编辑 / 删除按钮的标题只在 aria-label 里，按文字过滤只命中打开来源的那个按钮
+    await page.getByRole('button').filter({ hasText: title }).click();
+    const row = occurrenceRow(page, task.id, target);
+    await expect(row).toHaveAttribute('data-highlighted', 'true');
+    await expect(row).toBeInViewport();
+    await expect(page).toHaveURL(/\/schedule\/tasks$/);
+  } finally {
+    await admin.delete(`/reminders/${reminder.id}`).catch(() => undefined);
+    await admin.patch(`/tasks/${task.id}`, { isArchived: true });
+  }
+});

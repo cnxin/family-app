@@ -88,7 +88,8 @@ function useOpenEntry() {
   const navigate = useNavigate();
   return (entry: CalendarEntry) => {
     if (entry.module === 'menu') navigate(`/eat/kitchen?date=${entry.date}`);
-    else if (entry.module === 'task') navigate('/schedule/tasks');
+    // 任务条目的 targetPath 是 /tasks?date=&taskId=：带着参数去，任务页滚到那一次并高亮（task-intent）
+    else if (entry.module === 'task') navigate(toNewRoute(entry.targetPath) ?? '/schedule/tasks');
     else if (entry.module === 'calendar') return;
     else {
       const route = toNewRoute(entry.targetPath);
