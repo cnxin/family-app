@@ -13,6 +13,11 @@ const WRAPPERS = new Set(['apps/web/src/lib/ids.ts', 'apps/web/src/lib/clipboard
 const FORBIDDEN = [
   { pattern: /\bcrypto\.randomUUID\b/, use: 'newId()（apps/web/src/lib/ids.ts）' },
   { pattern: /\bnavigator\.clipboard\b/, use: 'copyText()（apps/web/src/lib/clipboard.ts）' },
+  // C2 试用期家里人走局域网 HTTP（docs/deploy-c2.md §0.1）：下面这些在 HTTP 下要么没有、要么直接拒绝。
+  // 现在一处都没用；真要用，先在 lib 里写一个带降级的封装，再把封装加进 WRAPPERS。
+  { pattern: /\bcrypto\.subtle\b/, use: '带降级的封装（先在 lib 里写一个；HTTP 下 crypto.subtle 是 undefined）' },
+  { pattern: /\bnavigator\.(mediaDevices|serviceWorker|geolocation|share|wakeLock|credentials)\b/, use: '带降级的封装（先在 lib 里写一个；HTTP 下不可用）' },
+  { pattern: /\bNotification\.requestPermission\b/, use: '带降级的封装（先在 lib 里写一个；HTTP 下浏览器直接拒绝）' },
 ];
 
 function* files(dir) {
@@ -51,4 +56,4 @@ if (problems.length) {
   for (const problem of problems) console.error(`  ${problem}`);
   process.exit(1);
 }
-console.log('安全上下文守门：浏览器端没有直接调 crypto.randomUUID / navigator.clipboard。');
+console.log('安全上下文守门：浏览器端没有直接调只在 HTTPS 下可用的 API（randomUUID、clipboard、subtle、mediaDevices 等）。');
