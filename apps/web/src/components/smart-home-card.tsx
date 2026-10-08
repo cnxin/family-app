@@ -13,7 +13,7 @@ const CARD = {
   muted: 'bg-surface border-border opacity-50',
 } as const;
 const TILE = {
-  on: 'bg-accent text-white',
+  on: 'bg-accent text-on-accent',
   off: 'bg-muted text-ink-soft',
   warn: 'bg-warm-soft text-warm',
   muted: 'bg-muted text-ink-soft',

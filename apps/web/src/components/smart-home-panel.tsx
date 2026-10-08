@@ -22,7 +22,7 @@ import { Button, Dialog } from './ui';
 // 手机是两档 sheet（约 60% / 全屏），桌面居中弹窗、最大高 80vh；内容是同一份。
 
 const TONE_TILE = {
-  on: 'bg-accent text-white',
+  on: 'bg-accent text-on-accent',
   off: 'bg-muted text-ink-soft',
   warn: 'bg-warm-soft text-warm',
   muted: 'bg-muted text-ink-soft opacity-60',

@@ -42,7 +42,7 @@ export function MessageBubble({ message }: { message: AgentMessage }) {
       <div
         className={
           'max-w-[min(680px,84%)] whitespace-pre-wrap rounded-card px-3.5 py-2.5 text-[14px] leading-relaxed ' +
-          (mine ? 'bg-accent text-white' : 'border border-border bg-surface')
+          (mine ? 'bg-accent text-on-accent' : 'border border-border bg-surface')
         }
       >
         {message.content}

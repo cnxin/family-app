@@ -107,7 +107,7 @@ export function BatchDialog({
           <Button variant="outline" className="flex-1" onClick={onClose}>
             取消
           </Button>
-          <Button className={'flex-1 ' + (action === 'delete' ? 'bg-danger' : '')} disabled={!ready || batch.isPending} onClick={run}>
+          <Button className={'flex-1 ' + (action === 'delete' ? 'bg-danger text-on-danger' : '')} disabled={!ready || batch.isPending} onClick={run}>
             {batch.isPending
               ? '处理中…'
               : action === 'category'

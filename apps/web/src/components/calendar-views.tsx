@@ -142,7 +142,7 @@ export function MonthBoard({
                   className={
                     'grid size-5 place-items-center rounded-full text-[11px] ' +
                     (isToday
-                      ? 'bg-accent font-semibold text-white'
+                      ? 'bg-accent font-semibold text-on-accent'
                       : outside
                         ? 'text-ink-soft/50'
                         : 'text-ink')

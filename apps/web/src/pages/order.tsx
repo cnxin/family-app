@@ -68,7 +68,7 @@ function DishCard({
           'transition-[background-color,border-color,transform] duration-150 active:scale-90 ' +
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40 ' +
           (inCart
-            ? 'border-accent bg-accent text-white'
+            ? 'border-accent bg-accent text-on-accent'
             : 'border-border bg-surface text-accent hover:bg-accent-soft')
         }
       >

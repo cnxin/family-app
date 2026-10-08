@@ -123,12 +123,12 @@ export function TaskDetail({ item, onClose }: { item: TaskOccurrence; onClose: (
             >
               只删这次（{item.dueDate}）
             </Button>
-            <Button className="bg-danger" disabled={busy} onClick={() => void removeAll()}>
+            <Button className="bg-danger text-on-danger" disabled={busy} onClick={() => void removeAll()}>
               全部删掉，以后都不出现
             </Button>
           </>
         ) : (
-          <Button className="bg-danger" disabled={busy} onClick={() => void removeAll()}>
+          <Button className="bg-danger text-on-danger" disabled={busy} onClick={() => void removeAll()}>
             删除这个任务
           </Button>
         )}

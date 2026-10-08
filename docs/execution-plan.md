@@ -284,6 +284,7 @@ export default function XxxPage() {
   再提交就是覆盖（`menuItemId` 会留着）。前端按 `menuItemId` 分成两拨来找「这一餐我提过没有」就会把人自己的请求顶掉。
 - 深色模式下主按钮是 `bg-accent text-white`，而深色的 accent 是浅绿，白字压上去对比度不够。
   这是 A 阶段就有的全局问题（每个页面都有），等有一块专门收拾设计令牌的时间再一起改，别在搬页面的提交里顺手动。
+  （C2 批 1 已修：压在 accent / warm / danger 实底上的字改用 `text-on-accent / on-warm / on-danger`，深色取 `--color-bg`；`apps/web/src/lib/theme-contrast.test.ts` 守门。）
 - 老页面字段名别猜：点菜项是 `requestedById`（不是 `orderedById`），`/menus?date=` 一次返回三餐，提醒来源 `/reminder-sources?start&end`。
 
 ---

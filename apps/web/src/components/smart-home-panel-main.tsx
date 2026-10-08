@@ -57,7 +57,7 @@ function ActionButtons({
             'min-h-[52px] rounded-[14px] border text-[15px] transition-[transform,background-color] duration-150 active:scale-[.97] ' +
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed ' +
             (one.primary && one.enabled
-              ? 'border-accent bg-accent font-semibold text-white disabled:opacity-60'
+              ? 'border-accent bg-accent font-semibold text-on-accent disabled:opacity-60'
               : 'border-border bg-surface text-ink disabled:text-ink-soft/60')
           }
           onClick={() => onPress(one.action)}

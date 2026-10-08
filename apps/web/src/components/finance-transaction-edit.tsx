@@ -238,7 +238,7 @@ export function TransactionEditor({
               <Button variant="outline" className="flex-1" onClick={() => setConfirmDelete(false)}>
                 取消
               </Button>
-              <Button className="flex-1 bg-danger" disabled={remove.isPending} onClick={confirmRemove}>
+              <Button className="flex-1 bg-danger text-on-danger" disabled={remove.isPending} onClick={confirmRemove}>
                 {remove.isPending ? '删除中…' : '确认删除'}
               </Button>
             </div>

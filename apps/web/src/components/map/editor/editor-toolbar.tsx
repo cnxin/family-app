@@ -32,7 +32,7 @@ export function EditorToolbar({ tools, desktop }: { tools: EditorTool[]; desktop
               onClick={tool.onClick}
               className={
                 'flex h-10 items-center gap-1.5 rounded-xl px-3 text-[14px] transition-colors duration-150 disabled:opacity-35 ' +
-                (tool.active ? 'bg-accent text-white' : 'text-ink hover:bg-muted')
+                (tool.active ? 'bg-accent text-on-accent' : 'text-ink hover:bg-muted')
               }
             >
               <span aria-hidden="true">{tool.icon}</span>

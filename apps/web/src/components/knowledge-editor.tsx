@@ -205,7 +205,7 @@ export function KnowledgeEditor({
               <Button variant="outline" className="flex-1" onClick={() => setConfirmDiscard(false)}>
                 继续编辑
               </Button>
-              <Button className="flex-1 bg-danger" onClick={onClose}>
+              <Button className="flex-1 bg-danger text-on-danger" onClick={onClose}>
                 放弃修改
               </Button>
             </div>

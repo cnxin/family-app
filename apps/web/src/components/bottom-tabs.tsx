@@ -148,7 +148,7 @@ function SceneMenu({
                 <span className="inline-flex items-center gap-1.5">
                   <span className="truncate">{segment.label}</span>
                   {segment.key === 'notifications' && unread > 0 ? (
-                    <span data-unread-badge className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] font-semibold tabular-nums text-white">{unread}</span>
+                    <span data-unread-badge className="min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] font-semibold tabular-nums text-on-danger">{unread}</span>
                   ) : null}
                 </span>
               </SoftLink>

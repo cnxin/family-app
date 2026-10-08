@@ -39,7 +39,7 @@ function Sidebar() {
             <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-md bg-muted text-[12px]">{segment.glyph}</span>
             <span className="truncate">{segment.label}</span>
             {badge ? (
-              <span data-unread-badge className="ml-auto min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] font-semibold tabular-nums text-white">{unread}</span>
+              <span data-unread-badge className="ml-auto min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] font-semibold tabular-nums text-on-danger">{unread}</span>
             ) : null}
           </SoftLink>
         );
