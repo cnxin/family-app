@@ -441,7 +441,7 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 
 **J1 收口时的剩余手写项**（main `6bde9db`；插件的条目已全部由 manifest 导出，`scripts/check-plugins.mjs` 全量断言）：
 
-1. **已知手写、只断言一致**（`check-plugins` 顶部 `KNOWN_HANDWRITTEN`）：① `nav.ts` 的 `CORE_KEYS` 与 `mobileTabs` 顺序表；② `SHELF_MODULE_KEYS`；⑤ `contracts/src/today.ts` 的留意 domain 枚举；⑧ `contracts/src/agent.ts` 的 agent 工具名单字面量；⑩ `pages/settings.tsx` 的设置行；⑫ `ACTIVITY_MODULES`、⑬ `NOTIFICATION_MODULES`（数据库枚举）；⑭ `Capability` 名字清单。
+1. **已知手写、只断言一致**（`check-plugins` 顶部 `KNOWN_HANDWRITTEN`）：① `nav.ts` 的 `CORE_KEYS` 与 `mobileTabs` 顺序表；② `SHELF_MODULE_KEYS`；⑤ `contracts/src/today.ts` 的留意 domain 枚举；⑧ `contracts/src/agent.ts` 的 agent 工具名单字面量（J4.1 起由 manifest + `core-assistant.ts` 推导，不再手写，`KNOWN_HANDWRITTEN` 剩 7 处）；⑩ `pages/settings.tsx` 的设置行；⑫ `ACTIVITY_MODULES`、⑬ `NOTIFICATION_MODULES`（数据库枚举）；⑭ `Capability` 名字清单。
 2. **内核 / 助理层的 `CORE_*` 表**（11 张，不许出现插件 key / 别名）：`CORE_EVENT_ROUTES`、`CORE_EVENT_ROUTE_EXEMPT`、`CORE_ATTENTION`（备份）、`CORE_QUERY_KEYS`、`CORE_MODULE_LABEL` / `CORE_MODULE_ICON`、`CORE_NAV`、`CORE_LEGACY_PATHS`、`CORE_ROLE_CAPABILITIES`、`CORE_TOOL_SOURCES`、`CORE_ACTIVITY_DOMAINS`；外加 `KERNEL_AGENT_TOOLS`、`PLUGIN_ALIASES` / `KERNEL_ALIASES` 这些 key 表本身。唯一例外：`CORE_TOOL_SOURCES` 里 `get_today_summary` / `get_family_schedule` 记成 `calendar`（数据值，J1b 定）。
 3. **按设计留在代码里的实现**（manifest 只给 id）：位置用量快照 `SNAPSHOT_SOURCES`、智能家居 hasData 判定、各插件的留意规则。
 
@@ -606,7 +606,7 @@ main 上 `105926f`（J1b.2 合并）、`a14ee3a`（J1b.3 合并）两次 CI 被�
 ### 9.5 没解的（不在 J1b 范围）
 
 1. **实体层的跨插件读写**（共享 `entities` 文件，不经插件目录 import，check-plugins 查不到；实体拆目录本就不在 J1 / J1b 范围，§8.5）：日历直读点菜 / 观影 / 访客 / 资产维护计划 / 旅行；提醒的来源解析直读家务 / 菜单 / 投票 / 维护计划 / 旅行 / 日程；资产直读并锁库存物品、读库存流水，维护缺口加购物项、取消维护提醒直接写购物 / 提醒的表；库存的菜单扣库、买到入库直读菜单与购物项；积分写任务实例的两列。
-2. **内核（助理 `agent` 目录）→ 插件服务的 import** 还在（`agent-tools` / `agent-proposals` / `agent-routine` / `agent-location-tools` / `agent.module`）：J1b 只管插件之间，J4 重建 agent 时改走门面。
+2. ~~**内核（助理 `agent` 目录）→ 插件服务的 import** 还在（`agent-tools` / `agent-proposals` / `agent-routine` / `agent-location-tools` / `agent.module`）：J1b 只管插件之间，J4 重建 agent 时改走门面。~~ **J4.1 已解**：agent 目录零 import 插件目录（check-plugins 把「零 import」扩到 `apps/api/src/agent/`），工具读数据、提案确认后写数据、例行任务汇总都经门面（新增知识库 / 出行 / 观影 / 回忆 / 财务 / 投票 / 提醒 / 菜谱 8 个门面，任务 / 日历 / 购物 / 点菜 / 库存 / 资产 / 位置 7 个补方法，共 15 个）；agent 不是插件，取用的门面由 `core-assistant.ts` 的 `ASSISTANT_DEPENDS_ON` 声明，check-plugins 断言与代码一致。还剩例行任务每晚汇总里两段原生 SQL 直读资产 / 库存的表（`collectExpiryItems`，属第 1 条那类实体层读写）。
 3. 数据库里的引用照旧（§8.7 第 8 条）。
 
 ## 进度表
@@ -618,6 +618,6 @@ main 上 `105926f`（J1b.2 合并）、`a14ee3a`（J1b.3 合并）两次 CI 被�
 | J1b 跨插件解耦 | ☑ | 见 §9 | 插件目录之间零 import（check-plugins 断言）；门面 6 个、事务内钩子 3 个、插件事件 1 个，manifest 的 `dependsOn` / `hooks` 与代码一致；assistant 内核工具清单收进 `core-assistant.ts`；实体层的跨插件读写与内核（agent）→ 插件的 import 不在范围，见 §9「没解的」；演示栈随本批升级，人工走查由 King 本人做 |
 | J2 助理数据与开关 | ☑ | 见 §8.8 | `assistant_utterances` 表与接口、三档开关、⌘K 原话落表；演示栈随本批升级，King 本人去 ⌘K 输几句再看「原话记录」做人工验收 |
 | J3 第 0 档引擎 | ☐ | | 等试用满两周且原话 ≥ 100 条、覆盖 ≥ 5 个域（2026-10-08 拍板）；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
-| J4 agent 重建 | ☐ | | |
+| J4 agent 重建 | 进行中 | 见 `docs/j4-agent-plan.md` §4 | King 2026-10-09 拍板（§2 十件按建议）。J4.0 `packages/agent-core`（provider / 工具注册表 / loop / 录制回放）、J4.1 工具由 manifest 生成（30 个现名不变，MCP tools/list 逐字节一致）、agent 目录零 import 插件目录已合；J4.2 起接 native runtime |
 | J5 本地模型档 | ☐ | | |
 | J6 收口 | ☐ | | |

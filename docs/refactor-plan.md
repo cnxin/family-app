@@ -133,6 +133,8 @@
 
 **智能体（已确认：Hermes 换成自研 agent loop）**
 
+> 已按 `docs/j4-agent-plan.md` 实施（King 2026-10-09 拍板，J4.0 / J4.1 已合）：自研 loop 在 `packages/agent-core`，工具由 manifest 生成。下面是当时的建议形态，细节以设计稿为准。
+
 现有代码已经留好了插槽：`agent.types.ts` 定义了 `AgentRuntime { health, chat, cancel }` 接口，`FakeAgentRuntime` 与 `HermesAgentRuntime` 是它的两个实现；28 个工具的实现在 `AgentToolsService`，MCP Controller 只是它的一层 HTTP 包装；提案/提案组的"模型只能提案、成员确认才执行"机制在 `AgentProposalsService.executeWithinTransaction` 里。自研 loop 就是**第三个 `AgentRuntime` 实现**，不需要动会话、记忆、提案、例行任务这些外围。
 
 建议的形态：
