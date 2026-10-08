@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import { LoginPage } from './pages/login';
+import { SetPasswordPage } from './pages/set-password';
 import { JoinPage } from './pages/join';
 import { SetupPage } from './pages/setup';
 import { TodayPage } from './pages/today';
@@ -115,6 +116,8 @@ export function App() {
 
   if (!ready) return null;
   if (!session) return <LoginPage />;
+  // 迁移来的老账号第一次登录（空密码）：先设密码，别的页都不让进（服务端同样只放行设密码和退出登录）
+  if (session.account.requiresPasswordSetup) return <SetPasswordPage />;
 
   return (
     <>

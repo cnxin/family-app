@@ -11,11 +11,20 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Request } from 'express';
 import { Repository } from 'typeorm';
+import { DomainError } from '@family/shared';
 import { Account, AuthSession, Member, MemberRole } from '../entities';
 import { credentialSnapshot } from './session.tokens';
 
 export const IS_PUBLIC = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC, true);
+
+/**
+ * 还没设密码的账号（迁移来的老成员，登录名 + 空密码进来）只能调这几个接口：设密码、退出登录。
+ * 其余一律 403 PASSWORD_SETUP_REQUIRED，前端据此停在「设个密码」页（C2 批 2，2026-10-08 King 拍板：首次登录强制设密码）。
+ */
+export const ALLOW_WITHOUT_PASSWORD = 'allowWithoutPassword';
+export const AllowWithoutPassword = () => SetMetadata(ALLOW_WITHOUT_PASSWORD, true);
+export const PASSWORD_SETUP_REQUIRED = 'PASSWORD_SETUP_REQUIRED';
 
 export interface JwtUser {
   sub: string;
@@ -120,6 +129,13 @@ export class JwtAuthGuard implements CanActivate {
     ) {
       await this.sessions.update(session.id, { revokedAt: new Date() });
       throw new UnauthorizedException('成员权限或凭据已更新，请重新登录');
+    }
+
+    if (
+      !account.passwordHash &&
+      !this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_PASSWORD, [ctx.getHandler(), ctx.getClass()])
+    ) {
+      throw new DomainError(403, PASSWORD_SETUP_REQUIRED, '先设个密码再继续');
     }
 
     req.user = {

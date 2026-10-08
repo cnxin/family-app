@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { changedDomains, openEventStream } from './events-client.mjs';
+import { FIXTURE_CREDENTIAL_SNAPSHOT, FIXTURE_PASSWORD_HASH } from './system-modules-fixtures.mjs';
 
 const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
@@ -90,9 +91,9 @@ await db.connect();
 try {
   await db.query(
     `INSERT INTO accounts
-       (id, "loginName", "loginNameNormalized")
-     VALUES ($1, $2, $3)`,
-    [ids.account, '隔离测试账号', `isolation-${ids.account}`],
+       (id, "loginName", "loginNameNormalized", "passwordHash")
+     VALUES ($1, $2, $3, $4)`,
+    [ids.account, '隔离测试账号', `isolation-${ids.account}`, FIXTURE_PASSWORD_HASH],
   );
   await db.query(
     'INSERT INTO households (id, name, slug) VALUES ($1, $2, $3)',
@@ -125,7 +126,7 @@ try {
       ids.account,
       ids.member,
       sha256('isolation-refresh-token'),
-      sha256('family-app-credential:no-pin'),
+      FIXTURE_CREDENTIAL_SNAPSHOT,
     ],
   );
   await db.query(

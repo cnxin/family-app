@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 
+/**
+ * 测试夹具账号的密码散列：没密码的账号会被拦在「先设个密码」（C2 批 2），夹具账号得带一个。
+ * 这些账号不走密码登录（令牌是夹具自己签的），所以不必是能验证的真 bcrypt。
+ */
+export const FIXTURE_PASSWORD_HASH = '$2a$10$fixture.account.not.for.login.fixture.account.not.for.l';
+/** 会话的凭据快照要和账号的 passwordHash 对得上（session.tokens.ts credentialSnapshot） */
+export const FIXTURE_CREDENTIAL_SNAPSHOT = createHash('sha256')
+  .update(`family-app-credential:${FIXTURE_PASSWORD_HASH}`, 'utf8')
+  .digest('hex');
+
 export async function createModuleHousehold(db, role = 'owner') {
   const householdId = randomUUID();
   const accountId = randomUUID();
@@ -12,8 +22,8 @@ export async function createModuleHousehold(db, role = 'owner') {
     householdId,
   ]);
   await db.query(
-    'INSERT INTO accounts (id,"loginName","loginNameNormalized") VALUES ($1,$2,$3)',
-    [accountId, accountId, accountId],
+    'INSERT INTO accounts (id,"loginName","loginNameNormalized","passwordHash") VALUES ($1,$2,$3,$4)',
+    [accountId, accountId, accountId, FIXTURE_PASSWORD_HASH],
   );
   await db.query(
     'INSERT INTO members (id,"householdId","accountId",name,"avatarEmoji",role) VALUES ($1,$2,$3,$4,$5,$6)',
@@ -30,7 +40,7 @@ export async function createModuleHousehold(db, role = 'owner') {
       memberId,
       hash(sessionId),
       role,
-      hash('family-app-credential:no-pin'),
+      FIXTURE_CREDENTIAL_SNAPSHOT,
     ],
   );
   const now = Math.floor(Date.now() / 1000);
