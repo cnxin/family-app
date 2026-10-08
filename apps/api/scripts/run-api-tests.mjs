@@ -409,6 +409,12 @@ try {
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-recurring.check.ts']);
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-import.check.ts']);
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/multipart.check.ts']);
+    // J4.0：packages/agent-core 的单测（录制回放，不打真模型）
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      '../../packages/agent-core/tests/agent-core.check.ts',
+    ]);
   } else {
     // --only：跳过契约、初始化演练与旧 PIN 迁移，只灌种子后直接跑选中的业务脚本
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);

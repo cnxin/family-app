@@ -184,6 +184,16 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@22.20.3)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(yaml@2.9.0)
 
+  packages/agent-core:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/api-client:
     dependencies:
       '@family/contracts':

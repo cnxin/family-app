@@ -1,0 +1,21 @@
+{
+  "name": "@family/agent-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "小管家自研 agent 循环：OpenAI 兼容的模型接口、工具注册表、runLoop（上限与围栏）、录制回放。纯 TypeScript，只依赖 zod 和全局 fetch，不依赖 Nest / HTTP 框架 / 数据库。",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

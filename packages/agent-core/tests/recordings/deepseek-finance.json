@@ -1,0 +1,82 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "source": "simulated",
+  "note": "模拟录制：按 DeepSeek 公开文档的流式格式手写（没有测试 key）。用例「记一笔 38 买菜」：先查账户分类，再提案，最后作答。",
+  "exchanges": [
+    {
+      "note": "查账户与分类",
+      "response": {
+        "status": 200,
+        "sse": [
+          "data: {\"id\":\"ds-1\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-1\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_0_6f3c\",\"type\":\"function\",\"function\":{\"name\":\"get_finance_summary\",\"arguments\":\"\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-1\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-1\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-1\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":812,\"completion_tokens\":12,\"total_tokens\":824,\"prompt_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":812}}",
+          "",
+          "data: [DONE]",
+          ""
+        ]
+      }
+    },
+    {
+      "note": "起草记账提案（参数分 6 片，断在 JSON 中间）",
+      "response": {
+        "status": 200,
+        "sse": [
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_0_9a1e\",\"type\":\"function\",\"function\":{\"name\":\"propose_finance_transaction\",\"arguments\":\"\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"type\\\":\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"expense\\\",\\\"amount\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":38,\\\"accountId\\\":\\\"11111111-1111\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"-4111-8111-111111111111\\\",\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"categoryId\\\":\\\"22222222-2222-4222-8222-22\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"2222222222\\\",\\\"title\\\":\\\"买菜\\\",\\\"occurredOn\\\":\\\"2026-10-09\\\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-2\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":1046,\"completion_tokens\":71,\"total_tokens\":1117,\"prompt_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":1046}}",
+          "",
+          "data: [DONE]",
+          ""
+        ]
+      }
+    },
+    {
+      "note": "作答",
+      "response": {
+        "status": 200,
+        "sse": [
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"好的，\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"已经起草了\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"一笔 38 元\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"的买菜支出（现金账\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"户），你在小管家里点「\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"确认」后才会入账。\"},\"logprobs\":null,\"finish_reason\":null}]}",
+          "",
+          "data: {\"id\":\"ds-3\",\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_simulated\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1160,\"completion_tokens\":38,\"total_tokens\":1198,\"prompt_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":1160}}",
+          "",
+          "data: [DONE]",
+          ""
+        ]
+      }
+    }
+  ]
+}
