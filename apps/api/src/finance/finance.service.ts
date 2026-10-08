@@ -108,19 +108,20 @@ function normalized(value?: string | null) {
 }
 
 /**
- * 流水搜索框（K5；K 收尾加金额）：纯数字（可带小数点）按金额精确找，「100-200」按金额范围找（两头都算，反着写也认），
- * 别的按文字找名称 / 商户 / 备注。返回 null 表示没填。
+ * 流水搜索框（K5；K 收尾加金额；C2 批 2 两种都找）：纯数字（可带小数点）按金额精确找、「100-200」按金额范围找
+ * （两头都算，反着写也认），同时也按文字找名称 / 商户 / 备注里含这串字的（「12306」这类），列表里金额对上的排前面；
+ * 别的只按文字找。返回 null 表示没填。
  */
 export function parseLedgerSearch(raw: string | undefined | null) {
   const text = raw?.trim();
   if (!text) return null;
   const number = String.raw`\d+(?:\.\d{1,2})?`;
   const exact = text.match(new RegExp(`^(${number})$`));
-  if (exact) return { kind: 'amount' as const, min: Number(exact[1]).toFixed(2), max: Number(exact[1]).toFixed(2) };
+  if (exact) return { kind: 'amount' as const, min: Number(exact[1]).toFixed(2), max: Number(exact[1]).toFixed(2), text };
   const range = text.match(new RegExp(`^(${number})\\s*[-~～—－]\\s*(${number})$`));
   if (range) {
     const [low, high] = [Number(range[1]), Number(range[2])].sort((a, b) => a - b);
-    return { kind: 'amount' as const, min: low.toFixed(2), max: high.toFixed(2) };
+    return { kind: 'amount' as const, min: low.toFixed(2), max: high.toFixed(2), text };
   }
   return { kind: 'text' as const, text };
 }
@@ -505,43 +506,55 @@ export class FinanceService {
     const month = (query.month ?? (await this.today(user.householdId)).slice(0, 7));
     const { start, end } = monthRange(month);
     if (query.accountId) await this.requireAccount(query.accountId, user.householdId, this.dataSource.manager, true);
-    const builder = this.transactions
-      .createQueryBuilder('transaction')
-      .leftJoinAndSelect('transaction.category', 'category')
-      .leftJoinAndSelect('transaction.actor', 'actor')
-      .leftJoinAndSelect('transaction.postings', 'posting')
-      .leftJoinAndSelect('posting.account', 'account')
-      .where('transaction.householdId = :householdId', { householdId: user.householdId })
-      .andWhere('transaction.occurredOn >= :start AND transaction.occurredOn < :end', { start, end })
-      .orderBy('transaction.occurredOn', 'DESC')
-      .addOrderBy('transaction.createdAt', 'DESC')
-      .take(query.limit ?? 100);
-    if (query.type) builder.andWhere('transaction.type = :type', { type: query.type });
-    if (query.accountId) builder.andWhere('posting.accountId = :accountId', { accountId: query.accountId });
-    // K5：改金额 / 删除时记的冲销笔不进列表（它们是账本内部的一对）；被替代、删除的原笔要「显示已删除」才列
-    builder.andWhere(
-      `NOT (transaction.type = 'reversal' AND EXISTS (
-         SELECT 1 FROM finance_transactions hidden
-          WHERE hidden.id = transaction."reversalOfId"
-            AND (hidden."deletedAt" IS NOT NULL OR hidden."supersededById" IS NOT NULL)))`,
-    );
-    if (query.includeDeleted !== 'true') {
-      builder.andWhere('transaction.deletedAt IS NULL AND transaction.supersededById IS NULL');
-    }
-    const search = parseLedgerSearch(query.q);
-    if (search?.kind === 'amount') {
-      builder.andWhere('transaction.amount BETWEEN :minAmount AND :maxAmount', { minAmount: search.min, maxAmount: search.max });
-    } else if (search?.kind === 'text') {
-      const pattern = `%${search.text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const limit = query.limit ?? 100;
+    /** 月份、类型、账户、分类、成员、已删除这些筛选每次查询都一样；搜索另外加 */
+    const filtered = () => {
+      const builder = this.transactions
+        .createQueryBuilder('transaction')
+        .leftJoinAndSelect('transaction.category', 'category')
+        .leftJoinAndSelect('transaction.actor', 'actor')
+        .leftJoinAndSelect('transaction.postings', 'posting')
+        .leftJoinAndSelect('posting.account', 'account')
+        .where('transaction.householdId = :householdId', { householdId: user.householdId })
+        .andWhere('transaction.occurredOn >= :start AND transaction.occurredOn < :end', { start, end })
+        .orderBy('transaction.occurredOn', 'DESC')
+        .addOrderBy('transaction.createdAt', 'DESC')
+        .take(limit);
+      if (query.type) builder.andWhere('transaction.type = :type', { type: query.type });
+      if (query.accountId) builder.andWhere('posting.accountId = :accountId', { accountId: query.accountId });
+      // K5：改金额 / 删除时记的冲销笔不进列表（它们是账本内部的一对）；被替代、删除的原笔要「显示已删除」才列
       builder.andWhere(
-        '(transaction.title ILIKE :q OR transaction.merchant ILIKE :q OR transaction.note ILIKE :q)',
-        { q: pattern },
+        `NOT (transaction.type = 'reversal' AND EXISTS (
+           SELECT 1 FROM finance_transactions hidden
+            WHERE hidden.id = transaction."reversalOfId"
+              AND (hidden."deletedAt" IS NOT NULL OR hidden."supersededById" IS NOT NULL)))`,
       );
+      if (query.includeDeleted !== 'true') {
+        builder.andWhere('transaction.deletedAt IS NULL AND transaction.supersededById IS NULL');
+      }
+      if (query.categoryId) builder.andWhere('transaction.categoryId = :categoryId', { categoryId: query.categoryId });
+      if (query.memberId) builder.andWhere('transaction.actorId = :memberId', { memberId: query.memberId });
+      return builder;
+    };
+    const search = parseLedgerSearch(query.q);
+    if (!search) return this.presentTransactions(await filtered().getMany(), user.householdId);
+    const textMatch = '(transaction.title ILIKE :q OR transaction.merchant ILIKE :q OR transaction.note ILIKE :q)';
+    const q = `%${search.text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    if (search.kind === 'text') {
+      return this.presentTransactions(await filtered().andWhere(textMatch, { q }).getMany(), user.householdId);
     }
-    if (query.categoryId) builder.andWhere('transaction.categoryId = :categoryId', { categoryId: query.categoryId });
-    if (query.memberId) builder.andWhere('transaction.actorId = :memberId', { memberId: query.memberId });
-    const rows = await builder.getMany();
-    return this.presentTransactions(rows, user.householdId);
+    // 纯数字：金额对上的在前；名称 / 商户 / 备注含这串数字、金额又不对的补在后面，总数仍不超过 limit。
+    // 分两次查，不在一条里按表达式排序：take + 关联表时 TypeORM 会把分页算错（K5 踩过）
+    const amount = { minAmount: search.min, maxAmount: search.max };
+    const byAmount = await filtered().andWhere('transaction.amount BETWEEN :minAmount AND :maxAmount', amount).getMany();
+    const byText = byAmount.length >= limit
+      ? []
+      : await filtered()
+          .andWhere(textMatch, { q })
+          .andWhere('transaction.amount NOT BETWEEN :minAmount AND :maxAmount', amount)
+          .take(limit - byAmount.length)
+          .getMany();
+    return this.presentTransactions([...byAmount, ...byText], user.householdId);
   }
 
   async summary(monthValue: string | undefined, user: JwtUser) {

@@ -110,7 +110,7 @@ export function LedgerPanel({
           type="search"
           value={search}
           aria-label="搜流水"
-          placeholder="名称、商户、备注，或金额如 439 / 100-200"
+          placeholder="名称、商户、备注或金额"
           className="h-9 min-w-0 flex-1"
           onChange={(event) => setSearch(event.target.value)}
         />

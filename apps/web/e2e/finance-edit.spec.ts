@@ -182,7 +182,7 @@ test('流水编辑：成员能改自己记的，别人记的不出编辑入口',
   }
 });
 
-test('流水搜索：纯数字按金额找，「a-b」按金额范围找', async ({ page, request }, testInfo) => {
+test('流水搜索：纯数字也按金额找，「a-b」按金额范围找', async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chrome', '桌面验一次');
   const admin = apiClient(request);
   const accountName = stamp('金额搜索');
@@ -200,7 +200,7 @@ test('流水搜索：纯数字按金额找，「a-b」按金额范围找', async
   try {
     await page.goto('/house/finance?view=ledger');
     const box = page.getByLabel('搜流水');
-    await expect(box).toHaveAttribute('placeholder', '名称、商户、备注，或金额如 439 / 100-200');
+    await expect(box).toHaveAttribute('placeholder', '名称、商户、备注或金额');
     await search(page, '4391.27');
     await expect(page.getByRole('article')).toHaveCount(1);
     await expect(page.getByRole('article')).toContainText('-¥4,391.27');

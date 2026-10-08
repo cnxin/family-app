@@ -367,7 +367,7 @@ export const financeTransactionQuery = financeMonthQuery.extend({
   type: financeTransactionType.optional(),
   accountId: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
-  /** K5：名称 / 商户 / 备注里找（纯数字按金额、「100-200」按金额范围）；分类、谁记的；连已删除 / 已改过的一起看 */
+  /** K5：名称 / 商户 / 备注里找（纯数字、「100-200」另外按金额找，金额对上的排前面）；分类、谁记的；连已删除 / 已改过的一起看 */
   q: z.string().trim().min(1).max(80).optional(),
   categoryId: uuid.optional(),
   memberId: uuid.optional(),
