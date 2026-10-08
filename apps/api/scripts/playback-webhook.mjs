@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import pg from 'pg';
 
@@ -29,6 +30,18 @@ async function plexWebhook(path, payload) {
   const form = new FormData();
   form.append('payload', JSON.stringify(payload));
   const response = await fetch(`${BASE}${path}`, { method: 'POST', body: form });
+  const text = await response.text();
+  return { status: response.status, body: text ? JSON.parse(text) : null };
+}
+
+/** 任意 multipart：parts 是 [字段名, 值, 文件名?]，值是 Blob 时当文件；requestId 用来在 API 日志里找这条 */
+async function multipartWebhook(path, parts, requestId) {
+  const form = new FormData();
+  for (const [name, value, fileName] of parts) {
+    if (value instanceof Blob) form.append(name, value, fileName);
+    else form.append(name, value);
+  }
+  const response = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'x-request-id': requestId }, body: form });
   const text = await response.text();
   return { status: response.status, body: text ? JSON.parse(text) : null };
 }
@@ -218,6 +231,46 @@ try {
     { event: 'media.play' },
   );
   assert(wrongSecret.status === 404, '错误的播放回调密钥会被拒绝');
+  // C2：AnyFilesInterceptor 在比对密钥之前就解析 multipart（公开端点）。错密钥带缩略图 → 404；
+  // 超文件数、超大数组下标字段名在解析阶段 400（只发一个下标字段，不跟 payload[x]，见 GHSA-535w）；
+  // 之后服务照常，正确密钥带缩略图照常收（library.new 早返回，不写库，不影响后面的计数）。
+  const badPath = plexPath.replace(plexSecret, 'invalid-playback-secret');
+  const thumb = new Blob([Buffer.alloc(4 * 1024, 0xff)], { type: 'image/jpeg' });
+  const wrongSecretWithThumb = await multipartWebhook(
+    badPath,
+    [['payload', JSON.stringify({ event: 'media.play' })], ['thumb', thumb, 'thumb.jpg']],
+    'playback-c2-multipart-0001',
+  );
+  const tooManyFiles = await multipartWebhook(
+    badPath,
+    [['payload', '{}'], ['thumb', thumb, 'a.jpg'], ['poster', thumb, 'b.jpg']],
+    'playback-c2-multipart-0002',
+  );
+  const hugeArrayIndex = await multipartWebhook(badPath, [['payload[4294967294]', 'x']], 'playback-c2-multipart-0003');
+  const healthAfterJunk = await fetch(`${BASE}/health/ready`);
+  const ignoredWithThumb = await multipartWebhook(
+    plexPath,
+    [['payload', JSON.stringify({ event: 'library.new' })], ['thumb', thumb, 'thumb.jpg']],
+    'playback-c2-multipart-0004',
+  );
+  await new Promise((done) => setTimeout(done, 100)); // runner 异步 append 日志
+  const unhandled = process.env.API_LOG_FILE
+    ? readFileSync(process.env.API_LOG_FILE, 'utf8')
+        .split('\n')
+        .filter((line) => line.includes('"event":"unhandled_exception"') && line.includes('"requestId":"playback-c2-multipart-'))
+        .length
+    : 0;
+  assert(
+    wrongSecretWithThumb.status === 404 &&
+      wrongSecretWithThumb.body.error.message === '播放回调不存在' &&
+      tooManyFiles.status === 400 &&
+      hugeArrayIndex.status === 400 &&
+      healthAfterJunk.status === 200 &&
+      ignoredWithThumb.status === 200 &&
+      ignoredWithThumb.body.data.ignored === true &&
+      unhandled === 0,
+    '错误密钥的 multipart（带缩略图）404；超文件数、超大数组下标字段名解析阶段 400；服务仍就绪，正确密钥带缩略图照常收',
+  );
 
   const oversized = await plexWebhook(plexPath, {
     event: 'media.play',

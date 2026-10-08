@@ -3,3 +3,8 @@ packages:
   - packages/*
 allowBuilds:
   '@nestjs/core': true
+# @nestjs/platform-express 10.4.22（10.x 最后一版）精确依赖 multer 2.0.2，带十几条 DoS 通告，2.4.0 是第一个全修的版本。
+# 升到 platform-express ≥ 11.2.7（精确依赖 multer 2.4.0）后可删这一条；
+# apps/api/src/common/multipart.ts 的按 code 兜底要到 12.x 才能删（11.2.7 还不认 LIMIT_FIELD_ARRAY_INDEX / INVALID_FIELD_NAME）。
+overrides:
+  multer: ^2.4.0

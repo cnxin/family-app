@@ -57,6 +57,7 @@ import {
 } from '../entities';
 import { UPLOAD_DIR } from '../upload/upload.module';
 import { rawFingerprint as fingerprint } from '../common/fingerprint';
+import { multipartLimits } from '../common/multipart';
 import {
   isHouseholdManager,
   isUniqueViolation,
@@ -1004,7 +1005,7 @@ export class MemoriesController {
               new BadRequestException('回忆照片只支持 GIF、JPEG、PNG 或 WebP'),
               false,
             ),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: multipartLimits({ fileSize: 10 * 1024 * 1024 }),
     }),
   )
   uploadPhoto(

@@ -47,6 +47,7 @@ import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
+import { multipartLimits } from '../common/multipart';
 import {
   HouseholdMedia,
   HouseholdMediaSourceConfig,
@@ -1698,12 +1699,12 @@ class MediaController {
   @HttpCode(200)
   @UseInterceptors(
     AnyFilesInterceptor({
-      limits: {
+      limits: multipartLimits({
         fields: 12,
         fieldSize: 128 * 1024,
         files: 1,
         fileSize: 2 * 1024 * 1024,
-      },
+      }),
     }),
   )
   receivePlaybackWebhook(
