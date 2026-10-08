@@ -20,7 +20,9 @@ import { ListSkeleton } from '../components/skeleton';
 export function TasksPage() {
   const { session } = useAuth();
   const today = useHouseholdToday();
-  const range = useTaskRange(today, shiftDays(today, 13));
+  // 显示范围：今天起两周；深链的 date 只在这个范围里才当首选
+  const lastDay = shiftDays(today, 13);
+  const range = useTaskRange(today, lastDay);
   const update = useUpdateOccurrence();
   const create = useCreateTask();
   const [title, setTitle] = useState('');
@@ -37,8 +39,14 @@ export function TasksPage() {
     node?.focus();
   }, []);
 
-  // ?task=<id>：从「晾衣服」这类留意卡跳进来，滚到那件并高亮 2 秒
-  const highlighted = useTaskIntent(range.data, range.data !== undefined || range.isError, today);
+  // ?task=<id>（留意卡）或 ?taskId=<id>&date=<d>（通知、日历、提醒、动态）：滚到那一次并高亮 2 秒。
+  // 等后台重取结束再挑：缓存里还没有刚指派的那件时，别拿旧列表判成「没找到」把参数抹了
+  const highlighted = useTaskIntent(
+    range.data,
+    (range.data !== undefined && !range.isFetching) || range.isError,
+    today,
+    lastDay,
+  );
 
   const byDate = new Map<string, typeof range.data>();
   for (const item of range.data ?? []) {
