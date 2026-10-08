@@ -283,6 +283,10 @@ export function CommandPalette() {
           className="h-12 shrink-0 border-b border-border bg-transparent px-4 text-[15px] text-ink placeholder:text-ink-soft/70 focus:outline-none"
         />
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1">
+          {/* 引导家里人整句说（J3 的原话从这里攒），输入后就不占地方（C2 批 2，King 定的文案） */}
+          {query.trim() ? null : (
+            <p className="px-4 pb-1 pt-2 text-[12px] text-ink-soft">试试直接说：记一笔 38 买菜、牙膏放哪了</p>
+          )}
           {results.length ? (
             groups.map((group) =>
               group.items.length ? (

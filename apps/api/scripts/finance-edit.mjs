@@ -314,7 +314,7 @@ try {
     '按商户名关键词找出那 3 笔；按成员、按分类筛；「%」按字面找，不当通配符',
   );
 
-  // K 收尾：搜索框纯数字按金额精确找，「a-b」按金额范围（反着写也认），不是数字的仍按文字
+  // K 收尾：搜索框纯数字按金额精确找，「a-b」按金额范围（反着写也认），不是数字的仍按文字（C2 批 2 起纯数字同时按文字找）
   for (const amount of [4321.09, 4399, 4401]) {
     await record(member.accessToken, {
       type: 'expense', amount, accountId: bank.id, categoryId: byKey.expense_food, title: `金额搜索-${amount}-${suffix}`,
@@ -329,6 +329,18 @@ try {
     '搜「4321.09」只出这一笔；搜「4400-4300」出 4300～4400 之间的两笔（反着写也认），4401 不在里面',
   );
   assert(textNumber.length === 1 && textNumber[0].amount === 4399, '带字的照旧按名称找');
+  // C2 批 2：纯数字两种都找：金额对上的排前面，名称 / 商户 / 备注里含这串数字的补在后面（「12306」火车票）
+  await record(member.accessToken, {
+    type: 'expense', amount: 553.5, accountId: bank.id, categoryId: byKey.expense_food, title: `12306 火车票-${suffix}`,
+  });
+  await record(member.accessToken, {
+    type: 'expense', amount: 12306, accountId: bank.id, categoryId: byKey.expense_food, title: `大额-${suffix}`,
+  });
+  const both = await list(owner.accessToken, { q: '12306', accountId: bank.id });
+  assert(
+    both.length === 2 && both[0].amount === 12306 && both[1].title === `12306 火车票-${suffix}`,
+    '搜「12306」：金额是 12306 的排前面，名称里含 12306 的火车票也找得到',
+  );
 
   console.log('8. 超预算留意不算已删除 / 已改过的');
   const budget = await request('/finance/budgets', owner.accessToken, 'PUT', { categoryId: byKey.expense_repair, month, amount: 40 });

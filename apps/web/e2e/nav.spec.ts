@@ -160,3 +160,15 @@ test('普通成员：保留本人设置与小管家，导航/搜索不暴露管�
   await profile.press('Enter');
   await expect(page).toHaveURL(/\/me\/profile$/);
 });
+
+test('⌘K：空输入时候选上方有一行「试试直接说」，输入后消失', async ({ page, isMobile }) => {
+  test.skip(isMobile, '桌面验一次');
+  await page.goto('/');
+  const input = await search(page, isMobile);
+  const hint = page.getByRole('dialog', { name: '快速跳转' }).getByText('试试直接说：记一笔 38 买菜、牙膏放哪了', { exact: true });
+  await expect(hint).toBeVisible();
+  await input.fill('记一笔');
+  await expect(hint).toHaveCount(0);
+  await input.fill('');
+  await expect(hint).toBeVisible();
+});
