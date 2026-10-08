@@ -173,6 +173,7 @@ const BUSINESS_SCRIPTS = [
   'map',
   'map-rooms',
   'upload',
+  'password-setup',
 ];
 
 function parseCliOptions(argv) {

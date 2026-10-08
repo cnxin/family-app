@@ -75,7 +75,7 @@ export async function attentionHousehold(page: Page, request: APIRequestContext)
   }
   const requireApi = createRequire(resolve(process.cwd(), '../api/package.json'));
   const { Client } = requireApi('pg');
-  const { createModuleHousehold } = requireApi('./scripts/system-modules-fixtures.mjs');
+  const { createModuleHousehold, FIXTURE_PASSWORD_HASH, FIXTURE_CREDENTIAL_SNAPSHOT } = requireApi('./scripts/system-modules-fixtures.mjs');
   const db = new Client({
     host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT || 5433),
@@ -92,7 +92,7 @@ export async function attentionHousehold(page: Page, request: APIRequestContext)
     const accountId = randomUUID();
     const sessionId = randomUUID();
     const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-    await db.query('INSERT INTO accounts (id,"loginName","loginNameNormalized") VALUES ($1,$2,$3)', [accountId, accountId, accountId]);
+    await db.query('INSERT INTO accounts (id,"loginName","loginNameNormalized","passwordHash") VALUES ($1,$2,$3,$4)', [accountId, accountId, accountId, FIXTURE_PASSWORD_HASH]);
     await db.query(
       'INSERT INTO members (id,"householdId","accountId",name,"avatarEmoji",role) VALUES ($1,$2,$3,$4,$5,$6)',
       [memberId, owner.householdId, accountId, '普通成员', '员', 'member'],
@@ -100,7 +100,7 @@ export async function attentionHousehold(page: Page, request: APIRequestContext)
     await db.query(
       `INSERT INTO auth_sessions (id,"householdId","accountId","memberId","refreshTokenHash","roleSnapshot","credentialSnapshot","expiresAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,now()+interval '10 minutes')`,
-      [sessionId, owner.householdId, accountId, memberId, hash(sessionId), 'member', hash('family-app-credential:no-pin')],
+      [sessionId, owner.householdId, accountId, memberId, hash(sessionId), 'member', FIXTURE_CREDENTIAL_SNAPSHOT],
     );
     member = {
       householdId: owner.householdId,

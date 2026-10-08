@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AuthSession, LoginBody } from '@family/contracts';
+import type { AccountProfile, AuthSession, LoginBody } from '@family/contracts';
 
 export interface RedeemBody { invitationToken: string; loginName: string; password: string }
 export interface BootstrapBody {
@@ -26,6 +26,8 @@ interface AuthValue {
   /** 退出登录：先让服务端吊销这次会话（刷新令牌随之作废），再清本机。服务端不通也照样清本机。 */
   signOut: () => Promise<void>;
   setHouseholdTimezone: (timezone: string) => void;
+  /** 设好 / 改过密码后用服务端回的账号信息更新会话（requiresPasswordSetup 跟着变）。 */
+  updateAccount: (account: AccountProfile) => void;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -58,6 +60,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession((current) => {
       if (!current) return current;
       const next = { ...current, householdTimezone: timezone };
+      write(next);
+      return next;
+    });
+  }, []);
+
+  const updateAccount = useCallback((account: AccountProfile) => {
+    setSession((current) => {
+      if (!current) return current;
+      const next = { ...current, account };
       write(next);
       return next;
     });
@@ -125,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ready: true,
       signOut,
       setHouseholdTimezone,
+      updateAccount,
       signIn: async (body) => {
         const next = await api<AuthSession>('/auth/login', { method: 'POST', auth: false, body });
         apply(next);
@@ -136,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         apply(await api<AuthSession>('/auth/setup/bootstrap', { method: 'POST', auth: false, body }));
       },
     }),
-    [session, signOut, setHouseholdTimezone, apply],
+    [session, signOut, setHouseholdTimezone, updateAccount, apply],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

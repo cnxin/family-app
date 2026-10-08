@@ -54,7 +54,7 @@ import {
   CapabilitiesGuard,
   RequireCapabilities,
 } from './capabilities';
-import { CurrentUser, JwtAuthGuard, JwtUser, Public } from './jwt.guard';
+import { AllowWithoutPassword, CurrentUser, JwtAuthGuard, JwtUser, Public } from './jwt.guard';
 import {
   accessTokenExpiresSeconds,
   createInvitationToken,
@@ -1123,6 +1123,7 @@ export class AuthController {
   }
 
   @HttpCode(200)
+  @AllowWithoutPassword()
   @Post('auth/logout')
   logout(@CurrentUser() user: JwtUser) {
     return this.auth.logout(user);
@@ -1180,6 +1181,7 @@ export class AuthController {
   }
 
   @HttpCode(200)
+  @AllowWithoutPassword()
   @Patch('accounts/me/password')
   updatePassword(
     @Body() dto: UpdatePasswordDto,
