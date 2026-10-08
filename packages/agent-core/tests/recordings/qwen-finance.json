@@ -1,0 +1,76 @@
+{
+  "provider": "qwen",
+  "model": "qwen-plus",
+  "source": "simulated",
+  "note": "模拟录制：按百炼 OpenAI 兼容模式公开文档的流式格式手写（没有测试 key）。用例「记一笔 38 买菜」：先查账户分类，再提案，最后作答。",
+  "exchanges": [
+    {
+      "note": "查账户与分类",
+      "response": {
+        "status": 200,
+        "sse": [
+          "data: {\"choices\":[{\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_3d8f2b0fc0c4\",\"type\":\"function\",\"function\":{\"name\":\"get_finance_summary\",\"arguments\":\"\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-1\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":null,\"arguments\":\"{}\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-1\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{},\"index\":0,\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-1\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-1\",\"usage\":{\"prompt_tokens\":905,\"completion_tokens\":15,\"total_tokens\":920,\"prompt_tokens_details\":{\"cached_tokens\":0}}}",
+          "",
+          "data: [DONE]",
+          ""
+        ]
+      }
+    },
+    {
+      "note": "起草记账提案（参数分 5 片，断在 JSON 中间）",
+      "response": {
+        "status": 200,
+        "sse": [
+          "data: {\"choices\":[{\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_c41e7a9d22b8\",\"type\":\"function\",\"function\":{\"name\":\"propose_finance_transaction\",\"arguments\":\"\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":null,\"arguments\":\"{\\\"type\\\":\\\"expe\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":null,\"arguments\":\"nse\\\",\\\"amount\\\":38,\\\"acco\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":null,\"arguments\":\"untId\\\":\\\"11111111-1111-4111-8111-111111111111\\\",\\\"\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":null,\"arguments\":\"categoryId\\\":\\\"22222222-2222-4222\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":null,\"arguments\":\"-8222-222222222222\\\",\\\"title\\\":\\\"买菜\\\",\\\"occurredOn\\\":\\\"2026-10-09\\\"}\"}}]},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{},\"index\":0,\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-2\",\"usage\":{\"prompt_tokens\":1131,\"completion_tokens\":76,\"total_tokens\":1207,\"prompt_tokens_details\":{\"cached_tokens\":0}}}",
+          "",
+          "data: [DONE]",
+          ""
+        ]
+      }
+    },
+    {
+      "note": "作答",
+      "response": {
+        "status": 200,
+        "sse": [
+          "data: {\"choices\":[{\"delta\":{\"content\":\"好的，已\",\"role\":\"assistant\"},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-3\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"content\":\"经起草了一笔\"},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-3\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"content\":\" 38 元的买菜\"},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-3\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"content\":\"支出（现金账户），你\"},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-3\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"content\":\"在小管家里点「确认」后才会入账。\"},\"index\":0,\"logprobs\":null,\"finish_reason\":null}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-3\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[{\"delta\":{\"content\":\"\"},\"index\":0,\"logprobs\":null,\"finish_reason\":\"stop\"}],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-3\",\"usage\":null}",
+          "",
+          "data: {\"choices\":[],\"object\":\"chat.completion.chunk\",\"created\":1760000000,\"system_fingerprint\":null,\"model\":\"qwen-plus\",\"id\":\"chatcmpl-qw-3\",\"usage\":{\"prompt_tokens\":1243,\"completion_tokens\":41,\"total_tokens\":1284,\"prompt_tokens_details\":{\"cached_tokens\":0}}}",
+          "",
+          "data: [DONE]",
+          ""
+        ]
+      }
+    }
+  ]
+}
