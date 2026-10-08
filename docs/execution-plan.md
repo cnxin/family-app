@@ -119,7 +119,7 @@ export default function XxxPage() {
 ### 3.1 分支与合并（2026-09-27 起，所有任务适用）
 
 1. 从最新 `main` 开短分支，命名 `refactor/c2-<任务>`（CI 只对 `main`、`refactor/**` 的 push 和 PR 触发，别的名字不跑 CI）。
-2. 一个任务一个功能提交，push 短分支，等该分支 CI 五项全绿。可再补一个只回填进度的 docs 提交，同样等绿。
+2. 一个任务一个功能提交，push 短分支，等该分支 CI 四个 job 全绿。可再补一个只回填进度的 docs 提交，同样等绿。
 3. 绿了用 merge commit 合回 main（`git merge --no-ff`），不走 PR；push main 后看 main 的 CI。
 4. 每轮开始先 `git status` 和 `git log origin/main..HEAD`，有未 push 的提交先 push。
 5. CI 失败后未改代码重跑变绿，汇报里单列，写根因或列为待查。
@@ -131,12 +131,18 @@ export default function XxxPage() {
 
 | 用例 | 域 | 现象 | 登记 |
 | --- | --- | --- | --- |
-| `smart-home-webhook.spec.ts`「设置页联动：生成密钥后给出可直接粘贴的 HA 配置，改开关，收到的事件列在下面」 | 智能家居 | 手机视口偶发失败，重跑即过 | J1.2 投票（2026-10-04） |
+| （暂无） | | | |
 
 已移除：「片单：手动加一部、发起观影投票、再改成已排期」（`write-paths.spec.ts`，观影）——根因是改安排后只做缓存失效、
 片库查询还被自己发的事件反复触发重拉（修前 2 秒 82 次），旧数据的重拉可能晚于保存回来；`fix/media-scheduled-cache`（rebase 后 `ca0f018`，
 合并 `855252e`）改为保存成功先写回缓存、片库可用性查询不再发事件。合并后在 `refactor/media-flake-check`（同一提交）上全量 CI 连跑 3 次
 （#37348898653 第 1～3 次），该用例手机、桌面每次都过，2026-10-06 移除。
+
+已移除：「设置页联动：生成密钥后给出可直接粘贴的 HA 配置，改开关，收到的事件列在下面」（`smart-home-webhook.spec.ts`，智能家居）——
+根因是 webhook 先推事件、后写联动结果，ping 这类不写别的域的结果写好后不再推，刚好在两次写之间去取的页面停在「—」；
+`6658ef2`（合并 `cd2635e`）改为结果落库后再推一次 smart-home，黑盒 `smart-home-webhook.mjs` 卡住这个竞态。修复后的全量 CI
+#37642641004、#37646359950、#37649116894 都是第 1 次就四个 job 全过（#37642315153 是 GitHub 故障导致的第 3 次，不计入），
+2026-10-08 移除。
 
 ---
 
@@ -282,6 +288,11 @@ export default function XxxPage() {
   全量跑是绿的。CLAUDE.md 早写了「--only 只用于迭代，验收必须全量跑」，别被单跑的红吓到。
 - 访客点菜的后端语义是「一个邀请 + 一天 + 一餐 = 一条请求」：菜单里点的那道和自由填的那条是**同一条**，
   再提交就是覆盖（`menuItemId` 会留着）。前端按 `menuItemId` 分成两拨来找「这一餐我提过没有」就会把人自己的请求顶掉。
+- CI 的 runner 钉在 `ubuntu-24.04`（C2 批 1 第 0 件，`ubuntu-latest` 从 2026-10-19 起滚动切到 Ubuntu 26）。同一时间在
+  `refactor/c2-ci-ubuntu26-probe` 上用 `ubuntu-26.04` 跑过一次全量（#37725958899，Ubuntu 26.04.1，镜像 20260927.149）：
+  四个 job 全过，Compose 配置检查、docker build、Playwright 的 chrome 都正常。以后要切 26.04 只改 `runs-on`。
+- 机器负载高时（另一个 worktree 在跑 Playwright 全量、iCloud 在同步），`run-api-tests.mjs` 全量可能挂在「等待 API 启动超时」：
+  ts-node 冷启动超过了约 20 秒的等待上限，不是代码问题。等负载降下来再跑，或别和 Playwright 全量同时跑。
 - 深色模式下主按钮是 `bg-accent text-white`，而深色的 accent 是浅绿，白字压上去对比度不够。
   这是 A 阶段就有的全局问题（每个页面都有），等有一块专门收拾设计令牌的时间再一起改，别在搬页面的提交里顺手动。
   （C2 批 1 已修：压在 accent / warm / danger 实底上的字改用 `text-on-accent / on-warm / on-danger`，深色取 `--color-bg`；`apps/web/src/lib/theme-contrast.test.ts` 守门。）
@@ -329,6 +340,7 @@ export default function XxxPage() {
 | C2 家庭试用两周 | ☐ | | 起止日期： |
 | C3 删除旧客户端 | ☑ | 见 `docs/pre-trial-plan.md` H1 | 2026-09-28 作为 H1 完成（`e0adfe9`，合入 `8c10678`）；C4 文档改写尚未开始，H1 只做了 CLAUDE.md / README 里涉及旧端的最小修正 |
 | Phase F 信息架构（F0～F8） | ☑ | 见 `docs/ia-plan.md` 进度表 | F0～F8 已完成。导航、深链和后置项以 ia-plan 为准。F8 验收 CI `36326622844` 五项全绿。 |
+| C2 批 1 试用前收口 | ☑ | 见备注 | 按《后续计划》批 1（2026-10-08 用户回「开工」）。代码提交全部首跑通过、没有重跑；文档分支 #37750675229 第 1 次 Playwright 手机视口「积分：新增奖励、申请兑换、确认、撤销」报 socket hang up（测试请求 API 时连接被断开，和文档改动无关），按 §3.1 第 6 条重跑失败的 job，第 2 次通过。第 0 件 CI 钉 `ubuntu-24.04`、actions 升 node24：`696b7b0` → `a84362c`（分支 #37725944825、main #37728075113；Ubuntu 26.04 探针 `4c81fb2` #37725958899 四个 job 全过，不合并）。第 1 件 multer 2.4.0（overrides）/ MCP SDK 1.32 / 按 code 兜底 multer 错误 / `/upload` 扩展名按类型白名单（顺带堵住同源存储型 XSS）：`3cf4af6` → `c7b3cd1`（#37731269370、main #37733431775；`pnpm audit --prod` 40 → 13，critical 清零）。第 2 件任务深链认 `taskId` / `date`：`8388eae` → `d1c4486`（#37733014747、main #37735259899）。第 3 件 ⌘K 选菜品打开做法：`e595823` → `4cfca2c`（#37733298657、main #37737609346）。第 4 件 usage-report 加原话段：`841b0d4` → `d900e63`（#37733682672、main #37740087604）。收尾前对抗审查补的三笔：日历 / 提醒点任务带上深链参数 `c99913a` → `413abec`（#37738523428、main #37742691041）；`/upload` 白名单补 bmp 与 jpg 写法、上传失败说原因 `5b9d9a7` → `272b387`（#37738527870、main #37745464278）；`smart-home-links` 等审计行和运行记录落定再断言 `5746af7` → `dbb4176`（#37740313524、main #37747740055）。第 5 件深色模式实底上的字色（截图经用户看过同意）：`0391c55` → `3882143`（#37743054120、main #37750604560）。文档：本次合并 |
 | C4 文档改写 | ☐ | | |
 | D1 AI 找菜谱 | ☐ | | 需用户确认范围 |
 | D2 换栈决策门 | ☐ | | 需用户决定 |
