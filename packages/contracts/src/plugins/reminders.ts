@@ -39,7 +39,7 @@ export const remindersManifest = {
       keywords: ['别忘了'],
       deepLink: '/schedule/reminders?create=1',
       // 提醒会出现在日历上
-      propose: { legacyTool: 'propose_reminder', actionType: 'reminder', label: '家庭提醒', domains: ['reminders', 'calendar'] },
+      propose: { actionType: 'reminder', label: '家庭提醒', domains: ['reminders', 'calendar'] },
     },
   ],
   usage: {

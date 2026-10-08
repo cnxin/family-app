@@ -5,6 +5,7 @@ import {
   readFileSync,
   rmSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -13,22 +14,12 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const apiRoot = resolve(scriptDir, '..');
 const repoRoot = resolve(apiRoot, '../..');
-// 工具名单只此一份，在 contracts（J1.0）
-const agentTypesPath = resolve(repoRoot, 'packages/contracts/src/agent.ts');
+// 工具名单只此一份：J4.1 起由插件 manifest + core-assistant.ts 推导，从 contracts 构建产物里取
+const contracts = createRequire(import.meta.url)('@family/contracts');
 const configPaths = [
   resolve(repoRoot, 'deploy/hermes/config.yaml'),
   resolve(repoRoot, 'deploy/hermes/config.local.yaml'),
 ];
-
-function parseToolConstant(source, constantName) {
-  const prefix = `export const ${constantName} = [`;
-  const start = source.indexOf(prefix);
-  if (start < 0) throw new Error(`找不到 ${constantName}`);
-  const end = source.indexOf('] as const;', start + prefix.length);
-  if (end < 0) throw new Error(`${constantName} 缺少 as const 结尾`);
-  return [...source.slice(start + prefix.length, end).matchAll(/^\s+'([a-z0-9_]+)',\s*$/gm)]
-    .map((match) => match[1]);
-}
 
 function parseHermesInclude(path) {
   const lines = readFileSync(path, 'utf8').split(/\r?\n/);
@@ -140,12 +131,13 @@ function sameOrder(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-const agentTypes = readFileSync(agentTypesPath, 'utf8');
-const expected = [
-  ...parseToolConstant(agentTypes, 'AGENT_READ_TOOLS'),
-  ...parseToolConstant(agentTypes, 'AGENT_MEMORY_TOOLS'),
-  ...parseToolConstant(agentTypes, 'AGENT_PROPOSAL_TOOLS'),
-];
+const toolGroups = [contracts.AGENT_READ_TOOLS, contracts.AGENT_MEMORY_TOOLS, contracts.AGENT_PROPOSAL_TOOLS];
+const expected = toolGroups.flat();
+/** 按读工具、记忆工具、提案工具分组排列；组内顺序不比（推导出的名单按插件排，配置里是历史顺序）。 */
+function grouped(actual) {
+  const groupOf = (tool) => toolGroups.findIndex((group) => group.includes(tool));
+  return actual.every((tool, index) => index === 0 || groupOf(actual[index - 1]) <= groupOf(tool));
+}
 const actualByPath = new Map(configPaths.map((path) => [path, parseHermesInclude(path)]));
 const configByPath = new Map(configPaths.map((path) => [path, {
   directModelRequests: parseYamlScalar(path, [
@@ -167,7 +159,7 @@ for (const [path, actual] of actualByPath) {
   const missing = difference(expected, actual);
   const extra = difference(actual, expected);
   const repeated = duplicates(actual);
-  const ordered = sameOrder(actual, expected);
+  const ordered = grouped(actual);
   if (missing.length || extra.length || repeated.length || !ordered) {
     failed = true;
     console.error(`✗ ${path}`);
@@ -175,7 +167,7 @@ for (const [path, actual] of actualByPath) {
     if (extra.length) console.error(`  冗余: ${extra.join(', ')}`);
     if (repeated.length) console.error(`  重复: ${repeated.join(', ')}`);
     if (!ordered && !missing.length && !extra.length && !repeated.length) {
-      console.error('  顺序不一致: 应按读工具、记忆工具、提案工具排列');
+      console.error('  顺序不一致: 应按读工具、记忆工具、提案工具分组排列');
     }
   } else {
     console.log(`  ✓ ${path} 与代码常量一致（${actual.length} 个工具）`);

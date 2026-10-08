@@ -2028,10 +2028,11 @@ export class AssetsFacadeProvider implements OnModuleInit {
   constructor(
     private readonly registry: PluginFacadeRegistry,
     private readonly dataSource: DataSource,
+    private readonly assets: AssetsService,
   ) {}
 
   onModuleInit() {
-    this.registry.register('assets', assetsFacade(this.dataSource));
+    this.registry.register('assets', assetsFacade(this.dataSource, this.assets));
   }
 }
 

@@ -657,10 +657,11 @@ export class InventoryFacadeProvider implements OnModuleInit {
     private readonly registry: PluginFacadeRegistry,
     private readonly ledger: InventoryTransactionsService,
     private readonly dataSource: DataSource,
+    private readonly inventory: InventoryService,
   ) {}
 
   onModuleInit() {
-    this.registry.register('inventory', inventoryFacade(this.ledger, this.dataSource));
+    this.registry.register('inventory', inventoryFacade(this.ledger, this.dataSource, this.inventory));
   }
 }
 

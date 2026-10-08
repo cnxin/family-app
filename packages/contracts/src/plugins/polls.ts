@@ -39,7 +39,7 @@ export const pollsManifest = {
       label: '发起投票',
       keywords: ['表决'],
       deepLink: '/schedule/polls?create=1',
-      propose: { legacyTool: 'propose_poll', actionType: 'poll', label: '家庭投票' },
+      propose: { actionType: 'poll', label: '家庭投票' },
     },
   ],
   usage: {

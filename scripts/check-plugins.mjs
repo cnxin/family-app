@@ -20,7 +20,7 @@ const fail = (message) => errors.push(message);
 const read = (path) => readFileSync(join(ROOT, path), 'utf8');
 const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** 从 marker 所在行起，取到与它同缩进的第一个 `]` / `}`（可带 `;` `,` `)` 或 ` satisfies …;`）为止的一段。 */
+/** 从 marker 所在行起，取到与它同缩进的第一个 `]` / `}`（可带 `;` `,` `)` 或 `（as const）satisfies …;`）为止的一段。 */
 function block(path, marker) {
   const source = read(path);
   const start = source.indexOf(marker);
@@ -31,7 +31,7 @@ function block(path, marker) {
   const lineStart = source.lastIndexOf('\n', start) + 1;
   const indent = source.slice(lineStart, start).match(/^\s*/)[0];
   const lines = source.slice(lineStart).split('\n');
-  const end = lines.findIndex((line, index) => index > 0 && new RegExp(`^${indent}[\\]}]([;,)]*| satisfies .*;)$`).test(line));
+  const end = lines.findIndex((line, index) => index > 0 && new RegExp(`^${indent}[\\]}]([;,)]*|( as const)? satisfies .*;)$`).test(line));
   return (end < 0 ? lines : lines.slice(0, end + 1)).join('\n');
 }
 
@@ -48,7 +48,6 @@ const KNOWN_HANDWRITTEN = [
   { no: '①', file: 'apps/web/src/lib/nav.ts', what: 'CORE_KEYS、mobileTabs 的 pick', reason: '只按 key 排的顺序表；断言与 manifest 的 tier / mobileTab 一致' },
   { no: '②', file: 'packages/contracts/src/system.ts', what: 'SHELF_MODULE_KEYS', reason: '模块开关 key 表（含内核的 activity / assistant）；断言与 module.overridable 一致' },
   { no: '⑤', file: 'packages/contracts/src/today.ts', what: '留意 domain 枚举', reason: 'zod 枚举；断言与 manifest + CORE_ATTENTION 的留意域一致' },
-  { no: '⑧', file: 'packages/contracts/src/agent.ts', what: 'AGENT_READ_TOOLS / AGENT_PROPOSAL_TOOLS / AGENT_MEMORY_TOOLS', reason: 'MCP 注册与 Hermes 配置契约按字面量名单走；断言每个工具恰好被一个插件或 KERNEL_AGENT_TOOLS 认领' },
   { no: '⑩', file: 'apps/web/src/pages/settings.tsx', what: '家庭设置行', reason: '页面文件，J1 不改页面；断言与 manifest.settingsRows 一致' },
   { no: '⑫', file: 'packages/contracts/src/activities.ts', what: 'ACTIVITY_MODULES', reason: '数据库约束里的值；断言别名表归属唯一' },
   { no: '⑬', file: 'packages/contracts/src/notifications.ts', what: 'NOTIFICATION_MODULES', reason: '数据库约束里的值；断言别名表归属唯一、与 manifest.notifications 一一对应' },
@@ -74,8 +73,8 @@ const CORE_TABLES = [
 ];
 /** CORE_* 里允许出现的插件写法（逐行原文）。都是写进数据库的值，J1 不改。 */
 const CORE_EXCEPTIONS = [
-  { table: 'export const CORE_ASSISTANT_TOOLS', line: "get_today_summary: { label: '今日摘要', sourceModule: 'calendar' },", reason: '跨域内核工具，调用记录历来记在 calendar 名下（数据库里的值，J1b 不改）' },
-  { table: 'export const CORE_ASSISTANT_TOOLS', line: "get_family_schedule: { label: '家庭日程', sourceModule: 'calendar' },", reason: '同上' },
+  { table: 'export const CORE_ASSISTANT_TOOLS', line: "get_today_summary: { label: '今日摘要', sourceModule: 'calendar', kind: 'read' },", reason: '跨域内核工具，调用记录历来记在 calendar 名下（数据库里的值，J1b 不改）' },
+  { table: 'export const CORE_ASSISTANT_TOOLS', line: "get_family_schedule: { label: '家庭日程', sourceModule: 'calendar', kind: 'read' },", reason: '同上' },
 ];
 
 // ---- 1. key 与 manifest 本身 ----------------------------------------------------------------------
@@ -134,6 +133,8 @@ for (const [space, values, name] of spaces) {
 }
 
 // ---- 3. agent 工具：名单唯一，每个工具恰好一个归属（插件或 KERNEL_AGENT_TOOLS） --------------------------------
+// J4.1 起名单由 manifest 推导（contracts/plugins/agent-tools.ts），⑧ 不再手写；这里另算一遍「工具集合 == manifest 推导」，
+// 并核对 apps/api/src/agent/tools/ 里实现的工具与它一一对应。
 
 const tools = [...c.AGENT_READ_TOOLS, ...c.AGENT_PROPOSAL_TOOLS, ...c.AGENT_MEMORY_TOOLS];
 if (new Set(tools).size !== tools.length) fail('agent 工具名单有重复');
@@ -145,8 +146,48 @@ const claim = (tool, owner) => {
 };
 for (const tool of c.KERNEL_AGENT_TOOLS) claim(tool, 'kernel');
 for (const plugin of PLUGINS) {
-  for (const query of plugin.queries ?? []) if (query.legacyTool) claim(query.legacyTool, plugin.key);
-  for (const proposal of c.proposalsOf(plugin)) if (proposal.legacyTool) claim(proposal.legacyTool, plugin.key);
+  for (const query of plugin.queries ?? []) claim(c.queryToolName(query), plugin.key);
+  for (const proposal of c.proposalsOf(plugin)) claim(c.proposalToolName(proposal), plugin.key);
+}
+{
+  // 工具集合 == manifest 推导：查询 → 读工具，写提案 → 提案工具，内核工具按 core-assistant.ts 的 kind 归组
+  const kernelOf = (kind) => c.KERNEL_AGENT_TOOLS.filter((tool) => c.CORE_ASSISTANT_TOOLS[tool].kind === kind);
+  const derived = {
+    读: [...kernelOf('read'), ...PLUGINS.flatMap((plugin) => (plugin.queries ?? []).map((query) => c.queryToolName(query)))],
+    提案: [...c.proposalsOf ? PLUGINS.flatMap((plugin) => c.proposalsOf(plugin).map((proposal) => c.proposalToolName(proposal))) : [], ...kernelOf('propose')],
+    记忆: kernelOf('preference'),
+  };
+  const listed = { 读: c.AGENT_READ_TOOLS, 提案: c.AGENT_PROPOSAL_TOOLS, 记忆: c.AGENT_MEMORY_TOOLS };
+  const sorted = (values) => JSON.stringify([...values].sort());
+  for (const group of Object.keys(derived)) {
+    if (sorted(listed[group]) !== sorted(derived[group])) {
+      fail(`agent ${group}工具名单（${listed[group].join('、')}）不等于 manifest 推导（${derived[group].join('、')}）`);
+    }
+  }
+  const aliases = Object.entries(c.agentToolAliases()).flatMap(([tool, names]) => names.map((alias) => [alias, tool]));
+  for (const [alias, tool] of aliases) {
+    if (tools.includes(alias)) fail(`工具 ${tool} 的旧名 ${alias} 和现有工具重名`);
+  }
+  if (new Set(aliases.map(([alias]) => alias)).size !== aliases.length) fail('agent 工具的旧名有重复');
+  // apps/api 的实现：每个工具一处 defineTool({ name, …, kind })，与名单一一对应；读 / 记忆工具 kind 为 read，提案工具为 propose
+  const toolDir = 'apps/api/src/agent/tools';
+  const implemented = new Map();
+  for (const file of readdirSync(join(ROOT, toolDir)).filter((one) => one.endsWith('.ts'))) {
+    for (const [, name, kind] of read(`${toolDir}/${file}`).matchAll(/defineTool\(\{\s*name: '([\w-]+)',[\s\S]*?\n\s+kind: '(read|propose)',/g)) {
+      if (implemented.has(name)) fail(`${toolDir}/${file}：工具 ${name} 实现了两次`);
+      implemented.set(name, kind);
+    }
+  }
+  const expectedKind = (tool) => (c.AGENT_PROPOSAL_TOOLS.includes(tool) ? 'propose' : 'read');
+  for (const tool of tools) {
+    if (!implemented.has(tool)) fail(`agent 工具 ${tool} 在 ${toolDir}/ 里没有实现`);
+    else if (implemented.get(tool) !== expectedKind(tool)) fail(`agent 工具 ${tool} 的 kind 应为 ${expectedKind(tool)}`);
+  }
+  for (const tool of implemented.keys()) if (!tools.includes(tool)) fail(`${toolDir}/ 实现了名单外的工具 ${tool}（先登记进 manifest 或 core-assistant.ts）`);
+  // MCP 只按注册表注册、propose_plan 的步骤联合由 manifest 推导：两处都不许再手写工具名或 z.literal
+  const mcp = read('apps/api/src/agent/agent-mcp.controller.ts');
+  if (/registerTool\(\s*'/.test(mcp) || /\bregister\(\s*'/.test(mcp)) fail('agent-mcp.controller.ts 又手写注册了工具：按注册表注册');
+  if (/z\.literal\(\s*'/.test(read(`${toolDir}/kernel.ts`))) fail(`${toolDir}/kernel.ts 手写了 propose_plan 的步骤类型：由 manifest 推导`);
 }
 const unowned = tools.filter((tool) => !owners.has(tool));
 // 内核清单（core-assistant.ts）：每个内核工具都有标签与调用记录来源；服务端不再另写一份来源表
@@ -255,25 +296,11 @@ for (const kernelDir of ['system', 'today', 'activities', 'notifications', 'even
   }
 }
 
-// propose_plan 能打包的步骤类型：MCP 入参的判别联合是手写的（agent-mcp.controller.ts），必须与 manifest 里
-// grouped 不为 false 的提案类型一致；服务端 GROUPABLE_ACTION_TYPES 由 manifest 推出，两道闸口不许不同步
-{
-  const mcp = read('apps/api/src/agent/agent-mcp.controller.ts');
-  const start = mcp.indexOf("'propose_plan',");
-  const union = start < 0 ? '' : mcp.slice(start, mcp.indexOf("'propose_", start + 20));
-  const mcpTypes = [...union.matchAll(/type: z\.literal\('([\w-]+)'\)/g)].map(([, type]) => type).sort();
-  const groupable = c.pluginProposals().filter((one) => one.grouped).map((one) => one.actionType).sort();
-  if (!mcpTypes.length) fail('agent-mcp.controller.ts 找不到 propose_plan 的步骤类型（type: z.literal）');
-  if (JSON.stringify(mcpTypes) !== JSON.stringify(groupable)) {
-    fail(`MCP propose_plan 能打包的步骤类型（${mcpTypes.join('、')}）与 manifest 里可打包的提案类型（${groupable.join('、')}）不一致`);
-  }
-}
-
 // ---- 1d. J1b：插件之间只经内核的门面 / 事务内钩子（docs/architecture.md §9） ---------------------------------
 // 插件目录之间零 import（contracts、shared 不算插件目录）；dependsOn == 实际取用的门面、hooks == 实际订阅的钩子
 // （多声明、少声明都报错）；门面接口只在 contracts 定义、实现只在提供方目录注册；钩子名 / 插件事件名只在 contracts 定义。
 
-const j1b = { facades: 0, hooks: 0, events: 0 };
+const j1b = { facades: 0, hooks: 0, events: 0, agentFacades: 0 };
 {
   const SRC = 'apps/api/src';
   /** 不叫插件 key 的插件目录。 */
@@ -302,13 +329,16 @@ const j1b = { facades: 0, hooks: 0, events: 0 };
   const calls = (text, type, method) => fieldsOf(text, type).flatMap((field) =>
     [...text.matchAll(new RegExp(`this\\.${field}\\s*\\.${method}\\(\\s*'([\\w.-]+)'(?:,\\s*'([\\w-]+)')?`, 'g'))].map((match) => ({ name: match[1], owner: match[2] })));
 
-  // 插件目录之间零 import
+  // 插件目录之间零 import；J4.1 起 agent 目录（内核）同样零 import 插件目录，只走门面（§9.5）
+  const AGENT_DIR = `${SRC}/agent/`;
   for (const { file, text, owner } of apiFiles) {
-    if (!owner) continue;
+    const agent = file.startsWith(AGENT_DIR);
+    if (!owner && !agent) continue;
     for (const [, spec] of text.matchAll(/(?:\bfrom\s+|\bimport\(\s*|\brequire\(\s*)'(\.{1,2}\/[^']+)'/g)) {
       const target = relative(join(ROOT, SRC), resolve(dirname(join(ROOT, file)), spec)).split(sep)[0];
       const targetOwner = ownerOfDir(target);
-      if (targetOwner && targetOwner !== owner) fail(`${file} import 了插件 ${targetOwner} 的 ${spec}：插件之间只走门面 / 事务内钩子（§9）`);
+      if (agent && targetOwner) fail(`${file} import 了插件 ${targetOwner} 的 ${spec}：agent 只经门面读写插件数据（§9.5）`);
+      else if (targetOwner && targetOwner !== owner) fail(`${file} import 了插件 ${targetOwner} 的 ${spec}：插件之间只走门面 / 事务内钩子（§9）`);
     }
   }
 
@@ -343,6 +373,19 @@ const j1b = { facades: 0, hooks: 0, events: 0 };
     const declared = new Set(plugin.dependsOn ?? []);
     for (const key of used) if (!declared.has(key) && key !== plugin.key) fail(`${plugin.key} 取用了 ${key} 的门面，manifest 的 dependsOn 没声明`);
     for (const key of declared) if (!used.has(key)) fail(`${plugin.key} 的 dependsOn 声明了 ${key}，代码里没有取用它的门面`);
+  }
+
+  // agent 目录取用的门面 == core-assistant.ts 的 ASSISTANT_DEPENDS_ON（agent 没有 manifest，用它代替 dependsOn）
+  {
+    const used = new Set(apiFiles.filter(({ file }) => file.startsWith(AGENT_DIR))
+      .flatMap(({ text }) => [...text.matchAll(/\bfacades\s*\.\s*get\(\s*'([\w-]+)'/g)].map((match) => match[1])));
+    const declared = new Set(c.ASSISTANT_DEPENDS_ON);
+    for (const key of used) {
+      if (!facadeKeys.includes(key)) fail(`agent 取用了不存在的门面 ${key}`);
+      else if (!declared.has(key)) fail(`agent 取用了 ${key} 的门面，core-assistant.ts 的 ASSISTANT_DEPENDS_ON 没声明`);
+    }
+    for (const key of declared) if (!used.has(key)) fail(`ASSISTANT_DEPENDS_ON 声明了 ${key}，agent 目录里没有取用它的门面`);
+    j1b.agentFacades = used.size;
   }
 
   // 事务内钩子：名单与 payload 只在 contracts；订阅方 == manifest.hooks；发起方 == 钩子名前缀的插件；写死的顺序只列订阅方
@@ -564,5 +607,7 @@ if (errors.length) {
 console.log(
   `插件登记一致：${PLUGINS.length} / ${c.PLUGIN_KEYS.length} 个插件都有 manifest；agent 工具 ${tools.length} 个全部有归属（插件 ${owners.size - c.KERNEL_AGENT_TOOLS.length}、内核 ${c.KERNEL_AGENT_TOOLS.length}）；` +
     `仍手写并断言一致的 ${KNOWN_HANDWRITTEN.length} 处（${KNOWN_HANDWRITTEN.map((one) => one.no).join('')}），内核表 ${CORE_TABLES.length} 张；` +
-    `插件目录之间零 import，门面 ${j1b.facades} 个、事务内钩子 ${j1b.hooks} 个、插件事件 ${j1b.events} 个与 manifest 一致`,
+    `插件目录之间零 import，门面 ${j1b.facades} 个、事务内钩子 ${j1b.hooks} 个、插件事件 ${j1b.events} 个与 manifest 一致；` +
+    `agent 工具集合 == manifest 推导（读 ${c.AGENT_READ_TOOLS.length}、提案 ${c.AGENT_PROPOSAL_TOOLS.length}、记忆 ${c.AGENT_MEMORY_TOOLS.length}，apps/api 实现一一对应）；` +
+    `agent 目录零 import 插件目录，经门面 ${j1b.agentFacades} 个（== ASSISTANT_DEPENDS_ON）`,
 );

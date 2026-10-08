@@ -755,10 +755,14 @@ export class MenusController {
 /** 把点菜门面注册到内核（J1b）：购物生成清单读某天的菜从这里取，不再直读 Menu 实体。 */
 @Injectable()
 export class MenusFacadeProvider implements OnModuleInit {
-  constructor(private readonly registry: PluginFacadeRegistry) {}
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly menus: MenusService,
+    private readonly dataSource: DataSource,
+  ) {}
 
   onModuleInit() {
-    this.registry.register('menus', menusFacade());
+    this.registry.register('menus', menusFacade(this.menus, this.dataSource));
   }
 }
 

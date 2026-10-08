@@ -159,8 +159,50 @@ export class ToolRegistry<C extends object = object> {
   }
 
   /**
-   * 校验参数并执行。rawArgs 是模型给的 JSON 字符串（空串当 {}）或已解析的对象。
-   * 参数不合法、工具抛错、提案没走回执，都返回 ok=false 的结果而不是抛出——循环把它原样交回模型。
+   * 校验参数并执行，出错直接抛 ToolInvocationError / 工具自己的异常（适配层用：MCP 要把服务端异常原样交给 SDK）。
+   * rawArgs 是模型给的 JSON 字符串（空串当 {}）或已解析的对象；读工具返回结果，提案工具返回 { proposalId }。
+   */
+  async invoke(
+    name: string,
+    context: C,
+    rawArgs: unknown,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<{ kind: 'read'; result: unknown } | { kind: 'propose'; result: { proposalId: string } }> {
+    const tool = this.get(name);
+    if (!tool) throw new ToolInvocationError('unknown_tool', `没有叫 ${name} 的工具`);
+
+    let args: unknown = rawArgs;
+    if (typeof rawArgs === 'string') {
+      try {
+        args = rawArgs.trim() ? JSON.parse(rawArgs) : {};
+      } catch {
+        throw new ToolInvocationError('invalid_arguments', '参数不是合法的 JSON');
+      }
+    }
+    const parsed = tool.schema.safeParse(args);
+    if (!parsed.success) throw new ToolInvocationError('invalid_arguments', describeIssues(parsed.error));
+
+    const base = { ...context, toolName: tool.name, signal: options.signal };
+    const definition = tool.definition;
+    if (definition.kind === 'read') {
+      const result: unknown = await definition.execute(
+        { ...base, toolKind: 'read' } as ReadToolContext<C>,
+        parsed.data,
+      );
+      return { kind: 'read', result };
+    }
+    const receipt: unknown = await definition.execute(
+      { ...base, toolKind: 'propose', receipt: issueReceipt } as ProposeToolContext<C>,
+      parsed.data,
+    );
+    if (!isProposalReceipt(receipt)) {
+      throw new ToolInvocationError('invalid_proposal', `${tool.name} 是提案工具，只能返回提案回执`);
+    }
+    return { kind: 'propose', result: { proposalId: receipt.proposalId } };
+  }
+
+  /**
+   * 同 invoke，但不抛：参数不合法、工具抛错、提案没走回执，都返回 ok=false 的结果——循环把它原样交回模型。
    */
   async execute(
     name: string,
@@ -168,41 +210,23 @@ export class ToolRegistry<C extends object = object> {
     rawArgs: unknown,
     options: { signal?: AbortSignal } = {},
   ): Promise<ToolOutcome> {
-    const tool = this.get(name);
-    if (!tool) return failure('unknown_tool', `没有叫 ${name} 的工具`);
-
-    let args: unknown = rawArgs;
-    if (typeof rawArgs === 'string') {
-      try {
-        args = rawArgs.trim() ? JSON.parse(rawArgs) : {};
-      } catch {
-        return failure('invalid_arguments', '参数不是合法的 JSON');
-      }
-    }
-    const parsed = tool.schema.safeParse(args);
-    if (!parsed.success) return failure('invalid_arguments', describeIssues(parsed.error));
-
-    const base = { ...context, toolName: tool.name, signal: options.signal };
     try {
-      const definition = tool.definition;
-      if (definition.kind === 'read') {
-        const result: unknown = await definition.execute(
-          { ...base, toolKind: 'read' } as ReadToolContext<C>,
-          parsed.data,
-        );
-        return { ok: true, kind: 'read', result };
-      }
-      const receipt: unknown = await definition.execute(
-        { ...base, toolKind: 'propose', receipt: issueReceipt } as ProposeToolContext<C>,
-        parsed.data,
-      );
-      if (!isProposalReceipt(receipt)) {
-        return failure('invalid_proposal', `${tool.name} 是提案工具，只能返回提案回执`);
-      }
-      return { ok: true, kind: 'propose', result: { proposalId: receipt.proposalId } };
+      return { ok: true, ...(await this.invoke(name, context, rawArgs, options)) };
     } catch (error) {
+      if (error instanceof ToolInvocationError) return failure(error.code, error.message);
       return failure('tool_failed', error instanceof Error ? error.message : String(error));
     }
+  }
+}
+
+/** invoke 自己判出的错误（工具执行时抛的异常原样向上抛，不包成它）。 */
+export class ToolInvocationError extends Error {
+  constructor(
+    readonly code: Exclude<ToolErrorCode, 'tool_not_allowed' | 'tool_failed'>,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ToolInvocationError';
   }
 }
 

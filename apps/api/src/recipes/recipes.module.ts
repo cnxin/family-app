@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   Get,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -14,6 +15,8 @@ import {
   Post,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { recipesFacade } from './recipes.facade';
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -667,6 +670,19 @@ export class RecipesController {
   }
 }
 
+/** 把菜谱门面注册到内核（J4.1）：小管家搜菜谱走这里。 */
+@Injectable()
+export class RecipesFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('recipes', recipesFacade(this.dataSource));
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -676,6 +692,6 @@ export class RecipesController {
     ]),
   ],
   controllers: [RecipesController],
-  providers: [RecipesService],
+  providers: [RecipesService, RecipesFacadeProvider],
 })
 export class RecipesModule {}

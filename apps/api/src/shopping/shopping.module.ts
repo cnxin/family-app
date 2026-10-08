@@ -322,7 +322,7 @@ export class ShoppingPluginProvider implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.facades.register('shopping', shoppingFacade());
+    this.facades.register('shopping', shoppingFacade(this.shopping));
     this.hooks.on('smart-home.link-fired', 'shopping', async (payload, manager) => {
       if (!payload.shoppingItem) return;
       await this.shopping.addManualWithinTransaction(payload.shoppingItem, payload.householdId, manager);

@@ -24,7 +24,7 @@ export const recipesManifest = {
     { id: 'recipes.create-dish', label: '新建菜品', keywords: ['菜'], deepLink: '/eat/recipes?create=1', capability: 'manage_recipes' },
   ],
   queries: [
-    { id: 'recipes.search', label: '搜家里的菜谱', server: 'recipes.search', legacyTool: 'search_recipes' },
+    { id: 'recipes.search', label: '搜家里的菜谱', server: 'recipes.search', toolName: 'search_recipes' },
   ],
   usage: {
     label: '菜谱',

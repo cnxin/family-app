@@ -28,6 +28,7 @@ import {
   Get,
   HttpCode,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -41,6 +42,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { mediaFacade } from './media.facade';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest, Response } from 'express';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
@@ -1856,6 +1859,19 @@ class MediaController {
   }
 }
 
+/** 把观影门面注册到内核（J4.1）：小管家读片单走这里。 */
+@Injectable()
+export class MediaFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly media: MediaService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('media', mediaFacade(this.media));
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -1891,6 +1907,7 @@ class MediaController {
     MediaUserMappingsService,
     MediaSourceSettingsService,
     MediaMetadataService,
+    MediaFacadeProvider,
   ],
   exports: [MediaService, MediaRequestsService, MediaConnectorsService],
 })

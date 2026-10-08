@@ -1,5 +1,5 @@
 // 日历门面（J1b）：实现在 apps/api/src/calendar/calendar.facade.ts，注册到 PluginFacadeRegistry。
-// 消费方：提醒（GET /reminder-sources 把日历上的条目列成「可以加提醒的事」）。
+// 消费方：提醒（GET /reminder-sources 把日历上的条目列成「可以加提醒的事」）、小管家（今日摘要、日历、家庭日程、每晚汇总、每周回顾）。
 import type { CalendarEntry } from '../calendar';
 import type { PluginActor } from './kernel';
 
@@ -9,8 +9,12 @@ import type { PluginActor } from './kernel';
  */
 export type CalendarEntryView = Pick<
   CalendarEntry,
-  'module' | 'sourceId' | 'title' | 'summary' | 'date' | 'startsAt' | 'targetPath'
-> & { status: string };
+  'id' | 'module' | 'sourceId' | 'title' | 'summary' | 'date' | 'startsAt' | 'targetPath'
+> & {
+  status: string;
+  /** 各来源不同的补充字段（创建人、负责人、东道主……）；小管家的家庭日程从里面取参与人。 */
+  metadata: object;
+};
 
 export interface CalendarFacade {
   /** 与日历列表同一个实现：一段日子里全家的日历条目（菜单、任务、来访、维护、出行……）。 */

@@ -18,7 +18,7 @@ export const memoriesManifest = {
     { id: 'memories.record', label: '记一条回忆', keywords: ['值得记住'], deepLink: '/life/memories?create=1' },
   ],
   queries: [
-    { id: 'memories.recent', label: '最近的家庭回忆', server: 'memories.recent', legacyTool: 'get_recent_memories' },
+    { id: 'memories.recent', label: '最近的家庭回忆', server: 'memories.recent', toolName: 'get_recent_memories' },
   ],
   usage: { label: '回忆', activityModules: ['memory'] },
 } as const satisfies PluginManifest;

@@ -27,6 +27,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 COPY packages/contracts/package.json ./packages/contracts/package.json
+COPY packages/agent-core/package.json ./packages/agent-core/package.json
 
 # --ignore-scripts：生产依赖阶段没有 typescript，不能跑 postinstall 构建；dist 从 build 阶段复制
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts --filter api...
@@ -44,8 +45,11 @@ COPY --chown=node:node --from=production-dependencies /app/apps/api/package.json
 COPY --chown=node:node --from=production-dependencies /app/packages/shared/package.json /app/packages/shared/package.json
 COPY --chown=node:node --from=production-dependencies /app/packages/contracts/package.json /app/packages/contracts/package.json
 COPY --chown=node:node --from=production-dependencies /app/packages/contracts/node_modules /app/packages/contracts/node_modules
+COPY --chown=node:node --from=production-dependencies /app/packages/agent-core/package.json /app/packages/agent-core/package.json
+COPY --chown=node:node --from=production-dependencies /app/packages/agent-core/node_modules /app/packages/agent-core/node_modules
 COPY --chown=node:node --from=build /app/packages/shared/dist /app/packages/shared/dist
 COPY --chown=node:node --from=build /app/packages/contracts/dist /app/packages/contracts/dist
+COPY --chown=node:node --from=build /app/packages/agent-core/dist /app/packages/agent-core/dist
 COPY --chown=node:node --from=build /app/apps/api/dist ./dist
 
 RUN mkdir -p uploads && chown node:node uploads

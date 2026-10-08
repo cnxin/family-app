@@ -162,7 +162,7 @@ jobs:
       - name: 构建 API 开发镜像
         run: docker build -f Dockerfile -t family-app-api:dev-ci .
       - name: 生产镜像能加载入口
-        run: docker run --rm family-app-api:ci node -e "require('@family/shared'); require('@family/contracts'); console.log('workspace packages ok')"
+        run: docker run --rm family-app-api:ci node -e "require('@family/shared'); require('@family/contracts'); require('@family/agent-core'); console.log('workspace packages ok')"
       - name: 构建前端镜像
         run: docker build -f Dockerfile.web -t family-app-web:ci .
       - name: 前端镜像的 Caddy 配置有效

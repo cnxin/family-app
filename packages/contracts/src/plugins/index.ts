@@ -6,29 +6,12 @@ import type {
   PluginAttention,
   PluginManifest,
   PluginNavSegment,
-  PluginProposal,
   PluginUsageTable,
 } from './types';
+import { pluginProposalTools, pluginReadTools, proposalsOf } from './agent-tools';
 import { CORE_ATTENTION } from './core';
 import { PLUGIN_ALIASES, PLUGIN_KEYS, type PluginKey } from './keys';
-import { financeManifest } from './finance';
-import { guestsManifest } from './guests';
-import { knowledgeManifest } from './knowledge';
-import { memoriesManifest } from './memories';
-import { pointsManifest } from './points';
-import { pollsManifest } from './polls';
-import { recipesManifest } from './recipes';
-import { travelManifest } from './travel';
-import { shoppingManifest } from './shopping';
-import { tasksManifest } from './tasks';
-import { calendarManifest } from './calendar';
-import { remindersManifest } from './reminders';
-import { menusManifest } from './menus';
-import { locationsManifest } from './locations';
-import { inventoryManifest } from './inventory';
-import { assetsManifest } from './assets';
-import { mediaManifest } from './media';
-import { smartHomeManifest } from './smart-home';
+import { PLUGIN_MANIFESTS } from './manifests';
 
 export * from './core';
 export * from './kernel';
@@ -42,12 +25,22 @@ export * from './tasks.events';
 export * from './smart-home.hooks';
 export * from './shopping.facade';
 export * from './assets.facade';
+export * from './knowledge.facade';
+export * from './travel.facade';
+export * from './media.facade';
+export * from './memories.facade';
+export * from './finance.facade';
+export * from './polls.facade';
+export * from './reminders.facade';
+export * from './recipes.facade';
 export * from './keys';
 export * from './core-assistant';
+export * from './agent-tools';
+export * from './manifests';
 export * from './types';
 
-/** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGINS: readonly PluginManifest[] = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest, locationsManifest, inventoryManifest, assetsManifest, mediaManifest, smartHomeManifest];
+/** 已迁移的插件（manifests.ts 的元组放宽成 PluginManifest）。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
+export const PLUGINS: readonly PluginManifest[] = PLUGIN_MANIFESTS;
 
 export function findPlugin(key: string): PluginManifest | undefined {
   return PLUGINS.find((plugin) => plugin.key === key);
@@ -134,22 +127,9 @@ export function renderTemplate(template: string, values: Readonly<Record<string,
 
 // ---- agent 工具、通知、能力 ------------------------------------------------------------------------
 
-/** 插件的全部写提案：挂在动作上的，加上还没有动作的（manifest.proposals）。 */
-export function proposalsOf(plugin: PluginManifest): readonly PluginProposal[] {
-  return [
-    ...(plugin.actions ?? []).flatMap((action) => (action.propose ? [action.propose] : [])),
-    ...(plugin.proposals ?? []),
-  ];
-}
-
 /** 工具名 → 认领它的插件（只含已迁移插件）。 */
 export function pluginToolOwners(): ReadonlyMap<string, string> {
-  const owners = new Map<string, string>();
-  for (const plugin of PLUGINS) {
-    for (const query of plugin.queries ?? []) if (query.legacyTool) owners.set(query.legacyTool, plugin.key);
-    for (const proposal of proposalsOf(plugin)) if (proposal.legacyTool) owners.set(proposal.legacyTool, plugin.key);
-  }
-  return owners;
+  return new Map([...pluginReadTools(), ...pluginProposalTools()].map((tool) => [tool.name, tool.plugin]));
 }
 
 /** agent 工具调用记录的 sourceModule：插件认领的工具取它 agentSource 别名的第一个。 */
@@ -164,19 +144,13 @@ export function pluginToolSources(): Readonly<Record<string, string>> {
 
 /** 已迁插件的写提案：工具名、actionType、提案卡类型名、能否打包进 propose_plan。 */
 export function pluginProposals(): readonly { plugin: string; tool: string; actionType: string; label: string; grouped: boolean }[] {
-  return PLUGINS.flatMap((plugin) =>
-    proposalsOf(plugin).flatMap((proposal) =>
-      proposal.legacyTool
-        ? [{
-            plugin: plugin.key,
-            tool: proposal.legacyTool,
-            actionType: proposal.actionType,
-            label: proposal.label,
-            grouped: proposal.grouped ?? true,
-          }]
-        : [],
-    ),
-  );
+  return pluginProposalTools().map((tool) => ({
+    plugin: tool.plugin,
+    tool: tool.name,
+    actionType: tool.actionType,
+    label: tool.label,
+    grouped: tool.grouped,
+  }));
 }
 
 /** 小管家确认提案会写到的插件域（/agent/proposals、/agent/proposal-groups 推送用），去重、保持声明顺序。 */

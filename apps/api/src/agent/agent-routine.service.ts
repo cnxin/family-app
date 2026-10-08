@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   OnApplicationBootstrap,
   OnApplicationShutdown,
@@ -8,7 +9,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
-import { CalendarService } from '../calendar/calendar.module';
 import {
   AgentRoutine,
   AgentRoutineItem,
@@ -17,9 +17,28 @@ import {
   Member,
   Notification,
 } from '../entities';
-import { InventoryService } from '../inventory/inventory.module';
-import { ShoppingService } from '../shopping/shopping.module';
 import { isUniqueViolation, todayInShanghai } from '@family/shared';
+
+/**
+ * 例行任务读插件数据的三个口子（J4.1 起 agent.module 用日历 / 购物 / 库存门面实现，本文件不 import 插件目录；
+ * 黑盒 agent-routines.mjs 按位置直接传同形状的桩）。
+ */
+export interface RoutineCalendarReader {
+  list(start: string, end: string, user: JwtUser): Promise<{ module: string; status: string }[]>;
+}
+export interface RoutineShoppingReader {
+  list(householdId: string, date: string): Promise<{ checked: boolean }[]>;
+}
+export interface RoutineInventoryReader {
+  list(householdId: string): Promise<{
+    quantity: string;
+    lowStockThreshold: string;
+    batchSummary?: { expiringCount: number; expiredCount: number } | null;
+  }[]>;
+}
+export const ROUTINE_CALENDAR = 'AGENT_ROUTINE_CALENDAR';
+export const ROUTINE_SHOPPING = 'AGENT_ROUTINE_SHOPPING';
+export const ROUTINE_INVENTORY = 'AGENT_ROUTINE_INVENTORY';
 
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
 const DAY_MS = 86_400_000;
@@ -153,9 +172,9 @@ export class AgentRoutineService
     private readonly items: Repository<AgentRoutineItem>,
     @InjectRepository(AgentSetting)
     private readonly settings: Repository<AgentSetting>,
-    private readonly calendar: CalendarService,
-    private readonly shopping: ShoppingService,
-    private readonly inventory: InventoryService,
+    @Inject(ROUTINE_CALENDAR) private readonly calendar: RoutineCalendarReader,
+    @Inject(ROUTINE_SHOPPING) private readonly shopping: RoutineShoppingReader,
+    @Inject(ROUTINE_INVENTORY) private readonly inventory: RoutineInventoryReader,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -790,7 +809,7 @@ export class AgentRoutineService
 
   private buildDigest(
     pending: AgentRoutineItem[],
-    calendarEntries: Awaited<ReturnType<CalendarService['list']>>,
+    calendarEntries: Awaited<ReturnType<RoutineCalendarReader['list']>>,
   ) {
     const taskCount = calendarEntries.filter(
       (entry) => entry.module === 'task' && entry.status === 'pending',

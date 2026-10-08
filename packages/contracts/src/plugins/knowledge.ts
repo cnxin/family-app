@@ -18,7 +18,7 @@ export const knowledgeManifest = {
     { id: 'knowledge.write', label: '写一篇说明', keywords: ['经验'], deepLink: '/life/knowledge?create=1' },
   ],
   queries: [
-    { id: 'knowledge.search', label: '搜家里的知识库', server: 'knowledge.search', legacyTool: 'search_knowledge' },
+    { id: 'knowledge.search', label: '搜家里的知识库', server: 'knowledge.search', toolName: 'search_knowledge' },
   ],
   usage: { label: '知识库', activityModules: ['knowledge'] },
 } as const satisfies PluginManifest;

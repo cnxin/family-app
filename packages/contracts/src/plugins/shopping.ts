@@ -34,12 +34,12 @@ export const shoppingManifest = {
       label: '加到购物清单',
       keywords: ['要买'],
       deepLink: '/house/shopping?create=1',
-      propose: { legacyTool: 'propose_shopping_items', actionType: 'shopping', label: '购物清单' },
+      propose: { toolName: 'propose_shopping_items', actionType: 'shopping', label: '购物清单' },
       capability: 'manage_shopping',
     },
   ],
   queries: [
-    { id: 'shopping.list', label: '购物清单里有什么', server: 'shopping.list', legacyTool: 'get_shopping_list' },
+    { id: 'shopping.list', label: '购物清单里有什么', server: 'shopping.list' },
   ],
   usage: {
     label: '购物',

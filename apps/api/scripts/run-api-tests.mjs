@@ -415,6 +415,8 @@ try {
       'ts-node/register',
       '../../packages/agent-core/tests/agent-core.check.ts',
     ]);
+    // J4.1：小管家工具注册表（MCP tools/list 快照、schema、工具集合 == manifest、别名）
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/agent-tools.check.ts']);
   } else {
     // --only：跳过契约、初始化演练与旧 PIN 迁移，只灌种子后直接跑选中的业务脚本
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);

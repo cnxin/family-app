@@ -41,6 +41,7 @@ import {
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import type { CalendarEntryView } from '@family/contracts';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { remindersFacade } from './reminders.facade';
 import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
 import {
   CalendarEvent,
@@ -785,6 +786,19 @@ export class RemindersLinkHooks implements OnModuleInit {
   }
 }
 
+/** 把提醒门面注册到内核（J4.1）：小管家提醒提案的预览与确认后建提醒走这里。 */
+@Injectable()
+export class RemindersFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly reminders: RemindersService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('reminders', remindersFacade(this.reminders));
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -802,7 +816,7 @@ export class RemindersLinkHooks implements OnModuleInit {
     ]),
   ],
   controllers: [RemindersController],
-  providers: [RemindersService, RemindersLinkHooks],
+  providers: [RemindersService, RemindersLinkHooks, RemindersFacadeProvider],
   exports: [RemindersService],
 })
 export class RemindersModule {}

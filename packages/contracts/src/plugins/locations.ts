@@ -36,8 +36,8 @@ export const locationsManifest = {
     { id: 'locations.locate', label: '记一下东西放哪', keywords: ['位置', '放在哪', '柜子'], deepLink: '/house/inventory?locate=1' },
   ],
   queries: [
-    { id: 'locations.find-item', label: '某样东西放在哪', server: 'locations.find-item', legacyTool: 'find_item' },
-    { id: 'locations.contents', label: '某个位置里有什么', server: 'locations.contents', legacyTool: 'list_location_contents' },
+    { id: 'locations.find-item', label: '某样东西放在哪', server: 'locations.find-item', toolName: 'find_item' },
+    { id: 'locations.contents', label: '某个位置里有什么', server: 'locations.contents', toolName: 'list_location_contents' },
   ],
   usage: {
     label: '位置',

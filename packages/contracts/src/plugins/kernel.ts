@@ -7,10 +7,18 @@
 
 import type { AssetsFacade } from './assets.facade';
 import type { CalendarFacade } from './calendar.facade';
+import type { FinanceFacade } from './finance.facade';
 import type { InventoryFacade } from './inventory.facade';
+import type { KnowledgeFacade } from './knowledge.facade';
 import type { LocationsFacade } from './locations.facade';
+import type { MediaFacade } from './media.facade';
+import type { MemoriesFacade } from './memories.facade';
 import type { MenusFacade } from './menus.facade';
+import type { PollsFacade } from './polls.facade';
+import type { RecipesFacade } from './recipes.facade';
+import type { RemindersFacade } from './reminders.facade';
 import type { ShoppingFacade } from './shopping.facade';
+import type { TravelFacade } from './travel.facade';
 import type { SmartHomeLinkFiredPayload } from './smart-home.hooks';
 import type { TasksFacade } from './tasks.facade';
 import type { TaskCompletedEvent } from './tasks.events';
@@ -46,6 +54,14 @@ export interface PluginFacades {
   menus: MenusFacade;
   shopping: ShoppingFacade;
   assets: AssetsFacade;
+  knowledge: KnowledgeFacade;
+  travel: TravelFacade;
+  media: MediaFacade;
+  memories: MemoriesFacade;
+  finance: FinanceFacade;
+  polls: PollsFacade;
+  reminders: RemindersFacade;
+  recipes: RecipesFacade;
 }
 export type PluginFacadeKey = keyof PluginFacades;
 

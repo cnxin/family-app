@@ -24,10 +24,10 @@ export const menusManifest = {
     routes: [{ prefix: '/menus' }, { prefix: '/menu-items' }],
     queryKeys: ['menus-of-date', 'menu', 'menu-dates', 'menu-events', 'menu-inventory-preview'],
   },
-  proposals: [{ legacyTool: 'propose_menu', actionType: 'menu', label: '菜单点菜' }],
+  proposals: [{ actionType: 'menu', label: '菜单点菜' }],
   queries: [
-    { id: 'menus.meal-plan', label: '某天的菜单', server: 'menus.meal-plan', legacyTool: 'get_meal_plan' },
-    { id: 'menus.dish-plan', label: '一段日子的点菜安排', server: 'menus.dish-plan', legacyTool: 'get_dish_plan' },
+    { id: 'menus.meal-plan', label: '某天的菜单', server: 'menus.meal-plan', toolName: 'get_meal_plan' },
+    { id: 'menus.dish-plan', label: '一段日子的点菜安排', server: 'menus.dish-plan', toolName: 'get_dish_plan' },
   ],
   usage: {
     label: '点菜（智能菜单）',

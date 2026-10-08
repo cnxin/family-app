@@ -1,4 +1,5 @@
 import type { TasksFacade } from '@family/contracts';
+import { fromPluginTransaction } from '../system/plugin-facades.registry';
 import type { TasksService } from './tasks.module';
 
 /**
@@ -11,5 +12,7 @@ export function tasksFacade(tasks: TasksService): TasksFacade {
     completeOccurrence: async (taskId, dueDate, actor) => {
       await tasks.updateOccurrence(taskId, dueDate, { status: 'done' }, actor);
     },
+    createTask: (transaction, input, actor) =>
+      tasks.createWithinTransaction(input, actor, fromPluginTransaction(transaction)),
   };
 }

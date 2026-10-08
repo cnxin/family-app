@@ -49,7 +49,7 @@ export const mediaManifest = {
     ],
   },
   queries: [
-    { id: 'media.watch-candidates', label: '片单里能看的', server: 'media.watch-candidates', legacyTool: 'get_watch_candidates' },
+    { id: 'media.watch-candidates', label: '片单里能看的', server: 'media.watch-candidates', toolName: 'get_watch_candidates' },
   ],
   settingsRows: [
     {

@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Injectable,
+  OnModuleInit,
   Module,
   NotFoundException,
   Param,
@@ -18,6 +19,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository, TypeOrmModule } from '@nestjs/typeorm';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { memoriesFacade } from './memories.facade';
 import { Type } from 'class-transformer';
 import { Response } from 'express';
 import {
@@ -1045,6 +1048,19 @@ export class MemoriesController {
   }
 }
 
+/** 把回忆门面注册到内核（J4.1）：小管家读最近回忆走这里。 */
+@Injectable()
+export class MemoriesFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly memories: MemoriesService,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('memories', memoriesFacade(this.memories));
+  }
+}
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -1054,7 +1070,7 @@ export class MemoriesController {
     ]),
   ],
   controllers: [MemoriesController],
-  providers: [MemoriesService],
+  providers: [MemoriesService, MemoriesFacadeProvider],
   exports: [MemoriesService],
 })
 export class MemoriesModule {}
