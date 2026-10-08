@@ -127,7 +127,7 @@
   - e2e：小管家对话 / 提案 / 提案组渲染的 mock 用例；厨房主厨与操作历史、菜谱做法版本的用例。
   - 智能菜单：界面与 API 已删（从未正式使用），`smart_menu_*` 实体与数据表保留，需要时从 git 找回 `apps/api/src/smart-menu/` 与 `packages/contracts/src/smart-menu.ts`。
   - 小管家页面上下文：已删，⌘K「交给小管家」替代。
-  - 后端 targetPath 仍按旧一层路径生成，靠新端 `toNewRoute` 换算；改成在源头直接生成新路径（换算层已放行新路径，见教训 31）。部分参数新端不消费（`assetId`、`taskId`、`eventId`、`visitId` 等，见 ia-plan §4）。
+  - 后端 targetPath 仍按旧一层路径生成，靠新端 `toNewRoute` 换算；改成在源头直接生成新路径（换算层已放行新路径，见教训 31）。部分参数新端不消费（`assetId`、`eventId`、`visitId` 等，见 ia-plan §4；任务 `taskId` / `date` 与菜谱 `dish` 已在 C2 批 1 接上）。
   - 只有旧端调用、新端尚无入口的端点：`GET /ingredients`、`GET /media/viewing-progress`、`GET /shopping-items/:id/inventory-preview`、`GET /agent/proposal-groups/:id`；新端是否需要，待定。
   - 知识库编辑「放弃未保存的修改」确认：旧端有、新端没有，待 King 定要不要补。
   - 登记食品批次弹窗文案与 API 不符：文案说「登记后会同时增加库存余量」「登记并入库」，API 只从现有未分批库存里划出一批，库存为 0 时 409。改文案还是改行为，待 King 定。

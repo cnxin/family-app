@@ -289,7 +289,8 @@
 | `date` + `meal` | 厨房 `/eat/kitchen` | 日期切到这一天，并滚到该餐次 |
 | `create=1` | 动作注册表里的页面 | 打开现成的新建。任务、购物改为滚到输入框并聚焦。`kind=expense` 或 `income` 决定记账从支出还是收入开始 |
 | `draft` | 小管家 `/me/assistant` | 把搜索词填进输入框，不自动发送 |
-| `task` | 任务 `/schedule/tasks` | 滚到这件任务（同一件在两周里出现多次时今天那一次优先，否则最早一次）并高亮 2 秒；列表里没有就只抹参数。智能家居「晾衣服」留意卡用（H3 E5 之后） |
+| `task` / `taskId`（+ `date`） | 任务 `/schedule/tasks` | 滚到这件任务并高亮 2 秒。`task`（留意卡）与 `taskId`（后端通知、日历、提醒、动态、小管家的 targetPath，形如 `/tasks?date=<d>&taskId=<id>`）同义，同时出现以 `task` 为准。同一件在两周里出现多次时：`date` 在显示范围（今天～今天+13）里取那天那一次，否则今天那一次优先、再否则最早一次；列表里没有就只抹参数；列表正在重取时等它回来再挑。处理完 `task` / `taskId` / `date` 三个一起抹；只带 `date` 不是深链、不动。（H3 E5 起 `task`；C2 批 1 起认 `taskId` / `date`） |
+| `dish` | 菜谱 `/eat/recipes` | 打开这道菜的做法弹窗（从完整列表取，不改搜索词和分类）。列表里有就直接打开（后台在重取也开）；没有且还在加载 / 重取就等；取完仍没有（下架、读失败、空列表）或空 id 只抹参数。⌘K 菜品结果用（C2 批 1） |
 | `locate=1` | 库存 `/house/inventory` | ⌘K「记一下东西放哪」：先开位置选择器，再挑是哪样东西（已有的一跳改默认位置，没有的带名字和位置去新建）（I1） |
 | `focus` | 地图 `/house/map` | 对准这个位置并打开它的抽屉（层格对准所在的柜子）；⌘K 找东西、库存 / 资产详情「在地图上看」用（I2、I3） |
 | `q` | 地图 `/house/map` | 把物品名填进「找东西」，命中的柜子在图上高亮 |
@@ -483,7 +484,7 @@ F5b 盘点之后的决定。半成品里没写明的分支以这里为准。
 
 ## 4. 后置项
 
-Phase F 收口时从各处备注收拢。下面只记还没做的；盘点之后已经接上的深链（点菜 / 厨房的 `date`+`meal`、财务 `kind`、小管家 `draft` 与 `settings=1`、消息 `view` 分段、投票 `create` / `pollId`、片单 `mediaId`）不重复列入。
+Phase F 收口时从各处备注收拢。下面只记还没做的；盘点之后已经接上的深链（点菜 / 厨房的 `date`+`meal`、财务 `kind`、小管家 `draft` 与 `settings=1`、消息 `view` 分段、投票 `create` / `pollId`、片单 `mediaId`、任务 `taskId` / `date`、菜谱 `dish`）不重复列入。
 
 ### F0 盘点表里仍未消费的深链
 
@@ -491,9 +492,7 @@ Phase F 收口时从各处备注收拢。下面只记还没做的；盘点之后
 
 | 页面 | 还没读的参数 |
 | --- | --- |
-| 菜谱 `/eat/recipes` | `?dish=`。⌘K 菜品结果会带上，页面不定位 |
 | 日历 `/schedule/calendar` | `date`、`eventId`。`view=month/week/agenda` 已经会读 |
-| 任务 `/schedule/tasks` | `taskId`、`date`。`create=1` 已在 F6 接上 |
 | 购物 `/house/shopping` | `date`。`create=1` 已在 F6 接上 |
 | 资产列表 `/house/assets` | 查询参数 `assetId`、`planId`。详情路径 `/:id` 已经有 |
 | 访客 `/house/guests` | `?visitId=`。公开邀请 `/guest/:token` 已支持 |
