@@ -16,7 +16,7 @@
 | 模型 | Hermes 配置 `longcat-2.0-free` / `opencode-zen`（免费模型），App 里**没有任何模型 / key 配置入口** |
 | 工具 | 30 个：23 读 + 7 `propose_*`；归属已全部在 manifest / `core-assistant.ts`（J1.6、J1b.5）；但**名单仍是手写字面量**（`AGENT_READ_TOOLS` / `AGENT_PROPOSAL_TOOLS`），MCP 的 `propose_plan` 入参联合也是手写（check-plugins 盯着一致） |
 | 提案 | `AgentProposalsService.executeWithinTransaction`：模型只能提案，成员确认才执行；提案组 `propose_plan` |
-| 会话 / 运行 / 事件 | `agent_conversations`、`agent_runs`、`agent_tool_events` 已有；前端 2 秒轮询 run 状态 |
+| 会话 / 运行 / 事件 | `agent_conversations`、`agent_runs`、`agent_tool_events` 已有；~~前端 2 秒轮询 run 状态~~（起草时写错：H2 起对话页已靠 `/events` 的 `changed` 刷新，没有按 run 轮询，J4.4 核实） |
 | 外围 | 记忆（2 个工具 + 候选 / 确认）、例行任务（`nightly_digest`、`weekly_report`，**确定性汇总拼正文，不经模型、不开 run**；起草时写的「用 runtime.chat 生成」不对，J4.5 核实后更正）、外部渠道（`/internal/agent/channels`，配对码） |
 | J2 已落的开关 | `agent_settings`：`enabled`（= 第 2 档）、`tier2DailyLimit`（50）、`tier2Redact`（true）、`captureUtterances`、`assistant_utterances` 表 |
 | agent 目录仍直接 import 各插件 Service | §9.5 点名留给 J4 |
@@ -87,8 +87,8 @@
 | J4.1 | 工具从 manifest 生成：`queries` → 读工具（走门面）、`actions(propose)` → `propose_*`；core-assistant 7 个；30 个旧名别名；agent 目录对插件 Service 的直接 import 全部改走门面（§9.5 那条）；`check-plugins` 断言「工具集合 == manifest 推导」 | M | `057baa8` | `cb9033f` | 分支 #37828855005、main #37832187109，均一次过 |
 | J4.2 | `NativeAgentRuntime` + `AgentService` 接线：会话 / 历史 / 允许的工具（按家庭模块开关裁剪，§3.3）/ 提案落库 / 事件写 `agent_tool_events`；`runtimeKind: 'native'`；`FakeAgentRuntime` 保留；全部 `agent*.mjs` 黑盒在 native 下通过（用 Fake provider 回放，不打真模型） | L | `6ec81c8` | `beaed76` | 分支 #37873196748、main #37874814358，均一次过 |
 | J4.3 | 云端档配置：`agent_settings` 新列 + 加密存 key；设置页「云端助理」分段加服务商下拉、模型、key（只显示末 4 位）、「测一下」（发一条 1 token 请求）、`tier2Scope`；每日上限与脱敏接到 AgentService；脱敏单测（真名 / 手机 / 车牌 / 卡号样式） | M | `25bf6a6` | `1cd65e0` | 分支 #37874906822、main #37876521864，均一次过 |
-| J4.4 | SSE：`/agent/runs/:id/events`（复用 H2 通道鉴权），前端小管家页消息区改订阅、去掉 2 秒轮询；取消按钮走 `cancel` | M | | | |
-| J4.5 | 外围回归：例行任务（nightly_digest / weekly_report）、外部渠道、记忆工具在 native 下跑通；用量报告加「云端档每日用量」；文档：§4 J4 ☑、§9.5 更新、family-guide 不动（试用期家里人看不到） | S | | | |
+| J4.4 | SSE：~~`/agent/runs/:id/events`~~ 按 H2 的命名规则复用 `/events`，事件名 `agent.run`（载荷 `{runId, conversationId, seq, type, …}`，type = text_delta / tool_call / tool_result / proposal / usage / error / done，只有增量与状态，只推给发起成员；契约 `contracts/src/events.ts`）；native 推全过程，fake / Hermes 只推 done；小管家页流式气泡、proposal / done 时重取会话详情，`/events` 断开且有回答在跑时退回 2 秒轮询（H2 起本来就没有按 run 轮询，`GET /agent/runs/*` 不存在）；标题下按运行方式写「本地家庭摘要 / 旧版云端 / 小管家自带 · 服务商」；取消走原 `cancel` | M | `7185cd2` | `540cab6` | 分支 #37958657014、main #37961976806，均一次过 |
+| J4.5 | 外围回归：外部渠道（配对、收发，tier2Scope 按消息所属成员判）、记忆工具（回放录制「记住 / 召回」）在 native 循环里跑通；例行任务在 native + 额度用完时照常——它们是确定性汇总、不经模型，**不受 scope、不受也不计入每日上限**（与指令「受每日上限影响且计入」不同，按实际行为断言）；每日上限计数与插入同事务、锁 `agent_settings` 行（10 并发只放行上限数，去锁反向验证放行 9 个）；用量报告云端段加「流式 run 占比」；deploy-c2 §4 ① 改为对仓库最后一个迁移；family-guide 不动 | S～M | `62de161`、`79549a0` | `764368e` | 分支 #37960811328（`62de161` 那次被新推送取消）、main #37965340669，均一次过 |
 | J4.6 | Hermes 下线（拍板 #8 的条件满足后）：删 runtime / compose / deploy/hermes / 契约脚本，迁移 `'hermes'` → `'native'`，升级脚本与 deploy-c2 相应改 | S | | | |
 
 验收总则：每笔前后 `agent*.mjs` 黑盒全过；J4.2 起用「录制回放」的 Fake provider 做确定性测试，真模型只在 J4.3 的「测一下」和 King 实测时碰；演示栈升级只在升级窗口，且 `tier2Scope=admins` 保证家里人无感。
