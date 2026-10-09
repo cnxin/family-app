@@ -256,6 +256,8 @@ export type BackupRunStatus =
 export type BackupRunTrigger = 'manual' | 'scheduled';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
 export type AgentRuntimeKind = 'fake' | 'hermes' | 'native';
+export type AgentProviderKind = 'deepseek' | 'qwen' | 'zhipu' | 'kimi' | 'custom';
+export type AgentTier2Scope = 'admins' | 'all';
 export type AgentResponseStyle = 'concise' | 'balanced' | 'detailed';
 export type AgentRoutineKind = 'nightly_digest' | 'weekly_report';
 export type AgentRoutineItemStatus = 'pending' | 'digested' | 'expired';
@@ -6780,6 +6782,11 @@ export class AgentChannelPairing {
   `"dailyRoutineNotificationLimit" BETWEEN 0 AND 50`,
 )
 @Check('CHK_agent_settings_tier2_daily_limit', `"tier2DailyLimit" BETWEEN 1 AND 1000`)
+@Check(
+  'CHK_agent_settings_provider_kind',
+  `"providerKind" IS NULL OR "providerKind" IN ('deepseek', 'qwen', 'zhipu', 'kimi', 'custom')`,
+)
+@Check('CHK_agent_settings_tier2_scope', `"tier2Scope" IN ('admins', 'all')`)
 export class AgentSetting {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -6839,6 +6846,30 @@ export class AgentSetting {
   /** 是否记录助理原话（assistant_utterances）；关掉后 ⌘K 不再落表。 */
   @Column({ type: 'boolean', default: true })
   captureUtterances: boolean;
+
+  /** J4.3 云端档（第 2 档）的 OpenAI 兼容服务：服务商、地址、模型；key 用 AGENT_DATA_KEY 加密后存。 */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  providerKind: AgentProviderKind | null;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  providerBaseUrl: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  providerModel: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  providerKeyEncrypted: string | null;
+
+  /** 「测一下」的时间与结果；改了服务商、地址、模型或 key 都会清掉，切到 native 前必须是 true。 */
+  @Column({ type: 'timestamptz', nullable: true })
+  providerCheckedAt: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  providerCheckOk: boolean;
+
+  /** 第 2 档对谁开放：admins 时普通成员看到的小管家是关着的（试用期默认）。 */
+  @Column({ type: 'varchar', length: 8, default: 'admins' })
+  tier2Scope: AgentTier2Scope;
 
   @Column({
     type: 'jsonb',
@@ -7225,6 +7256,7 @@ export class AgentMessage {
   `"status" IN ('queued', 'running', 'completed', 'failed', 'cancelled')`,
 )
 @Check('CHK_agent_runs_runtime_kind', `"runtimeKind" IN ('fake', 'hermes', 'native')`)
+@Check('CHK_agent_runs_tier', `"tier" IS NULL OR "tier" BETWEEN 0 AND 2`)
 @Check(
   'CHK_agent_runs_tokens',
   `("inputTokens" IS NULL OR "inputTokens" >= 0) AND ("outputTokens" IS NULL OR "outputTokens" >= 0)`,
@@ -7333,6 +7365,14 @@ export class AgentRun {
 
   @Column({ type: 'varchar', length: 300, nullable: true })
   errorMessage: string | null;
+
+  /** 助理档位（J4.3）：云端运行方式（hermes / native）的 run 记 2，本地确定性助理留空；每日上限按它数。 */
+  @Column({ type: 'smallint', nullable: true })
+  tier: number | null;
+
+  /** 这次发给模型前是否做了脱敏（tier2Redact，native 才做）。 */
+  @Column({ type: 'boolean', default: false })
+  redacted: boolean;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

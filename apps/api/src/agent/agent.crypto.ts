@@ -107,3 +107,36 @@ export function decryptAgentMemoryContent(
     decipher.final(),
   ]).toString('utf8');
 }
+
+function providerKeyAdditionalData(householdId: string) {
+  return Buffer.from(`agent-provider-key:${householdId}`, 'utf8');
+}
+
+/**
+ * 云端档服务商的 key（J4.3）：和对话内容同一把 AGENT_DATA_KEY、同样的 AES-256-GCM，附加数据绑定家庭；
+ * 存成一列 `v1:<nonce>:<密文>`。没配 AGENT_DATA_KEY 时返回 null（调用方拒绝保存）。
+ */
+export function encryptProviderKey(key: string, householdId: string) {
+  const dataKey = agentDataKey();
+  if (!dataKey) return null;
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', dataKey, nonce);
+  cipher.setAAD(providerKeyAdditionalData(householdId));
+  const ciphertext = Buffer.concat([cipher.update(key, 'utf8'), cipher.final(), cipher.getAuthTag()]);
+  return `v1:${nonce.toString('base64')}:${ciphertext.toString('base64')}`;
+}
+
+export function decryptProviderKey(stored: string, householdId: string) {
+  const dataKey = agentDataKey();
+  const [version, nonce, ciphertext] = stored.split(':');
+  if (!dataKey || version !== 'v1' || !nonce || !ciphertext) return null;
+  const payload = Buffer.from(ciphertext, 'base64');
+  if (payload.length < 17) return null;
+  const decipher = createDecipheriv('aes-256-gcm', dataKey, Buffer.from(nonce, 'base64'));
+  decipher.setAAD(providerKeyAdditionalData(householdId));
+  decipher.setAuthTag(payload.subarray(payload.length - 16));
+  return Buffer.concat([
+    decipher.update(payload.subarray(0, payload.length - 16)),
+    decipher.final(),
+  ]).toString('utf8');
+}

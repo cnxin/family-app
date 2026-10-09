@@ -35,6 +35,29 @@ export const AGENT_RUNTIME_KINDS = ['fake', 'hermes', 'native'] as const;
 export const agentRuntimeKind = z.enum(AGENT_RUNTIME_KINDS);
 export type AgentRuntimeKind = z.infer<typeof agentRuntimeKind>;
 
+/** J4.3 云端档（第 2 档）的 OpenAI 兼容服务商；custom 自己填地址和模型。 */
+export const AGENT_PROVIDER_KINDS = ['deepseek', 'qwen', 'zhipu', 'kimi', 'custom'] as const;
+export const agentProviderKind = z.enum(AGENT_PROVIDER_KINDS);
+export type AgentProviderKind = z.infer<typeof agentProviderKind>;
+
+/**
+ * 预填的地址与推荐模型（可改）。与 packages/agent-core 的 providerQuirks 一致（agent-tools.check.ts 核对）；
+ * custom 没有预填。
+ */
+export const AGENT_PROVIDER_PRESETS: Readonly<
+  Record<Exclude<AgentProviderKind, 'custom'>, { label: string; baseUrl: string; model: string }>
+> = {
+  deepseek: { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+  qwen: { label: '通义千问（百炼）', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+  zhipu: { label: '智谱', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-plus' },
+  kimi: { label: 'Kimi（月之暗面）', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+};
+
+/** 第 2 档对谁开放：admins 时普通成员看到的小管家是关着的（试用期默认）。 */
+export const AGENT_TIER2_SCOPES = ['admins', 'all'] as const;
+export const agentTier2Scope = z.enum(AGENT_TIER2_SCOPES);
+export type AgentTier2Scope = z.infer<typeof agentTier2Scope>;
+
 export const AGENT_RESPONSE_STYLES = ['concise', 'balanced', 'detailed'] as const;
 export const agentResponseStyle = z.enum(AGENT_RESPONSE_STYLES);
 export type AgentResponseStyle = z.infer<typeof agentResponseStyle>;
@@ -206,10 +229,28 @@ export const agentSettingsSchema = z.object({
   tier2Redact: z.boolean(),
   /** 是否记录助理原话（assistant_utterances）。 */
   captureUtterances: z.boolean(),
+  /** J4.3 云端档：服务商、地址、模型；key 只回是否已配置与末 4 位，原文不出服务器。 */
+  providerKind: agentProviderKind.nullable(),
+  providerBaseUrl: z.string().nullable(),
+  providerModel: z.string().nullable(),
+  providerKeyConfigured: z.boolean(),
+  providerKeyLast4: z.string().nullable(),
+  /** 「测一下」的时间与结果；改了服务商、地址、模型或 key 都会清掉。切到 native 前必须是 true。 */
+  providerCheckedAt: nullableDateTime,
+  providerCheckOk: z.boolean(),
+  tier2Scope: agentTier2Scope,
   version: z.number().int(),
   updatedAt: isoDateTime,
 });
 export type AgentSettings = z.infer<typeof agentSettingsSchema>;
+
+/** POST /agent/settings/provider-check：ok 与服务商原文（key 已打码），连同更新后的设置。 */
+export const agentProviderCheckSchema = z.object({
+  ok: z.boolean(),
+  message: z.string().nullable(),
+  settings: agentSettingsSchema,
+});
+export type AgentProviderCheck = z.infer<typeof agentProviderCheckSchema>;
 
 /** presentRoutine()；lastRunAt 在轮询器跑过一次之后才非 null。 */
 export const agentRoutineSchema = z.object({
@@ -543,8 +584,16 @@ export const updateAgentSettingsBody = z.object({
   tier2DailyLimit: z.number().int().min(1).max(1000).optional(),
   tier2Redact: z.boolean().optional(),
   captureUtterances: z.boolean().optional(),
+  /** J4.3：服务商非 custom 时没传的地址 / 模型按预设填。null 清空。 */
+  providerKind: agentProviderKind.nullable().optional(),
+  providerBaseUrl: z.url({ protocol: /^https?$/ }).max(300).nullable().optional(),
+  providerModel: z.string().trim().max(120).nullable().optional(),
+  /** 新 key 原文：只写不读，存库前加密；null 清掉。 */
+  providerKey: z.string().trim().min(8).max(300).nullable().optional(),
+  tier2Scope: agentTier2Scope.optional(),
   expectedVersion,
 });
+export type UpdateAgentSettingsBody = z.infer<typeof updateAgentSettingsBody>;
 
 export const updateAgentRoutineBody = z.object({
   enabled: z.boolean().optional(),
@@ -651,6 +700,12 @@ export const agent = {
     summary: '修改设置（乐观锁；管理员）',
     body: updateAgentSettingsBody,
     response: agentSettingsSchema,
+  }),
+  checkProvider: defineEndpoint({
+    method: 'POST',
+    path: '/agent/settings/provider-check',
+    summary: '测一下云端模型：按当前配置发一条 max_tokens=1 的请求（管理员）',
+    response: agentProviderCheckSchema,
   }),
   routines: defineEndpoint({
     method: 'GET',

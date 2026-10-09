@@ -1,5 +1,5 @@
 {
-  "note": "J4.2 native 黑盒（agent-native.mjs）的回放套件：成员原话包含 match 就回放对应录制；其余走剧本模型（照本地确定性助理的剧本），让全部 agent*.mjs 在 native 下也能跑。只在测试模式经 AGENT_NATIVE_PROVIDER=replay:<本文件> 生效。",
+  "note": "J4.2 native 黑盒（agent-native.mjs）的回放套件：成员原话包含 match 就回放对应录制；其余走剧本模型（照本地确定性助理的剧本），让全部 agent*.mjs 在 native 下也能跑。只在测试模式经 AGENT_NATIVE_PROVIDER=replay:<本文件> 生效。 原话含「（走家里配的模型）」的改走家庭配置的模型（agent-cloud.mjs 借假模型服务看发出去的内容有没有脱敏）。",
   "scenarios": [
     {
       "match": "记一笔 38 买菜",
@@ -18,6 +18,10 @@
       "match": "慢慢想一想",
       "recording": "slow.json",
       "latencyMs": 2000
+    },
+    {
+      "match": "（走家里配的模型）",
+      "use": "configured"
     }
   ],
   "fallback": "scripted"

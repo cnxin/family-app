@@ -8,8 +8,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ToolRegistry, toJsonSchema, type ModelEvent } from '@family/agent-core';
+import { ToolRegistry, providerQuirks, toJsonSchema, type ModelEvent } from '@family/agent-core';
 import {
+  AGENT_PROVIDER_KINDS,
+  AGENT_PROVIDER_PRESETS,
   AGENT_MEMORY_TOOLS,
   AGENT_PROPOSAL_TOOLS,
   AGENT_READ_TOOLS,
@@ -260,6 +262,18 @@ void (async () => {
     assert.equal(second[0].type === 'text_delta' && second[0].text, step.kind === 'tool' ? step.render(result) : '');
     const closed = await collect({ messages: [{ role: 'user', content: '今天吃什么' }], tools: [] });
     assert.deepEqual(closed.map((event) => event.type), ['text_delta', 'done']);
+  });
+
+  console.log('云端档服务商（J4.3）');
+  await check('契约里的服务商预设 == agent-core 差异表的预填地址与推荐模型；每个非 custom 服务商都有差异表', () => {
+    for (const kind of AGENT_PROVIDER_KINDS.filter((one) => one !== 'custom')) {
+      const preset = AGENT_PROVIDER_PRESETS[kind as Exclude<typeof kind, 'custom'>];
+      const quirks = providerQuirks[kind as keyof typeof providerQuirks] as { defaultBaseUrl?: string; recommendedModel?: string; label: string };
+      assert.ok(quirks, `${kind} 没有差异表`);
+      assert.equal(preset.baseUrl, quirks.defaultBaseUrl, kind);
+      assert.equal(preset.model, quirks.recommendedModel, kind);
+      assert.equal(preset.label, quirks.label, kind);
+    }
   });
 
   console.log(`小管家工具单测通过：${passed} 项`);
