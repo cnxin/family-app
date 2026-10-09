@@ -30,6 +30,8 @@ export interface AgentChatInput {
   message: string;
   allowedTools: string[];
   history: { role: 'user' | 'assistant'; content: string }[];
+  /** 不可信内容（页面上下文、检索结果、记忆……）：native 运行时加围栏后交给模型，不拼进成员原话。 */
+  untrusted?: { label: string; content: string }[];
 }
 
 export interface AgentChatResult {
@@ -46,7 +48,7 @@ export interface AgentRuntimeHealth {
 }
 
 export interface AgentRuntime {
-  readonly kind: 'fake' | 'hermes';
+  readonly kind: 'fake' | 'hermes' | 'native';
   readonly version: string;
   health(): Promise<AgentRuntimeHealth>;
   chat(input: AgentChatInput): Promise<AgentChatResult>;

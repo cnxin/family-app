@@ -1,0 +1,24 @@
+{
+  "note": "J4.2 native 黑盒（agent-native.mjs）的回放套件：成员原话包含 match 就回放对应录制；其余走剧本模型（照本地确定性助理的剧本），让全部 agent*.mjs 在 native 下也能跑。只在测试模式经 AGENT_NATIVE_PROVIDER=replay:<本文件> 生效。",
+  "scenarios": [
+    {
+      "match": "记一笔 38 买菜",
+      "recording": "../../../../../packages/agent-core/tests/recordings/deepseek-finance.json",
+      "chunkSize": 11
+    },
+    {
+      "match": "今天吃什么",
+      "recording": "meal-plan.json"
+    },
+    {
+      "match": "把所有事情都查一遍",
+      "recording": "max-steps.json"
+    },
+    {
+      "match": "慢慢想一想",
+      "recording": "slow.json",
+      "latencyMs": 2000
+    }
+  ],
+  "fallback": "scripted"
+}

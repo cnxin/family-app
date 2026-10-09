@@ -4,7 +4,8 @@ import { once } from 'node:events';
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const API_PORT = Number(process.env.TEST_API_PORT || 3199);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
@@ -28,6 +29,8 @@ const testEnvironment = {
   AGENT_ROUTINE_POLL_INTERVAL_MS: '100',
   FINANCE_RECURRING_POLL_INTERVAL_MS: '200',
   AGENT_RUNTIME_KEY: 'family-app-api-test-runtime-key',
+  // J4.2：native 运行时的模型在测试里换成回放套件（按原话挑录制，其余走剧本模型），只在测试模式生效
+  AGENT_NATIVE_PROVIDER: `replay:${join(dirname(fileURLToPath(import.meta.url)), 'fixtures/agent-native/suite.json')}`,
   AGENT_RUNTIME_URL: 'http://127.0.0.1:3200',
   REFRESH_TOKEN_EXPIRES_SECONDS: '2592000',
   REMINDER_POLL_INTERVAL_MS: '200',
@@ -105,13 +108,14 @@ async function runProcess(command, args) {
 }
 
 const timings = [];
+let timingLabel = '';
 
 async function runScript(path, ...args) {
   const startedAt = Date.now();
   try {
     await runProcess(process.execPath, [path, ...args]);
   } finally {
-    timings.push({ script: path.replace(/^scripts\//, ''), ms: Date.now() - startedAt });
+    timings.push({ script: `${path.replace(/^scripts\//, '')}${timingLabel}`, ms: Date.now() - startedAt });
   }
 }
 
@@ -144,6 +148,7 @@ const BUSINESS_SCRIPTS = [
   'agent-tools',
   'agent-routines',
   'agent-proposal-groups',
+  'agent-native',
   'travel',
   'members-activities',
   'media',
@@ -177,16 +182,22 @@ const BUSINESS_SCRIPTS = [
 ];
 
 function parseCliOptions(argv) {
-  const options = { only: null, list: false };
+  const options = { only: null, list: false, agentRuntime: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--list') options.list = true;
+    // --agent-runtime=native：本地确定性助理改由 native 循环 + 剧本模型执行；both：先照常跑，再换干净的库在 native 下
+    // 把选中的 agent*.mjs 跑第二遍（全量模式默认就是 both）
+    else if (argument.startsWith('--agent-runtime=')) options.agentRuntime = argument.slice('--agent-runtime='.length);
     else if (argument === '--only') {
       options.only = (argv[index + 1] ?? '').split(',');
       index += 1;
     } else if (argument.startsWith('--only=')) {
       options.only = argument.slice('--only='.length).split(',');
     }
+  }
+  if (options.agentRuntime && !['native', 'both'].includes(options.agentRuntime)) {
+    throw new Error(`--agent-runtime 只认 native / both：${options.agentRuntime}`);
   }
   if (options.only) {
     options.only = options.only.map((name) => name.trim().replace(/\.mjs$/, '')).filter(Boolean);
@@ -222,6 +233,10 @@ const selectedScripts = cliOptions.only
   ? BUSINESS_SCRIPTS.filter((name) => cliOptions.only.includes(name))
   : BUSINESS_SCRIPTS;
 const fullRun = !cliOptions.only;
+if (cliOptions.agentRuntime === 'native') testEnvironment.AGENT_TEST_RUNTIME = 'native';
+/** J4.2：在 native 运行时下再跑一遍的脚本——选中的 agent*.mjs（全量即全部）。 */
+const AGENT_SCRIPTS = selectedScripts.filter((name) => name.startsWith('agent'));
+const nativeSecondPass = (fullRun || cliOptions.agentRuntime === 'both') && AGENT_SCRIPTS.length > 0;
 
 function startApi() {
   activeApiOutput = '';
@@ -326,13 +341,13 @@ async function stopApi() {
   api = null;
 }
 
-const admin = new Client({
+const DB_CONNECTION = {
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
   user: process.env.DB_USER || 'family',
   password: process.env.DB_PASSWORD || 'family123',
-  database: 'postgres',
-});
+};
+const admin = new Client({ ...DB_CONNECTION, database: 'postgres' });
 let api = null;
 let databaseCreated = false;
 let activeApiOutput = '';
@@ -440,10 +455,47 @@ try {
 
   if (fullRun) {
     await stopApi();
+    const loginRateLimit = testEnvironment.LOGIN_RATE_LIMIT;
     testEnvironment.LOGIN_RATE_LIMIT = '3';
     api = startApi();
     await waitForApi(api);
     await runScript('scripts/login-rate-limit.mjs');
+
+    await stopApi();
+    testEnvironment.LOGIN_RATE_LIMIT = loginRateLimit;
+  }
+  if (nativeSecondPass) {
+    // J4.2 第二遍：全部 agent*.mjs 在 native 运行时下再跑一遍——本地助理的剧本改由 native 循环 + 剧本模型执行，
+    // agent-native 用回放录制。黑盒不能在同一个库上重跑（固定日期的数据会撞），所以换干净的库：灌种子、
+    // 补跑三个 agent 黑盒的迁移演练（agent-profiles 等的 API 阶段要用它们造的历史数据），再起 API。
+    await stopApi();
+    await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1', [TEST_DATABASE]);
+    await admin.query(`DROP DATABASE "${TEST_DATABASE}"`);
+    await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'src/seed.ts']);
+    testEnvironment.AGENT_TEST_RUNTIME = 'native';
+    timingLabel = '（native）';
+    console.log(`\n第二遍：${AGENT_SCRIPTS.join('、')} 在 native 运行时下（干净的库）`);
+    for (const name of ['agent-proposal-groups', 'agent-routines', 'agent-profiles']) {
+      if (AGENT_SCRIPTS.includes(name)) await runScript(`scripts/${name}.mjs`, '--migration');
+    }
+    api = startApi();
+    await waitForApi(api);
+    for (const name of AGENT_SCRIPTS) {
+      await runScript(`scripts/${name}.mjs`);
+    }
+    // 确认第二遍真的走了 native：经 API 开的 run，运行时版本全是 native 循环，没有一个是本地确定性助理
+    const verify = new Client({ ...DB_CONNECTION, database: TEST_DATABASE });
+    await verify.connect();
+    const versions = Object.fromEntries((await verify.query(
+      `SELECT "runtimeVersion" AS version, COUNT(*)::int AS count FROM agent_runs
+        WHERE "runtimeVersion" IN ('family-fake-2', 'native-loop-1') GROUP BY 1`,
+    )).rows.map((row) => [row.version, row.count]));
+    await verify.end();
+    if (versions['family-fake-2'] || !versions['native-loop-1']) {
+      throw new Error(`断言失败: 第二遍的 run 没有全部走 native（${JSON.stringify(versions)}）`);
+    }
+    console.log(`  ✓ 第二遍经 API 开的 ${versions['native-loop-1']} 个 run 全部走 native 循环（runtimeVersion=native-loop-1）`);
   }
 } finally {
   printTimings();

@@ -255,7 +255,7 @@ export type BackupRunStatus =
   | 'cancelled';
 export type BackupRunTrigger = 'manual' | 'scheduled';
 export type BackupCapacityStatus = 'unknown' | 'ok' | 'warning' | 'critical';
-export type AgentRuntimeKind = 'fake' | 'hermes';
+export type AgentRuntimeKind = 'fake' | 'hermes' | 'native';
 export type AgentResponseStyle = 'concise' | 'balanced' | 'detailed';
 export type AgentRoutineKind = 'nightly_digest' | 'weekly_report';
 export type AgentRoutineItemStatus = 'pending' | 'digested' | 'expired';
@@ -6773,7 +6773,7 @@ export class AgentChannelPairing {
 
 @Entity('agent_settings')
 @Unique('UQ_agent_settings_household', ['householdId'])
-@Check('CHK_agent_settings_runtime_kind', `"runtimeKind" IN ('fake', 'hermes')`)
+@Check('CHK_agent_settings_runtime_kind', `"runtimeKind" IN ('fake', 'hermes', 'native')`)
 @Check('CHK_agent_settings_retention_days', `"retentionDays" BETWEEN 1 AND 30`)
 @Check(
   'CHK_agent_settings_daily_routine_notification_limit',
@@ -7224,7 +7224,7 @@ export class AgentMessage {
   'CHK_agent_runs_status',
   `"status" IN ('queued', 'running', 'completed', 'failed', 'cancelled')`,
 )
-@Check('CHK_agent_runs_runtime_kind', `"runtimeKind" IN ('fake', 'hermes')`)
+@Check('CHK_agent_runs_runtime_kind', `"runtimeKind" IN ('fake', 'hermes', 'native')`)
 @Check(
   'CHK_agent_runs_tokens',
   `("inputTokens" IS NULL OR "inputTokens" >= 0) AND ("outputTokens" IS NULL OR "outputTokens" >= 0)`,

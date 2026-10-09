@@ -23,6 +23,7 @@ import { AgentController } from './agent.controller';
 import { AgentChannelInternalController } from './agent-channel-internal.controller';
 import { AgentMcpController } from './agent-mcp.controller';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
+import { NativeAgentRuntime } from './native/native-runtime';
 import { AgentService } from './agent.service';
 import { AgentToolsService } from './agent-tools.service';
 import { AgentProposalsService } from './agent-proposals.service';
@@ -71,6 +72,7 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
     AgentToolsService,
     FakeAgentRuntime,
     HermesAgentRuntime,
+    NativeAgentRuntime,
     AgentProposalsService,
     AgentChannelsService,
     AgentRetentionService,

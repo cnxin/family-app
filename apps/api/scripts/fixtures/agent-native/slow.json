@@ -1,0 +1,36 @@
+{
+  "provider": "generic",
+  "source": "simulated",
+  "note": "模拟录制：很慢的回答（套件里每个事件前等 2 秒），用来测取消。",
+  "exchanges": [
+    {
+      "note": "作答",
+      "response": {
+        "events": [
+          {
+            "type": "text_delta",
+            "text": "让我"
+          },
+          {
+            "type": "text_delta",
+            "text": "慢慢"
+          },
+          {
+            "type": "text_delta",
+            "text": "想一想……"
+          },
+          {
+            "type": "usage",
+            "inputTokens": 300,
+            "outputTokens": 8
+          },
+          {
+            "type": "done",
+            "finishReason": "stop",
+            "rawFinishReason": "stop"
+          }
+        ]
+      }
+    }
+  ]
+}

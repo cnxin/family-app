@@ -15,6 +15,10 @@ export type AssistantUtteranceSource = z.infer<typeof assistantUtteranceSource>;
 /**
  * 一次输入怎么结束：navigated 点了某条；proposed 生成了提案（J3 起）；candidates 有候选但没点就关了；
  * no_match 没有候选；dismissed 输过字又全删掉再关。
+ *
+ * source = agent_chat（小管家对话，服务端在 run 结束时记，tier = 2，J4.2）只用三种：
+ * proposed 这次 run 产生了提案或提案组；dismissed run 失败或被取消；no_match 只回答、没有动作。
+ * navigated / candidates 不适用；重试不再记。
  */
 export const ASSISTANT_UTTERANCE_OUTCOMES = ['navigated', 'proposed', 'candidates', 'no_match', 'dismissed'] as const;
 export const assistantUtteranceOutcome = z.enum(ASSISTANT_UTTERANCE_OUTCOMES);

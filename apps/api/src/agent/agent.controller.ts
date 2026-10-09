@@ -75,8 +75,8 @@ class UpdateAgentSettingsDto {
   enabled?: boolean;
 
   @IsOptional()
-  @IsIn(['fake', 'hermes'])
-  runtimeKind?: 'fake' | 'hermes';
+  @IsIn(['fake', 'hermes', 'native'])
+  runtimeKind?: 'fake' | 'hermes' | 'native';
 
   @IsOptional()
   @IsString()

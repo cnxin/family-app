@@ -1,0 +1,57 @@
+{
+  "provider": "generic",
+  "source": "simulated",
+  "note": "模拟录制：只读路径「今天吃什么」——查今天的菜单后作答，不提案。",
+  "exchanges": [
+    {
+      "note": "第 1 步：调 get_meal_plan",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_1",
+              "name": "get_meal_plan",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 620,
+            "outputTokens": 9
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "作答",
+      "response": {
+        "events": [
+          {
+            "type": "text_delta",
+            "text": "今天的菜单还没定，"
+          },
+          {
+            "type": "text_delta",
+            "text": "想吃什么可以直接点。"
+          },
+          {
+            "type": "usage",
+            "inputTokens": 700,
+            "outputTokens": 14
+          },
+          {
+            "type": "done",
+            "finishReason": "stop",
+            "rawFinishReason": "stop"
+          }
+        ]
+      }
+    }
+  ]
+}
