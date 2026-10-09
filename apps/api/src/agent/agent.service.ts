@@ -10,6 +10,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
+import { hasCapability, type Capability } from '../auth/capabilities';
 import { JwtUser } from '../auth/jwt.guard';
 import { agentDataKey } from '../common/config';
 import {
@@ -22,9 +23,13 @@ import {
   AgentMemberProfile,
   AgentResponseStyle,
   AgentToolEvent,
+  AssistantUtteranceRecord,
 } from '../entities';
 import { decryptAgentContent, encryptAgentContent } from './agent.crypto';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
+import { AgentRunError, NativeAgentRuntime } from './native/native-runtime';
+import { isolatedTestMode } from './native/provider-factory';
+import { modulesTurnedOff, toolAccess } from './tool-access';
 import {
   AGENT_MEMORY_TOOLS,
   AGENT_PROPOSAL_TOOLS,
@@ -99,21 +104,24 @@ export class AgentService {
     private readonly dataSource: DataSource,
     private readonly fakeRuntime: FakeAgentRuntime,
     private readonly hermesRuntime: HermesAgentRuntime,
+    private readonly nativeRuntime: NativeAgentRuntime,
     private readonly proposals: AgentProposalsService,
   ) {}
 
   async status(user: JwtUser) {
     const setting = await this.ensureSettings(user);
-    const [fake, hermes] = await Promise.all([
+    const [fake, hermes, native] = await Promise.all([
       this.fakeRuntime.health(),
       this.hermesRuntime.health(),
+      this.nativeRuntime.health(),
     ]);
-    const selected = setting.runtimeKind === 'hermes' ? hermes : fake;
+    const runtimes = { fake, hermes, native };
+    const selected = runtimes[setting.runtimeKind];
     return {
       enabled: setting.enabled,
       runtimeKind: setting.runtimeKind,
       selected,
-      runtimes: { fake, hermes },
+      runtimes,
       fallbackAvailable: fake.available,
       persistenceEncrypted: encryptAgentContent(
         '',
@@ -423,6 +431,14 @@ export class AgentService {
       throw new ServiceUnavailableException('对话加密尚未配置');
     }
     const conversation = await this.requireConversation(conversationId, user, true);
+    const allowedTools = await this.allowedTools(
+      [
+        ...setting.readToolsEnabled,
+        ...setting.proposalToolsEnabled,
+        ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
+      ],
+      user,
+    );
 
     const existing = await this.runs.findOneBy({
       householdId: user.householdId,
@@ -451,17 +467,10 @@ export class AgentService {
             agentProfileId: profile.id,
             clientRequestId: key,
             runtimeKind: setting.runtimeKind,
-            runtimeVersion:
-              setting.runtimeKind === 'hermes'
-                ? this.hermesRuntime.version
-                : this.fakeRuntime.version,
+            runtimeVersion: this.runtime(setting.runtimeKind).version,
             modelAlias: setting.modelAlias,
             status: 'queued',
-            allowedTools: [
-              ...setting.readToolsEnabled,
-              ...setting.proposalToolsEnabled,
-              ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
-            ],
+            allowedTools,
             authorizationExpiresAt: new Date(
               Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
             ),
@@ -595,6 +604,7 @@ export class AgentService {
       throw new ConflictException('消息渠道会话已经结束');
     }
 
+    const channelTools = await this.allowedTools([...setting.readToolsEnabled], user);
     const existing = await this.runs.findOneBy({
       householdId: channel.householdId,
       clientRequestId: key,
@@ -622,13 +632,10 @@ export class AgentService {
             agentProfileId: profile.id,
             clientRequestId: key,
             runtimeKind: setting.runtimeKind,
-            runtimeVersion:
-              setting.runtimeKind === 'hermes'
-                ? this.hermesRuntime.version
-                : this.fakeRuntime.version,
+            runtimeVersion: this.runtime(setting.runtimeKind).version,
             modelAlias: setting.modelAlias,
             status: 'queued',
-            allowedTools: [...setting.readToolsEnabled],
+            allowedTools: channelTools,
             authorizationExpiresAt: new Date(
               Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
             ),
@@ -799,17 +806,17 @@ export class AgentService {
           clientRequestId: key,
           retryOfRunId: original.id,
           runtimeKind: setting.runtimeKind,
-          runtimeVersion:
-            setting.runtimeKind === 'hermes'
-              ? this.hermesRuntime.version
-              : this.fakeRuntime.version,
+          runtimeVersion: this.runtime(setting.runtimeKind).version,
           modelAlias: setting.modelAlias,
           status: 'queued',
-          allowedTools: [
-            ...setting.readToolsEnabled,
-            ...setting.proposalToolsEnabled,
-            ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
-          ],
+          allowedTools: await this.allowedTools(
+            [
+              ...setting.readToolsEnabled,
+              ...setting.proposalToolsEnabled,
+              ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
+            ],
+            user,
+          ),
           authorizationExpiresAt: new Date(
             Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
           ),
@@ -850,9 +857,53 @@ export class AgentService {
     try {
       await this.processRunUnpublished(runId, message);
     } finally {
-      const run = await this.runs.findOne({ where: { id: runId }, select: { id: true, householdId: true } });
-      if (run) this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
+      const run = await this.runs.findOneBy({ id: runId });
+      if (run) {
+        await this.recordUtterance(run, message).catch(() => undefined);
+        this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
+      }
     }
+  }
+
+  /**
+   * 会话入口的原话也落 assistant_utterances（J2 的表，source = agent_chat，tier = 2），按 run 结果记 outcome：
+   * 产生了提案 → proposed；失败 / 取消 → dismissed；只回答、没动作 → no_match。家里关了「记录原话」就不记；
+   * 重试不是新的一句话，不再记。
+   */
+  private async recordUtterance(run: AgentRun, message: string) {
+    if (run.retryOfRunId || !['completed', 'failed', 'cancelled'].includes(run.status)) return;
+    const setting = await this.settings.findOneBy({ householdId: run.householdId });
+    if (!setting?.captureUtterances) return;
+    const text = message.trim().slice(0, 200);
+    if (!text) return;
+    let outcome: 'proposed' | 'dismissed' | 'no_match' = 'dismissed';
+    if (run.status === 'completed') {
+      const [row]: { proposed: boolean }[] = await this.dataSource.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM agent_action_proposals WHERE "runId" = $1
+           UNION ALL SELECT 1 FROM agent_proposal_groups WHERE "runId" = $1
+         ) AS proposed`,
+        [run.id],
+      );
+      outcome = row.proposed ? 'proposed' : 'no_match';
+    }
+    await this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(AssistantUtteranceRecord)
+      .values({
+        householdId: run.householdId,
+        memberId: run.requestedByMemberId,
+        // 一个 run 只记一次
+        clientId: run.id,
+        text,
+        source: 'agent_chat',
+        tier: 2,
+        outcome,
+        createdAt: new Date(),
+      })
+      .orIgnore()
+      .execute();
   }
 
   private async processRunUnpublished(
@@ -910,7 +961,7 @@ export class AgentService {
         if (current?.status === 'cancelled') return;
         if (run.runtimeKind !== 'hermes') throw error;
         fallback = true;
-        result = await this.fakeRuntime.chat({
+        result = await this.runtime('fake').chat({
           runId: run.id,
           modelAlias: run.modelAlias,
           message,
@@ -961,17 +1012,35 @@ export class AgentService {
       await this.runs.update(run.id, {
         status: 'failed',
         finishedAt: new Date(),
-        errorCode: 'AGENT_RUN_FAILED',
+        // native 循环的失败带自己的代码（超步数、超时、模型不可用……），其余照旧
+        errorCode: error instanceof AgentRunError ? error.code : 'AGENT_RUN_FAILED',
         errorMessage:
-          error instanceof ServiceUnavailableException
-            ? '智能体运行时暂时不可用'
-            : '小管家暂时无法完成这次回答',
+          error instanceof AgentRunError
+            ? error.message
+            : error instanceof ServiceUnavailableException
+              ? '智能体运行时暂时不可用'
+              : '小管家暂时无法完成这次回答',
       });
     }
   }
 
   private runtime(kind: AgentRuntimeKind): AgentRuntime {
-    return kind === 'hermes' ? this.hermesRuntime : this.fakeRuntime;
+    if (kind === 'hermes') return this.hermesRuntime;
+    if (kind === 'native') return this.nativeRuntime;
+    // 测试开关：隔离测试库里 AGENT_TEST_RUNTIME=native 时，本地确定性助理改由 native 循环 + 剧本模型执行，
+    // 全部 agent*.mjs 黑盒照原样再跑一遍（run 上记的仍是 fake）
+    if (process.env.AGENT_TEST_RUNTIME === 'native' && isolatedTestMode()) return this.nativeRuntime;
+    return this.fakeRuntime;
+  }
+
+  /**
+   * 本次 run 能用的工具：家庭开着的读 / 提案工具（调用方给）∩ 模块开关（插件被关掉，它的工具一起消失）
+   * ∩ 成员能力（manifest 里查询 / 动作声明的能力，例如 get_finance_summary 要 view_finance）。
+   */
+  private async allowedTools(candidates: readonly string[], user: JwtUser) {
+    const off = await modulesTurnedOff(this.dataSource, user.householdId);
+    const can = (capability: string) => hasCapability(user, capability as Capability);
+    return candidates.filter((tool) => toolAccess(tool, off, can) === 'ok');
   }
 
   private isRetryableStatus(run: AgentRun) {

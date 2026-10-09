@@ -1,0 +1,232 @@
+{
+  "provider": "generic",
+  "source": "simulated",
+  "note": "模拟录制：模型一直要调工具，第 8 步之后循环按 maxSteps 上限停下（run 失败，代码 AGENT_MAX_STEPS）。",
+  "exchanges": [
+    {
+      "note": "第 1 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_1",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 501,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 2 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_2",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 502,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 3 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_3",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 503,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 4 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_4",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 504,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 5 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_5",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 505,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 6 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_6",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 506,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 7 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_7",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 507,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 8 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_8",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 508,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "第 9 步：调 get_today_summary",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_9",
+              "name": "get_today_summary",
+              "arguments": "{}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 509,
+            "outputTokens": 6
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    }
+  ]
+}

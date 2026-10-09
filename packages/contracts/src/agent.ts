@@ -31,7 +31,7 @@ import { defineEndpoint } from './registry';
 //    `messages` 永远为空，契约不会报。Phase 3 把调度抽成可控的（测试里能同步 drain 队列）之后，
 //    这些放宽应该收回来。
 
-export const AGENT_RUNTIME_KINDS = ['fake', 'hermes'] as const;
+export const AGENT_RUNTIME_KINDS = ['fake', 'hermes', 'native'] as const;
 export const agentRuntimeKind = z.enum(AGENT_RUNTIME_KINDS);
 export type AgentRuntimeKind = z.infer<typeof agentRuntimeKind>;
 
@@ -174,6 +174,8 @@ export const agentStatusSchema = z.object({
   runtimes: z.object({
     fake: agentRuntimeHealthSchema,
     hermes: agentRuntimeHealthSchema,
+    /** J4.2 小管家自带的循环。 */
+    native: agentRuntimeHealthSchema,
   }),
   fallbackAvailable: z.boolean(),
   persistenceEncrypted: z.boolean(),

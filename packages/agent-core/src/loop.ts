@@ -7,6 +7,15 @@ import { ProviderError } from './errors';
 import type { ToolError, ToolRegistry } from './registry';
 import type { FinishReason, ModelImage, ModelMessage, ModelProvider, ModelToolCall } from './types';
 
+/**
+ * 循环用到的工具集：ToolRegistry 天然满足；应用也可以包一层（例如把 execute 接到自己的鉴权与审计上），
+ * 只要名字解析、给模型的定义与注册表一致。
+ */
+export type AgentToolset<C extends object> = Pick<
+  ToolRegistry<C>,
+  'canonicalSet' | 'toModelTools' | 'resolve' | 'execute'
+>;
+
 export interface UntrustedContent {
   /** 这段内容是什么（「当前页面」「检索结果」「记住的偏好」……），由调用方给，不含指令。 */
   readonly label: string;
@@ -134,7 +143,7 @@ export function buildInitialMessages(input: AgentInput<object>): ModelMessage[] 
 
 export async function* runLoop<C extends object>(
   provider: ModelProvider,
-  registry: ToolRegistry<C>,
+  registry: AgentToolset<C>,
   input: AgentInput<C>,
   limits: AgentLimits = {},
 ): AsyncGenerator<AgentEvent> {

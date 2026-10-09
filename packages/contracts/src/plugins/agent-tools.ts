@@ -44,6 +44,8 @@ export interface PluginReadTool {
   plugin: string;
   aliases: readonly string[];
   queryId: string;
+  /** 成员要有这个能力才能用（查询的 capability）；缺省人人可用。 */
+  capability?: string;
 }
 
 export interface PluginProposalTool {
@@ -54,6 +56,8 @@ export interface PluginProposalTool {
   label: string;
   /** 能否放进 propose_plan 的一组（manifest 的 grouped 缺省为能）。 */
   grouped: boolean;
+  /** 成员要有这个能力才能用（挂着它的动作的 capability；manifest 顶层 proposals 没有）。 */
+  capability?: string;
 }
 
 /** 插件查询生成的读工具，按 manifests.ts 的插件顺序、各插件 queries 的顺序。 */
@@ -64,21 +68,36 @@ export function pluginReadTools(): readonly PluginReadTool[] {
       plugin: plugin.key,
       aliases: query.toolAliases ?? [],
       queryId: query.id,
+      ...(query.capability ? { capability: query.capability } : {}),
     })),
   );
 }
 
 /** 插件写提案生成的提案工具。 */
 export function pluginProposalTools(): readonly PluginProposalTool[] {
-  return manifests.flatMap((plugin) =>
-    proposalsOf(plugin).map((proposal) => ({
-      name: proposalToolName(proposal),
-      plugin: plugin.key,
-      aliases: proposal.toolAliases ?? [],
-      actionType: proposal.actionType,
-      label: proposal.label,
-      grouped: proposal.grouped ?? true,
-    })),
+  const tool = (plugin: PluginManifest, proposal: PluginProposal, capability: string | undefined): PluginProposalTool => ({
+    name: proposalToolName(proposal),
+    plugin: plugin.key,
+    aliases: proposal.toolAliases ?? [],
+    actionType: proposal.actionType,
+    label: proposal.label,
+    grouped: proposal.grouped ?? true,
+    ...(capability ? { capability } : {}),
+  });
+  // 顺序同 proposalsOf：先动作上挂的，再顶层的
+  return manifests.flatMap((plugin) => [
+    ...(plugin.actions ?? []).flatMap((action) => (action.propose ? [tool(plugin, action.propose, action.capability)] : [])),
+    ...(plugin.proposals ?? []).map((proposal) => tool(plugin, proposal, undefined)),
+  ]);
+}
+
+/** 插件工具 → 所属插件与所需能力（内核工具不在里面：不归任何模块、人人可用）。agent 开会话时按它裁剪工具（J4.2）。 */
+export function pluginToolRequirements(): Readonly<Record<string, { plugin: string; capability?: string }>> {
+  return Object.fromEntries(
+    [...pluginReadTools(), ...pluginProposalTools()].map((tool) => [
+      tool.name,
+      { plugin: tool.plugin, ...(tool.capability ? { capability: tool.capability } : {}) },
+    ]),
   );
 }
 

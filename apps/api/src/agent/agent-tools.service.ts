@@ -6,9 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { CORE_TOOL_SOURCES, pluginToolSources } from '@family/contracts';
-import { ToolInvocationError, type ToolRegistry } from '@family/agent-core';
+import { ToolInvocationError, type ToolOutcome, type ToolRegistry } from '@family/agent-core';
+import { hasCapability, type Capability } from '../auth/capabilities';
 import { JwtUser } from '../auth/jwt.guard';
 import {
   AgentMemberProfile,
@@ -23,6 +24,7 @@ import { AgentMemoryService } from './agent-memory.service';
 import { AgentProposalGroupsService } from './agent-proposal-groups.service';
 import { createAgentToolRegistry, type AgentToolContext } from './tools';
 import { SEARCH_RECIPES_LIMIT_ERROR } from './tools/recipes';
+import { modulesTurnedOff, toolAccess } from './tool-access';
 
 const MAX_RESPONSE_BYTES = 48_000;
 
@@ -381,6 +383,7 @@ export class AgentToolsService {
     proposalGroups: AgentProposalGroupsService,
     agentMemory: AgentMemoryService,
     facades: PluginFacadeRegistry,
+    private readonly dataSource: DataSource,
   ) {
     this.registry = createAgentToolRegistry({
       facades,
@@ -393,9 +396,14 @@ export class AgentToolsService {
     });
   }
 
+  /**
+   * MCP、内置运行时与 native 循环共用的执行入口：鉴权（run 状态、授权名单、成员能力）→ 执行 → 落 agent_tool_events。
+   * forModel=true（native 循环）时提案工具只返回 { proposalId }，调用记录里存的仍是完整提案。
+   */
   async execute(
     toolName: string,
     input: Record<string, unknown>,
+    options: { forModel?: boolean } = {},
   ): Promise<unknown> {
     if (!this.registry.get(toolName)) {
       throw new BadRequestException('未开放的智能体工具');
@@ -418,11 +426,19 @@ export class AgentToolsService {
     if (!member || member.disabledAt) {
       throw new ForbiddenException('发起成员已停用');
     }
+    const user = userFor(run, member);
+    // J4.2：授权名单之外再按家庭当前的模块开关与发起成员当前的能力核一遍（开会话后才关掉的也拦得住）
+    const access = toolAccess(
+      this.registry.resolve(toolName)!,
+      await modulesTurnedOff(this.dataSource, run.householdId),
+      (capability) => hasCapability(user, capability as Capability),
+    );
+    if (access === 'module_off') throw new ForbiddenException('这个模块已被家庭关闭');
+    if (access === 'no_capability') throw new ForbiddenException('当前家庭角色不能使用这个工具');
 
     const startedAt = new Date();
-    const user = userFor(run, member);
     try {
-      const output = await this.callTool(toolName, input, user, run);
+      const { output, modelOutput } = await this.callTool(toolName, input, user, run);
       const serialized = JSON.stringify(output);
       if (Buffer.byteLength(serialized, 'utf8') > MAX_RESPONSE_BYTES) {
         throw new BadRequestException('工具返回内容超过大小限制');
@@ -430,7 +446,7 @@ export class AgentToolsService {
       await this.saveEvent(run, toolName, input, 'completed', output, startedAt);
       // 工具调用是运行进度：推 assistant 让对话页刷新（原来客户端按 700ms 轮询）
       this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
-      return output;
+      return options.forModel ? modelOutput : output;
     } catch (error) {
       await this.saveEvent(run, toolName, input, 'failed', null, startedAt);
       // 工具调用是运行进度：推 assistant 让对话页刷新（原来客户端按 700ms 轮询）
@@ -457,10 +473,44 @@ export class AgentToolsService {
         { user, run, onProposal: (value) => (presented = value) },
         args,
       );
-      return outcome.kind === 'propose' ? presented : outcome.result;
+      return outcome.kind === 'propose'
+        ? { output: presented, modelOutput: outcome.result }
+        : { output: outcome.result, modelOutput: outcome.result };
     } catch (error) {
       if (error instanceof ToolInvocationError) throw new BadRequestException(error.message);
       throw error;
+    }
+  }
+
+  /**
+   * native 循环的工具执行：runId 由运行时给（模型传的同名参数被覆盖），走 execute 同一条路；
+   * 出错不抛，变成 ok=false 的结果交回模型（agent-core 的 ToolOutcome）。
+   */
+  async executeForLoop(toolName: string, runId: string, rawArgs: unknown): Promise<ToolOutcome> {
+    let args: unknown = rawArgs;
+    if (typeof rawArgs === 'string') {
+      try {
+        args = rawArgs.trim() ? JSON.parse(rawArgs) : {};
+      } catch {
+        return { ok: false, error: { code: 'invalid_arguments', message: '参数不是合法的 JSON' } };
+      }
+    }
+    if (!args || typeof args !== 'object' || Array.isArray(args)) {
+      return { ok: false, error: { code: 'invalid_arguments', message: '参数必须是一个对象' } };
+    }
+    try {
+      const result = await this.execute(toolName, { ...(args as Record<string, unknown>), runId }, { forModel: true });
+      return this.registry.get(toolName)?.kind === 'propose'
+        ? { ok: true, kind: 'propose', result: result as { proposalId: string } }
+        : { ok: true, kind: 'read', result };
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          code: error instanceof ForbiddenException ? 'tool_not_allowed' : 'tool_failed',
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
     }
   }
 
