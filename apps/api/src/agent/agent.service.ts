@@ -10,6 +10,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
+import { AGENT_PROVIDER_PRESETS } from '@family/contracts';
+import { ProviderError } from '@family/agent-core';
 import { hasCapability, type Capability } from '../auth/capabilities';
 import { JwtUser } from '../auth/jwt.guard';
 import { agentDataKey } from '../common/config';
@@ -23,12 +25,19 @@ import {
   AgentMemberProfile,
   AgentResponseStyle,
   AgentToolEvent,
+  AgentProviderKind,
+  AgentTier2Scope,
   AssistantUtteranceRecord,
 } from '../entities';
-import { decryptAgentContent, encryptAgentContent } from './agent.crypto';
+import {
+  decryptAgentContent,
+  decryptProviderKey,
+  encryptAgentContent,
+  encryptProviderKey,
+} from './agent.crypto';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
 import { AgentRunError, NativeAgentRuntime } from './native/native-runtime';
-import { isolatedTestMode } from './native/provider-factory';
+import { isolatedTestMode, openAICompatibleProvider, settingProviderConfig } from './native/provider-factory';
 import { modulesTurnedOff, toolAccess } from './tool-access';
 import {
   AGENT_MEMORY_TOOLS,
@@ -57,8 +66,18 @@ interface UpdateAgentSettingsInput {
   tier2DailyLimit?: number;
   tier2Redact?: boolean;
   captureUtterances?: boolean;
+  providerKind?: AgentProviderKind | null;
+  providerBaseUrl?: string | null;
+  providerModel?: string | null;
+  providerKey?: string | null;
+  tier2Scope?: AgentTier2Scope;
   expectedVersion: number;
 }
+
+/** 云端运行方式（第 2 档）：每日上限与 tier2Scope 只管它们；本地确定性助理（测试、离线用）不算。 */
+const CLOUD_RUNTIMES: readonly AgentRuntimeKind[] = ['hermes', 'native'];
+const DAILY_LIMIT_CODE = 'AGENT_DAILY_LIMIT';
+const DAILY_LIMIT_TEXT = '今天小管家的云端额度用完了，明天再问';
 
 /** 可清空的文本设置：没传保留原值，传 null 或空白清空。 */
 function optionalSetting(value: string | null | undefined, current: string | null) {
@@ -110,15 +129,15 @@ export class AgentService {
 
   async status(user: JwtUser) {
     const setting = await this.ensureSettings(user);
-    const [fake, hermes, native] = await Promise.all([
+    const [fake, hermes] = await Promise.all([
       this.fakeRuntime.health(),
       this.hermesRuntime.health(),
-      this.nativeRuntime.health(),
     ]);
-    const runtimes = { fake, hermes, native };
+    const runtimes = { fake, hermes, native: this.nativeRuntime.healthFor(setting) };
     const selected = runtimes[setting.runtimeKind];
     return {
-      enabled: setting.enabled,
+      // tier2Scope = admins 时普通成员看到的是关着的（入口靠它隐藏）
+      enabled: setting.enabled && this.tier2Open(setting, user),
       runtimeKind: setting.runtimeKind,
       selected,
       runtimes,
@@ -170,11 +189,18 @@ export class AgentService {
     ) {
       throw new ForbiddenException('设置中包含未开放的操作提案工具');
     }
+    const provider = this.nextProviderSettings(input, current, user);
+    const runtimeKind = input.runtimeKind ?? current.runtimeKind;
+    if (runtimeKind === 'native' && current.runtimeKind !== 'native' && !provider.providerCheckOk) {
+      throw new BadRequestException('切到「小管家自带」前先把云端模型测通');
+    }
     const result = await this.settings.update(
       { id: current.id, version: input.expectedVersion },
       {
+        ...provider,
+        tier2Scope: input.tier2Scope ?? current.tier2Scope,
         enabled: input.enabled ?? current.enabled,
-        runtimeKind: input.runtimeKind ?? current.runtimeKind,
+        runtimeKind,
         runtimeProfile:
           input.runtimeProfile == null
             ? current.runtimeProfile
@@ -207,6 +233,86 @@ export class AgentService {
       throw new ConflictException('智能体设置已被其他成员更新，请刷新后重试');
     }
     return this.presentSettings((await this.settings.findOneBy({ id: current.id }))!);
+  }
+
+  /**
+   * 服务商相关的列：换成非 custom 的服务商时没传的地址 / 模型按预设填；key 加密后存；
+   * 服务商、地址、模型、key 任一变了就清掉「测一下」的结果。
+   */
+  private nextProviderSettings(input: UpdateAgentSettingsInput, current: AgentSetting, user: JwtUser) {
+    const providerKind = input.providerKind === undefined ? current.providerKind : input.providerKind;
+    let providerBaseUrl = optionalSetting(input.providerBaseUrl, current.providerBaseUrl);
+    let providerModel = optionalSetting(input.providerModel, current.providerModel);
+    if (input.providerKind && input.providerKind !== 'custom') {
+      const preset = AGENT_PROVIDER_PRESETS[input.providerKind];
+      if (input.providerBaseUrl === undefined) providerBaseUrl = preset.baseUrl;
+      if (input.providerModel === undefined) providerModel = preset.model;
+    }
+    let providerKeyEncrypted = current.providerKeyEncrypted;
+    if (input.providerKey !== undefined) {
+      providerKeyEncrypted = input.providerKey ? encryptProviderKey(input.providerKey.trim(), user.householdId) : null;
+      if (input.providerKey && !providerKeyEncrypted) {
+        throw new ServiceUnavailableException('保存 key 前需要配置 AGENT_DATA_KEY');
+      }
+    }
+    const changed =
+      providerKind !== current.providerKind ||
+      providerBaseUrl !== current.providerBaseUrl ||
+      providerModel !== current.providerModel ||
+      input.providerKey !== undefined;
+    return {
+      providerKind,
+      providerBaseUrl,
+      providerModel,
+      providerKeyEncrypted,
+      providerCheckOk: changed ? false : current.providerCheckOk,
+      providerCheckedAt: changed ? null : current.providerCheckedAt,
+    };
+  }
+
+  /** 「测一下」：按当前配置发一条 max_tokens=1 的请求，记下时间与结果；服务商的报错原文（key 打码）原样回给页面。 */
+  async checkProvider(user: JwtUser) {
+    const current = await this.ensureSettings(user);
+    const config = settingProviderConfig(current);
+    if (!config) throw new BadRequestException('先选好服务商，填好地址、模型和 key');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    let message: string | null = null;
+    try {
+      for await (const event of openAICompatibleProvider(config).chat({
+        messages: [{ role: 'user', content: '你好' }],
+        maxTokens: 1,
+        signal: controller.signal,
+      })) {
+        void event;
+      }
+    } catch (error) {
+      message = controller.signal.aborted
+        ? '15 秒内没有响应'
+        : error instanceof ProviderError
+          ? error.body ? `${error.message}：${error.body}` : error.message
+          : '测试请求失败';
+      message = message.split(config.apiKey).join('***').slice(0, 500);
+    } finally {
+      clearTimeout(timer);
+    }
+    const result = await this.settings.update(
+      { id: current.id, version: current.version },
+      {
+        providerCheckedAt: new Date(),
+        providerCheckOk: message == null,
+        updatedByMemberId: user.memberId,
+        version: current.version + 1,
+      },
+    );
+    if (!result.affected) {
+      throw new ConflictException('智能体设置已被其他成员更新，请刷新后重新测一下');
+    }
+    return {
+      ok: message == null,
+      message,
+      settings: this.presentSettings((await this.settings.findOneBy({ id: current.id }))!),
+    };
   }
 
   async getProfile(user: JwtUser) {
@@ -267,7 +373,7 @@ export class AgentService {
   async createConversation(title: string | undefined, user: JwtUser) {
     const setting = await this.ensureSettings(user);
     const profile = await this.ensureProfile(user);
-    if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!setting.enabled || !this.tier2Open(setting, user)) throw new ForbiddenException('家庭小管家当前未启用');
     if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
@@ -425,7 +531,7 @@ export class AgentService {
     const key = clientRequestId.trim();
     const setting = await this.ensureSettings(user);
     const profile = await this.ensureProfile(user);
-    if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!setting.enabled || !this.tier2Open(setting, user)) throw new ForbiddenException('家庭小管家当前未启用');
     if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
@@ -439,6 +545,7 @@ export class AgentService {
       ],
       user,
     );
+    const quota = await this.quota(setting, user.householdId);
 
     const existing = await this.runs.findOneBy({
       householdId: user.householdId,
@@ -469,19 +576,16 @@ export class AgentService {
             runtimeKind: setting.runtimeKind,
             runtimeVersion: this.runtime(setting.runtimeKind).version,
             modelAlias: setting.modelAlias,
-            status: 'queued',
             allowedTools,
             authorizationExpiresAt: new Date(
               Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
             ),
             startedAt: null,
-            finishedAt: null,
             cancelRequestedAt: null,
             inputTokens: null,
             outputTokens: null,
             estimatedCost: null,
-            errorCode: null,
-            errorMessage: null,
+            ...quota,
           }),
         );
         const encrypted = encryptAgentContent(
@@ -522,7 +626,7 @@ export class AgentService {
       }
       throw error;
     }
-    void this.processRun(run.id, content);
+    this.dispatch(run, content);
     return this.presentRun(run);
   }
 
@@ -552,7 +656,7 @@ export class AgentService {
     };
     const setting = await this.ensureSettings(user);
     const profile = await this.ensureProfile(user);
-    if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!setting.enabled || !this.tier2Open(setting, user)) throw new ForbiddenException('家庭小管家当前未启用');
     if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
@@ -605,6 +709,7 @@ export class AgentService {
     }
 
     const channelTools = await this.allowedTools([...setting.readToolsEnabled], user);
+    const channelQuota = await this.quota(setting, channel.householdId);
     const existing = await this.runs.findOneBy({
       householdId: channel.householdId,
       clientRequestId: key,
@@ -634,19 +739,16 @@ export class AgentService {
             runtimeKind: setting.runtimeKind,
             runtimeVersion: this.runtime(setting.runtimeKind).version,
             modelAlias: setting.modelAlias,
-            status: 'queued',
             allowedTools: channelTools,
             authorizationExpiresAt: new Date(
               Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
             ),
             startedAt: null,
-            finishedAt: null,
             cancelRequestedAt: null,
             inputTokens: null,
             outputTokens: null,
             estimatedCost: null,
-            errorCode: null,
-            errorMessage: null,
+            ...channelQuota,
           }),
         );
         const encrypted = encryptAgentContent(
@@ -678,7 +780,7 @@ export class AgentService {
       }
       throw error;
     }
-    void this.processRun(run.id, content);
+    this.dispatch(run, content);
     return this.presentRun(run);
   }
 
@@ -766,7 +868,7 @@ export class AgentService {
     );
     const setting = await this.ensureSettings(user);
     const profile = await this.ensureProfile(user);
-    if (!setting.enabled) throw new ForbiddenException('家庭小管家当前未启用');
+    if (!setting.enabled || !this.tier2Open(setting, user)) throw new ForbiddenException('家庭小管家当前未启用');
     if (!profile.enabled) throw new ForbiddenException('你的小管家当前未启用');
     if (!agentDataKey()) {
       throw new ServiceUnavailableException('对话加密尚未配置');
@@ -808,7 +910,6 @@ export class AgentService {
           runtimeKind: setting.runtimeKind,
           runtimeVersion: this.runtime(setting.runtimeKind).version,
           modelAlias: setting.modelAlias,
-          status: 'queued',
           allowedTools: await this.allowedTools(
             [
               ...setting.readToolsEnabled,
@@ -821,13 +922,11 @@ export class AgentService {
             Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
           ),
           startedAt: null,
-          finishedAt: null,
           cancelRequestedAt: null,
           inputTokens: null,
           outputTokens: null,
           estimatedCost: null,
-          errorCode: null,
-          errorMessage: null,
+          ...(await this.quota(setting, user.householdId)),
         }),
       );
     } catch (error) {
@@ -845,7 +944,7 @@ export class AgentService {
       }
       throw error;
     }
-    void this.processRun(run.id, content);
+    this.dispatch(run, content);
     return this.presentRun(run, false);
   }
 
@@ -1037,6 +1136,55 @@ export class AgentService {
    * 本次 run 能用的工具：家庭开着的读 / 提案工具（调用方给）∩ 模块开关（插件被关掉，它的工具一起消失）
    * ∩ 成员能力（manifest 里查询 / 动作声明的能力，例如 get_finance_summary 要 view_finance）。
    */
+  /** 第 2 档对这个成员开没开：云端运行方式下 tier2Scope = admins 只给管理员（owner / admin）。 */
+  private tier2Open(setting: AgentSetting, user: JwtUser) {
+    return !CLOUD_RUNTIMES.includes(setting.runtimeKind) || setting.tier2Scope === 'all' || user.role !== 'member';
+  }
+
+  /**
+   * 开 run 前的额度：云端运行方式按上海时区当天已开的第 2 档 run 数比 tier2DailyLimit，用完了这次就记成一条
+   * 不执行的 failed run（errorCode = AGENT_DAILY_LIMIT，tier 留空不占额度）——既是审计，对话里也看得到原因。
+   */
+  private async quota(setting: AgentSetting, householdId: string) {
+    const cloud = CLOUD_RUNTIMES.includes(setting.runtimeKind);
+    if (cloud) {
+      const [row]: { used: number }[] = await this.dataSource.query(
+        `SELECT COUNT(*)::int AS used FROM agent_runs
+          WHERE "householdId" = $1 AND tier = 2
+            AND "createdAt" >= (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai')`,
+        [householdId],
+      );
+      if (row.used >= setting.tier2DailyLimit) {
+        return {
+          status: 'failed' as const,
+          tier: null,
+          redacted: false,
+          finishedAt: new Date(),
+          errorCode: DAILY_LIMIT_CODE,
+          errorMessage: DAILY_LIMIT_TEXT,
+        };
+      }
+    }
+    return {
+      status: 'queued' as const,
+      tier: cloud ? 2 : null,
+      redacted: setting.runtimeKind === 'native' && setting.tier2Redact,
+      finishedAt: null,
+      errorCode: null,
+      errorMessage: null,
+    };
+  }
+
+  /** 排上队的交给运行时；被额度挡下的只记原话、推一下对话页。 */
+  private dispatch(run: AgentRun, content: string) {
+    if (run.status === 'queued') {
+      void this.processRun(run.id, content);
+      return;
+    }
+    void this.recordUtterance(run, content).catch(() => undefined);
+    this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
+  }
+
   private async allowedTools(candidates: readonly string[], user: JwtUser) {
     const off = await modulesTurnedOff(this.dataSource, user.householdId);
     const can = (capability: string) => hasCapability(user, capability as Capability);
@@ -1235,9 +1383,27 @@ export class AgentService {
       tier2DailyLimit: setting.tier2DailyLimit,
       tier2Redact: setting.tier2Redact,
       captureUtterances: setting.captureUtterances,
+      providerKind: setting.providerKind,
+      providerBaseUrl: setting.providerBaseUrl,
+      providerModel: setting.providerModel,
+      providerKeyConfigured: setting.providerKeyEncrypted != null,
+      providerKeyLast4: this.providerKeyLast4(setting),
+      providerCheckedAt: setting.providerCheckedAt,
+      providerCheckOk: setting.providerCheckOk,
+      tier2Scope: setting.tier2Scope,
       version: setting.version,
       updatedAt: setting.updatedAt,
     };
+  }
+
+  /** key 只给末 4 位；解不开（换过 AGENT_DATA_KEY）就不给。 */
+  private providerKeyLast4(setting: AgentSetting) {
+    if (!setting.providerKeyEncrypted) return null;
+    try {
+      return decryptProviderKey(setting.providerKeyEncrypted, setting.householdId)?.slice(-4) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private presentProfile(profile: AgentMemberProfile) {

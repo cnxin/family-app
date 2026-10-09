@@ -1,19 +1,26 @@
 import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { AgentProviderCheck, AgentSettings, AssistantUtterance, UpdateAgentSettingsBody } from '@family/contracts';
+import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import {
   useAgentChannelPairings,
   useAgentChannels,
   useAgentSettings,
+  useAssistantUtterances,
+  useClearMyUtterances,
+  downloadUtterancesCsv,
   useCreateAgentChannelPairing,
   useMembers,
   useRevokeAgentChannel,
   useRevokeAgentChannelPairing,
-  useUpdateAgentSettings,
 } from '../lib/queries';
+import { invalidateModules } from '../lib/queries/modules';
 import { pushToast } from '../lib/toast';
-import { AssistantTiers, UtteranceLog, type TierChange } from './assistant-tiers';
+import { AssistantTiers, type ProviderCheckResult, type TierChange } from './assistant-tiers';
 import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';
-import { Button, Dialog, Input } from './ui';
+import { Button, Dialog, Input, Segmented } from './ui';
 
 function shortTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -25,13 +32,40 @@ function shortTime(value: string) {
   }).format(new Date(value));
 }
 
+/** 改设置（J4.3 起带云端模型的字段：请求体就是契约的 UpdateAgentSettingsBody）。 */
+function useSaveAgentSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateAgentSettingsBody) => api<AgentSettings>('/agent/settings', { method: 'PATCH', body }),
+    onSuccess: (settings) => {
+      void invalidateModules(client);
+      client.setQueryData(['agent-settings'], settings);
+      void client.invalidateQueries({ queryKey: ['agent-status'] });
+    },
+  });
+}
+
+/** 「测一下」云端模型：服务端发一条 max_tokens=1 的请求，回结果和更新后的设置。 */
+function useCheckProvider() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<AgentProviderCheck>('/agent/settings/provider-check', { method: 'POST' }),
+    onSuccess: (result) => {
+      client.setQueryData(['agent-settings'], result.settings);
+      void client.invalidateQueries({ queryKey: ['agent-status'] });
+    },
+  });
+}
+
 /**
  * 助理设置：三档（本机规则 / 本地模型 / 云端助理，J2）+ 原话记录 + 消息渠道绑定（把 Telegram 这类外部账号配到某个成员）。
  * 成员也看得到三档与自己的原话，但只有管理员能改。外部渠道进来的消息是只读的——要改东西还是回 App 里确认提案。
  */
 export function AssistantSettings({ manager, onClose }: { manager: boolean; onClose: () => void }) {
   const settings = useAgentSettings(true);
-  const update = useUpdateAgentSettings();
+  const update = useSaveAgentSettings();
+  const check = useCheckProvider();
+  const [checkResult, setCheckResult] = useState<ProviderCheckResult | null>(null);
   const channels = useAgentChannels();
   const pairings = useAgentChannelPairings(manager);
   const members = useMembers();
@@ -53,7 +87,20 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
   function change(values: TierChange) {
     if (!settings.data || update.isPending) return;
     setMessage(null);
+    // 改了服务商、地址、模型或 key，服务端会清掉测试结果；页面上这次的结果也一起清
+    if ('providerKind' in values || 'providerBaseUrl' in values || 'providerModel' in values || 'providerKey' in values) {
+      setCheckResult(null);
+    }
     update.mutate({ ...values, expectedVersion: settings.data.version }, { onError });
+  }
+
+  function checkProvider() {
+    if (check.isPending) return;
+    setMessage(null);
+    check.mutate(undefined, {
+      onSuccess: (result) => setCheckResult({ ok: result.ok, message: result.message }),
+      onError,
+    });
   }
 
   return (
@@ -66,7 +113,15 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
           </p>
           <div className="mt-2">
             {settings.data ? (
-              <AssistantTiers settings={settings.data} manager={manager} pending={update.isPending} onChange={change} />
+              <AssistantTiers
+                settings={settings.data}
+                manager={manager}
+                pending={update.isPending}
+                checking={check.isPending}
+                checkResult={checkResult}
+                onChange={change}
+                onCheckProvider={checkProvider}
+              />
             ) : (
               <p className="text-[13px] text-ink-soft">读取设置…</p>
             )}
@@ -227,5 +282,112 @@ export function AssistantSettings({ manager, onClose }: { manager: boolean; onCl
         </section>
       </div>
     </Dialog>
+  );
+}
+
+const OUTCOME_LABEL: Record<AssistantUtterance['outcome'], string> = {
+  navigated: '点了',
+  proposed: '出了提案',
+  candidates: '有候选没点',
+  no_match: '没找到',
+  dismissed: '删掉了',
+};
+
+const CHOSEN_LABEL: Record<NonNullable<AssistantUtterance['chosenKind']>, string> = {
+  action: '动作',
+  page: '页面',
+  dish: '菜品',
+  item: '东西',
+  agent: '小管家',
+};
+
+/**
+ * 原话记录：试用期看「家里人到底怎么说」的窗口。最近 20 条；成员看自己的，管理员能看全部、导出 CSV。
+ */
+export function UtteranceLog({ manager, capturing }: { manager: boolean; capturing: boolean }) {
+  const { session } = useAuth();
+  const [scope, setScope] = useState<'all' | 'mine'>(manager ? 'all' : 'mine');
+  const [confirming, setConfirming] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const memberId = scope === 'mine' ? session?.member.id : undefined;
+  const list = useAssistantUtterances({ limit: 20, ...(memberId ? { memberId } : {}) });
+  const clear = useClearMyUtterances();
+  const items = list.data?.items ?? [];
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      await downloadUtterancesCsv();
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : '导出失败', undefined, 'error');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function clearMine() {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    clear.mutate(undefined, {
+      onSuccess: (result) => pushToast(result.deleted ? `清掉了 ${result.deleted} 条` : '没有要清的', undefined, 'success'),
+      onError: (error) => pushToast(error instanceof Error ? error.message : '没清掉，再试一次', undefined, 'error'),
+      onSettled: () => setConfirming(false),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        {manager ? (
+          <Segmented
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: 'all' as const, label: '全部' },
+              { value: 'mine' as const, label: '我的' },
+            ]}
+          />
+        ) : null}
+        <span className="flex-1" />
+        {manager ? (
+          <Button variant="outline" className="h-8 px-3 text-[13px]" disabled={exporting} onClick={() => void exportCsv()}>
+            导出 CSV
+          </Button>
+        ) : null}
+        <Button
+          variant="outline"
+          className={'h-8 px-3 text-[13px]' + (confirming ? ' border-danger text-danger' : '')}
+          disabled={clear.isPending}
+          onClick={clearMine}
+          onBlur={() => setConfirming(false)}
+        >
+          {confirming ? '确定清空我的？' : '清空我的'}
+        </Button>
+      </div>
+      {list.isPending ? (
+        <p className="text-[13px] text-ink-soft">读取中…</p>
+      ) : items.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[13px] text-ink-soft">
+          {capturing ? '还没有记下原话。在 ⌘K 里搜点什么试试。' : '「记录原话」关着，⌘K 里输的话不会记下来。'}
+        </p>
+      ) : (
+        <ul aria-label="原话记录" className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+          {items.map((one) => (
+            <li key={one.id} className="px-3 py-2">
+              <div className="flex items-baseline gap-2">
+                <span className="min-w-0 flex-1 break-words text-sm font-medium">{one.text}</span>
+                <span className="shrink-0 text-[12px] text-ink-soft">{OUTCOME_LABEL[one.outcome]}</span>
+              </div>
+              <p className="mt-0.5 text-[12px] text-ink-soft">
+                {shortTime(one.createdAt)} · {one.memberName ?? '已删成员'}
+                {one.chosenKind ? ` · ${CHOSEN_LABEL[one.chosenKind]}${one.chosenId ? `：${one.chosenId}` : ''}` : ''}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

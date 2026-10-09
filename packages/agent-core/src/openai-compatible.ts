@@ -33,7 +33,7 @@ export interface ProviderQuirks {
 }
 
 /**
- * 已知差异表。DeepSeek 与通义千问两条据两家公开文档整理，
+ * 已知差异表。DeepSeek、通义千问、智谱、Kimi 据各家公开文档整理，
  * J4.0 的回放用例目前是手写的模拟录制，拿到 King 的测试 key 后用真实录制核对并更新。
  */
 export const providerQuirks = {
@@ -73,6 +73,33 @@ export const providerQuirks = {
       'tool_choice 只认 auto / none / 指定函数，不认 required，降级成 auto。',
       '图片只有 qwen-vl 系列认，纯文本模型带图会返回 400（原文随 ProviderError 带出）。',
       'Qwen3 开源模型默认开思考，思考内容在 delta.reasoning_content，不当正文输出。',
+    ],
+  },
+  zhipu: {
+    label: '智谱',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    recommendedModel: 'glm-4-plus',
+    images: true,
+    toolChoiceRequired: false,
+    streamUsage: false,
+    notes: [
+      'tool_choice 只认 auto，required 降级成 auto。',
+      '流式最后一片自带 usage，不发 stream_options。',
+      'finish_reason 多一个 sensitive（内容审核拦下），归为 content_filter。',
+      '图片只有 glm-4v 系列认。以上据公开文档整理，未经真实录制核对。',
+    ],
+  },
+  kimi: {
+    label: 'Kimi（月之暗面）',
+    defaultBaseUrl: 'https://api.moonshot.cn/v1',
+    recommendedModel: 'moonshot-v1-8k',
+    images: true,
+    toolChoiceRequired: false,
+    streamUsage: false,
+    notes: [
+      'tool_choice 不认 required，降级成 auto。',
+      '流式的 usage 放在最后一片的 choices[0].usage 里（不在顶层），解析时两处都认。',
+      '图片只有 *-vision-preview 模型认。以上据公开文档整理，未经真实录制核对。',
     ],
   },
 } as const satisfies Record<string, ProviderQuirks>;
@@ -315,6 +342,13 @@ class ChunkAssembler {
     }
     const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : undefined;
     if (!isRecord(choice)) return;
+    // 个别实现（Kimi）把 usage 放在 choice 里
+    if (isRecord(choice.usage)) {
+      this.usage = {
+        inputTokens: numberOr0(choice.usage.prompt_tokens),
+        outputTokens: numberOr0(choice.usage.completion_tokens),
+      };
+    }
     const delta = isRecord(choice.delta) ? choice.delta : {};
     if (typeof delta.content === 'string' && delta.content) {
       yield { type: 'text_delta', text: delta.content };

@@ -106,6 +106,20 @@ const UTTERANCE_RECENT = `
 const UTTERANCE_TOTAL = 'SELECT "householdId" AS household, COUNT(*)::int AS count FROM assistant_utterances GROUP BY 1';
 const rank = (list, value) => (list.includes(value) ? list.indexOf(value) : list.length);
 
+// 云端档（J4.3）：按上海时区的天，数第 2 档 run（tier = 2）、它们的 token 合计、被每日上限挡下的次数
+// （挡下的那次记成 errorCode = AGENT_DAILY_LIMIT、tier 留空的 failed run）。
+const CLOUD_DAILY = `
+  SELECT "householdId" AS household,
+         to_char("createdAt" AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD') AS day,
+         COUNT(*) FILTER (WHERE tier = 2)::int AS runs,
+         COALESCE(SUM(COALESCE("inputTokens", 0) + COALESCE("outputTokens", 0)) FILTER (WHERE tier = 2), 0)::int AS tokens,
+         COUNT(*) FILTER (WHERE "errorCode" = 'AGENT_DAILY_LIMIT')::int AS refused
+    FROM agent_runs
+   WHERE "createdAt" >= now() - make_interval(days => $1)
+     AND (tier = 2 OR "errorCode" = 'AGENT_DAILY_LIMIT')
+   GROUP BY 1, 2
+   ORDER BY 2`;
+
 const client = new pg.Client({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 5433),
@@ -160,6 +174,11 @@ try {
   const utteranceTotals = new Map(
     hasUtterances ? (await client.query(UTTERANCE_TOTAL)).rows.map((row) => [row.household, row.count]) : [],
   );
+  // J4.3 迁移之前的库没有 agent_runs.tier：跳过这一段
+  const hasCloud = (await client.query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_runs' AND column_name = 'tier') AS ok`,
+  )).rows[0].ok;
+  const cloudRows = hasCloud ? (await client.query(CLOUD_DAILY, [DAYS])).rows : [];
   await client.query('COMMIT');
 
   console.log(`# 小管家用量：最近 ${DAYS} 天的写操作次数\n`);
@@ -208,10 +227,24 @@ try {
       const chosen = mine.reduce((sum, row) => sum + row.chosen, 0);
       console.log(`- 最近 ${DAYS} 天共 ${recent} 条，其中带 chosenKind 的 ${chosen} 条；全部时间共 ${utteranceTotals.get(household.id) ?? 0} 条\n`);
     };
+    const printCloud = () => {
+      if (!hasCloud) return;
+      const mine = cloudRows.filter((row) => row.household === household.id);
+      console.log(`**云端档（J4.3，最近 ${DAYS} 天，按上海时区的天）**\n`);
+      if (!mine.length) {
+        console.log('- 这段时间没有用云端档\n');
+        return;
+      }
+      console.log('| 日期 | 云端 run 数 | token 合计 | 被每日上限拒绝 |');
+      console.log('| --- | ---: | ---: | ---: |');
+      for (const row of mine) console.log(`| ${row.day} | ${row.runs} | ${row.tokens} | ${row.refused} |`);
+      console.log('');
+    };
     if (!domains.length) {
       console.log('这段时间没有写操作。\n');
       printSnapshots();
       printUtterances();
+      printCloud();
       continue;
     }
     console.log(`| 域 | ${columns.map((column) => column.name).join(' | ')} | 合计 | 计数来源 |`);
@@ -233,6 +266,7 @@ try {
     console.log('');
     printSnapshots();
     printUtterances();
+    printCloud();
   }
   if (!hasUtterances) console.log('**助理原话（J2）**：库里还没有 assistant_utterances（J2 迁移之前），这一段跳过\n');
   console.log('**没有计入的写操作**\n');

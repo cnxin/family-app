@@ -28,13 +28,19 @@ import {
 } from '@nestjs/common';
 import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
-import { AgentProposalGroupStatus, AgentRoutineKind } from '../entities';
+import {
+  AgentProposalGroupStatus,
+  AgentProviderKind,
+  AgentRoutineKind,
+  AgentTier2Scope,
+} from '../entities';
 import {
   AGENT_MEMORY_KEYS,
   AGENT_PROPOSAL_TOOLS,
   AGENT_READ_TOOLS,
   AgentMemoryKey,
 } from './agent.types';
+import { AGENT_PROVIDER_KINDS, AGENT_TIER2_SCOPES } from '@family/contracts';
 import { AgentService } from './agent.service';
 import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
@@ -136,6 +142,32 @@ class UpdateAgentSettingsDto {
   @IsOptional()
   @IsBoolean()
   captureUtterances?: boolean;
+
+  /** J4.3 云端档：服务商（null 清空）；非 custom 时没传的地址 / 模型按预设填。 */
+  @IsOptional()
+  @IsIn([...AGENT_PROVIDER_KINDS])
+  providerKind?: AgentProviderKind | null;
+
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false })
+  @MaxLength(300)
+  providerBaseUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  providerModel?: string | null;
+
+  /** 新 key 原文：只写不读，存库前加密；null 清掉。 */
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(300)
+  providerKey?: string | null;
+
+  @IsOptional()
+  @IsIn([...AGENT_TIER2_SCOPES])
+  tier2Scope?: AgentTier2Scope;
 
   @IsOptional()
   @IsArray()
@@ -363,6 +395,13 @@ export class AgentController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.service.updateSettings(dto, user);
+  }
+
+  /** J4.3「测一下」：按当前配置发一条 max_tokens=1 的请求。 */
+  @Post('settings/provider-check')
+  @RequireCapabilities('manage_agent')
+  checkProvider(@CurrentUser() user: JwtUser) {
+    return this.service.checkProvider(user);
   }
 
   @Get('routines')

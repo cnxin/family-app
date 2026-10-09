@@ -3,6 +3,7 @@
 // 回放套件按成员原话挑录制：「记一笔 38 买菜」是 J4.0 的 DeepSeek 模拟录制，另有只读、超步数、慢回答三条。
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { startFakeModel } from './fake-model.mjs';
 
 const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
@@ -107,17 +108,28 @@ const utterance = (runId) =>
 
 const owner = await login('爸爸');
 const created = [];
+const model = await startFakeModel();
 let restoreKind = null;
 try {
-  console.log('1. 切到「小管家自带」运行方式');
+  console.log('1. 配好云端模型、测通，切到「小管家自带」运行方式');
   const status = await request('/agent/status', owner.accessToken);
   assert(status.data.runtimes.native.available === true, 'native 运行时在测试模式下可用（回放模型）');
   const before = await request('/agent/settings', owner.accessToken);
   restoreKind = before.data.runtimeKind;
+  // J4.3：切到 native 前必须「测一下」通过（「测一下」按家庭配置真打，这里打假模型服务）
+  const configured = await request('/agent/settings', owner.accessToken, 'PATCH', {
+    providerKind: 'custom',
+    providerBaseUrl: model.url,
+    providerModel: 'fake-model',
+    providerKey: model.key,
+    expectedVersion: before.data.version,
+  });
+  const checked = await request('/agent/settings/provider-check', owner.accessToken, 'POST');
+  assert(configured.status === 200 && checked.data?.ok === true, '云端模型配好并测通');
   const switched = await request('/agent/settings', owner.accessToken, 'PATCH', {
     runtimeKind: 'native',
     enabled: true,
-    expectedVersion: before.data.version,
+    expectedVersion: checked.data.settings.version,
   });
   assert(switched.status === 200 && switched.data.runtimeKind === 'native', '管理员把运行方式切到 native');
 
@@ -229,9 +241,14 @@ try {
     const current = await request('/agent/settings', owner.accessToken);
     await request('/agent/settings', owner.accessToken, 'PATCH', {
       runtimeKind: restoreKind,
+      providerKind: null,
+      providerBaseUrl: null,
+      providerModel: null,
+      providerKey: null,
       expectedVersion: current.data.version,
     });
   }
+  await model.stop();
   for (const [table, id] of created.reverse()) {
     await db.query(`DELETE FROM ${table} WHERE id = $1`, [id]).catch(() => undefined);
   }

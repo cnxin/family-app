@@ -2,16 +2,21 @@
 // 工具执行接到 AgentToolsService.executeForLoop：与 MCP / 内置路径同一套鉴权（run 状态、授权名单、成员能力）、
 // 同一套 agent_tool_events 落库；交给模型的提案结果只有 proposalId。
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { runLoop, type AgentEvent, type AgentLimits, type AgentToolset } from '@family/agent-core';
 import { todayInShanghai } from '@family/shared';
+import { AgentRun, AgentSetting } from '../../entities';
 import { AgentToolsService } from '../agent-tools.service';
 import type { AgentChatInput, AgentChatResult, AgentRuntime, AgentRuntimeHealth } from '../agent.types';
+import { redactForModel, redactionContext } from '../redact';
 import {
-  envProviderConfig,
   nativeTestProviderSpec,
   openAICompatibleProvider,
+  settingProviderConfig,
   testProviderFor,
 } from './provider-factory';
+import { RedactingProvider } from './redacting-provider';
 
 /** 单次 run 的上限（agent-core 的参数，不是散落的常量）。 */
 export const NATIVE_LIMITS: AgentLimits = {
@@ -58,20 +63,35 @@ export class NativeAgentRuntime implements AgentRuntime {
   readonly version = 'native-loop-1';
   private readonly active = new Map<string, AbortController>();
 
-  constructor(private readonly tools: AgentToolsService) {}
+  constructor(
+    private readonly tools: AgentToolsService,
+    @InjectRepository(AgentRun) private readonly runs: Repository<AgentRun>,
+    @InjectRepository(AgentSetting) private readonly settings: Repository<AgentSetting>,
+    private readonly dataSource: DataSource,
+  ) {}
 
+  /** 没有家庭上下文时的健康：只有测试模式的回放 / 剧本模型算可用。status 用 healthFor。 */
   async health(): Promise<AgentRuntimeHealth> {
     if (nativeTestProviderSpec()) {
       return { available: true, configured: true, version: this.version, message: '测试模式：回放 / 剧本模型' };
     }
-    const config = envProviderConfig();
-    return config
+    return { available: false, configured: false, version: this.version, message: '按家庭的云端档配置' };
+  }
+
+  /** 某个家庭的健康：配好了地址、模型、key 算 configured，「测一下」通过才算 available。 */
+  healthFor(setting: AgentSetting): AgentRuntimeHealth {
+    if (nativeTestProviderSpec()) {
+      return { available: true, configured: true, version: this.version, message: '测试模式：回放 / 剧本模型' };
+    }
+    const config = settingProviderConfig(setting);
+    if (!config) return { available: false, configured: false, version: this.version, message: '还没有配置云端模型' };
+    return setting.providerCheckOk
       ? { available: true, configured: true, version: this.version, message: `已配置模型 ${config.model}` }
-      : { available: false, configured: false, version: this.version, message: '尚未配置云端模型' };
+      : { available: false, configured: true, version: this.version, message: '云端模型还没测通' };
   }
 
   async chat(input: AgentChatInput): Promise<AgentChatResult> {
-    const provider = this.providerFor(input);
+    const provider = await this.providerFor(input);
     const controller = new AbortController();
     this.active.set(input.runId, controller);
     const registry = this.tools.registry;
@@ -123,11 +143,22 @@ export class NativeAgentRuntime implements AgentRuntime {
     this.active.get(runId)?.abort();
   }
 
-  private providerFor(input: AgentChatInput) {
+  private async providerFor(input: AgentChatInput) {
+    const run = await this.runs.findOneBy({ id: input.runId });
+    if (!run) throw new AgentRunError('AGENT_RUN_MISSING', '智能体运行不存在');
     const spec = nativeTestProviderSpec();
-    if (spec) return testProviderFor(spec, input.message);
-    const config = envProviderConfig();
-    if (!config) throw new AgentRunError('AGENT_PROVIDER_UNCONFIGURED', '还没有配置云端模型');
-    return openAICompatibleProvider(config);
+    let provider = spec ? testProviderFor(spec, input.message) : null;
+    if (!provider) {
+      const setting = await this.settings.findOneBy({ householdId: run.householdId });
+      const config = setting ? settingProviderConfig(setting) : null;
+      if (!config) throw new AgentRunError('AGENT_PROVIDER_UNCONFIGURED', '还没有配置云端模型');
+      provider = openAICompatibleProvider(config);
+    }
+    // 开 run 时按家庭的 tier2Redact 定下来的（记在 run 上）
+    if (run.redacted) {
+      const context = await redactionContext(this.dataSource, run.householdId);
+      provider = new RedactingProvider(provider, (text) => redactForModel(text, context));
+    }
+    return provider;
   }
 }
