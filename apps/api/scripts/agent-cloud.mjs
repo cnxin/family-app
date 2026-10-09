@@ -209,6 +209,28 @@ try {
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const row = household?.split('\n').find((line) => line.startsWith(`| ${day} |`))?.split('|').map((cell) => cell.trim());
   assert(row && Number(row[2]) === 2 && Number(row[3]) > 0 && Number(row[4]) === 1, `报告里今天：云端 run 2 次、token > 0、被拒 1 次（${row?.join(' ')}）`);
+  assert(row?.[5] === '2 / 2（100%）', `流式 run 占比：两次都走 native 循环（${row?.[5]}）`);
+
+  console.log('8. 并发（J4.5）：上限 3、10 个请求同时发，只放行 3 个');
+  await db.query('UPDATE agent_runs SET tier = NULL WHERE "householdId" = $1 AND tier = 2', [owner.member.householdId]);
+  await patch(owner.accessToken, { tier2DailyLimit: 3 });
+  const lanes = await Promise.all(
+    Array.from({ length: 10 }, () => request('/agent/conversations', owner.accessToken, 'POST', {})),
+  );
+  const burst = await Promise.all(lanes.map((lane, index) => send(owner.accessToken, lane.data.id, `并发第 ${index + 1} 问`)));
+  const admitted = burst.filter((one) => one.status === 202 && one.data.status === 'queued');
+  const limited = burst.filter((one) => one.status === 202 && one.data.errorCode === 'AGENT_DAILY_LIMIT');
+  const counted = (await db.query(
+    `SELECT COUNT(*)::int AS n FROM agent_runs WHERE "householdId" = $1 AND tier = 2
+       AND id = ANY($2::uuid[])`,
+    [owner.member.householdId, burst.map((one) => one.data.id)],
+  )).rows[0].n;
+  assert(
+    admitted.length === 3 && limited.length === 7 && counted === 3,
+    `放行 ${admitted.length} 个、挡下 ${limited.length} 个；记 tier = 2 的 ${counted} 个`,
+  );
+  await Promise.all(admitted.map((one, index) => finished(owner.accessToken, lanes[burst.indexOf(one)].data.id, one.data.id)
+    .then((done) => assert(done.run.status === 'completed', `放行的第 ${index + 1} 个照常回答`))));
 } finally {
   const current = await settings(owner.accessToken);
   await request('/agent/settings', owner.accessToken, 'PATCH', {

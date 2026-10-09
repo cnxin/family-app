@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'node:crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AGENT_PROVIDER_PRESETS, AGENT_RUN_EVENT, type AgentRunStreamPayload } from '@family/contracts';
 import { ProviderError } from '@family/agent-core';
 import { hasCapability, type Capability } from '../auth/capabilities';
@@ -547,8 +547,6 @@ export class AgentService {
       ],
       user,
     );
-    const quota = await this.quota(setting, user.householdId);
-
     const existing = await this.runs.findOneBy({
       householdId: user.householdId,
       clientRequestId: key,
@@ -587,7 +585,7 @@ export class AgentService {
             inputTokens: null,
             outputTokens: null,
             estimatedCost: null,
-            ...quota,
+            ...(await this.quota(manager, setting, user.householdId)),
           }),
         );
         const encrypted = encryptAgentContent(
@@ -711,7 +709,6 @@ export class AgentService {
     }
 
     const channelTools = await this.allowedTools([...setting.readToolsEnabled], user);
-    const channelQuota = await this.quota(setting, channel.householdId);
     const existing = await this.runs.findOneBy({
       householdId: channel.householdId,
       clientRequestId: key,
@@ -750,7 +747,7 @@ export class AgentService {
             inputTokens: null,
             outputTokens: null,
             estimatedCost: null,
-            ...channelQuota,
+            ...(await this.quota(manager, setting, channel.householdId)),
           }),
         );
         const encrypted = encryptAgentContent(
@@ -899,38 +896,43 @@ export class AgentService {
       return this.presentRun(duplicate, false);
     }
 
+    const allowedTools = await this.allowedTools(
+      [
+        ...setting.readToolsEnabled,
+        ...setting.proposalToolsEnabled,
+        ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
+      ],
+      user,
+    );
     let run: AgentRun;
     try {
-      run = await this.runs.save(
-        this.runs.create({
-          householdId: user.householdId,
-          conversationId: conversation.id,
-          requestedByMemberId: user.memberId,
-          agentProfileId: profile.id,
-          clientRequestId: key,
-          retryOfRunId: original.id,
-          runtimeKind: setting.runtimeKind,
-          runtimeVersion: this.runtime(setting.runtimeKind).version,
-          modelAlias: setting.modelAlias,
-          allowedTools: await this.allowedTools(
-            [
-              ...setting.readToolsEnabled,
-              ...setting.proposalToolsEnabled,
-              ...(profile.memoryEnabled ? AGENT_MEMORY_TOOLS : []),
-            ],
-            user,
-          ),
-          authorizationExpiresAt: new Date(
-            Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
-          ),
-          startedAt: null,
-          cancelRequestedAt: null,
-          inputTokens: null,
-          outputTokens: null,
-          estimatedCost: null,
-          ...(await this.quota(setting, user.householdId)),
-        }),
-      );
+      // 额度计数要和插入在同一个事务里（quota 锁设置行）
+      run = await this.dataSource.transaction(async (manager) => {
+        const runs = manager.getRepository(AgentRun);
+        return runs.save(
+          runs.create({
+            householdId: user.householdId,
+            conversationId: conversation.id,
+            requestedByMemberId: user.memberId,
+            agentProfileId: profile.id,
+            clientRequestId: key,
+            retryOfRunId: original.id,
+            runtimeKind: setting.runtimeKind,
+            runtimeVersion: this.runtime(setting.runtimeKind).version,
+            modelAlias: setting.modelAlias,
+            allowedTools,
+            authorizationExpiresAt: new Date(
+              Date.now() + AGENT_TOOL_AUTHORIZATION_TTL_MS,
+            ),
+            startedAt: null,
+            cancelRequestedAt: null,
+            inputTokens: null,
+            outputTokens: null,
+            estimatedCost: null,
+            ...(await this.quota(manager, setting, user.householdId)),
+          }),
+        );
+      });
     } catch (error) {
       if (isUniqueViolation(error)) {
         const raced = await this.runs.findOne({
@@ -1174,17 +1176,23 @@ export class AgentService {
   /**
    * 开 run 前的额度：云端运行方式按上海时区当天已开的第 2 档 run 数比 tier2DailyLimit，用完了这次就记成一条
    * 不执行的 failed run（errorCode = AGENT_DAILY_LIMIT，tier 留空不占额度）——既是审计，对话里也看得到原因。
+   * 必须在插入 run 的同一个事务里调（J4.5）：先锁住这户的设置行（SELECT … FOR UPDATE），同一户并发开 run
+   * 在这里排队，计数与插入之间不会被别人插进来；10 个并发也只放行额度内的。上限取锁住那一刻的值。
    */
-  private async quota(setting: AgentSetting, householdId: string) {
+  private async quota(manager: EntityManager, setting: AgentSetting, householdId: string) {
     const cloud = CLOUD_RUNTIMES.includes(setting.runtimeKind);
     if (cloud) {
-      const [row]: { used: number }[] = await this.dataSource.query(
+      const [locked]: { limit: number }[] = await manager.query(
+        `SELECT "tier2DailyLimit" AS "limit" FROM agent_settings WHERE "householdId" = $1 FOR UPDATE`,
+        [householdId],
+      );
+      const [row]: { used: number }[] = await manager.query(
         `SELECT COUNT(*)::int AS used FROM agent_runs
           WHERE "householdId" = $1 AND tier = 2
             AND "createdAt" >= (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai')`,
         [householdId],
       );
-      if (row.used >= setting.tier2DailyLimit) {
+      if (row.used >= (locked?.limit ?? setting.tier2DailyLimit)) {
         return {
           status: 'failed' as const,
           tier: null,

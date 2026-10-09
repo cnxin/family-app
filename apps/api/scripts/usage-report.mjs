@@ -108,12 +108,15 @@ const rank = (list, value) => (list.includes(value) ? list.indexOf(value) : list
 
 // 云端档（J4.3）：按上海时区的天，数第 2 档 run（tier = 2）、它们的 token 合计、被每日上限挡下的次数
 // （挡下的那次记成 errorCode = AGENT_DAILY_LIMIT、tier 留空的 failed run）。
+// 流式（J4.4 / J4.5）：第 2 档里由 native 循环真正跑起来的 run（runtimeKind = native 且 startedAt 有值）会把过程
+// 推到 /events；Hermes 只在结束时推一条 done。占比 = 流式 run / 云端 run。
 const CLOUD_DAILY = `
   SELECT "householdId" AS household,
          to_char("createdAt" AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD') AS day,
          COUNT(*) FILTER (WHERE tier = 2)::int AS runs,
          COALESCE(SUM(COALESCE("inputTokens", 0) + COALESCE("outputTokens", 0)) FILTER (WHERE tier = 2), 0)::int AS tokens,
-         COUNT(*) FILTER (WHERE "errorCode" = 'AGENT_DAILY_LIMIT')::int AS refused
+         COUNT(*) FILTER (WHERE "errorCode" = 'AGENT_DAILY_LIMIT')::int AS refused,
+         COUNT(*) FILTER (WHERE tier = 2 AND "runtimeKind" = 'native' AND "startedAt" IS NOT NULL)::int AS streamed
     FROM agent_runs
    WHERE "createdAt" >= now() - make_interval(days => $1)
      AND (tier = 2 OR "errorCode" = 'AGENT_DAILY_LIMIT')
@@ -235,9 +238,10 @@ try {
         console.log('- 这段时间没有用云端档\n');
         return;
       }
-      console.log('| 日期 | 云端 run 数 | token 合计 | 被每日上限拒绝 |');
-      console.log('| --- | ---: | ---: | ---: |');
-      for (const row of mine) console.log(`| ${row.day} | ${row.runs} | ${row.tokens} | ${row.refused} |`);
+      const share = (row) => (row.runs ? `${row.streamed} / ${row.runs}（${Math.round((row.streamed / row.runs) * 100)}%）` : '—');
+      console.log('| 日期 | 云端 run 数 | token 合计 | 被每日上限拒绝 | 流式 run 占比 |');
+      console.log('| --- | ---: | ---: | ---: | ---: |');
+      for (const row of mine) console.log(`| ${row.day} | ${row.runs} | ${row.tokens} | ${row.refused} | ${share(row)} |`);
       console.log('');
     };
     if (!domains.length) {

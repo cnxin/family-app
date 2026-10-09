@@ -1,7 +1,8 @@
 // J4.2 native 运行时黑盒：小管家自带的循环（packages/agent-core 的 runLoop）+ 回放模型。
 // API 由 run-api-tests.mjs 带 AGENT_NATIVE_PROVIDER=replay:scripts/fixtures/agent-native/suite.json 启动（只在测试模式生效），
-// 回放套件按成员原话挑录制：「记一笔 38 买菜」是 J4.0 的 DeepSeek 模拟录制，另有只读、超步数、慢回答三条。
+// 回放套件按成员原话挑录制：「记一笔 38 买菜」是 J4.0 的 DeepSeek 模拟录制，另有只读、超步数、慢回答、记忆（记 / 召回）。
 // J4.4：订阅 /events 看流式事件（agent.run）——native 按序推过程，fake 只在结束时推一条 done，只推给发起成员。
+// J4.5：外部渠道（tier2Scope 按消息所属成员判）、记忆工具在 native 循环里跑通。
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { openEventStream } from './events-client.mjs';
@@ -59,6 +60,17 @@ async function mcp(body) {
   const dataLine = text.split(/\r?\n/).find((line) => line.startsWith('data: '));
   const payload = dataLine ? dataLine.slice(6) : text;
   return { status: response.status, body: payload ? JSON.parse(payload) : null };
+}
+
+async function internal(path, method = 'GET', body) {
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MCP_KEY}` },
+    body: body == null ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : null;
+  return { status: response.status, data: json?.data, error: json?.error };
 }
 
 async function waitFor(check, label, timeoutMs = 15_000) {
@@ -125,6 +137,7 @@ const model = await startFakeModel();
 const ownerStream = await openEventStream(BASE, owner.accessToken);
 const otherStream = await openEventStream(BASE, other.accessToken);
 let restoreKind = null;
+const pairedChannels = [];
 try {
   assert(
     ownerStream.status === 200 && otherStream.status === 200 &&
@@ -335,6 +348,109 @@ try {
   } finally {
     await request('/system/modules/finance', owner.accessToken, 'PATCH', { override: null });
   }
+
+  console.log('9. 外部渠道（J4.5）：配对、收发走 native；tier2Scope 按消息所属成员判');
+  const pairFor = async (who) => {
+    const pairing = await request('/agent/channel-pairings', owner.accessToken, 'POST', {
+      memberId: who.member.id,
+      platform: 'telegram',
+      expiresInMinutes: 10,
+      idempotencyKey: `native-pair:${randomUUID()}`,
+    });
+    const paired = await internal('/internal/agent/channels/pair', 'POST', {
+      pairingCode: pairing.data?.pairingCode,
+      externalAccountId: `native-${randomUUID()}`,
+    });
+    if (paired.status !== 201) return null;
+    pairedChannels.push(paired.data.channel);
+    return paired.data.channel.id;
+  };
+  const ownerChannel = await pairFor(owner);
+  const memberChannel = await pairFor(other);
+  assert(Boolean(ownerChannel && memberChannel), '管理员给自己、给妈妈各配好一个渠道');
+  const channelSend = (channelId, message) =>
+    internal(`/internal/agent/channels/${channelId}/messages`, 'POST', {
+      externalThreadRef: `native-thread-${randomUUID()}`,
+      message,
+      clientRequestId: `native-channel:${randomUUID()}`,
+    });
+  const channelDone = (channelId, runId) =>
+    waitFor(async () => {
+      const result = await internal(`/internal/agent/channels/${channelId}/runs/${runId}`);
+      return ['completed', 'failed', 'cancelled'].includes(result.data?.status) ? result.data : null;
+    }, `渠道 run ${runId} 结束`);
+  const channelRow = async (runId) =>
+    (await db.query('SELECT "runtimeVersion", tier, "allowedTools" FROM agent_runs WHERE id = $1', [runId])).rows[0];
+  const scope = (await request('/agent/settings', owner.accessToken)).data;
+  assert(scope.tier2Scope === 'admins', '试用期默认 tier2Scope = admins');
+  const memberBlocked = await channelSend(memberChannel, '今天吃什么');
+  assert(memberBlocked.status === 403, '妈妈（普通成员）的渠道消息 403：不因为走的是渠道就绕过 tier2Scope');
+  const ownerChannelMessage = await channelSend(ownerChannel, '今天吃什么');
+  assert(ownerChannelMessage.status === 202, '爸爸（管理员）的渠道消息排上队');
+  const ownerChannelRun = await channelDone(ownerChannel, ownerChannelMessage.data.id);
+  const ownerChannelState = await channelRow(ownerChannelMessage.data.id);
+  assert(
+    ownerChannelRun.status === 'completed' && ownerChannelRun.readOnly === true &&
+      ownerChannelRun.content === '今天的菜单还没定，想吃什么可以直接点。' &&
+      ownerChannelState.runtimeVersion === 'native-loop-1' && ownerChannelState.tier === 2 &&
+      ownerChannelState.allowedTools.includes('get_meal_plan') &&
+      !ownerChannelState.allowedTools.some((tool) => tool.startsWith('propose_') || tool === 'remember_preference'),
+    '渠道 run 走 native 循环（tier = 2、计入每日额度），只读工具，回答是录制的正文',
+  );
+  const opened = await request('/agent/settings', owner.accessToken, 'PATCH', { tier2Scope: 'all', expectedVersion: scope.version });
+  assert(opened.status === 200, '管理员把 tier2Scope 改成 all');
+  const memberChannelMessage = await channelSend(memberChannel, '今天吃什么');
+  const memberChannelRun = memberChannelMessage.status === 202
+    ? await channelDone(memberChannel, memberChannelMessage.data.id)
+    : null;
+  assert(
+    memberChannelRun?.status === 'completed' &&
+      (await channelRow(memberChannelMessage.data.id)).runtimeVersion === 'native-loop-1',
+    'tier2Scope = all 后妈妈的渠道消息照常走 native 回答',
+  );
+  await request('/agent/settings', owner.accessToken, 'PATCH', { tier2Scope: 'admins', expectedVersion: opened.data.version });
+
+  console.log('10. 记忆工具（J4.5）：native 循环里 remember_preference 建候选，确认后 recall_preferences 召回');
+  const profile = await request('/agent/profile', owner.accessToken);
+  if (!profile.data.memoryEnabled) {
+    await request('/agent/profile', owner.accessToken, 'PATCH', { memoryEnabled: true, expectedVersion: profile.data.version });
+  }
+  const recallItems = async (runId) =>
+    (await db.query(
+      `SELECT "toolName", status, ("outputSummary"->>'itemCount')::int AS items FROM agent_tool_events WHERE "runId" = $1`,
+      [runId],
+    )).rows;
+  const remember = await ask(owner.accessToken, '记住我不吃香菜');
+  const rememberDone = await finished(owner.accessToken, remember);
+  const rememberEvents = await toolEvents(remember.runId);
+  assert(
+    rememberDone.run.status === 'completed' && rememberEvents.length === 1 &&
+      rememberEvents[0].toolName === 'remember_preference' && rememberEvents[0].status === 'completed',
+    'native 循环调 remember_preference 一次，run 完成',
+  );
+  const candidates = await request('/agent/memories?status=candidate', owner.accessToken);
+  const candidate = candidates.data?.find((item) => item.content === '不吃香菜' && item.source?.type === 'agent_tool');
+  assert(
+    candidate?.memoryKey === 'diet_restriction' && candidate.visibility === 'member_private' && candidate.status === 'candidate',
+    '候选照旧落库：本人私有、diet_restriction、来源 agent_tool，待确认',
+  );
+  const recallBefore = await ask(owner.accessToken, '我记过哪些忌口');
+  await finished(owner.accessToken, recallBefore);
+  const beforeRows = await recallItems(recallBefore.runId);
+  assert(
+    beforeRows.length === 1 && beforeRows[0].toolName === 'recall_preferences' && beforeRows[0].status === 'completed' &&
+      beforeRows[0].items === 0,
+    '确认前 recall_preferences 召回 0 条（候选不生效）',
+  );
+  const confirmed = await request(`/agent/memories/${candidate.id}/confirm`, owner.accessToken, 'POST', {
+    expectedVersion: candidate.version,
+  });
+  assert(confirmed.status === 201, '爸爸确认这条候选');
+  const recallAfter = await ask(owner.accessToken, '我记过哪些忌口');
+  await finished(owner.accessToken, recallAfter);
+  const afterRows = await recallItems(recallAfter.runId);
+  assert(afterRows.length === 1 && afterRows[0].status === 'completed' && afterRows[0].items === 1, '确认后 recall_preferences 召回 1 条');
+  await request(`/agent/memories/${candidate.id}`, owner.accessToken, 'DELETE', { expectedVersion: confirmed.data.version });
 } finally {
   if (restoreKind) {
     const current = await request('/agent/settings', owner.accessToken);
@@ -346,6 +462,9 @@ try {
       providerKey: null,
       expectedVersion: current.data.version,
     });
+  }
+  for (const channel of pairedChannels) {
+    await request(`/agent/channels/${channel.id}/revoke`, owner.accessToken, 'POST', { expectedVersion: channel.version });
   }
   await model.stop();
   ownerStream.close();

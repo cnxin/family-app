@@ -1,0 +1,57 @@
+{
+  "provider": "generic",
+  "source": "simulated",
+  "note": "模拟录制（J4.5）：「记住我不吃香菜」——调 remember_preference 建候选，提醒成员去确认。",
+  "exchanges": [
+    {
+      "note": "第 1 步：记偏好",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_1",
+              "name": "remember_preference",
+              "arguments": "{\"memoryKey\": \"diet_restriction\", \"content\": \"不吃香菜\"}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 640,
+            "outputTokens": 18
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "作答",
+      "response": {
+        "events": [
+          {
+            "type": "text_delta",
+            "text": "记下了「不吃香菜」，"
+          },
+          {
+            "type": "text_delta",
+            "text": "在「它记住了什么」里确认后才会生效。"
+          },
+          {
+            "type": "usage",
+            "inputTokens": 720,
+            "outputTokens": 22
+          },
+          {
+            "type": "done",
+            "finishReason": "stop",
+            "rawFinishReason": "stop"
+          }
+        ]
+      }
+    }
+  ]
+}

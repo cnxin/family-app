@@ -20,6 +20,14 @@
       "latencyMs": 2000
     },
     {
+      "match": "记住我不吃香菜",
+      "recording": "memory-remember.json"
+    },
+    {
+      "match": "我记过哪些忌口",
+      "recording": "memory-recall.json"
+    },
+    {
       "match": "（走家里配的模型）",
       "use": "configured"
     }
