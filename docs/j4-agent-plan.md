@@ -72,10 +72,12 @@
 
 ## 3. 数据与配置
 
-- `agent_settings` 加列：`providerKind`（deepseek / qwen / zhipu / kimi / custom，可空）、`providerBaseUrl`、`providerModel`、`providerKeyEncrypted`（加密）、`tier2Scope`（admins / all，默认 admins）、`providerCheckedAt` / `providerCheckOk`（「测一下」结果）。
-- `agent_runs` 加列：`tier`（0 / 1 / 2，本阶段恒 2）、`inputTokens` / `outputTokens`（已有则不加）、`redacted`（bool）。
-- `agent_daily_usage(householdId, day, runs)`：每日计数，上海时区日界；或在 `agent_runs` 上按天 count（数据量小，**先用 count，不建表**）。
-- 工具名单：`AGENT_READ_TOOLS` / `AGENT_PROPOSAL_TOOLS` 改为从 manifest + `core-assistant.ts` 生成；30 个旧名保留为别名（黑盒脚本与渠道配置依赖），`check-plugins` 的手写联合断言随之删掉。
+> 按实际落地的列名修正（J4.3，迁移 `AddAgentCloudProvider1785234500000`；运行方式 `'native'` 在 J4.2 的 `AddNativeAgentRuntime1785234400000`）。
+
+- `agent_settings` 加列：`providerKind`（varchar(16)，deepseek / qwen / zhipu / kimi / custom，可空）、`providerBaseUrl`（varchar(300)）、`providerModel`（varchar(120)）、`providerKeyEncrypted`（text，存 `v1:<nonce>:<密文>`：与对话内容同一把 `AGENT_DATA_KEY` 的 AES-256-GCM，附加数据绑家庭；接口只回 `providerKeyConfigured` 与 `providerKeyLast4`）、`providerCheckedAt`（timestamptz）/ `providerCheckOk`（bool，默认 false；改了服务商、地址、模型或 key 就清掉）、`tier2Scope`（varchar(8)，admins / all，默认 admins）。老家庭升级后新列为空、`tier2Scope = admins`，`runtimeKind` 不变。
+- `agent_runs` 加列：`tier`（smallint，可空；云端运行方式 hermes / native 的 run 记 2，本地确定性助理 fake 留空）、`redacted`（bool，默认 false；native 且 `tier2Redact` 开时为 true）。`inputTokens` / `outputTokens` 原来就有，native 累加各步用量写进去。
+- 每日用量：不建表，在 `agent_runs` 上按上海时区当天 `count(tier = 2)`；超过 `tier2DailyLimit` 的那次记成一条不执行的 failed run（`errorCode = AGENT_DAILY_LIMIT`，`tier` 留空不占额度），兼作审计；用量报告的「云端档」一段按天数它们。
+- 工具名单：`AGENT_READ_TOOLS` / `AGENT_PROPOSAL_TOOLS` 改为从 manifest + `core-assistant.ts` 生成；30 个现名全部保留（和规则不同的在 manifest 写 `toolName`，`toolAliases` 留给以后改名），`check-plugins` 的手写联合断言随之删掉（J4.1）。
 
 ## 4. 分笔（叠加分支，每笔一个 PR，规矩照旧）
 
@@ -83,8 +85,8 @@
 | --- | --- | --- | --- | --- | --- |
 | J4.0 | `packages/agent-core`：`ModelProvider`（OpenAI 兼容，流式 + tool_calls + images）、`ToolRegistry`、`runLoop`、上限与围栏；**单测用录制的模型响应回放**（含：一次工具调用、连续三次、工具报错、超步数、流式分片、恶意上下文注入围栏） | L | `d72d586` | `4ca3405` | 分支 #37824739021、main #37828165900，均一次过 |
 | J4.1 | 工具从 manifest 生成：`queries` → 读工具（走门面）、`actions(propose)` → `propose_*`；core-assistant 7 个；30 个旧名别名；agent 目录对插件 Service 的直接 import 全部改走门面（§9.5 那条）；`check-plugins` 断言「工具集合 == manifest 推导」 | M | `057baa8` | `cb9033f` | 分支 #37828855005、main #37832187109，均一次过 |
-| J4.2 | `NativeAgentRuntime` + `AgentService` 接线：会话 / 历史 / 允许的工具（按家庭模块开关裁剪，§3.3）/ 提案落库 / 事件写 `agent_tool_events`；`runtimeKind: 'native'`；`FakeAgentRuntime` 保留；全部 `agent*.mjs` 黑盒在 native 下通过（用 Fake provider 回放，不打真模型） | L | | | |
-| J4.3 | 云端档配置：`agent_settings` 新列 + 加密存 key；设置页「云端助理」分段加服务商下拉、模型、key（只显示末 4 位）、「测一下」（发一条 1 token 请求）、`tier2Scope`；每日上限与脱敏接到 AgentService；脱敏单测（真名 / 手机 / 车牌 / 卡号样式） | M | | | |
+| J4.2 | `NativeAgentRuntime` + `AgentService` 接线：会话 / 历史 / 允许的工具（按家庭模块开关裁剪，§3.3）/ 提案落库 / 事件写 `agent_tool_events`；`runtimeKind: 'native'`；`FakeAgentRuntime` 保留；全部 `agent*.mjs` 黑盒在 native 下通过（用 Fake provider 回放，不打真模型） | L | `6ec81c8` | `beaed76` | 分支 #37873196748、main #37874814358，均一次过 |
+| J4.3 | 云端档配置：`agent_settings` 新列 + 加密存 key；设置页「云端助理」分段加服务商下拉、模型、key（只显示末 4 位）、「测一下」（发一条 1 token 请求）、`tier2Scope`；每日上限与脱敏接到 AgentService；脱敏单测（真名 / 手机 / 车牌 / 卡号样式） | M | `25bf6a6` | `1cd65e0` | 分支 #37874906822、main #37876521864，均一次过 |
 | J4.4 | SSE：`/agent/runs/:id/events`（复用 H2 通道鉴权），前端小管家页消息区改订阅、去掉 2 秒轮询；取消按钮走 `cancel` | M | | | |
 | J4.5 | 外围回归：例行任务（nightly_digest / weekly_report）、外部渠道、记忆工具在 native 下跑通；用量报告加「云端档每日用量」；文档：§4 J4 ☑、§9.5 更新、family-guide 不动（试用期家里人看不到） | S | | | |
 | J4.6 | Hermes 下线（拍板 #8 的条件满足后）：删 runtime / compose / deploy/hermes / 契约脚本，迁移 `'hermes'` → `'native'`，升级脚本与 deploy-c2 相应改 | S | | | |
