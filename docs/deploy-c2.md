@@ -166,13 +166,16 @@ docker compose --env-file deploy/.env.production -f docker-compose.prod.yml up -
 
 下面的 `dc` 是 `docker compose --env-file deploy/.env.production -f docker-compose.prod.yml` 的简写。
 
-**① 迁移到位**
+**① 迁移到位**：库里最新的迁移 == 仓库里最后一个迁移文件的类名（不再写死迁移名，每次升级都适用）。
 
 ```bash
-dc exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT name FROM app_migrations ORDER BY timestamp DESC LIMIT 2; SELECT COUNT(*) FROM maintenance_records WHERE \"performedOn\" IS NULL;"'
+expected=$(grep -ho 'export class [A-Za-z0-9]*' "$(ls apps/api/src/database/migrations/1*.ts | sort | tail -1)" | cut -d' ' -f3)
+actual=$(dc exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT name FROM app_migrations ORDER BY timestamp DESC LIMIT 1;"')
+[ "$expected" = "$actual" ] && echo "迁移到位：$actual" || echo "不一致：仓库 $expected，库里 $actual"
+dc exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM maintenance_records WHERE \"performedOn\" IS NULL;"'
 ```
 
-应看到 `AddStorageLocations1785233200000`、`AddSmartHomeCommandSource1785233100000`，以及 `0`（没有漏回填的维护记录）。
+应看到「迁移到位：…」（类名形如 `AddAgentCloudProvider1785234500000`），以及 `0`（没有漏回填的维护记录）。在部署目录（仓库根）执行，`ls` 取的就是这次升级的代码。
 
 **② 时区一致**
 

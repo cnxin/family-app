@@ -1,0 +1,57 @@
+{
+  "provider": "generic",
+  "source": "simulated",
+  "note": "模拟录制（J4.5）：「我记过哪些忌口」——调 recall_preferences 召回已确认的忌口后作答（正文不随召回结果变）。",
+  "exchanges": [
+    {
+      "note": "第 1 步：召回忌口",
+      "response": {
+        "events": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "call_1",
+              "name": "recall_preferences",
+              "arguments": "{\"memoryKey\": \"diet_restriction\"}"
+            }
+          },
+          {
+            "type": "usage",
+            "inputTokens": 610,
+            "outputTokens": 12
+          },
+          {
+            "type": "done",
+            "finishReason": "tool_calls",
+            "rawFinishReason": "tool_calls"
+          }
+        ]
+      }
+    },
+    {
+      "note": "作答",
+      "response": {
+        "events": [
+          {
+            "type": "text_delta",
+            "text": "我这边查了你记过的忌口，"
+          },
+          {
+            "type": "text_delta",
+            "text": "以上面查到的为准。"
+          },
+          {
+            "type": "usage",
+            "inputTokens": 690,
+            "outputTokens": 16
+          },
+          {
+            "type": "done",
+            "finishReason": "stop",
+            "rawFinishReason": "stop"
+          }
+        ]
+      }
+    }
+  ]
+}

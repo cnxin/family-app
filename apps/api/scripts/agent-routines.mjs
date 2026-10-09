@@ -1042,9 +1042,107 @@ async function runApiPhase() {
       '周报正文不包含密钥、对话或记忆正文且不超过 500 字',
     );
 
+    await routinesUnderNative(db, owner);
+
     console.log('A7.4-B 每晚汇总、临期提醒、家庭周报与通知上限回归通过');
   } finally {
     await AppDataSource.destroy();
+  }
+}
+
+/**
+ * J4.5：运行方式是「小管家自带」（native）时例行任务照常。晚报 / 周报由确定性的汇总拼出来，不经过模型、不开 agent_runs，
+ * 所以不受 tier2Scope 影响，也不受第 2 档每日上限影响、不计入（计入的只有对话 / 渠道 / 重试开的 run）。
+ * 用种子家庭（第 1 段已打开两种例行任务和例行通知），由 API 自己的轮询器派发。
+ */
+async function routinesUnderNative(db, owner) {
+  console.log('8. native 运行方式 + tier2Scope = admins + 当天额度用完：晚报、周报照常发，不开 run、不占额度');
+  const { startFakeModel } = await import('./fake-model.mjs');
+  const model = await startFakeModel();
+  const householdId = owner.member.householdId;
+  const original = (await request('/agent/settings', owner.accessToken)).data;
+  const patch = async (body) => {
+    const current = (await request('/agent/settings', owner.accessToken)).data;
+    return request('/agent/settings', owner.accessToken, 'PATCH', { ...body, expectedVersion: current.version });
+  };
+  const ask = async (message) => {
+    const conversation = await request('/agent/conversations', owner.accessToken, 'POST', {});
+    return request(`/agent/conversations/${conversation.data.id}/messages`, owner.accessToken, 'POST', {
+      message,
+      clientRequestId: randomUUID(),
+    });
+  };
+  const counts = async () =>
+    (await db.query(
+      `SELECT COUNT(*)::int AS runs, COUNT(*) FILTER (WHERE tier = 2)::int AS tier2 FROM agent_runs WHERE "householdId" = $1`,
+      [householdId],
+    ))[0];
+  try {
+    await patch({ providerKind: 'custom', providerBaseUrl: model.url, providerModel: 'fake-model', providerKey: model.key });
+    const checked = await request('/agent/settings/provider-check', owner.accessToken, 'POST');
+    const native = await patch({ runtimeKind: 'native', enabled: true, tier2Scope: 'admins', tier2DailyLimit: 1 });
+    assert(
+      checked.data?.ok === true && native.status === 200 && native.data.runtimeKind === 'native' &&
+        native.data.tier2Scope === 'admins' && native.data.tier2DailyLimit === 1,
+      '切到 native，tier2Scope = admins，每日上限 1',
+    );
+    // 前面的脚本可能在这一家开过云端 run：今天的计数清零后用掉唯一的 1 次
+    await db.query('UPDATE agent_runs SET tier = NULL WHERE "householdId" = $1 AND tier = 2', [householdId]);
+    const first = await ask('今天吃什么');
+    const refused = await ask('今天吃什么');
+    assert(
+      first.status === 202 && first.data.status === 'queued' && refused.data?.errorCode === 'AGENT_DAILY_LIMIT',
+      '当天额度用完：第 2 次对话被 AGENT_DAILY_LIMIT 挡下',
+    );
+
+    const routineIds = (await db.query(
+      `SELECT id FROM agent_routines WHERE "householdId" = $1 AND enabled = true`,
+      [householdId],
+    )).map((row) => row.id);
+    assert(routineIds.length === 2, '种子家庭的晚报、周报都开着');
+    await db.query(
+      `DELETE FROM notifications WHERE "householdId" = $1 AND module = 'agent'
+         AND type IN ('agent_nightly_digest', 'agent_weekly_report')`,
+      [householdId],
+    );
+    const before = await counts();
+    await db.query(
+      `UPDATE agent_routines SET "nextRunAt" = now() - interval '1 minute' WHERE id = ANY($1::uuid[])`,
+      [routineIds],
+    );
+    const delivered = await waitFor(async () => {
+      const rows = await db.query(
+        `SELECT type, "recipientId" FROM notifications WHERE "householdId" = $1 AND module = 'agent'
+           AND type IN ('agent_nightly_digest', 'agent_weekly_report')`,
+        [householdId],
+      );
+      return rows.length === 2 ? rows : null;
+    }, 10_000);
+    assert(
+      delivered?.length === 2 &&
+        delivered.every((row) => row.recipientId === owner.member.id) &&
+        new Set(delivered.map((row) => row.type)).size === 2,
+      'API 的轮询器照常给 owner 发出晚报和周报（不受 tier2Scope、额度影响）',
+    );
+    const after = await counts();
+    assert(
+      after.runs === before.runs && after.tier2 === before.tier2 && after.tier2 === 1,
+      `例行任务不开 agent_runs、不占第 2 档额度（run ${before.runs} → ${after.runs}，tier 2 仍是 ${after.tier2}）`,
+    );
+    const stillRefused = await ask('今天吃什么');
+    assert(stillRefused.data?.errorCode === 'AGENT_DAILY_LIMIT', '例行任务跑完后额度不变：对话仍被挡下');
+  } finally {
+    await patch({
+      runtimeKind: original.runtimeKind,
+      enabled: original.enabled,
+      tier2Scope: original.tier2Scope,
+      tier2DailyLimit: original.tier2DailyLimit,
+      providerKind: null,
+      providerBaseUrl: null,
+      providerModel: null,
+      providerKey: null,
+    });
+    await model.stop();
   }
 }
 

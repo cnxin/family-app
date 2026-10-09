@@ -17,7 +17,7 @@
 | 工具 | 30 个：23 读 + 7 `propose_*`；归属已全部在 manifest / `core-assistant.ts`（J1.6、J1b.5）；但**名单仍是手写字面量**（`AGENT_READ_TOOLS` / `AGENT_PROPOSAL_TOOLS`），MCP 的 `propose_plan` 入参联合也是手写（check-plugins 盯着一致） |
 | 提案 | `AgentProposalsService.executeWithinTransaction`：模型只能提案，成员确认才执行；提案组 `propose_plan` |
 | 会话 / 运行 / 事件 | `agent_conversations`、`agent_runs`、`agent_tool_events` 已有；前端 2 秒轮询 run 状态 |
-| 外围 | 记忆（2 个工具 + 候选 / 确认）、例行任务（`nightly_digest`、`weekly_report`，用 runtime.chat 生成）、外部渠道（`/internal/agent/channels`，配对码） |
+| 外围 | 记忆（2 个工具 + 候选 / 确认）、例行任务（`nightly_digest`、`weekly_report`，**确定性汇总拼正文，不经模型、不开 run**；起草时写的「用 runtime.chat 生成」不对，J4.5 核实后更正）、外部渠道（`/internal/agent/channels`，配对码） |
 | J2 已落的开关 | `agent_settings`：`enabled`（= 第 2 档）、`tier2DailyLimit`（50）、`tier2Redact`（true）、`captureUtterances`、`assistant_utterances` 表 |
 | agent 目录仍直接 import 各插件 Service | §9.5 点名留给 J4 |
 
@@ -102,6 +102,7 @@
 | 模型把工具描述当指令 / 上下文注入 | 围栏 + 写操作只提案 + 单测里的注入用例 |
 | Hermes 下线后渠道配对等依赖它的东西断掉 | J4.5 先回归，J4.6 才删；渠道那条路径本来就在我们 API 里，不经 Hermes |
 | 成本失控 | 每日上限 + 单次 run 的步数 / token 上限 + 「测一下」只发 1 token |
+| 模型地址可填局域网（管理员） | 有意放开：要支持家里自己跑的本地模型（J5 第 1 档同一接口）。只有能管理小管家的人（`manage_agent`）能改；API 只请求这一个地址（「测一下」和对话），不跟随用户输入的其它 URL；key 加密存、只回末 4 位；每次 run 记 `tier` / `redacted` / token 数可审计 |
 
 ## 6. 与其它计划的关系
 
