@@ -175,8 +175,14 @@ try {
   assert(runRow.tier === 2 && runRow.redacted === true, 'run 记 tier = 2、redacted = true');
 
   console.log('6. 每日上限：设成 2，当天第 3 次被拒');
-  // 测试库里前面的脚本也在这一家开过云端 run：先把今天的计数清零，再按「上限 2」走一遍
+  // 测试库里前面的脚本也在这一家开过云端 run：先把今天的计数清零，再按「上限 2」走一遍；
+  // 被上限挡下的记录也可能有（agent-routines 第 8 段），报告里的「被拒」按增量算
   await db.query('UPDATE agent_runs SET tier = NULL WHERE "householdId" = $1 AND tier = 2', [owner.member.householdId]);
+  const refusedBefore = (await db.query(
+    `SELECT COUNT(*)::int AS n FROM agent_runs WHERE "householdId" = $1 AND "errorCode" = 'AGENT_DAILY_LIMIT'
+       AND to_char("createdAt" AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD') = to_char(now() AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD')`,
+    [owner.member.householdId],
+  )).rows[0].n;
   await patch(owner.accessToken, { tier2DailyLimit: 2 });
   for (const index of [1, 2]) {
     const queued = await send(owner.accessToken, conversation.data.id, `${VIA_MODEL}第 ${index} 次`);
@@ -208,7 +214,10 @@ try {
   const household = report.split('\n## ').find((section) => section.includes('云端档（J4.3'));
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const row = household?.split('\n').find((line) => line.startsWith(`| ${day} |`))?.split('|').map((cell) => cell.trim());
-  assert(row && Number(row[2]) === 2 && Number(row[3]) > 0 && Number(row[4]) === 1, `报告里今天：云端 run 2 次、token > 0、被拒 1 次（${row?.join(' ')}）`);
+  assert(
+    row && Number(row[2]) === 2 && Number(row[3]) > 0 && Number(row[4]) === refusedBefore + 1,
+    `报告里今天：云端 run 2 次、token > 0、被拒比之前多 1 次（之前 ${refusedBefore}；${row?.join(' ')}）`,
+  );
   assert(row?.[5] === '2 / 2（100%）', `流式 run 占比：两次都走 native 循环（${row?.[5]}）`);
 
   console.log('8. 并发（J4.5）：上限 3、10 个请求同时发，只放行 3 个');
