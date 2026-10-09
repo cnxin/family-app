@@ -10,7 +10,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
-import { AGENT_PROVIDER_PRESETS } from '@family/contracts';
+import { AGENT_PROVIDER_PRESETS, AGENT_RUN_EVENT, type AgentRunStreamPayload } from '@family/contracts';
 import { ProviderError } from '@family/agent-core';
 import { hasCapability, type Capability } from '../auth/capabilities';
 import { JwtUser } from '../auth/jwt.guard';
@@ -139,6 +139,8 @@ export class AgentService {
       // tier2Scope = admins 时普通成员看到的是关着的（入口靠它隐藏）
       enabled: setting.enabled && this.tier2Open(setting, user),
       runtimeKind: setting.runtimeKind,
+      // 对话页标题下按运行方式写「小管家自带 · 服务商」（J4.4）
+      providerKind: setting.providerKind,
       selected,
       runtimes,
       fallbackAvailable: fake.available,
@@ -953,14 +955,40 @@ export class AgentService {
    * 渠道消息、重试这些入口没有经过登录写请求的拦截器，统一在这里发。
    */
   private async processRun(runId: string, message: string) {
+    const push = this.runStream();
     try {
-      await this.processRunUnpublished(runId, message);
+      await this.processRunUnpublished(runId, message, push);
     } finally {
       const run = await this.runs.findOneBy({ id: runId });
       if (run) {
         await this.recordUtterance(run, message).catch(() => undefined);
+        this.pushDone(run, push);
         this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
       }
+    }
+  }
+
+  /**
+   * J4.4：一次 run 的流式事件（contracts 的 agent.run），只推给发起成员；seq 在这次 run 里从 1 递增。
+   * native 运行时的过程事件经它推出去；run 收尾时由 pushDone 推最后一条 done。
+   */
+  private runStream() {
+    let seq = 0;
+    return (run: AgentRun, payload: AgentRunStreamPayload) => {
+      seq += 1;
+      this.eventBus.publishToMember({
+        householdId: run.householdId,
+        memberId: run.requestedByMemberId,
+        event: AGENT_RUN_EVENT,
+        data: { ...payload, runId: run.id, conversationId: run.conversationId, seq },
+      });
+    };
+  }
+
+  /** 已经落库到终态（完成 / 失败 / 取消）的 run 推一条 done；还没结束的不推。 */
+  private pushDone(run: AgentRun, push: ReturnType<AgentService['runStream']>) {
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+      push(run, { type: 'done', status: run.status, errorCode: run.errorCode });
     }
   }
 
@@ -1008,6 +1036,7 @@ export class AgentService {
   private async processRunUnpublished(
     runId: string,
     message: string,
+    push: ReturnType<AgentService['runStream']>,
   ) {
     const claimed = await this.runs.update(
       { id: runId, status: 'queued' },
@@ -1054,6 +1083,7 @@ export class AgentService {
           message,
           allowedTools: run.allowedTools,
           history,
+          onEvent: (payload) => push(run, payload),
         });
       } catch (error) {
         const current = await this.runs.findOneBy({ id: run.id });
@@ -1182,6 +1212,7 @@ export class AgentService {
       return;
     }
     void this.recordUtterance(run, content).catch(() => undefined);
+    this.pushDone(run, this.runStream());
     this.eventBus.publish({ householdId: run.householdId, domains: ['assistant'] });
   }
 

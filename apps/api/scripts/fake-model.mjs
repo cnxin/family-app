@@ -5,6 +5,7 @@
 // - 「记一笔 38 买菜」→ 按工具结果走：先调 get_finance_summary，再用返回里的第一个账户、名字带「买菜」的分类
 //   （没有就第一个支出分类）调 propose_finance_transaction，最后作答；
 // - 其余：把成员最后一句话原样回一遍（「收到：…」）。
+// 作答的正文按 chunkMs 分段慢慢吐（J4.4 看对话页的字是不是一段段长出来的）；chunkMs = 0 时一次回完。
 // 每次请求的 JSON 都记在 requests 里（看发出去的内容有没有脱敏）。
 import { createServer } from 'node:http';
 
@@ -21,8 +22,30 @@ function sse(response, chunks) {
 const choice = (delta, finish = null) => ({ choices: [{ index: 0, delta, finish_reason: finish }] });
 const usage = (prompt, completion) => ({ choices: [], usage: { prompt_tokens: prompt, completion_tokens: completion } });
 
-function textReply(response, text) {
-  sse(response, [choice({ role: 'assistant', content: text }), choice({}, 'stop'), usage(100, text.length)]);
+function textReply(response, text, chunkMs = 0) {
+  if (!chunkMs) {
+    sse(response, [choice({ role: 'assistant', content: text }), choice({}, 'stop'), usage(100, text.length)]);
+    return;
+  }
+  // 每段 4 个字，段与段之间隔 chunkMs
+  const pieces = text.match(/[\s\S]{1,4}/g) ?? [];
+  response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+  const write = (chunk) => response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  write(choice({ role: 'assistant', content: '' }));
+  let index = 0;
+  const next = () => {
+    if (response.destroyed) return;
+    if (index < pieces.length) {
+      write(choice({ content: pieces[index] }));
+      index += 1;
+      setTimeout(next, chunkMs);
+      return;
+    }
+    write(choice({}, 'stop'));
+    write(usage(100, text.length));
+    response.end('data: [DONE]\n\n');
+  };
+  next();
 }
 
 function toolReply(response, name, args) {
@@ -42,7 +65,7 @@ function memberText(messages) {
   return fenceEnd >= 0 ? content.slice(fenceEnd + 6) : content;
 }
 
-function financeTurn(response, messages) {
+function financeTurn(response, messages, chunkMs) {
   const lastTool = [...messages].reverse().find((message) => message.role === 'tool');
   const lastCall = [...messages].reverse().find((message) => message.role === 'assistant' && message.tool_calls?.length);
   const called = lastCall?.tool_calls?.[0]?.function?.name;
@@ -61,10 +84,10 @@ function financeTurn(response, messages) {
       occurredOn: today(),
     });
   }
-  return textReply(response, '已经起草了一笔 38 元的买菜支出，你在下面确认后才会入账。');
+  return textReply(response, '已经起草了一笔 38 元的买菜支出，你在下面确认后才会入账。', chunkMs);
 }
 
-export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0 } = {}) {
+export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0, chunkMs = 0 } = {}) {
   const requests = [];
   const server = createServer((request, response) => {
     if (request.method !== 'POST' || !request.url?.endsWith('/chat/completions')) {
@@ -88,8 +111,8 @@ export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0 
         return;
       }
       const text = memberText(body.messages ?? []);
-      if (text.includes('记一笔 38 买菜')) return financeTurn(response, body.messages);
-      return textReply(response, `收到：${text}`);
+      if (text.includes('记一笔 38 买菜')) return financeTurn(response, body.messages, chunkMs);
+      return textReply(response, `收到：${text}`, chunkMs);
     });
   });
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));

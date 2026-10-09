@@ -9,6 +9,8 @@ export {
   type AgentToolName,
 } from '@family/contracts';
 
+import type { AgentRunStreamPayload } from '@family/contracts';
+
 export const AGENT_HERMES_CHAT_TIMEOUT_MS = 6 * 60_000;
 export const AGENT_HERMES_STOP_WAIT_MS = 45_000;
 export const AGENT_TOOL_AUTHORIZATION_TTL_MS = 7 * 60_000;
@@ -32,6 +34,8 @@ export interface AgentChatInput {
   history: { role: 'user' | 'assistant'; content: string }[];
   /** 不可信内容（页面上下文、检索结果、记忆……）：native 运行时加围栏后交给模型，不拼进成员原话。 */
   untrusted?: { label: string; content: string }[];
+  /** J4.4 流式：native 运行时把循环的过程事件交出来（服务端补上 runId / seq 推到 /events）；其余运行时不调。 */
+  onEvent?: (event: AgentRunStreamPayload) => void;
 }
 
 export interface AgentChatResult {

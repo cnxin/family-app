@@ -31,11 +31,55 @@ export const EVENTS_HEARTBEAT_MS = 20_000;
 /** 每个家庭最多同时 20 条连接，超了拒绝新连接。 */
 export const EVENTS_MAX_CONNECTIONS_PER_HOUSEHOLD = 20;
 
+/**
+ * J4.4 小管家 run 的流式事件。SSE 事件名固定为 `agent.run`（照 H2 的命名：事件名是类型，id 在 payload 里），
+ * 只推给发起这次 run 的成员的连接。seq 在一次 run 里从 1 递增，最后一条总是 done（客户端收到后再拉一次会话详情对齐）。
+ * - 「小管家自带」（native）推全过程：text_delta / tool_call / tool_result / proposal / usage / error / done；
+ * - Hermes、本地确定性助理只在结束时推一条 done；
+ * - payload 只有增量与状态：正文增量、工具名、提案 id、错误代码。工具参数与工具结果不推（在会话详情里按权限取）。
+ */
+export const AGENT_RUN_EVENT = 'agent.run';
+const agentRunEventBase = { runId: uuid, conversationId: uuid, seq: z.number().int().min(1) };
+export const agentRunStreamEventSchema = z.discriminatedUnion('type', [
+  /** 模型正文的一段增量，按 seq 拼起来。落库的回答是最后一步的正文（之前步骤若有过渡语也会推，以 done 后的会话详情为准）。 */
+  z.object({ ...agentRunEventBase, type: z.literal('text_delta'), text: z.string() }),
+  z.object({ ...agentRunEventBase, type: z.literal('tool_call'), toolCallId: z.string(), toolName: z.string() }),
+  z.object({
+    ...agentRunEventBase,
+    type: z.literal('tool_result'),
+    toolCallId: z.string(),
+    toolName: z.string(),
+    ok: z.boolean(),
+    /** 工具没成功时的代码（tool_not_allowed / tool_failed / invalid_arguments / unknown_tool）。 */
+    errorCode: z.string().nullable(),
+  }),
+  /** 生成了一条待确认的提案（propose_plan 时是提案组 id）；卡片内容从会话详情取。 */
+  z.object({ ...agentRunEventBase, type: z.literal('proposal'), toolCallId: z.string(), toolName: z.string(), proposalId: uuid }),
+  z.object({
+    ...agentRunEventBase,
+    type: z.literal('usage'),
+    inputTokens: z.number().int().min(0),
+    outputTokens: z.number().int().min(0),
+  }),
+  /** native 循环停下的原因（超步数、超时、模型不可用、被取消……）；后面还会跟一条 done（failed，取消时 cancelled）。 */
+  z.object({ ...agentRunEventBase, type: z.literal('error'), code: z.string(), message: z.string() }),
+  z.object({
+    ...agentRunEventBase,
+    type: z.literal('done'),
+    status: z.enum(['completed', 'failed', 'cancelled']),
+    errorCode: z.string().nullable(),
+  }),
+]);
+export type AgentRunStreamEvent = z.infer<typeof agentRunStreamEventSchema>;
+type WithoutRun<T> = T extends unknown ? Omit<T, 'runId' | 'conversationId' | 'seq'> : never;
+/** 运行时交出来的部分；runId / conversationId / seq 由服务端补上。 */
+export type AgentRunStreamPayload = WithoutRun<AgentRunStreamEvent>;
+
 export const events = {
   stream: defineEndpoint({
     method: 'GET',
     path: '/events',
-    summary: 'SSE 事件流：hello → changed / heartbeat（@Res() 直接写流，契约为 undefined）',
+    summary: 'SSE 事件流：hello → changed / heartbeat / agent.run（@Res() 直接写流，契约为 undefined）',
     response: z.undefined(),
   }),
 };

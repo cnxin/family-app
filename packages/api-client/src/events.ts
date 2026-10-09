@@ -1,4 +1,4 @@
-import type { EventsChanged, EventsHello } from '@family/contracts';
+import { AGENT_RUN_EVENT, type AgentRunStreamEvent, type EventsChanged, type EventsHello } from '@family/contracts';
 
 /**
  * /events 订阅（H2b）。服务端只推「哪个域变了」，调用方收到后让对应查询失效、自己重取。
@@ -9,7 +9,8 @@ import type { EventsChanged, EventsHello } from '@family/contracts';
  *   将来换成 WebSocket 传同样的帧即可；
  * - 断了就指数退避重连（1s → 30s 封顶），收到 hello 算连上并清零退避；
  *   45 秒收不到任何帧（服务端每 20 秒一条心跳）当作断线；
- * - 401 先续期一次再连，续期失败就停下（交给调用方登出）。
+ * - 401 先续期一次再连，续期失败就停下（交给调用方登出）；
+ * - 小管家的流式帧（`agent.run`，J4.4）交给 onAgentRun，也分给 listenAgentRuns 登记的旁听者。
  */
 
 export type EventsStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
@@ -24,6 +25,39 @@ export interface EventsHandlers {
   onHello?(hello: EventsHello): void;
   onChanged(change: EventsChanged): void;
   onStatus?(status: EventsStatus): void;
+  /** 小管家一次 run 的流式事件（只推给发起成员）。 */
+  onAgentRun?(event: AgentRunStreamEvent): void;
+}
+
+/*
+ * 旁听（J4.4）：一个页面只开一条 /events（外壳那条），别的模块想听小管家的流式帧、想知道现在连没连着，
+ * 在这里登记，不再开第二条连接（每户连接数有上限）。
+ */
+const agentRunListeners = new Set<(event: AgentRunStreamEvent) => void>();
+const connectedListeners = new Set<(connected: boolean) => void>();
+let openSubscriptions = 0;
+
+/** 登记一个流式帧旁听者，返回取消登记。 */
+export function listenAgentRuns(listener: (event: AgentRunStreamEvent) => void): () => void {
+  agentRunListeners.add(listener);
+  return () => agentRunListeners.delete(listener);
+}
+
+/** 现在有没有一条 /events 连着（收到过 hello、还没断）。 */
+export function eventsConnected(): boolean {
+  return openSubscriptions > 0;
+}
+
+/** 连上 / 断开时通知，返回取消登记。 */
+export function listenEventsConnected(listener: (connected: boolean) => void): () => void {
+  connectedListeners.add(listener);
+  return () => connectedListeners.delete(listener);
+}
+
+function countOpen(delta: 1 | -1) {
+  const before = eventsConnected();
+  openSubscriptions += delta;
+  if (eventsConnected() !== before) for (const listener of connectedListeners) listener(eventsConnected());
 }
 
 export interface EventsTransportOptions {
@@ -104,6 +138,8 @@ export function subscribeEvents(options: SubscribeEventsOptions): EventsSubscrip
 
   const setStatus = (next: EventsStatus) => {
     if (status === next) return;
+    if (next === 'open') countOpen(1);
+    else if (status === 'open') countOpen(-1);
     status = next;
     options.handlers.onStatus?.(next);
   };
@@ -137,6 +173,10 @@ export function subscribeEvents(options: SubscribeEventsOptions): EventsSubscrip
             options.handlers.onHello?.(JSON.parse(data) as EventsHello);
           } else if (event === 'changed') {
             options.handlers.onChanged(JSON.parse(data) as EventsChanged);
+          } else if (event === AGENT_RUN_EVENT) {
+            const run = JSON.parse(data) as AgentRunStreamEvent;
+            options.handlers.onAgentRun?.(run);
+            for (const listener of agentRunListeners) listener(run);
           }
         },
       });
