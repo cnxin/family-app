@@ -1,8 +1,10 @@
 // J4.2 native 运行时黑盒：小管家自带的循环（packages/agent-core 的 runLoop）+ 回放模型。
 // API 由 run-api-tests.mjs 带 AGENT_NATIVE_PROVIDER=replay:scripts/fixtures/agent-native/suite.json 启动（只在测试模式生效），
 // 回放套件按成员原话挑录制：「记一笔 38 买菜」是 J4.0 的 DeepSeek 模拟录制，另有只读、超步数、慢回答三条。
+// J4.4：订阅 /events 看流式事件（agent.run）——native 按序推过程，fake 只在结束时推一条 done，只推给发起成员。
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { openEventStream } from './events-client.mjs';
 import { startFakeModel } from './fake-model.mjs';
 
 const { Client } = pg;
@@ -106,23 +108,68 @@ const utterance = (runId) =>
     [runId],
   )).rows[0], `run ${runId} 的原话`);
 
+/** 某个 run 的流式事件（按到达顺序）。 */
+const runFrames = (stream, runId) =>
+  stream.frames
+    .filter((frame) => frame.event === 'agent.run')
+    .map((frame) => JSON.parse(frame.data))
+    .filter((event) => event.runId === runId);
+const runDone = (stream, runId) =>
+  stream.waitFor((frame) => frame.event === 'agent.run' && JSON.parse(frame.data).runId === runId &&
+    JSON.parse(frame.data).type === 'done', 10_000);
+
 const owner = await login('爸爸');
+const other = await login('妈妈');
 const created = [];
 const model = await startFakeModel();
+const ownerStream = await openEventStream(BASE, owner.accessToken);
+const otherStream = await openEventStream(BASE, other.accessToken);
 let restoreKind = null;
 try {
-  console.log('1. 配好云端模型、测通，切到「小管家自带」运行方式');
-  const status = await request('/agent/status', owner.accessToken);
-  assert(status.data.runtimes.native.available === true, 'native 运行时在测试模式下可用（回放模型）');
+  assert(
+    ownerStream.status === 200 && otherStream.status === 200 &&
+      Boolean(await ownerStream.waitFor((frame) => frame.event === 'hello', 5_000)) &&
+      Boolean(await otherStream.waitFor((frame) => frame.event === 'hello', 5_000)),
+    '爸爸、妈妈都订阅上 /events',
+  );
+
+  console.log('1. 切换前的运行方式：run 结束时推一条 done（fake 不流式；native 第二遍时这里已是 native）');
   const before = await request('/agent/settings', owner.accessToken);
   restoreKind = before.data.runtimeKind;
+  const enabled = await request('/agent/settings', owner.accessToken, 'PATCH', {
+    enabled: true,
+    expectedVersion: before.data.version,
+  });
+  assert(enabled.status === 200, '管理员打开小管家（运行方式不变）');
+  const plain = await ask(owner.accessToken, '今天吃什么');
+  await finished(owner.accessToken, plain);
+  await runDone(ownerStream, plain.runId);
+  const plainFrames = runFrames(ownerStream, plain.runId);
+  // native 第二遍里 runtimeKind 仍记 fake（AGENT_TEST_RUNTIME 只换执行的运行时），看 runtimeVersion
+  const plainVersion = (await db.query('SELECT "runtimeVersion" FROM agent_runs WHERE id = $1', [plain.runId])).rows[0].runtimeVersion;
+  if (plainVersion === 'native-loop-1') {
+    assert(
+      plainFrames.at(-1)?.type === 'done' && plainFrames.some((event) => event.type === 'text_delta'),
+      'native：过程事件流式推送，最后一条 done',
+    );
+  } else {
+    assert(
+      plainFrames.length === 1 && plainFrames[0].type === 'done' && plainFrames[0].status === 'completed' &&
+        plainFrames[0].seq === 1 && plainFrames[0].conversationId === plain.conversationId,
+      `${plainVersion}：不流式，只推一条 done（status = completed、seq = 1）`,
+    );
+  }
+
+  console.log('2. 配好云端模型、测通，切到「小管家自带」运行方式');
+  const status = await request('/agent/status', owner.accessToken);
+  assert(status.data.runtimes.native.available === true, 'native 运行时在测试模式下可用（回放模型）');
   // J4.3：切到 native 前必须「测一下」通过（「测一下」按家庭配置真打，这里打假模型服务）
   const configured = await request('/agent/settings', owner.accessToken, 'PATCH', {
     providerKind: 'custom',
     providerBaseUrl: model.url,
     providerModel: 'fake-model',
     providerKey: model.key,
-    expectedVersion: before.data.version,
+    expectedVersion: enabled.data.version,
   });
   const checked = await request('/agent/settings/provider-check', owner.accessToken, 'POST');
   assert(configured.status === 200 && checked.data?.ok === true, '云端模型配好并测通');
@@ -132,8 +179,13 @@ try {
     expectedVersion: checked.data.settings.version,
   });
   assert(switched.status === 200 && switched.data.runtimeKind === 'native', '管理员把运行方式切到 native');
+  const nativeStatus = await request('/agent/status', owner.accessToken);
+  assert(
+    nativeStatus.data.runtimeKind === 'native' && nativeStatus.data.providerKind === 'custom',
+    '状态接口带上服务商（对话页标题写「小管家自带 · 自定义服务」）',
+  );
 
-  console.log('2. 「记一笔 38 买菜」（DeepSeek 模拟录制）→ 记账提案');
+  console.log('3. 「记一笔 38 买菜」（DeepSeek 模拟录制）→ 记账提案');
   for (const [path, body, fixedId] of [
     ['/finance/accounts', { name: `现金（回放 ${randomUUID().slice(0, 4)}）`, type: 'cash' }, REPLAY_ACCOUNT],
     ['/finance/categories', { name: `买菜（回放 ${randomUUID().slice(0, 4)}）`, kind: 'expense' }, REPLAY_CATEGORY],
@@ -165,6 +217,39 @@ try {
   );
   const financeRun = await runRow(finance.runId);
   assert(financeRun.inputTokens === 812 + 1046 + 1160 && financeRun.outputTokens === 12 + 71 + 38, 'token 用量累加写进 agent_runs');
+
+  console.log('4. 流式事件（J4.4）：按序推给发起成员，增量拼起来就是落库的回答');
+  assert(Boolean(await runDone(ownerStream, finance.runId)), '爸爸收到这次 run 的 done');
+  const stream = runFrames(ownerStream, finance.runId);
+  assert(stream.every((event, index) => event.seq === index + 1), `seq 从 1 连续递增（共 ${stream.length} 条）`);
+  const milestones = stream.filter((event) => event.type !== 'text_delta' && event.type !== 'usage');
+  assert(
+    JSON.stringify(milestones.map((event) => `${event.type}:${event.toolName ?? event.status}`)) === JSON.stringify([
+      'tool_call:get_finance_summary', 'tool_result:get_finance_summary',
+      'tool_call:propose_finance_transaction', 'tool_result:propose_finance_transaction',
+      'proposal:propose_finance_transaction', 'done:completed',
+    ]),
+    '按序收到 tool_call → tool_result → tool_call → tool_result → proposal → done',
+  );
+  assert(milestones.find((event) => event.type === 'proposal').proposalId === proposal.id, 'proposal 事件带的是对话里那条提案的 ID');
+  const answer = financeDone.detail.messages.find((message) => message.role === 'assistant' && message.runId === finance.runId);
+  const deltas = stream.filter((event) => event.type === 'text_delta');
+  assert(
+    deltas.length > 1 && deltas.map((event) => event.text).join('').trim() === answer.content,
+    `text_delta（${deltas.length} 段）拼起来 == 落库的回答`,
+  );
+  const usageEvents = stream.filter((event) => event.type === 'usage');
+  assert(
+    usageEvents.reduce((sum, event) => sum + event.inputTokens, 0) === financeRun.inputTokens &&
+      usageEvents.reduce((sum, event) => sum + event.outputTokens, 0) === financeRun.outputTokens,
+    'usage 事件逐步累加 == agent_runs 的 token 用量',
+  );
+  const raw = JSON.stringify(stream);
+  assert(
+    !raw.includes(REPLAY_ACCOUNT) && !raw.includes('"arguments"') && !raw.includes('"result"'),
+    '载荷只有增量和状态：不带工具参数、不带工具结果',
+  );
+  assert(runFrames(otherStream, finance.runId).length === 0, '妈妈的 /events 收不到爸爸这次 run 的任何流式事件');
   const financeUtterance = await utterance(finance.runId);
   assert(
     financeUtterance.text === '记一笔 38 买菜' && financeUtterance.source === 'agent_chat' &&
@@ -172,7 +257,7 @@ try {
     '原话表一条：tier=2 / source=agent_chat / outcome=proposed',
   );
 
-  console.log('3. 「今天吃什么」只读路径');
+  console.log('5. 「今天吃什么」只读路径');
   const meal = await ask(owner.accessToken, '今天吃什么');
   const mealDone = await finished(owner.accessToken, meal);
   const mealEvents = await toolEvents(meal.runId);
@@ -183,14 +268,21 @@ try {
   assert(!mealDone.detail.proposals.some((entry) => entry.runId === meal.runId), '只读路径不产生提案');
   assert((await utterance(meal.runId)).outcome === 'no_match', '只回答没动作，原话记 no_match');
 
-  console.log('4. 超步数：run 失败、记代码、不重试');
+  console.log('6. 超步数：run 失败、记代码、不重试');
   const loop = await ask(owner.accessToken, '把所有事情都查一遍');
   const loopDone = await finished(owner.accessToken, loop);
   assert(loopDone.run.status === 'failed' && loopDone.run.errorCode === 'AGENT_MAX_STEPS', 'run 失败，errorCode = AGENT_MAX_STEPS');
   assert((await toolEvents(loop.runId)).length === 8, '8 步里每步一次工具调用，第 9 次请求前停下');
   assert((await utterance(loop.runId)).outcome === 'dismissed', '失败的 run 原话记 dismissed');
+  await runDone(ownerStream, loop.runId);
+  const loopFrames = runFrames(ownerStream, loop.runId);
+  assert(
+    loopFrames.at(-2)?.type === 'error' && loopFrames.at(-2).code === 'AGENT_MAX_STEPS' &&
+      loopFrames.at(-1).type === 'done' && loopFrames.at(-1).status === 'failed' && loopFrames.at(-1).errorCode === 'AGENT_MAX_STEPS',
+    '失败的 run：先推 error（AGENT_MAX_STEPS），再推 done（failed）',
+  );
 
-  console.log('5. 取消：在途请求中断，不写回答');
+  console.log('7. 取消：在途请求中断，不写回答');
   const slow = await ask(owner.accessToken, '慢慢想一想');
   await waitFor(async () => (await request(`/agent/conversations/${slow.conversationId}`, owner.accessToken))
     .data?.runs?.find((entry) => entry.id === slow.runId)?.status === 'running', 'run 开始运行');
@@ -203,8 +295,15 @@ try {
       !slowDetail.data.messages.some((message) => message.role === 'assistant' && message.runId === slow.runId),
     '取消后没有写回答，run 仍是 cancelled',
   );
+  await runDone(ownerStream, slow.runId);
+  const slowFrames = runFrames(ownerStream, slow.runId);
+  assert(
+    slowFrames.at(-1)?.type === 'done' && slowFrames.at(-1).status === 'cancelled' &&
+      slowFrames.filter((event) => event.type === 'done').length === 1,
+    '取消的 run 只推一条 done（cancelled）',
+  );
 
-  console.log('6. 模块开关：财务关掉后工具消失，直接调用被拒');
+  console.log('8. 模块开关：财务关掉后工具消失，直接调用被拒');
   const off = await request('/system/modules/finance', owner.accessToken, 'PATCH', { override: 'off' });
   assert(off.status === 200, '管理员关掉财务模块');
   try {
@@ -249,6 +348,8 @@ try {
     });
   }
   await model.stop();
+  ownerStream.close();
+  otherStream.close();
   for (const [table, id] of created.reverse()) {
     await db.query(`DELETE FROM ${table} WHERE id = $1`, [id]).catch(() => undefined);
   }

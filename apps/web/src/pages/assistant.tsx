@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { AgentConversation } from '@family/contracts';
+import { AGENT_PROVIDER_PRESETS, type AgentConversation, type AgentStatus } from '@family/contracts';
 import {
   useAgentConversation,
   useAgentConversations,
   useAgentProposalGroups,
+  useAgentRunStream,
   useAgentStatus,
   useArchiveAgentConversation,
   useCancelAgentRun,
@@ -17,6 +18,7 @@ import { pushToast } from '../lib/toast';
 import {
   MessageBubble,
   ProposalCard,
+  StreamingBubble,
   ToolProgress,
   ToolResultGroup,
 } from '../components/agent-chat';
@@ -34,6 +36,18 @@ const SUGGESTIONS = [
   '最近有哪些东西快没了？',
   '这个月家里花了多少钱？',
 ];
+
+/** 标题下那行：现在是谁在回答（J4.4）。 */
+function runtimeLabel(status: AgentStatus | undefined) {
+  if (!status) return '';
+  if (status.runtimeKind === 'hermes') return '旧版云端';
+  if (status.runtimeKind === 'native') {
+    const kind = status.providerKind;
+    const provider = !kind ? '还没配服务商' : kind === 'custom' ? '自定义服务' : AGENT_PROVIDER_PRESETS[kind].label;
+    return `小管家自带 · ${provider}`;
+  }
+  return '本地家庭摘要';
+}
 
 function when(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -57,6 +71,7 @@ export function AssistantPage() {
   const retry = useRetryAgentRun();
   const archive = useArchiveAgentConversation();
   const proposalGroups = useAgentProposalGroups(Boolean(conversationId));
+  const streams = useAgentRunStream(conversationId);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [params, setParams] = useSearchParams();
@@ -97,12 +112,14 @@ export function AssistantPage() {
   const activeRun = detail?.runs.find((run) => run.status === 'queued' || run.status === 'running');
   const latestRun = detail?.runs[0] ?? null;
   const busy = send.isPending || create.isPending || Boolean(activeRun);
+  // 流式拼出来的回答；run 落库结束、详情重取回来之后由正式的消息气泡接替
+  const streamingText = activeRun ? (streams[activeRun.id]?.text ?? '') : '';
 
-  // 新消息进来就滚到底
+  // 新消息进来、流式字往下长都滚到底
   useEffect(() => {
     const node = streamRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages.length, activeRun?.status]);
+  }, [messages.length, activeRun?.status, streamingText.length]);
 
   async function submit() {
     const text = draft.trim();
@@ -119,11 +136,9 @@ export function AssistantPage() {
     }
   }
 
-  const runtimeHint = status.data?.selected.available
-    ? status.data.runtimeKind === 'hermes'
-      ? 'Hermes 已连接'
-      : '本地家庭摘要可用'
-    : '离线模式可用';
+  const runtimeHint = status.data && !status.data.selected.available
+    ? `${runtimeLabel(status.data)} · 暂时连不上`
+    : runtimeLabel(status.data);
 
   return (
     <Page
@@ -220,6 +235,8 @@ export function AssistantPage() {
                     />
                   ))
                 : null}
+
+              {activeRun && streamingText ? <StreamingBubble text={streamingText} /> : null}
 
               {activeRun ? (
                 <div className="flex items-center gap-2">

@@ -8,7 +8,7 @@ import {
   type EventsHello,
 } from '@family/contracts';
 import { Clock } from '../common/clock';
-import { EventBus, type HouseholdChange } from './event-bus';
+import { EventBus, type HouseholdChange, type MemberMessage } from './event-bus';
 
 interface Connection {
   id: string;
@@ -33,12 +33,14 @@ export class EventsService implements OnModuleDestroy {
   private readonly logger = new Logger('Events');
   private readonly connections = new Map<string, Set<Connection>>();
   private readonly unsubscribe: () => void;
+  private readonly unsubscribeMember: () => void;
 
   constructor(
     bus: EventBus,
     private readonly clock: Clock,
   ) {
     this.unsubscribe = bus.subscribe((change) => this.fanOut(change));
+    this.unsubscribeMember = bus.subscribeMember((message) => this.toMember(message));
   }
 
   /**
@@ -95,6 +97,7 @@ export class EventsService implements OnModuleDestroy {
 
   onModuleDestroy() {
     this.unsubscribe();
+    this.unsubscribeMember();
     for (const set of this.connections.values()) {
       for (const connection of [...set]) this.close(connection, true);
     }
@@ -110,6 +113,16 @@ export class EventsService implements OnModuleDestroy {
     };
     const data = JSON.stringify(payload);
     for (const connection of targets) this.send(connection, 'changed', data);
+  }
+
+  /** J4.4：只写给这个成员的连接（小管家 run 的流式事件）。 */
+  private toMember(message: MemberMessage) {
+    const targets = this.connections.get(message.householdId);
+    if (!targets?.size) return;
+    const data = JSON.stringify(message.data);
+    for (const connection of targets) {
+      if (connection.memberId === message.memberId) this.send(connection, message.event, data);
+    }
   }
 
   private send(connection: Connection, event: string, data: string) {

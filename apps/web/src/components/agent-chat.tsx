@@ -51,6 +51,31 @@ export function MessageBubble({ message }: { message: AgentMessage }) {
   );
 }
 
+/**
+ * 回答还在路上（J4.4）：流式拼出来的字先显示在这里，落库后换成正式的消息气泡。
+ * 出现时 ease-out 淡入；不设 aria-live（逐字播报太吵），回答落库后的正式气泡由读屏正常读到。
+ */
+export function StreamingBubble({ text }: { text: string }) {
+  return (
+    <div className="flex items-start gap-2 motion-safe:animate-[float-in_180ms_cubic-bezier(0,0,0.2,1)]">
+      <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-[14px]">
+        ✨
+      </span>
+      <article
+        aria-label="小管家正在回答"
+        aria-busy="true"
+        className="max-w-[min(680px,84%)] whitespace-pre-wrap rounded-card border border-border bg-surface px-3.5 py-2.5 text-[14px] leading-relaxed"
+      >
+        {text}
+        <span
+          aria-hidden="true"
+          className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[3px] rounded-full bg-accent motion-safe:animate-pulse"
+        />
+      </article>
+    </div>
+  );
+}
+
 /** 跑着的时候顶在消息流下面：正在查什么、查到哪一步了。 */
 export function ToolProgress({ events, queued }: { events: AgentToolEvent[]; queued: boolean }) {
   return (

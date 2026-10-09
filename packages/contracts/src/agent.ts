@@ -193,6 +193,8 @@ export type AgentRuntimeHealth = z.infer<typeof agentRuntimeHealthSchema>;
 export const agentStatusSchema = z.object({
   enabled: z.boolean(),
   runtimeKind: agentRuntimeKind,
+  /** 云端档的服务商（J4.4：对话页标题下写「小管家自带 · 服务商」）。 */
+  providerKind: agentProviderKind.nullable(),
   selected: agentRuntimeHealthSchema,
   runtimes: z.object({
     fake: agentRuntimeHealthSchema,

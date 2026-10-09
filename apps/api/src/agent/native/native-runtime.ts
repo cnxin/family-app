@@ -120,15 +120,33 @@ export class NativeAgentRuntime implements AgentRuntime {
         },
         NATIVE_LIMITS,
       );
+      const emit = input.onEvent ?? (() => undefined);
       for await (const event of events) {
-        if (event.type === 'usage') {
+        // J4.4：过程事件交给服务端推到 /events（只有增量与状态，不带工具参数和结果）
+        if (event.type === 'text_delta') {
+          emit({ type: 'text_delta', text: event.text });
+        } else if (event.type === 'tool_call') {
+          emit({ type: 'tool_call', toolCallId: event.id, toolName: event.name });
+        } else if (event.type === 'tool_result') {
+          emit({
+            type: 'tool_result',
+            toolCallId: event.id,
+            toolName: event.name,
+            ok: event.ok,
+            errorCode: event.ok ? null : event.error.code,
+          });
+        } else if (event.type === 'proposal') {
+          emit({ type: 'proposal', toolCallId: event.id, toolName: event.name, proposalId: event.proposalId });
+        } else if (event.type === 'usage') {
           reported = true;
           inputTokens += event.inputTokens;
           outputTokens += event.outputTokens;
+          emit({ type: 'usage', inputTokens: event.inputTokens, outputTokens: event.outputTokens });
         } else if (event.type === 'done') {
           content = event.text.trim();
         } else if (event.type === 'error') {
           const [code, message] = ERROR_TEXT[event.code];
+          emit({ type: 'error', code, message });
           throw new AgentRunError(code, message);
         }
       }
