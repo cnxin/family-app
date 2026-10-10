@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type {
   FinanceAccount,
   FinanceCategory,
@@ -6,6 +7,7 @@ import type {
   UpdatedFinanceTransaction,
   UpdateFinanceTransactionBody,
 } from '@family/contracts';
+import { apiBlob } from '../lib/api';
 import { rememberCategory } from '../lib/finance-recent';
 import { isMoneyInput, useDeleteFinanceTransaction, useUpdateFinanceTransaction, yuan } from '../lib/queries';
 import { pushToast } from '../lib/toast';
@@ -18,6 +20,47 @@ const label = 'mb-1 block text-[12px] text-ink-soft';
 const chip = (active: boolean) =>
   'rounded-full border px-2.5 py-1 text-[13px] transition-colors duration-150 ' +
   (active ? 'border-accent bg-accent-soft text-accent' : 'border-border text-ink-soft hover:bg-muted');
+
+/** K2：截图记的流水在编辑面板里给一张缩略图，点开看原图（截图要登录才能取，走 blob URL）。 */
+function ScreenshotThumb({ transactionId }: { transactionId: string }) {
+  const [open, setOpen] = useState(false);
+  const blob = useQuery({
+    queryKey: ['finance-attachment', transactionId],
+    queryFn: () => apiBlob(`/finance/transactions/${transactionId}/attachment`),
+    staleTime: Infinity,
+  });
+  const url = useMemo(() => (blob.data ? URL.createObjectURL(blob.data) : null), [blob.data]);
+  useEffect(
+    () => () => {
+      if (url) URL.revokeObjectURL(url);
+    },
+    [url],
+  );
+  if (blob.isError) return <p className="text-[12px] text-ink-soft">截图取不到了</p>;
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="看截图原图"
+        disabled={!url}
+        className="flex items-center gap-2 self-start rounded-lg border border-border p-1 pr-3 text-[12px] text-ink-soft transition-colors duration-150 hover:bg-muted"
+        onClick={() => setOpen(true)}
+      >
+        {url ? (
+          <img src={url} alt="记账截图" className="size-12 rounded-md object-cover" />
+        ) : (
+          <span className="size-12 rounded-md bg-muted motion-safe:animate-pulse" />
+        )}
+        截图
+      </button>
+      {open && url ? (
+        <Dialog title="记账截图" place="center" maxWidth={520} onClose={() => setOpen(false)}>
+          <img src={url} alt="记账截图原图" className="mx-auto max-h-[70vh] w-auto rounded-lg" />
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
 
 /** 从分录读出这笔现在记在哪：支出 / 收入一条分录；转账负的是转出、正的是转入。 */
 export function transactionAccounts(entry: FinanceTransaction) {
@@ -145,8 +188,16 @@ export function TransactionEditor({
     >
       <div className="flex flex-col gap-3">
         <p className="text-[12px] text-ink-soft">
-          {[entry.sourceType === 'import' ? `${entry.actorName}导入` : `${entry.actorName}记的`, entry.occurredOn].join(' · ')}
+          {[
+            entry.sourceType === 'import'
+              ? `${entry.actorName}导入`
+              : entry.sourceType === 'screenshot'
+                ? `${entry.actorName}传截图记的`
+                : `${entry.actorName}记的`,
+            entry.occurredOn,
+          ].join(' · ')}
         </p>
+        {entry.attachmentPath ? <ScreenshotThumb transactionId={entry.id} /> : null}
         <Segmented
           label="收支方向"
           value={type}

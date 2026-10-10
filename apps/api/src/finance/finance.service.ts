@@ -25,6 +25,7 @@ import {
   Household,
 } from '../entities';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { assertFinanceAttachment } from './finance-screenshot.service';
 import { monthlyAverage } from './finance-recurring.schedule';
 import type {
   CreateFinanceAccountDto,
@@ -85,6 +86,8 @@ export type FinanceCreateSource = {
   /** K1 导入：交易单号（按家庭 + 来源唯一）与交易对方 */
   externalId?: string | null;
   merchant?: string | null;
+  /** K2 截图记账：截图文件名（uploads/.private/finance/<家庭>/ 下） */
+  attachmentPath?: string | null;
   /** K5 改金额 / 账户另记的新笔：记在原来那笔的记账人名下（不是改的人），记录时间沿用原笔（列表里位置不变） */
   actor?: { memberId: string; name: string };
   createdAt?: Date;
@@ -283,9 +286,15 @@ export class FinanceService {
     };
   }
 
-  createTransaction(dto: CreateFinanceTransactionDto, user: JwtUser) {
+  async createTransaction(dto: CreateFinanceTransactionDto, user: JwtUser) {
+    // K2：带了截图（识别接口返回的文件名）就记成 screenshot，文件得真在本家庭的截图目录里
+    if (dto.attachmentPath) await assertFinanceAttachment(user.householdId, dto.attachmentPath);
     return this.dataSource.transaction((manager) =>
-      this.createWithinTransaction(dto, user, manager, { sourceType: 'manual' }),
+      this.createWithinTransaction(dto, user, manager, {
+        sourceType: dto.attachmentPath ? 'screenshot' : 'manual',
+        merchant: dto.merchant?.trim() || null,
+        attachmentPath: dto.attachmentPath ?? null,
+      }),
     );
   }
 
@@ -362,6 +371,7 @@ export class FinanceService {
         sourceId: source.sourceId ?? randomUUID(),
         externalId: source.externalId ?? null,
         merchant: source.merchant ?? null,
+        attachmentPath: source.attachmentPath ?? null,
         idempotencyKey: dto.idempotencyKey,
         requestFingerprint,
         reversalOfId: null,

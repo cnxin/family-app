@@ -420,6 +420,10 @@ export const createFinanceTransactionBody = z.object({
   note: z.string().max(1000).nullish(),
   occurredOn: dateOnly,
   idempotencyKey: z.string().min(1).max(180),
+  /** K2：截图识别出的交易对方 */
+  merchant: z.string().max(120).nullish(),
+  /** K2：截图识别返回的文件名；带上就记成 sourceType = screenshot（文件必须在本家庭的截图目录里） */
+  attachmentPath: z.lazy(() => financeAttachmentName).nullish(),
 });
 export type CreateFinanceTransactionBody = z.infer<typeof createFinanceTransactionBody>;
 /**
@@ -504,6 +508,48 @@ export type CommitFinanceImportBody = z.infer<typeof commitFinanceImportBody>;
 /** 「已付」：带上看到的那一期，重复点同一期返回同一笔流水，那一期已经推过去了就 409。 */
 export const payFinanceRecurringBody = z.object({ dueOn: dateOnly });
 export type PayFinanceRecurringBody = z.infer<typeof payFinanceRecurringBody>;
+
+// ---- K2 截图记账（docs/finance-plan.md §3-K2，J4 第四批） --------------------------------------------
+
+export const FINANCE_SCREENSHOT_MAX_BYTES = 4 * 1024 * 1024;
+/** 截图文件名：uuid + 扩展名。文件在 uploads/.private/finance/<家庭>/，流水的 attachmentPath 只记文件名。 */
+export const financeAttachmentName = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/);
+
+const screenshotAmount = z.preprocess(
+  (value) => (typeof value === 'string' ? Number(value.replace(/[¥￥,，\s元]/g, '')) : value),
+  z.number().positive().max(MAX_AMOUNT),
+);
+/**
+ * 识别时模型必须返回的 JSON（系统提示词固定，只许这一个对象，见 apps/api/src/finance/finance-screenshot.rules.ts）。
+ * amount 允许带 ¥ 或千分位的字符串；看不出的字段给 null。amount 为 null / direction 不对都算没认出来。
+ */
+export const financeScreenshotModelOutput = z.object({
+  amount: screenshotAmount,
+  direction: z.enum(['expense', 'income']),
+  merchant: z.string().max(200).nullish(),
+  occurredAt: z.string().max(40).nullish(),
+  payMethod: z.string().max(80).nullish(),
+  note: z.string().max(500).nullish(),
+});
+export type FinanceScreenshotModelOutput = z.infer<typeof financeScreenshotModelOutput>;
+
+/** 识别结果（预填用，不落流水）：分类按商户规则链、账户按付款方式猜，猜不到留空。 */
+export const financeScreenshotRecognitionSchema = z.object({
+  amount: z.number(),
+  direction: z.enum(['expense', 'income']),
+  merchant: z.string().nullable(),
+  occurredOn: dateOnly.nullable(),
+  payMethod: z.string().nullable(),
+  note: z.string().nullable(),
+  /** 预填的账目名称：清洗过的商户名，没有商户用备注，都没有用「截图记账」 */
+  title: z.string(),
+  categoryId: uuid.nullable(),
+  accountId: uuid.nullable(),
+  attachmentPath: financeAttachmentName,
+});
+export type FinanceScreenshotRecognition = z.infer<typeof financeScreenshotRecognitionSchema>;
 
 export const finance = {
   summary: defineEndpoint({
@@ -592,6 +638,20 @@ export const finance = {
     summary: '批量改分类 / 改账户 / 删除（≤ 200 笔，逐条按权限，不够权限的跳过）',
     body: batchFinanceTransactionsBody,
     response: financeBatchResultSchema,
+  }),
+  screenshotRecognize: defineEndpoint({
+    method: 'POST',
+    path: '/finance/screenshot-recognize',
+    summary:
+      'K2 截图识别（multipart 字段 file，JPG / PNG / WebP ≤ 4 MB；要 record_finance 且第 2 档对你开放、配的模型能看图；计入每日上限）：返回预填结果与截图文件名，不落流水',
+    response: financeScreenshotRecognitionSchema,
+  }),
+  transactionAttachment: defineEndpoint({
+    method: 'GET',
+    path: '/finance/transactions/:id/attachment',
+    summary: 'K2 流水的截图原图（要登录；二进制流，无 JSON 响应）',
+    params: idParams,
+    response: z.undefined(),
   }),
   reverseTransaction: defineEndpoint({
     method: 'POST',

@@ -216,6 +216,8 @@ export class FinanceEditService {
         sourceId: row.sourceId,
         externalId: row.externalId,
         merchant: changes.merchant !== undefined ? changes.merchant?.trim() || null : row.merchant,
+        // K2：截图跟到新笔上
+        attachmentPath: row.attachmentPath,
         actor: { memberId: row.actorId, name: row.actorName },
         // 新笔排在原笔原来的位置（列表按日期、记录时间排）
         createdAt: row.createdAt,

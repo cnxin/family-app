@@ -195,6 +195,8 @@ export const agentStatusSchema = z.object({
   runtimeKind: agentRuntimeKind,
   /** 云端档的服务商（J4.4：对话页标题下写「小管家自带 · 服务商」）。 */
   providerKind: agentProviderKind.nullable(),
+  /** 截图记账这类看图功能对当前成员开没开（J4 第四批）：第 2 档开着、测通过、服务商收图片、对他开放。 */
+  visionAvailable: z.boolean(),
   selected: agentRuntimeHealthSchema,
   runtimes: z.object({
     fake: agentRuntimeHealthSchema,
