@@ -6,6 +6,8 @@
 //   （没有就第一个支出分类）调 propose_finance_transaction，最后作答；
 // - 其余：把成员最后一句话原样回一遍（「收到：…」）。
 // 作答的正文按 chunkMs 分段慢慢吐（J4.4 看对话页的字是不是一段段长出来的）；chunkMs = 0 时一次回完。
+// - 消息里带图片（image_url 块，K2 截图记账）→ 按 vision.mode：json 回 vision.reply（固定 JSON），
+//   garbage 回一句不是 JSON 的话；黑盒 / e2e 改返回对象上的 vision 切换。
 // 每次请求的 JSON 都记在 requests 里（看发出去的内容有没有脱敏）。
 import { createServer } from 'node:http';
 
@@ -57,6 +59,22 @@ function toolReply(response, name, args) {
   ]);
 }
 
+/** 最后一条 user 消息带没带图片（OpenAI 兼容的 image_url 块）。 */
+function hasImage(messages) {
+  const last = [...messages].reverse().find((message) => message.role === 'user');
+  return Array.isArray(last?.content) && last.content.some((part) => part?.type === 'image_url');
+}
+
+/** K2 截图识别的固定回答：美团外卖 36.5 元，花呗付的。 */
+export const FAKE_SCREENSHOT_REPLY = {
+  amount: 36.5,
+  direction: 'expense',
+  merchant: '美团外卖-望京店',
+  occurredAt: '2026-10-09 12:30',
+  payMethod: '花呗',
+  note: '午饭',
+};
+
 /** 成员原话：最后一条 user 消息里最后一个围栏之后的部分。 */
 function memberText(messages) {
   const last = [...messages].reverse().find((message) => message.role === 'user');
@@ -89,6 +107,7 @@ function financeTurn(response, messages, chunkMs) {
 
 export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0, chunkMs = 0 } = {}) {
   const requests = [];
+  const vision = { mode: 'json', reply: FAKE_SCREENSHOT_REPLY };
   const server = createServer((request, response) => {
     if (request.method !== 'POST' || !request.url?.endsWith('/chat/completions')) {
       response.writeHead(404).end();
@@ -110,6 +129,9 @@ export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0,
         sse(response, [choice({ role: 'assistant', content: '好' }), choice({}, 'length'), usage(5, 1)]);
         return;
       }
+      if (hasImage(body.messages ?? [])) {
+        return textReply(response, vision.mode === 'json' ? JSON.stringify(vision.reply) : '这张图看不太清楚，换一张试试？');
+      }
       const text = memberText(body.messages ?? []);
       if (text.includes('记一笔 38 买菜')) return financeTurn(response, body.messages, chunkMs);
       return textReply(response, `收到：${text}`, chunkMs);
@@ -121,6 +143,7 @@ export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0,
     key,
     url: `http://127.0.0.1:${address.port}/v1`,
     requests,
+    vision,
     async stop() {
       server.closeAllConnections?.();
       await new Promise((resolve) => server.close(resolve));

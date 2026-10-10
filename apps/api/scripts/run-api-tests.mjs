@@ -134,6 +134,7 @@ const BUSINESS_SCRIPTS = [
   'finance-credit',
   'finance-import',
   'finance-edit',
+  'finance-screenshot',
   'assistant-utterances',
   'polls',
   'reminders',
@@ -424,6 +425,8 @@ try {
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/kernel-units.check.ts']);
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-recurring.check.ts']);
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-import.check.ts']);
+    // J4 第四批 K2：截图记账的纯函数（付款方式 → 账户、回复解析、日期归一、文件头）
+    await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-screenshot.check.ts']);
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/multipart.check.ts']);
     // J4.0：packages/agent-core 的单测（录制回放，不打真模型）
     await runProcess(process.execPath, [

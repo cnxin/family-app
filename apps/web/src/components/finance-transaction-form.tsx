@@ -1,10 +1,12 @@
 import { useHouseholdToday } from '../lib/use-household-today';
-import { useState } from 'react';
-import type { FinanceAccount, FinanceCategory } from '@family/contracts';
+import { useRef, useState } from 'react';
+import type { FinanceAccount, FinanceCategory, FinanceScreenshotRecognition } from '@family/contracts';
+import { postForm } from '../lib/api';
 import {
   accountBalanceText,
   isMoneyInput,
   monthLabel,
+  useAgentStatus,
   useCreateFinanceTransaction,
 } from '../lib/queries';
 import { readRecentCategories, rememberCategory } from '../lib/finance-recent';
@@ -62,6 +64,42 @@ export function TransactionForm({
 
   const [recent] = useState(readRecentCategories);
 
+  // K2 截图记账：第 2 档对当前成员开着、配的模型能看图才有「传截图」（试用期只有管理员看得到）
+  const agentStatus = useAgentStatus();
+  const canScan = agentStatus.data?.visionAvailable === true;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [scanning, setScanning] = useState(false);
+  const [screenshot, setScreenshot] = useState<{ path: string; merchant: string | null } | null>(null);
+
+  async function scan(file: File) {
+    setScanning(true);
+    setMessage(null);
+    try {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      const result = await postForm<FinanceScreenshotRecognition>('/finance/screenshot-recognize', form);
+      // 认出来的先填进表单，人看一眼、改一改再点确认才落账
+      setMode(result.direction);
+      setAmount(String(result.amount));
+      if (result.accountId && usable.some((one) => one.id === result.accountId)) setAccountId(result.accountId);
+      setCategoryId(
+        result.categoryId ?? categories.find((one) => one.isActive && one.kind === result.direction)?.id ?? '',
+      );
+      setTitle(result.title);
+      if (result.occurredOn) setOccurredOn(result.occurredOn);
+      setNote(result.note ?? '');
+      setScreenshot({ path: result.attachmentPath, merchant: result.merchant });
+      navigator.vibrate?.(10);
+      pushToast('认出来了，核对一下再确认', undefined, 'success');
+    } catch (error) {
+      // 没认出来、额度用完、模型出错：说原因，表单照常手填
+      pushToast(error instanceof Error ? error.message : '没认出来，手动填吧');
+    } finally {
+      setScanning(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
   function changeMode(next: Mode) {
     setMode(next);
     if (next !== 'transfer') {
@@ -91,6 +129,7 @@ export function TransactionForm({
         note: note.trim() || null,
         occurredOn,
         idempotencyKey,
+        ...(screenshot ? { attachmentPath: screenshot.path, merchant: screenshot.merchant } : {}),
       },
       {
         onSuccess: () => {
@@ -118,6 +157,45 @@ export function TransactionForm({
       }
     >
       <div className="flex flex-col gap-3">
+        {canScan ? (
+          <div className="flex flex-col gap-1.5 rounded-card border border-border bg-muted/40 px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="h-9 shrink-0 px-3 text-[13px]"
+                disabled={scanning}
+                aria-busy={scanning}
+                onClick={() => fileRef.current?.click()}
+              >
+                {scanning ? '识别中…' : screenshot ? '换一张截图' : '传截图'}
+              </Button>
+              <p className="min-w-0 flex-1 text-[12px] text-ink-soft">
+                {screenshot ? '已附上截图，确认记账时一起存下。' : '支付宝、微信的付款截图，认出来先填好，你确认了才记。'}
+              </p>
+              {screenshot && !scanning ? (
+                <button
+                  type="button"
+                  className="shrink-0 text-[12px] text-ink-soft underline-offset-2 hover:underline"
+                  onClick={() => setScreenshot(null)}
+                >
+                  不附了
+                </button>
+              ) : null}
+            </div>
+            <p className="text-[11px] text-ink-soft">截图会发给家里配置的模型服务商识别，算一次小管家的云端额度。</p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              aria-label="选择截图"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void scan(file);
+              }}
+            />
+          </div>
+        ) : null}
         <p className="text-[12px] text-ink-soft">记错了在流水里点那一笔就能改、能删。</p>
 
         <Segmented

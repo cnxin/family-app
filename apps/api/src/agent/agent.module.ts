@@ -25,6 +25,7 @@ import { AgentMcpController } from './agent-mcp.controller';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
 import { NativeAgentRuntime } from './native/native-runtime';
 import { AgentService } from './agent.service';
+import { AgentVisionService } from './agent-vision.service';
 import { AgentToolsService } from './agent-tools.service';
 import { AgentProposalsService } from './agent-proposals.service';
 import { AgentChannelsService } from './agent-channels.service';
@@ -69,6 +70,7 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
   ],
   providers: [
     AgentService,
+    AgentVisionService,
     AgentToolsService,
     FakeAgentRuntime,
     HermesAgentRuntime,
@@ -103,5 +105,7 @@ import { AgentProposalGroupsService } from './agent-proposal-groups.service';
       }),
     },
   ],
+  // 截图记账（财务插件）用内核的云端看图（J4 第四批）
+  exports: [AgentVisionService],
 })
 export class AgentModule {}

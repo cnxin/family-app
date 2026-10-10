@@ -47,6 +47,8 @@ import {
   AgentRuntime,
 } from './agent.types';
 import { AgentProposalsService } from './agent-proposals.service';
+import { CLOUD_RUNTIMES, tier2Quota } from './agent-quota';
+import { visionAvailable } from './vision-access';
 import { isUniqueViolation } from '@family/shared';
 
 interface UpdateAgentSettingsInput {
@@ -75,9 +77,6 @@ interface UpdateAgentSettingsInput {
 }
 
 /** 云端运行方式（第 2 档）：每日上限与 tier2Scope 只管它们；本地确定性助理（测试、离线用）不算。 */
-const CLOUD_RUNTIMES: readonly AgentRuntimeKind[] = ['hermes', 'native'];
-const DAILY_LIMIT_CODE = 'AGENT_DAILY_LIMIT';
-const DAILY_LIMIT_TEXT = '今天小管家的云端额度用完了，明天再问';
 
 /** 可清空的文本设置：没传保留原值，传 null 或空白清空。 */
 function optionalSetting(value: string | null | undefined, current: string | null) {
@@ -141,6 +140,8 @@ export class AgentService {
       runtimeKind: setting.runtimeKind,
       // 对话页标题下按运行方式写「小管家自带 · 服务商」（J4.4）
       providerKind: setting.providerKind,
+      // 截图记账这类看图功能能不能用（第四批）：记一笔表单靠它决定显不显示「传截图」
+      visionAvailable: visionAvailable(setting, user),
       selected,
       runtimes,
       fallbackAvailable: fake.available,
@@ -154,6 +155,16 @@ export class AgentService {
       // ⌘K 打开时会读 status：家里关了「记录原话」就不往 assistant_utterances 里记
       captureUtterances: setting.captureUtterances,
     };
+  }
+
+  /** 家庭的小管家设置（没有就按默认建）。给内核的 AgentVisionService 用。 */
+  settingsFor(user: JwtUser) {
+    return this.ensureSettings(user);
+  }
+
+  /** 成员的小管家档案（没有就按默认建）。给内核的 AgentVisionService 用。 */
+  profileFor(user: JwtUser) {
+    return this.ensureProfile(user);
   }
 
   async getSettings(user: JwtUser) {
@@ -1173,44 +1184,9 @@ export class AgentService {
     return !CLOUD_RUNTIMES.includes(setting.runtimeKind) || setting.tier2Scope === 'all' || user.role !== 'member';
   }
 
-  /**
-   * 开 run 前的额度：云端运行方式按上海时区当天已开的第 2 档 run 数比 tier2DailyLimit，用完了这次就记成一条
-   * 不执行的 failed run（errorCode = AGENT_DAILY_LIMIT，tier 留空不占额度）——既是审计，对话里也看得到原因。
-   * 必须在插入 run 的同一个事务里调（J4.5）：先锁住这户的设置行（SELECT … FOR UPDATE），同一户并发开 run
-   * 在这里排队，计数与插入之间不会被别人插进来；10 个并发也只放行额度内的。上限取锁住那一刻的值。
-   */
-  private async quota(manager: EntityManager, setting: AgentSetting, householdId: string) {
-    const cloud = CLOUD_RUNTIMES.includes(setting.runtimeKind);
-    if (cloud) {
-      const [locked]: { limit: number }[] = await manager.query(
-        `SELECT "tier2DailyLimit" AS "limit" FROM agent_settings WHERE "householdId" = $1 FOR UPDATE`,
-        [householdId],
-      );
-      const [row]: { used: number }[] = await manager.query(
-        `SELECT COUNT(*)::int AS used FROM agent_runs
-          WHERE "householdId" = $1 AND tier = 2
-            AND "createdAt" >= (date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai')`,
-        [householdId],
-      );
-      if (row.used >= (locked?.limit ?? setting.tier2DailyLimit)) {
-        return {
-          status: 'failed' as const,
-          tier: null,
-          redacted: false,
-          finishedAt: new Date(),
-          errorCode: DAILY_LIMIT_CODE,
-          errorMessage: DAILY_LIMIT_TEXT,
-        };
-      }
-    }
-    return {
-      status: 'queued' as const,
-      tier: cloud ? 2 : null,
-      redacted: setting.runtimeKind === 'native' && setting.tier2Redact,
-      finishedAt: null,
-      errorCode: null,
-      errorMessage: null,
-    };
+  /** 开 run 前的额度（agent-quota.ts）：必须在插入 run 的同一个事务里调。 */
+  private quota(manager: EntityManager, setting: AgentSetting, householdId: string) {
+    return tier2Quota(manager, setting, householdId);
   }
 
   /** 排上队的交给运行时；被额度挡下的只记原话、推一下对话页。 */

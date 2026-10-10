@@ -65,6 +65,7 @@ const TRANSACTION_TYPES: Exclude<FinanceTransactionType, 'reversal'>[] = [
   'income',
   'transfer',
 ];
+import { FinanceScreenshotModule } from './finance-screenshot.controller';
 import { FinanceService, MAX_AMOUNT } from './finance.service';
 import { financeFacade } from './finance.facade';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
@@ -276,6 +277,17 @@ export class CreateFinanceTransactionDto {
   @MinLength(1)
   @MaxLength(180)
   idempotencyKey: string;
+
+  /** K2：截图识别出的交易对方 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  merchant?: string | null;
+
+  /** K2：截图识别返回的文件名（uuid + .jpg / .png / .webp） */
+  @IsOptional()
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/)
+  attachmentPath?: string | null;
 }
 
 export class ReverseFinanceTransactionDto {
@@ -432,6 +444,8 @@ export class FinanceFacadeProvider implements OnModuleInit {
 @Module({
   imports: [
     TodayModule,
+    // K2 截图记账（用内核的云端看图）
+    FinanceScreenshotModule,
     TypeOrmModule.forFeature([
       FinanceAccount,
       FinanceBudget,
