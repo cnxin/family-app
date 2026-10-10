@@ -295,6 +295,25 @@ export class RemindersService
     );
   }
 
+  /** 小管家读工具（门面 listWindow）：提醒时间落在 [from, to) 里、没取消的，按提醒时间排。 */
+  async listWindow(from: Date, to: Date, user: JwtUser) {
+    const reminders = await this.reminders.find({
+      where: {
+        householdId: user.householdId,
+        status: In(['scheduled', 'sent'] as ReminderStatus[]),
+        remindAt: Between(from, new Date(to.getTime() - 1)),
+      },
+      relations: { recipients: true },
+      order: { remindAt: 'ASC', createdAt: 'ASC' },
+      take: 100,
+    });
+    return Promise.all(
+      reminders.map(async (reminder) =>
+        this.present(reminder, user, await this.resolveSource(this.dataSource.manager, reminder, false)),
+      ),
+    );
+  }
+
   async create(dto: CreateReminderDto, user: JwtUser) {
     const id = await this.dataSource.transaction((manager) =>
       this.createWithinTransaction(dto, user, manager),

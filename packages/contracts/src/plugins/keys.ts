@@ -38,9 +38,9 @@ export const PLUGIN_ALIASES: Readonly<Record<PluginKey, AliasTable>> = {
   polls: { activity: ['poll'], notification: ['poll'], proposal: ['poll'], agentSource: ['poll'] },
   // 财务的两个 agent 工具现在的调用记录 sourceModule 落 'agent'（手写来源表从来没登记），J1 不改值
   finance: { activity: ['finance'], proposal: ['finance'] },
-  points: { activity: ['points'], notification: ['points'] },
-  guests: { activity: ['guest'], notification: ['guest'] },
-  'smart-home': {},
+  points: { activity: ['points'], notification: ['points'], agentSource: ['points'] },
+  guests: { activity: ['guest'], notification: ['guest'], agentSource: ['guest'] },
+  'smart-home': { agentSource: ['smart_home'] },
   media: { activity: ['media'], notification: ['media'], agentSource: ['media'] },
   travel: { activity: ['travel'], agentSource: ['travel'] },
   memories: { activity: ['memory'], agentSource: ['memory'] },

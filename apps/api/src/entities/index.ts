@@ -6894,6 +6894,11 @@ export class AgentSetting {
       'get_finance_summary',
       'find_item',
       'list_location_contents',
+      'get_reminders',
+      'get_polls',
+      'get_points_summary',
+      'get_upcoming_visits',
+      'get_device_status',
     ],
   })
   readToolsEnabled: string[];

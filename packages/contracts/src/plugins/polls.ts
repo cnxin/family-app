@@ -57,5 +57,6 @@ export const pollsManifest = {
       { label: '投票（投票人）', table: 'poll_votes', memberColumn: 'memberId', createdColumn: 'createdAt' },
     ],
   },
+  queries: [{ id: 'polls.list', label: '家里的投票', server: 'polls.list', toolName: 'get_polls' }],
   notifications: [{ key: 'poll', label: '投票', icon: '🗳' }],
 } as const satisfies PluginManifest;

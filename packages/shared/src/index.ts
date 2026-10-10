@@ -8,3 +8,4 @@ export * from './map-snap';
 export * from './map-split';
 export * from './task-occurrence';
 export * from './recipe-snapshot';
+export * from './smart-home-status';

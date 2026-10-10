@@ -37,6 +37,9 @@ export const pointsManifest = {
       },
     ],
   },
+  queries: [
+    { id: 'points.summary', label: '积分余额与待审批的兑换', server: 'points.summary', toolName: 'get_points_summary' },
+  ],
   usage: { label: '积分', activityModules: ['points'] },
   notifications: [{ key: 'points', label: '积分', icon: '🎁' }],
   capabilities: [{ key: 'manage_points', roles: ['owner', 'admin'] }],

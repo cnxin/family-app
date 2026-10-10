@@ -26,6 +26,7 @@ import {
   type UpdateSmartHomeDeviceBody,
 } from '@family/contracts';
 import { RequireCapabilities } from '../auth/capabilities';
+import { SmartHomeFacadeProvider } from './smart-home.facade';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { ZodBody, ZodParam, ZodQuery } from '../common/zod';
 import {
@@ -292,6 +293,7 @@ export class SmartHomeLinksController {
     SmartHomeLinksService,
     SmartHomeAttentionSource,
     SmartHomeHasDataProvider,
+    SmartHomeFacadeProvider,
   ],
 })
 export class SmartHomeModule {}

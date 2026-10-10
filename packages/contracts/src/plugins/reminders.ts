@@ -47,5 +47,8 @@ export const remindersManifest = {
     activityModules: ['reminder'],
     tables: [{ label: '提醒', table: 'reminders', memberColumn: 'createdById', createdColumn: 'createdAt' }],
   },
+  queries: [
+    { id: 'reminders.upcoming', label: '最近要提醒的事', server: 'reminders.upcoming', toolName: 'get_reminders' },
+  ],
   notifications: [{ key: 'reminder', label: '提醒', icon: '🔔' }],
 } as const satisfies PluginManifest;

@@ -1,5 +1,6 @@
-// 小管家的 30 个工具（J4.1）：读工具由插件 manifest 的 queries 生成名字、提案工具由 actions(propose) 生成，
-// 加 core-assistant.ts 的 7 个内核工具；名单与 manifest 推导一致由 check-plugins 与 agent-tools.check.ts 盯着。
+// 小管家的 35 个工具（J4.1 的 30 个 + 第四批补的 5 个读工具）：读工具由插件 manifest 的 queries 生成名字、
+// 提案工具由 actions(propose) 生成，加 core-assistant.ts 的 7 个内核工具；名单与 manifest 推导一致由 check-plugins
+// 与 agent-tools.check.ts 盯着。
 // MCP（Hermes）与以后的自研循环用同一个注册表。
 import { agentToolAliases } from '@family/contracts';
 import { ToolRegistry } from '@family/agent-core';
@@ -7,6 +8,7 @@ import { getAssetDetailTool } from './assets';
 import { getCalendarTool } from './calendar';
 import type { AgentToolContext, AgentToolDeps } from './context';
 import { getFinanceSummaryTool, proposeFinanceTransactionTool } from './finance';
+import { getUpcomingVisitsTool } from './guests';
 import { getInventoryAlertsTool, getInventorySummaryTool } from './inventory';
 import {
   getFamilyScheduleTool,
@@ -22,16 +24,20 @@ import { findItemTool, listLocationContentsTool } from './locations';
 import { getWatchCandidatesTool } from './media';
 import { getRecentMemoriesTool } from './memories';
 import { getDishPlanTool, getMealPlanTool, proposeMenuTool } from './menus';
-import { proposePollTool } from './polls';
+import { getPointsSummaryTool } from './points';
+import { getPollsTool, proposePollTool } from './polls';
 import { searchRecipesTool } from './recipes';
-import { proposeReminderTool } from './reminders';
+import { getRemindersTool, proposeReminderTool } from './reminders';
 import { getShoppingListTool, proposeShoppingItemsTool } from './shopping';
+import { getDeviceStatusTool } from './smart-home';
 import { getMemberTasksTool, getTasksTool, proposeTaskTool } from './tasks';
 import { getTravelChecklistTool } from './travel';
 
 export type { AgentToolContext, AgentToolDeps } from './context';
 
-/** 注册顺序就是 MCP tools/list 的顺序（历史顺序；改了 tools/list 快照就对不上）。 */
+/**
+ * 注册顺序就是 MCP tools/list 的顺序：J4.1 的 30 个保持历史顺序（快照逐字节不变），以后新增的一律追加在末尾。
+ */
 export function createAgentToolRegistry(deps: AgentToolDeps): ToolRegistry<AgentToolContext> {
   const proposeTools = [
     proposeTaskTool(deps),
@@ -67,6 +73,12 @@ export function createAgentToolRegistry(deps: AgentToolDeps): ToolRegistry<Agent
     rememberPreferenceTool(deps),
     proposePlanTool(deps, proposeTools),
     ...proposeTools,
+    // J4 第四批：提醒、投票、积分、访客、智能家居的读工具（追加在末尾）
+    getRemindersTool(deps),
+    getPollsTool(deps),
+    getPointsSummaryTool(deps),
+    getUpcomingVisitsTool(deps),
+    getDeviceStatusTool(deps),
   ];
   const aliases = agentToolAliases();
   const registry = new ToolRegistry<AgentToolContext>();

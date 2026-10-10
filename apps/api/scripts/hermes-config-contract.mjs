@@ -132,7 +132,9 @@ function sameOrder(left, right) {
 }
 
 const toolGroups = [contracts.AGENT_READ_TOOLS, contracts.AGENT_MEMORY_TOOLS, contracts.AGENT_PROPOSAL_TOOLS];
-const expected = toolGroups.flat();
+/** J4 第四批起新增的工具不进 Hermes 配置（Hermes 在 J4.6 下线，只有「小管家自带」用得到它们）。 */
+const NOT_IN_HERMES = ['get_reminders', 'get_polls', 'get_points_summary', 'get_upcoming_visits', 'get_device_status'];
+const expected = toolGroups.flat().filter((tool) => !NOT_IN_HERMES.includes(tool));
 /** 按读工具、记忆工具、提案工具分组排列；组内顺序不比（推导出的名单按插件排，配置里是历史顺序）。 */
 function grouped(actual) {
   const groupOf = (tool) => toolGroups.findIndex((group) => group.includes(tool));
