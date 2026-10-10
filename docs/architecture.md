@@ -298,13 +298,13 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 6. ~~**内核反向依赖插件**：`system-modules.service.ts` import `smart-home/home-assistant.config`。~~ **已关闭**（J1.6：hasData 改走 `ModuleHasDataRegistry`，check-plugins 断言内核目录不 import 插件目录）。
 7. **SHELF_MODULE_KEYS 混着非插件**：activity（永远 hasData）和 assistant（看 agent 开关）也在里面。
 
-**缺项**（不是错，J3 / J4 要补的空白）：⌘K 缺点菜、库存、积分、智能家居、观影；agent 读工具缺提醒、投票、积分、访客、智能家居（J4 只重建执行层与配置层，没补新工具，仍缺）；设置行只有观影和智能家居有（小管家的云端档配置在「问问小管家 → 设置」，J4.3）。
+**缺项**（不是错，J3 / J4 要补的空白）：⌘K 缺点菜、库存、积分、智能家居、观影；~~agent 读工具缺提醒、投票、积分、访客、智能家居~~（J4 第四批已补：`get_reminders`、`get_polls`、`get_points_summary`、`get_upcoming_visits`、`get_device_status`，经门面读、追加在 tools/list 末尾、不进 Hermes 配置）；设置行只有观影和智能家居有（小管家的云端档配置在「问问小管家 → 设置」，J4.3）。
 
 **跨插件 Service import（违反 §6 第 6 条）共 7 条边**：资产 → 库存、日历 → 任务、提醒 → 日历、智能家居 → 任务 / 提醒 / 购物、任务 → 积分（在打勾的同一事务里记积分）。另有 3 处纯函数 import（`usableLocationId`、`buildRecipeSnapshot`、`taskOccursOn`），以及所有域共用一个 8,352 行的 `entities/index.ts`（购物直接读 Menu、InventoryItem 实体）。~~agent 依赖 14 个域的 Service，属于 J4 的事。~~ **J4.1 已解**：agent 目录零 import 插件目录，全部经门面（§9.5 第 2 条）。
 
 ### 8.3 agent 工具（核实）
 
-- 读工具 21 个（`AGENT_READ_TOOLS`）、提案工具 7 个（`AGENT_PROPOSAL_TOOLS`），合计 28；另有记忆工具 2 个（`AGENT_MEMORY_TOOLS`），MCP 实际注册 30 个。
+- 读工具 21 个（`AGENT_READ_TOOLS`）、提案工具 7 个（`AGENT_PROPOSAL_TOOLS`），合计 28；另有记忆工具 2 个（`AGENT_MEMORY_TOOLS`），MCP 实际注册 30 个。**J4 第四批起**读工具 26 个、MCP 35 个：新增的 5 个追加在末尾（前 30 个 tools/list 逐字节不变，快照单测改为「前缀一致 + 新增 5 个」）；积分、访客、智能家居各加一个门面（共 18 个），迁移 `AddAgentBatch4ReadTools` 给原来是全套默认只读工具的家庭补上。智能家居的一句状态与控制页卡片同一套说法：照 web 搬了一份到 `@family/shared`，`smart-home-status.check.ts` 逐条比对两份。
 - 名字**全部手写字面量**，不是拼出来的。之前只搜到 `propose_plan`，是搜索写法的问题。
 - 命名不统一：提案工具是 `propose_` + 名词，单复数随意（`propose_shopping_items` 对应 actionType `shopping`，`propose_finance_transaction` 对应 `finance`）；`propose_plan` 是跨插件打包，不对应单一 actionType。
 - 文档里「28 个旧工具名做别名」（§3.3、J4）的数没错；J4 要做别名的是 30 个。
@@ -618,6 +618,6 @@ main 上 `105926f`（J1b.2 合并）、`a14ee3a`（J1b.3 合并）两次 CI 被�
 | J1b 跨插件解耦 | ☑ | 见 §9 | 插件目录之间零 import（check-plugins 断言）；门面 6 个、事务内钩子 3 个、插件事件 1 个，manifest 的 `dependsOn` / `hooks` 与代码一致；assistant 内核工具清单收进 `core-assistant.ts`；实体层的跨插件读写与内核（agent）→ 插件的 import 不在范围，见 §9「没解的」；演示栈随本批升级，人工走查由 King 本人做 |
 | J2 助理数据与开关 | ☑ | 见 §8.8 | `assistant_utterances` 表与接口、三档开关、⌘K 原话落表；演示栈随本批升级，King 本人去 ⌘K 输几句再看「原话记录」做人工验收 |
 | J3 第 0 档引擎 | ☐ | | 等试用满两周且原话 ≥ 100 条、覆盖 ≥ 5 个域（2026-10-08 拍板）；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
-| J4 agent 重建 | J4.0～J4.5 已完成，J4.6 等实测一周 | 见 `docs/j4-agent-plan.md` §4 | King 2026-10-09 拍板（§2 十件按建议）。已合：J4.0 `packages/agent-core`（provider / 工具注册表 / loop / 录制回放）、J4.1 工具由 manifest 生成（30 个现名不变，MCP tools/list 逐字节一致）、agent 目录零 import 插件目录、J4.2 NativeAgentRuntime（工具三层过滤、agent_chat 原话落表、agent*.mjs 在 native 下跑第二遍）、J4.3 云端档配置（服务商 / key 加密 / 测一下 / 每日上限 / tier2Scope / 脱敏，设置页「云端助理」分段）、J4.4 流式（`/events` 的 `agent.run` 事件，小管家页逐段出字、断线退回轮询）、J4.5 外围回归（渠道 / 记忆 / 例行任务在 native 下跑通，每日上限加锁，用量报告加流式占比）；J4.6 Hermes 下线等 King 实测一周 |
+| J4 agent 重建 | J4.0～J4.5 已完成，J4.6 等实测一周 | 见 `docs/j4-agent-plan.md` §4 | King 2026-10-09 拍板（§2 十件按建议）。已合：J4.0 `packages/agent-core`（provider / 工具注册表 / loop / 录制回放）、J4.1 工具由 manifest 生成（30 个现名不变，MCP tools/list 逐字节一致）、agent 目录零 import 插件目录、J4.2 NativeAgentRuntime（工具三层过滤、agent_chat 原话落表、agent*.mjs 在 native 下跑第二遍）、J4.3 云端档配置（服务商 / key 加密 / 测一下 / 每日上限 / tier2Scope / 脱敏，设置页「云端助理」分段）、J4.4 流式（`/events` 的 `agent.run` 事件，小管家页逐段出字、断线退回轮询）、J4.5 外围回归（渠道 / 记忆 / 例行任务在 native 下跑通，每日上限加锁，用量报告加流式占比）；J4.6 Hermes 下线等 King 实测一周。第四批（2026-10-10）：补提醒 / 投票 / 积分 / 访客 / 智能家居 5 个读工具、K2 截图记账（内核云端看图，见 `finance-plan.md` §8.8） |
 | J5 本地模型档 | ☐ | | |
 | J6 收口 | ☐ | | |
