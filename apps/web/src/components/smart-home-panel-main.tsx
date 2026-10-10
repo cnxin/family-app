@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import type { SmartHomeControl, SmartHomeDomain, SmartHomePanel, SmartHomePanelEntity } from '@family/contracts';
-import { smartHomeStateLine } from '../lib/smart-home-copy';
+import { isPercentEntity, smartHomeStateLine } from '@family/shared';
+import { percentLabel } from '../lib/smart-home-copy';
 import { useSmartHomeHistory } from '../lib/queries';
 import { choiceLayout } from '../lib/smart-home-controls';
-import { isPercentEntity, percentLabel } from '../lib/smart-home-device-copy';
 import type { PendingCommands } from '../lib/use-pending-commands';
 import { EntityRow } from './smart-home-entity-control';
 import { ChoiceGroup } from './ui/choice';

@@ -1,7 +1,6 @@
 // 智能家居设备的一句状态（smart-home-redesign §3.1），与控制页卡片同一套说法。
-// 照 apps/web/src/lib/smart-home-copy.ts（smartHomeStateLine）与 smart-home-device-copy.ts（deviceStatusLine）搬来，
-// 给服务端用（小管家读工具 get_device_status，J4 第四批）；web 那两份暂时不动，两边一致由
-// apps/api/scripts/smart-home-status.check.ts 盯着。类型写成结构类型：本包不依赖 contracts。
+// J4 第四批从 web 搬来给服务端用（小管家读工具 get_device_status）；第四批收尾起 web 也从这里引，只留这一份。
+// 单测在 packages/shared/tests/smart-home-status.test.mjs。类型写成结构类型：本包不依赖 contracts。
 
 /** 一个实体的状态里用得上的字段（contracts 的 SmartHomeEntityState 满足它）。 */
 export interface SmartHomeStateLike {
@@ -160,7 +159,7 @@ const numberOf = (state: SmartHomeStateLike | null) => {
 const trim = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, ''));
 
 /** 百分比类的传感器：单位是 %，或者名字里写着「百分比」（海尔净水器的滤芯就是这样、没单位）。 */
-function isPercentEntity(entity: { name: string; state: SmartHomeStateLike | null }) {
+export function isPercentEntity(entity: { name: string; state: SmartHomeStateLike | null }) {
   return numberOf(entity.state) !== null && (entity.state?.unit === '%' || /百分比|percent/i.test(entity.name));
 }
 

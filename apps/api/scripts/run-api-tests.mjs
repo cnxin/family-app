@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -436,8 +436,10 @@ try {
     ]);
     // J4.1：小管家工具注册表（MCP tools/list 快照、schema、工具集合 == manifest、别名）
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/agent-tools.check.ts']);
-    // J4 第四批：设备一句状态 @family/shared 与 web 卡片两份实现一致（小管家 get_device_status 用前者）
-    await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/smart-home-status.check.ts']);
+    // packages/shared 的单测（node:test，测 dist）：家庭日期、设备一句状态（第四批收尾从 web 挪来）
+    const sharedTests = join(dirname(fileURLToPath(import.meta.url)), '../../../packages/shared/tests');
+    const sharedFiles = readdirSync(sharedTests).filter((name) => name.endsWith('.test.mjs')).map((name) => join(sharedTests, name));
+    await runProcess(process.execPath, ['--test', ...sharedFiles]);
     // J4.3：发给云端模型前的脱敏
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/agent-redact.check.ts']);
   } else {

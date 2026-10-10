@@ -1,5 +1,6 @@
 // 发给云端模型前的脱敏（J4.3，docs/j4-agent-plan.md §2 第 4 条，tier2Redact 开时）：
 // - 成员真名 → 称呼。成员表没有昵称 / 称呼字段，统一换成「成员 N」（N 按加入家庭的先后）；
+// - 访客名 → 「访客 N」（N 按建档先后，第四批收尾补的：来访工具的结果里有访客名）；
 // - 手机号（11 位、1 开头）、车牌（省简称 + 字母 + 5～6 位）、身份证样式（18 位）、银行卡样式（16～19 位数字）
 //   → 保留前 2 后 2，中间换成 *；
 // - 金额、日期、地址、位置名不动（否则财务、日程、找东西都答不了）。回程不还原。
@@ -32,16 +33,35 @@ export function redactForModel(text: string, context: RedactionContext): string 
   return result;
 }
 
-/** 本家庭成员的真名 → 「成员 N」。名字只有一个字的不换（会误伤正文里的常用字）。 */
+/**
+ * 真名 → 称呼的替换表：成员 → 「成员 N」、访客 → 「访客 N」（N 都按先后，含不换的单字名）。
+ * 名字只有一个字的不换（会误伤正文里的常用字）；成员和访客同名时成员优先（先出现的保留）；
+ * 合在一起统一按长度降序（「王小明」先于「小明」，不分成员访客）。
+ */
+export function redactionNames(memberNames: readonly string[], guestNames: readonly string[]): RedactionContext['names'] {
+  const seen = new Set<string>();
+  return [
+    ...memberNames.map((name, index) => ({ name: name.trim(), alias: `成员${index + 1}` })),
+    ...guestNames.map((name, index) => ({ name: name.trim(), alias: `访客${index + 1}` })),
+  ]
+    .filter((entry) => entry.name.length >= 2 && !seen.has(entry.name) && Boolean(seen.add(entry.name)))
+    .sort((left, right) => right.name.length - left.name.length);
+}
+
+/** 本家庭成员与访客的真名 → 称呼。 */
 export async function redactionContext(dataSource: DataSource, householdId: string): Promise<RedactionContext> {
   const members: { name: string }[] = await dataSource.query(
     `SELECT name FROM members WHERE "householdId" = $1 ORDER BY "createdAt", id`,
     [householdId],
   );
+  const guests: { name: string }[] = await dataSource.query(
+    `SELECT name FROM guests WHERE "householdId" = $1 ORDER BY "createdAt", id`,
+    [householdId],
+  );
   return {
-    names: members
-      .map((member, index) => ({ name: member.name.trim(), alias: `成员${index + 1}` }))
-      .filter((entry) => entry.name.length >= 2)
-      .sort((left, right) => right.name.length - left.name.length),
+    names: redactionNames(
+      members.map((member) => member.name),
+      guests.map((guest) => guest.name),
+    ),
   };
 }

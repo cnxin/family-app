@@ -1,6 +1,7 @@
 import { smartHomeActionsFor, type SmartHomeDeviceWithState } from '@family/contracts';
 import { useSmartHomeCommand } from '../lib/queries';
-import { deviceStatusLine, primaryButton } from '../lib/smart-home-device-copy';
+import { deviceStatusLine } from '@family/shared';
+import { primaryButton } from '../lib/smart-home-copy';
 import { SmartHomeIcon } from './smart-home-icon';
 
 // 设备卡（smart-home-redesign §2.1）：图标、中文名、一句状态、至多一个主按钮。开 / 关 / 运行 / 离线靠颜色表达。

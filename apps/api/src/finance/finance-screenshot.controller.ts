@@ -22,6 +22,7 @@ import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { multipartLimits } from '../common/multipart';
 import { ZodParam } from '../common/zod';
+import { FinanceScreenshotCleanup } from './finance-screenshot.cleanup';
 import { FinanceScreenshotService } from './finance-screenshot.service';
 
 /** 截图超过 4 MB：multer 报 413 英文，按指令回 400 中文。 */
@@ -65,10 +66,10 @@ export class FinanceScreenshotController {
   }
 }
 
-/** K2 截图记账：控制器与服务；识别用内核的云端看图（AgentModule 导出的 AgentVisionService）。FinanceModule 引入。 */
+/** K2 截图记账：控制器、服务与孤儿截图清理；识别用内核的云端看图（AgentModule 导出的 AgentVisionService）。FinanceModule 引入。 */
 @Module({
   imports: [AgentModule],
   controllers: [FinanceScreenshotController],
-  providers: [FinanceScreenshotService],
+  providers: [FinanceScreenshotService, FinanceScreenshotCleanup],
 })
 export class FinanceScreenshotModule {}

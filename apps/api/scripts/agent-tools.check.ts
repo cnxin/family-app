@@ -26,7 +26,9 @@ import {
   type AgentProposalToolName,
   type AgentReadToolName,
 } from '@family/contracts';
+import { getMetadataArgsStorage } from 'typeorm';
 import { AgentMcpController } from '../src/agent/agent-mcp.controller';
+import { AgentSetting } from '../src/entities';
 import { createAgentToolRegistry, type AgentToolContext, type AgentToolDeps } from '../src/agent/tools';
 import type { PluginFacadeRegistry } from '../src/system/plugin-facades.registry';
 import { fakeAgentScript } from '../src/agent/fake-script';
@@ -157,6 +159,12 @@ void (async () => {
     assert.deepEqual(sorted(AGENT_READ_TOOLS), sorted([...HISTORICAL.read, ...ADDED_BATCH4]));
     assert.deepEqual(sorted(AGENT_PROPOSAL_TOOLS), sorted(HISTORICAL.proposal));
     assert.deepEqual(sorted(AGENT_MEMORY_TOOLS), sorted(HISTORICAL.memory));
+  });
+  await check('agent_settings.readToolsEnabled 的实体默认值 == AGENT_READ_TOOLS（含顺序；不一致就配一份迁移）', () => {
+    const column = getMetadataArgsStorage().columns.find(
+      (entry) => entry.target === AgentSetting && entry.propertyName === 'readToolsEnabled',
+    );
+    assert.deepEqual(column?.options.default, [...AGENT_READ_TOOLS]);
   });
   await check('工具名规则：查询 get_<插件>_<动词>、提案 propose_<actionType>，manifest 写了 toolName 就用它', () => {
     assert.equal(defaultQueryToolName('menus.meal-plan'), 'get_menus_meal_plan');

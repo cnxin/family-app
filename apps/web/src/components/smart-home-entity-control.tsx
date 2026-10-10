@@ -1,6 +1,6 @@
 import { SMART_HOME_DOMAINS, type SmartHomeDomain, type SmartHomePanelEntity } from '@family/contracts';
 import { choiceLayout, formatWithUnit } from '../lib/smart-home-controls';
-import { smartHomeStateLine } from '../lib/smart-home-copy';
+import { smartHomeStateLine } from '@family/shared';
 import type { PendingCommands } from '../lib/use-pending-commands';
 import { ChoiceGroup } from './ui/choice';
 import { Slider } from './ui/slider';

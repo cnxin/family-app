@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 import {
   guessAccount,
+  orphanScreenshots,
+  ORPHAN_SCREENSHOT_AGE_MS,
   normalizeOccurredOn,
   parseScreenshotReply,
   screenshotTitle,
@@ -110,6 +112,27 @@ check('按文件头认图片，不信声明的类型', () => {
   assert.deepEqual(sniffScreenshot(Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1')), { ext: '.webp', mime: 'image/webp' });
   assert.equal(sniffScreenshot(Buffer.from('GIF89a')), null);
   assert.equal(sniffScreenshot(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')), null);
+});
+
+check('孤儿截图：只删超过 24 小时、没有流水引用的；不认的文件名不碰；最旧的先删、按上限截断', () => {
+  const now = Date.parse('2026-10-11T12:00:00Z');
+  const old = now - ORPHAN_SCREENSHOT_AGE_MS - 60_000;
+  const referencedName = '11111111-1111-4111-8111-111111111111.png';
+  const freshName = '22222222-2222-4222-8222-222222222222.jpg';
+  const orphanName = '33333333-3333-4333-8333-333333333333.webp';
+  const olderOrphan = '44444444-4444-4444-8444-444444444444.png';
+  const files = [
+    { name: referencedName, mtimeMs: old },
+    { name: freshName, mtimeMs: now - 60_000 },
+    { name: orphanName, mtimeMs: old },
+    { name: olderOrphan, mtimeMs: old - 3_600_000 },
+    { name: 'notes.txt', mtimeMs: old },
+  ];
+  const referenced = new Set([referencedName]);
+  assert.deepEqual(orphanScreenshots(files, referenced, now), [olderOrphan, orphanName]);
+  assert.deepEqual(orphanScreenshots(files, referenced, now, 1), [olderOrphan]);
+  assert.deepEqual(orphanScreenshots(files, referenced, now, 0), []);
+  assert.deepEqual(orphanScreenshots(files.slice(0, 2), referenced, now), []);
 });
 
 console.log(`截图记账单测通过：${passed} 项`);
