@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { SmartHomeEntityState } from '@family/contracts';
-import { arrangeDirectory, groupByArea, smartHomeKind, smartHomeStateLine } from './smart-home-copy';
+import {
+  arrangeDirectory,
+  groupByArea,
+  percentLabel,
+  primaryButton,
+  smartHomeKind,
+  smartHomeTileLine,
+  todayDevices,
+  type DeviceLike,
+} from './smart-home-copy';
+
+// 一句状态（smartHomeStateLine / deviceStatusLine）的用例在 packages/shared/tests/smart-home-status.test.mjs（第四批收尾挪过去）。
 
 function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartHomeEntityState {
   return {
@@ -24,53 +35,6 @@ function state(value: string, extra: Partial<SmartHomeEntityState> = {}): SmartH
     ...extra,
   };
 }
-
-describe('smartHomeStateLine', () => {
-  it('连不上时一律一条横线，离线 / 不知道单独说', () => {
-    expect(smartHomeStateLine('vacuum', null)).toEqual({ text: '—', detail: null, tone: 'muted' });
-    expect(smartHomeStateLine('cover', state('unavailable')).text).toBe('离线');
-    expect(smartHomeStateLine('sensor', state('unknown')).text).toBe('不知道');
-  });
-
-  it('扫地机：状态说人话，带电量', () => {
-    expect(smartHomeStateLine('vacuum', state('cleaning', { battery: 62 }))).toEqual({
-      text: '正在清扫',
-      detail: '电量 62%',
-      tone: 'on',
-    });
-    expect(smartHomeStateLine('vacuum', state('docked')).text).toBe('在充电座上');
-    expect(smartHomeStateLine('vacuum', state('error')).tone).toBe('warn');
-  });
-
-  it('窗帘：开着带开合百分比，全开、关着不带', () => {
-    expect(smartHomeStateLine('cover', state('open', { position: 80 }))).toMatchObject({ text: '开着', detail: '开了 80%' });
-    expect(smartHomeStateLine('cover', state('open', { position: 100 })).detail).toBeNull();
-    expect(smartHomeStateLine('cover', state('closed', { position: 0 }))).toMatchObject({ text: '关着', detail: null });
-  });
-
-  it('传感器：数值 + 中文单位，百分号紧跟', () => {
-    expect(smartHomeStateLine('sensor', state('38', { unit: 'min' })).text).toBe('38 分钟');
-    expect(smartHomeStateLine('sensor', state('12', { unit: '%' })).text).toBe('12%');
-    expect(smartHomeStateLine('sensor', state('23.46', { unit: '°C' })).text).toBe('23.5°C');
-    expect(smartHomeStateLine('sensor', state('2026-09-28T06:30:00+00:00', { deviceClass: 'timestamp' })).text).toBe('14:30');
-  });
-
-  it('二元传感器按 device_class 说', () => {
-    expect(smartHomeStateLine('binary_sensor', state('on', { deviceClass: 'running' })).text).toBe('运行中');
-    expect(smartHomeStateLine('binary_sensor', state('off', { deviceClass: 'running' })).text).toBe('没在运行');
-    expect(smartHomeStateLine('binary_sensor', state('on')).text).toBe('是');
-  });
-
-  it('开关类与空调', () => {
-    expect(smartHomeStateLine('switch', state('on')).tone).toBe('on');
-    expect(smartHomeStateLine('light', state('off')).text).toBe('关着');
-    expect(smartHomeStateLine('climate', state('cool')).text).toBe('制冷');
-    expect(smartHomeStateLine('climate', state('heat', { targetTemperature: 26, currentTemperature: 28.4 })).detail).toBe(
-      '设定 26° · 室内 28.4°',
-    );
-    expect(smartHomeStateLine('climate', state('off', { targetTemperature: 26, currentTemperature: 28 })).detail).toBe('室内 28°');
-  });
-});
 
 describe('groupByArea', () => {
   it('按分组名排，没分组的归「其他」放最后，组内顺序不变', () => {
@@ -143,3 +107,57 @@ describe('arrangeDirectory', () => {
   });
 });
 
+describe('百分比类', () => {
+  // 「是不是百分比类」isPercentEntity 的三条在 shared 的测试里
+  it('短名去掉「百分比」', () => {
+    expect(percentLabel('初滤剩余百分比')).toBe('初滤剩余');
+  });
+});
+
+describe('primaryButton', () => {
+  it('写按下会发生什么；只读类、离线没有', () => {
+    expect(primaryButton('vacuum', state('cleaning'))).toEqual({ action: 'pause', label: '暂停' });
+    expect(primaryButton('vacuum', state('paused'))?.label).toBe('继续');
+    expect(primaryButton('vacuum', state('docked'))?.label).toBe('开始');
+    expect(primaryButton('vacuum', state('error'))).toBeNull();
+    expect(primaryButton('cover', state('closed'))?.label).toBe('打开');
+    expect(primaryButton('cover', state('open'))?.label).toBe('关上');
+    expect(primaryButton('cover', state('closing'))?.label).toBe('停');
+    expect(primaryButton('climate', state('cool'))?.label).toBe('关掉');
+    expect(primaryButton('switch', state('off'))?.label).toBe('打开');
+    expect(primaryButton('sensor', state('12'))).toBeNull();
+    expect(primaryButton('switch', state('unavailable'))).toBeNull();
+  });
+});
+
+describe('今天页设备区块与家里页状态行（H3 E5）', () => {
+  const row = (name: string, extra: Partial<{ pinnedToToday: boolean; online: boolean; primaryDomain: string; primary: SmartHomeEntityState | null; icon: DeviceLike['icon'] }> = {}) => ({
+    name, icon: 'switch' as DeviceLike['icon'], primaryDomain: 'switch', primary: state('off'), featured: [], pinnedToToday: false, online: true, ...extra,
+  });
+
+  it('今天页只放勾了的设备，按原顺序取前 4 台；场景不算，也不算进「全部 N 台」', () => {
+    const devices = [
+      row('场景', { primaryDomain: 'scene', pinnedToToday: true }),
+      ...['一', '二', '三', '四', '五'].map((name) => row(name, { pinnedToToday: true })),
+      row('没勾'),
+    ];
+    const { shown, total } = todayDevices(devices, 4);
+    expect(shown.map((one) => one.name)).toEqual(['一', '二', '三', '四']);
+    expect(total).toBe(6);
+    expect(todayDevices([row('没勾')], 4).shown).toEqual([]);
+  });
+
+  it('状态行：连着数运行 / 要留意 / 离线；都没开写「都歇着」；断开、没连、没设备分别处理', () => {
+    const connected = { configured: true, available: true };
+    const running = row('扫地机', { icon: 'vacuum', primaryDomain: 'vacuum', primary: state('cleaning', { battery: 60 }) });
+    const low = row('净水', { icon: 'water_purifier', primaryDomain: 'sensor', primary: state('8', { unit: '%' }) });
+    const gone = row('插座', { online: false, primary: state('unavailable') });
+    expect(smartHomeTileLine({ connection: connected, devices: [running, low, gone, row('灯')] })).toBe(
+      '4 台设备 · 1 台在运行 · 1 台要留意 · 1 台离线',
+    );
+    expect(smartHomeTileLine({ connection: connected, devices: [row('灯')] })).toBe('1 台设备 · 都歇着');
+    expect(smartHomeTileLine({ connection: { configured: true, available: false }, devices: [row('灯')] })).toBe('连不上 Home Assistant');
+    expect(smartHomeTileLine({ connection: { configured: false, available: false }, devices: [] })).toBeUndefined();
+    expect(smartHomeTileLine({ connection: connected, devices: [row('场景', { primaryDomain: 'scene' })] })).toBeUndefined();
+  });
+});

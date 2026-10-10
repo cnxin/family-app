@@ -4,6 +4,7 @@
 // - max_tokens = 1（「测一下」）→ 一个字，finish_reason = length；
 // - 「记一笔 38 买菜」→ 按工具结果走：先调 get_finance_summary，再用返回里的第一个账户、名字带「买菜」的分类
 //   （没有就第一个支出分类）调 propose_finance_transaction，最后作答；
+// - 「最近谁来家里」→ 先调 get_upcoming_visits，拿到结果后作答（第四批收尾：看工具结果里的访客名有没有脱敏）；
 // - 其余：把成员最后一句话原样回一遍（「收到：…」）。
 // 作答的正文按 chunkMs 分段慢慢吐（J4.4 看对话页的字是不是一段段长出来的）；chunkMs = 0 时一次回完。
 // - 消息里带图片（image_url 块，K2 截图记账）→ 按 vision.mode：json 回 vision.reply（固定 JSON），
@@ -105,6 +106,12 @@ function financeTurn(response, messages, chunkMs) {
   return textReply(response, '已经起草了一笔 38 元的买菜支出，你在下面确认后才会入账。', chunkMs);
 }
 
+function visitsTurn(response, messages) {
+  const lastTool = [...messages].reverse().find((message) => message.role === 'tool');
+  if (!lastTool) return toolReply(response, 'get_upcoming_visits', {});
+  return textReply(response, '最近有客人要来，记得提前定菜。');
+}
+
 export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0, chunkMs = 0 } = {}) {
   const requests = [];
   const vision = { mode: 'json', reply: FAKE_SCREENSHOT_REPLY };
@@ -134,6 +141,7 @@ export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0,
       }
       const text = memberText(body.messages ?? []);
       if (text.includes('记一笔 38 买菜')) return financeTurn(response, body.messages, chunkMs);
+      if (text.includes('最近谁来家里')) return visitsTurn(response, body.messages);
       return textReply(response, `收到：${text}`, chunkMs);
     });
   });

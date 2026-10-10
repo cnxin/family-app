@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { SmartHomeDirectoryDevice, SmartHomeDirectoryEntry } from '@family/contracts';
 import { useAddSmartHomeDevice, useSmartHomeDirectory } from '../lib/queries';
-import { SMART_HOME_KINDS, arrangeDirectory, smartHomeStateLine, type SmartHomeKind } from '../lib/smart-home-copy';
+import { smartHomeStateLine } from '@family/shared';
+import { SMART_HOME_KINDS, arrangeDirectory, type SmartHomeKind } from '../lib/smart-home-copy';
 import { pushToast } from '../lib/toast';
 import { QueryFrame } from './query-state';
 import { ListSkeleton } from './skeleton';

@@ -317,6 +317,7 @@ export function AssistantTiers({
               onChange={onChange}
               onCheck={onCheckProvider}
             />
+            <p className="text-[12px] text-ink-soft">开启后，对话内容（已脱敏）和记账截图原图会发给所选服务商</p>
             <div className="flex items-center gap-3">
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px]">只对管理员开放（试用期建议）</span>

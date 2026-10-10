@@ -19,6 +19,7 @@ import { AddFinanceRecurringErrors1785234300000 } from './1785234300000-add-fina
 import { AddNativeAgentRuntime1785234400000 } from './1785234400000-add-native-agent-runtime';
 import { AddAgentCloudProvider1785234500000 } from './1785234500000-add-agent-cloud-provider';
 import { AddAgentBatch4ReadTools1785234600000 } from './1785234600000-add-agent-batch4-read-tools';
+import { AddAgentAssetDetailDefault1785234700000 } from './1785234700000-add-agent-asset-detail-default';
 import { SmartHomeDevicesByDevice1785233000000 } from './1785233000000-smart-home-devices-by-device';
 import { AddSmartHomeCommandSource1785233100000 } from './1785233100000-add-smart-home-command-source';
 import { InitialSchema1785226400000 } from './1785226400000-initial-schema';
@@ -166,4 +167,5 @@ export const ALL_MIGRATIONS = [
   AddNativeAgentRuntime1785234400000,
   AddAgentCloudProvider1785234500000,
   AddAgentBatch4ReadTools1785234600000,
+  AddAgentAssetDetailDefault1785234700000,
 ];

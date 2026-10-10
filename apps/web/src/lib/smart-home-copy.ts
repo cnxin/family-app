@@ -1,127 +1,85 @@
-import type { SmartHomeAction, SmartHomeDomain, SmartHomeEntityState } from '@family/contracts';
+import type { SmartHomeAction, SmartHomeDomain, SmartHomeEntityState, SmartHomeIcon } from '@family/contracts';
+import { deviceStatusLine } from '@family/shared';
 
-/** 一台设备在页面上的一句话状态。tone 决定颜色：on 高亮、warn 提醒、off 平常、muted 连不上。 */
-export interface StateLine {
-  text: string;
-  detail: string | null;
-  tone: 'on' | 'off' | 'warn' | 'muted';
+// 智能家居页面上的文案与小工具。一个实体 / 一台设备的「一句状态」（smartHomeStateLine / deviceStatusLine）在
+// @family/shared（服务端小管家 get_device_status 也用它，第四批收尾起只留这一份），这里是只有页面用的。
+
+/** 页面上一台设备的形状（主实体与主面板项的状态）。 */
+export interface DeviceLike {
+  icon: SmartHomeIcon;
+  primaryDomain: string;
+  primary: SmartHomeEntityState | null;
+  featured: { entityId: string; domain: string; name: string; state: SmartHomeEntityState | null }[];
 }
 
-const VACUUM: Record<string, [string, StateLine['tone']]> = {
-  cleaning: ['正在清扫', 'on'],
-  docked: ['在充电座上', 'off'],
-  returning: ['正在回充', 'on'],
-  paused: ['暂停了', 'warn'],
-  idle: ['待机', 'off'],
-  error: ['出错了，去 App 看看', 'warn'],
-};
-
-const COVER: Record<string, [string, StateLine['tone']]> = {
-  open: ['开着', 'on'],
-  closed: ['关着', 'off'],
-  opening: ['正在打开', 'on'],
-  closing: ['正在关上', 'on'],
-};
-
-/** binary_sensor 按 device_class 说人话；没有的就「是 / 否」。 */
-const BINARY: Record<string, [string, string]> = {
-  running: ['运行中', '没在运行'],
-  problem: ['有问题', '正常'],
-  door: ['开着', '关着'],
-  window: ['开着', '关着'],
-  opening: ['开着', '关着'],
-  moisture: ['检测到水', '干的'],
-  battery: ['电量低', '电量正常'],
-  connectivity: ['在线', '离线'],
-  plug: ['插着', '没插'],
-};
-
-const CLIMATE: Record<string, string> = {
-  off: '关着',
-  cool: '制冷',
-  heat: '制热',
-  heat_cool: '自动',
-  auto: '自动',
-  dry: '除湿',
-  fan_only: '送风',
-};
-
-const UNITS: Record<string, string> = { min: '分钟', h: '小时', s: '秒', d: '天' };
-
-function formatNumber(value: string) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return value;
-  return Number.isInteger(number) ? String(number) : number.toFixed(1).replace(/\.0$/, '');
+/** 百分比类传感器的短名：「初滤剩余百分比」→「初滤剩余」。 */
+export function percentLabel(name: string) {
+  return name.replace(/百分比$/, '').trim() || name;
 }
 
-function sensorLine(state: SmartHomeEntityState, timeZone: string): StateLine {
-  if (state.deviceClass === 'timestamp') {
-    const at = new Date(state.state);
-    if (Number.isNaN(at.getTime())) return { text: state.state, detail: null, tone: 'off' };
-    const time = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone }).format(at);
-    return { text: time, detail: null, tone: 'off' };
-  }
-  const value = formatNumber(state.state);
-  const unit = state.unit ? UNITS[state.unit] ?? state.unit : '';
-  const joined = unit && !/^[%°]/.test(unit) && /[一-龥]/.test(unit) ? `${value} ${unit}` : `${value}${unit}`;
-  return { text: joined, detail: null, tone: 'off' };
+export interface PrimaryButton {
+  action: 'start' | 'pause' | 'open' | 'close' | 'stop' | 'turn_on' | 'turn_off';
+  /** 按钮上写的是「按下会发生什么」，不是当前状态（redesign §2.1） */
+  label: string;
 }
 
-export function smartHomeStateLine(
-  domain: SmartHomeDomain,
-  state: SmartHomeEntityState | null,
-  timeZone = 'Asia/Shanghai',
-): StateLine {
-  if (!state) return { text: '—', detail: null, tone: 'muted' };
-  if (state.state === 'unavailable') return { text: '离线', detail: null, tone: 'muted' };
-  if (state.state === 'unknown') return { text: '不知道', detail: null, tone: 'muted' };
-
-  switch (domain) {
-    case 'vacuum': {
-      const [text, tone] = VACUUM[state.state] ?? [state.state, 'off'];
-      return { text, detail: state.battery == null ? null : `电量 ${state.battery}%`, tone };
-    }
-    case 'cover': {
-      const [text, tone] = COVER[state.state] ?? [state.state, 'off'];
-      const detail =
-        state.position != null && state.state !== 'closed' && state.position !== 100 ? `开了 ${state.position}%` : null;
-      return { text, detail, tone };
-    }
-    case 'light':
+/**
+ * 卡片上唯一的主按钮（redesign §3.3）：扫地机 暂停 / 继续 / 开始，窗帘 打开 / 关上 / 停，开关与空调 打开 / 关掉；
+ * 洗衣机、净水器、传感器没有。出错、离线、读不到状态时也没有。
+ */
+export function primaryButton(primaryDomain: string, state: SmartHomeEntityState | null): PrimaryButton | null {
+  const value = state?.state;
+  if (!value || value === 'unavailable' || value === 'unknown') return null;
+  switch (primaryDomain) {
+    case 'vacuum':
+      if (value === 'cleaning' || value === 'returning') return { action: 'pause', label: '暂停' };
+      if (value === 'error') return null;
+      return { action: 'start', label: value === 'paused' ? '继续' : '开始' };
+    case 'cover':
+      if (value === 'opening' || value === 'closing') return { action: 'stop', label: '停' };
+      return value === 'closed' ? { action: 'open', label: '打开' } : { action: 'close', label: '关上' };
     case 'switch':
-    case 'input_boolean':
-    case 'fan':
-    case 'humidifier':
-      return state.state === 'on' ? { text: '开着', detail: null, tone: 'on' } : { text: '关着', detail: null, tone: 'off' };
-    case 'binary_sensor': {
-      const [on, off] = BINARY[state.deviceClass ?? ''] ?? ['是', '否'];
-      return state.state === 'on' ? { text: on, detail: null, tone: 'on' } : { text: off, detail: null, tone: 'off' };
-    }
     case 'climate':
-    case 'water_heater': {
-      const parts = [
-        state.state !== 'off' && state.targetTemperature != null ? `设定 ${formatNumber(String(state.targetTemperature))}°` : null,
-        state.currentTemperature != null ? `室内 ${formatNumber(String(state.currentTemperature))}°` : null,
-      ].filter(Boolean);
-      return {
-        text: CLIMATE[state.state] ?? state.state,
-        detail: parts.length ? parts.join(' · ') : null,
-        tone: state.state === 'off' ? 'off' : 'on',
-      };
-    }
-    case 'scene':
-    case 'script':
-      return { text: '场景', detail: null, tone: 'off' };
-    case 'sensor':
-    case 'number':
-      return sensorLine(state, timeZone);
-    case 'select':
-    case 'text':
-      return { text: state.state, detail: null, tone: 'off' };
-    case 'button':
-      // 按钮的状态是上次按的时间，卡片上没意义
-      return { text: '按钮', detail: null, tone: 'off' };
+      return value === 'off' ? { action: 'turn_on', label: '打开' } : { action: 'turn_off', label: '关掉' };
+    default:
+      return null;
   }
+}
+
+type StatesLike = {
+  connection: { configured: boolean; available: boolean };
+  devices: (DeviceLike & { pinnedToToday: boolean; online: boolean })[];
+};
+
+const isSceneDomain = (domain: string) => domain === 'scene' || domain === 'script';
+
+/**
+ * 今天页「家里的设备」（redesign §2.5）：勾了「在今天页显示」的设备，按服务端的排序取前 limit 台；
+ * 场景、脚本不算设备（它们在智能家居页的场景一排）。total 是智能家居页一共有几台，给「全部 N 台」用。
+ */
+export function todayDevices<T extends StatesLike['devices'][number]>(devices: T[], limit: number) {
+  const all = devices.filter((device) => !isSceneDomain(device.primaryDomain));
+  return { shown: all.filter((device) => device.pinnedToToday).slice(0, limit), total: all.length };
+}
+
+/**
+ * 家里页智能家居图块的状态行：连着时「N 台设备 · M 台在运行」（运行 = 卡片会着色的那些），
+ * 断开时「连不上 Home Assistant」；还没连、白名单是空的就不写（图块本身只有名字）。
+ */
+export function smartHomeTileLine(states: StatesLike | undefined): string | undefined {
+  if (!states?.connection.configured) return undefined;
+  const devices = states.devices.filter((device) => !isSceneDomain(device.primaryDomain));
+  if (!devices.length) return undefined;
+  if (!states.connection.available) return '连不上 Home Assistant';
+  const running = devices.filter((device) => device.online && deviceStatusLine(device).tone === 'on').length;
+  const warn = devices.filter((device) => device.online && deviceStatusLine(device).tone === 'warn').length;
+  const offline = devices.filter((device) => !device.online).length;
+  const tail = [
+    running ? `${running} 台在运行` : '',
+    warn ? `${warn} 台要留意` : '',
+    offline ? `${offline} 台离线` : '',
+  ].filter(Boolean);
+  return [`${devices.length} 台设备`, ...(tail.length ? tail : ['都歇着'])].join(' · ');
 }
 
 /** 按分组排好：有分组的按分组名，没分组的归「其他」放最后；组内保持服务端顺序。 */

@@ -2,6 +2,7 @@
 // MCP 目录由 agent.mjs 校验，Hermes 白名单由 hermes-config-contract.mjs 校验。
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { startFakeModel } from './fake-model.mjs';
 
 const { Client } = pg;
 const BASE = process.env.API_URL || 'http://127.0.0.1:3100';
@@ -842,6 +843,53 @@ try {
       !shortVisits?.some((one) => one.title === `外婆来吃饭${mark}`),
     'get_upcoming_visits：14 天内的来访带日期 / 访客 / 有没有定菜；days=2 不含 3 天后的',
   );
+  // 第四批收尾：访客名进脱敏。开 tier2Redact（默认就开）、走家里配的模型（假模型服务）问一句，
+  // 模型先调 get_upcoming_visits，第二次请求里带着工具结果——访客真名应已换成「访客 N」
+  const model = await startFakeModel();
+  const settingsBefore = (await request('/agent/settings', owner.accessToken)).data;
+  try {
+    const configured = await request('/agent/settings', owner.accessToken, 'PATCH', {
+      providerKind: 'custom', providerBaseUrl: model.url, providerModel: 'fake-model', providerKey: model.key,
+      expectedVersion: settingsBefore.version,
+    });
+    const checked = await request('/agent/settings/provider-check', owner.accessToken, 'POST');
+    const native = await request('/agent/settings', owner.accessToken, 'PATCH', {
+      runtimeKind: 'native', enabled: true, tier2Redact: true, expectedVersion: checked.data?.settings?.version ?? configured.data?.version,
+    });
+    assert(native.status === 200 && native.data.tier2Redact === true, '切到小管家自带、走假模型服务，脱敏开着');
+    const chat = await request('/agent/conversations', owner.accessToken, 'POST', {});
+    const asked = await request(`/agent/conversations/${chat.data.id}/messages`, owner.accessToken, 'POST', {
+      message: '（走家里配的模型）最近谁来家里', clientRequestId: randomUUID(),
+    });
+    let finished = null;
+    for (let attempt = 0; attempt < 150 && !finished; attempt += 1) {
+      const detail = await request(`/agent/conversations/${chat.data.id}`, owner.accessToken);
+      const run = detail.data?.runs?.find((entry) => entry.id === asked.data.id);
+      if (run && ['completed', 'failed', 'cancelled'].includes(run.status)) finished = run;
+      else await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const order = (await db.query(
+      'SELECT id FROM guests WHERE "householdId" = $1 ORDER BY "createdAt", id',
+      [owner.member.householdId],
+    )).rows.map((row) => row.id);
+    const alias = `访客${order.indexOf(guest.data.id) + 1}`;
+    const withTool = model.requests.find((body) => body.messages?.some((message) => message.role === 'tool'));
+    const toolText = withTool?.messages?.filter((message) => message.role === 'tool').map((message) => message.content).join('\n') ?? '';
+    const runRow = (await db.query('SELECT redacted FROM agent_runs WHERE id = $1', [asked.data.id])).rows[0];
+    assert(
+      finished?.status === 'completed' && runRow?.redacted === true && toolText.includes(`外婆来吃饭${mark}`) &&
+        !toolText.includes(`外婆${mark}`) && toolText.includes(`"${alias}"`),
+      `发给模型的工具结果里访客真名换成了「${alias}」（来访标题等其余内容原样）`,
+    );
+  } finally {
+    const current = (await request('/agent/settings', owner.accessToken)).data;
+    await request('/agent/settings', owner.accessToken, 'PATCH', {
+      runtimeKind: settingsBefore.runtimeKind, enabled: settingsBefore.enabled, tier2Redact: settingsBefore.tier2Redact,
+      providerKind: null, providerBaseUrl: null, providerModel: null, providerKey: null, expectedVersion: current.version,
+    });
+    await model.stop();
+  }
+
   const memberRun = await batch4Run(member);
   const memberVisits = await mcp(toolCall(70, 'get_upcoming_visits', memberRun, {}));
   assert(

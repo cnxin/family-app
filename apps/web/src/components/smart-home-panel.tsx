@@ -3,7 +3,7 @@ import { SMART_HOME_TODAY_LIMIT, type SmartHomePanel, type SmartHomePanelEntity 
 import { useAuth } from '../lib/auth';
 import { useSmartHomePanel, useSmartHomeStates, useUpdateSmartHomeDevice } from '../lib/queries';
 import { SMART_HOME_ACTION_LABELS } from '../lib/smart-home-copy';
-import { deviceStatusLine } from '../lib/smart-home-device-copy';
+import { deviceStatusLine } from '@family/shared';
 import { pushToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/use-media-query';
 import { usePendingCommands, type PendingCommands } from '../lib/use-pending-commands';

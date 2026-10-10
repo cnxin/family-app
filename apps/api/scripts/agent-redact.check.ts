@@ -2,7 +2,7 @@
 // 每类各 3 条正例、3 条反例；金额、日期、地址、位置名不动。run-api-tests.mjs 全量模式里执行；
 // 单独跑：node -r ts-node/register scripts/agent-redact.check.ts
 import assert from 'node:assert/strict';
-import { redactForModel, type RedactionContext } from '../src/agent/redact';
+import { redactForModel, redactionNames, type RedactionContext } from '../src/agent/redact';
 
 let passed = 0;
 function check(name: string, run: () => void) {
@@ -79,6 +79,29 @@ check('反例：不是成员的名字、一个字的不换', () => {
   same('王阿姨来做客', family);
   same('小明天去', family);
   same('妈', family);
+});
+
+console.log('访客名（第四批收尾）');
+check('替换表：成员 → 成员N、访客 → 访客N；单字不换；同名成员优先；统一按长度降序', () => {
+  const names = redactionNames(['爸爸', '妈', '王小明'], ['小明', '外婆', '爸爸', '王', '李阿姨家的小明']);
+  assert.deepEqual(names, [
+    { name: '李阿姨家的小明', alias: '访客5' },
+    { name: '王小明', alias: '成员3' },
+    { name: '爸爸', alias: '成员1' },
+    { name: '小明', alias: '访客1' },
+    { name: '外婆', alias: '访客2' },
+  ]);
+});
+check('正文里成员名、访客名、同名、单字名一起出现', () => {
+  const context: RedactionContext = { names: redactionNames(['爸爸', '妈', '王小明'], ['小明', '外婆', '爸爸', '王']) };
+  assert.equal(
+    redactForModel('王小明和小明周六来，外婆也来；爸爸接，妈不去，王老师请假', context),
+    '成员3和访客1周六来，访客2也来；成员1接，妈不去，王老师请假',
+  );
+  assert.equal(
+    redactForModel('{"guests":["外婆","小明"],"host":"爸爸"}', context),
+    '{"guests":["访客2","访客1"],"host":"成员1"}',
+  );
 });
 
 console.log('不动的内容');

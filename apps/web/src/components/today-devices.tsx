@@ -3,7 +3,7 @@ import { SMART_HOME_TODAY_LIMIT } from '@family/contracts';
 import { useAuth } from '../lib/auth';
 import { useSmartHomeStates } from '../lib/queries';
 import { useModules } from '../lib/queries/modules';
-import { todayDevices } from '../lib/smart-home-device-copy';
+import { todayDevices } from '../lib/smart-home-copy';
 import { DeviceCard } from './smart-home-card';
 import { DeviceDetail } from './smart-home-panel';
 import { SoftLink } from './soft-link';

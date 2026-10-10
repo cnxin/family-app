@@ -4,7 +4,7 @@ import { shelfSegments } from '../lib/nav';
 import { usePins, PIN_LIMIT } from '../lib/pins';
 import { useModules, useSetModuleOverride } from '../lib/queries/modules';
 import { useAttention, useCachedSmartHomeStates } from '../lib/queries';
-import { smartHomeTileLine } from '../lib/smart-home-device-copy';
+import { smartHomeTileLine } from '../lib/smart-home-copy';
 import { attentionCopy } from '../lib/attention-copy';
 import { pushToast } from '../lib/toast';
 import { openPalette } from '../components/command-palette';

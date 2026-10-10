@@ -1,6 +1,7 @@
 // K2 截图记账的纯函数（docs/finance-plan.md §3-K2）：识别提示词、模型回复的解析、日期归一、按付款方式猜账户。
 // 单测见 scripts/finance-screenshot.check.ts。
 import {
+  financeAttachmentName,
   financeScreenshotModelOutput,
   type FinanceAccountType,
   type FinanceScreenshotModelOutput,
@@ -136,4 +137,27 @@ export function sniffScreenshot(buffer: Buffer): { ext: '.jpg' | '.png' | '.webp
     return { ext: '.webp', mime: 'image/webp' };
   }
   return null;
+}
+
+/** 孤儿截图：识别了却没确认记账，留在目录里的。超过这么久、没有流水引用就删（第四批收尾）。 */
+export const ORPHAN_SCREENSHOT_AGE_MS = 24 * 60 * 60 * 1000;
+/** 每轮最多删这么多（各家庭合计），删不完下一轮接着删。 */
+export const ORPHAN_SCREENSHOT_BATCH = 200;
+
+/**
+ * 一个家庭的截图目录里该删的文件：修改时间早于 24 小时、没有任何流水的 attachmentPath 引用它，最旧的先删，
+ * 最多 limit 个。文件名不是「uuid + .jpg / .png / .webp」的不认、不删（不是识别接口存的）。
+ */
+export function orphanScreenshots(
+  files: readonly { name: string; mtimeMs: number }[],
+  referenced: ReadonlySet<string>,
+  now: number,
+  limit = ORPHAN_SCREENSHOT_BATCH,
+): string[] {
+  return files
+    .filter((file) => financeAttachmentName.safeParse(file.name).success)
+    .filter((file) => now - file.mtimeMs > ORPHAN_SCREENSHOT_AGE_MS && !referenced.has(file.name))
+    .sort((left, right) => left.mtimeMs - right.mtimeMs)
+    .slice(0, Math.max(limit, 0))
+    .map((file) => file.name);
 }
