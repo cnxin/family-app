@@ -12,6 +12,7 @@ import {
   Injectable,
   Module,
   NotFoundException,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -35,6 +36,8 @@ import {
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { DataSource, In, IsNull, MoreThan, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { guestsFacade } from './guests.facade';
 import { CurrentUser, JwtUser, Public } from '../auth/jwt.guard';
 import { RequireCapabilities } from '../auth/capabilities';
 import { decryptIntegrationCredential, encryptIntegrationCredential } from '../common/integration-credentials';
@@ -1433,10 +1436,24 @@ export class GuestsController {
   }
 }
 
+/** 访客门面（J4 第四批：小管家读工具 get_upcoming_visits）。 */
+@Injectable()
+export class GuestsFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly guests: GuestsService,
+    private readonly db: DataSource,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('guests', guestsFacade(this.guests, this.db));
+  }
+}
+
 @Module({
   imports: [TodayModule, TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Menu, MenuItem, Member, Notification, HouseholdActivityLog])],
   controllers: [GuestsController],
-  providers: [GuestsService, GuestMenuAttentionRule, GuestMealRequestAttentionRule, GuestsAttention],
+  providers: [GuestsService, GuestMenuAttentionRule, GuestMealRequestAttentionRule, GuestsAttention, GuestsFacadeProvider],
   exports: [GuestsService],
 })
 export class GuestsModule {}

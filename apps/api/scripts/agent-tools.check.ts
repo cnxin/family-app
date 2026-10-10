@@ -1,5 +1,6 @@
 // J4.1 单测（和 kernel-units.check.ts 同一写法：ts-node 跑、node:assert 断言）：小管家工具注册表与 MCP 暴露。
-// - MCP tools/list 与 J4.1 之前逐字节一致（agent-mcp-tools.snapshot.json 是改造前 main 016dacf 的输出）；
+// - MCP tools/list 的前 30 个与 J4.1 之前逐字节一致（agent-mcp-tools.snapshot.json 是改造前 main 016dacf 的输出），
+//   第四批新增的 5 个读工具追加在末尾（agent-mcp-tools.added.snapshot.json）；
 // - 每个注册表工具的 zod → JSON Schema 与 MCP 暴露的一致；工具集合 == manifest 推导；30 个现名（含字面量类型）不变；
 // - 旧名别名能解析；propose_plan 的步骤联合由 manifest 推导；提案工具只把 proposalId 交给模型。
 // run-api-tests.mjs 全量模式里执行；单独跑：node -r ts-node/register scripts/agent-tools.check.ts
@@ -54,10 +55,13 @@ const HISTORICAL = {
   memory: ['recall_preferences', 'remember_preference'],
 } as const;
 
+/** J4 第四批补的 5 个读工具（提醒、投票、积分、访客、智能家居），追加在 tools/list 末尾。 */
+const ADDED_BATCH4 = ['get_reminders', 'get_polls', 'get_points_summary', 'get_upcoming_visits', 'get_device_status'] as const;
+
 // 字面量类型也按 manifest 推导：与冻结的名单互相包含，否则编译不过
 type Eq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const typesMatch: [
-  Eq<AgentReadToolName, (typeof HISTORICAL.read)[number]>,
+  Eq<AgentReadToolName, (typeof HISTORICAL.read)[number] | (typeof ADDED_BATCH4)[number]>,
   Eq<AgentProposalToolName, (typeof HISTORICAL.proposal)[number]>,
   Eq<AgentMemoryToolName, (typeof HISTORICAL.memory)[number]>,
 ] = [true, true, true];
@@ -119,9 +123,15 @@ void (async () => {
 
   console.log('MCP 暴露');
   const raw = await listToolsRaw(registry);
-  await check('tools/list 与 J4.1 之前的快照逐字节一致（含顺序）', () => {
+  await check('tools/list：前 30 个与 J4.1 之前的快照逐字节一致（含顺序），第四批的 5 个追加在末尾', () => {
     const snapshot = readFileSync(join(__dirname, 'agent-mcp-tools.snapshot.json'), 'utf8');
-    assert.equal(raw, snapshot);
+    const added = readFileSync(join(__dirname, 'agent-mcp-tools.added.snapshot.json'), 'utf8').trim();
+    const tail = snapshot.slice(snapshot.lastIndexOf(']},"jsonrpc"'));
+    const head = snapshot.slice(0, snapshot.length - tail.length);
+    assert.ok(raw.startsWith(`${head},`), '前 30 个工具与快照逐字节一致');
+    assert.ok(raw.endsWith(tail));
+    assert.equal(`[${raw.slice(head.length + 1, raw.length - tail.length)}]`, added);
+    assert.deepEqual((JSON.parse(added) as { name: string }[]).map((tool) => tool.name), [...ADDED_BATCH4]);
   });
   const listed = (JSON.parse(raw) as { result: { tools: ListedTool[] } }).result.tools;
   await check('每个注册表工具：名字、描述、zod → JSON Schema 与 MCP 暴露的一致', () => {
@@ -143,8 +153,8 @@ void (async () => {
       sorted(AGENT_PROPOSAL_TOOLS),
     );
   });
-  await check('30 个现名全部保留（运行时名单与字面量类型）', () => {
-    assert.deepEqual(sorted(AGENT_READ_TOOLS), sorted(HISTORICAL.read));
+  await check('30 个现名全部保留 + 第四批 5 个读工具（运行时名单与字面量类型）', () => {
+    assert.deepEqual(sorted(AGENT_READ_TOOLS), sorted([...HISTORICAL.read, ...ADDED_BATCH4]));
     assert.deepEqual(sorted(AGENT_PROPOSAL_TOOLS), sorted(HISTORICAL.proposal));
     assert.deepEqual(sorted(AGENT_MEMORY_TOOLS), sorted(HISTORICAL.memory));
   });
@@ -219,6 +229,60 @@ void (async () => {
     const found = (await tools.invoke('find_item', ctx, { name: ' 牙膏 ' })).result as { found: number; items: { lastPlacedAt: string }[] };
     assert.equal(found.found, 1);
     assert.equal(found.items[0].lastPlacedAt, '上次放在 卫生间 / 镜柜');
+  });
+
+  await check('第四批 5 个读工具只经门面取数据：提醒按成员筛、投票数票、积分、来访、设备一句状态', async () => {
+    const tools = createAgentToolRegistry(stubDeps({
+      members: { findOneBy: async ({ id }: { id: string }) => ({ id, disabledAt: null }) },
+    }, {
+      reminders: {
+        listWindow: async () => [
+          { id: 'r1', title: '倒垃圾', remindAt: '2026-10-10T12:00:00.000Z', status: 'scheduled', sourceModule: 'task', targetPath: '/tasks', recipients: [{ id: '11111111-1111-4111-8111-111111111111', name: '妈妈' }] },
+          { id: 'r2', title: null, remindAt: '2026-10-10T13:00:00.000Z', status: 'sent', sourceModule: 'menu', targetPath: null, recipients: [{ id: '22222222-2222-4222-8222-222222222222', name: '爸爸' }] },
+        ],
+      },
+      polls: {
+        listPolls: async (status: string) => [
+          { id: 'p1', title: `周末去哪（${status}）`, status, closesAt: null, totalVoters: 2, selectedOptionIds: [], options: [{ label: '公园', voteCount: 2 }, { label: '商场', voteCount: 0 }] },
+        ],
+      },
+      points: {
+        summary: async (memberId: string | null) => ({
+          weekStart: '2026-10-05',
+          members: [{ memberId: 'm1', name: memberId ? '只看一人' : '妈妈', balance: 120, earnedThisWeek: 30 }],
+          pendingRedemptions: [{ id: 'x', memberId: 'm1', memberName: '妈妈', rewardName: '看电影', cost: 100, requestedAt: '2026-10-09T00:00:00.000Z' }],
+        }),
+      },
+      guests: {
+        upcomingVisits: async (days: number) => [
+          { id: 'v1', title: `外婆来（${days} 天内）`, startsAt: '2026-10-12T02:00:00.000Z', endsAt: null, date: '2026-10-12', host: '爸爸', guests: ['外婆'], attending: 1, menuPlanned: false, pendingMealRequests: 1 },
+        ],
+      },
+      'smart-home': {
+        deviceStatuses: async (filter: { room?: string }) => ({
+          connection: 'unreachable',
+          devices: [{ id: 'd1', name: `扫地机${filter.room ?? ''}`, room: '客厅', status: '正在清扫 · 80%', online: true }],
+        }),
+      },
+    }));
+    const reminders = (await tools.invoke('get_reminders', ctx, { memberId: '11111111-1111-4111-8111-111111111111' })).result as { title: string; recipients: string[] }[];
+    assert.deepEqual(reminders.map((row) => [row.title, row.recipients]), [['倒垃圾', ['妈妈']]]);
+    const all = (await tools.invoke('get_reminders', ctx, { range: 'week' })).result as { title: string }[];
+    assert.equal(all[1].title, '（关联的事项已经不在了）');
+    assert.deepEqual((await tools.invoke('get_polls', ctx, {})).result, [
+      { title: '周末去哪（open）', status: 'open', closesAt: null, totalVoters: 2, voted: false, options: [{ label: '公园', votes: 2 }, { label: '商场', votes: 0 }], targetPath: '/schedule/polls?pollId=p1' },
+    ]);
+    const points = (await tools.invoke('get_points_summary', ctx, {})).result as { members: { balance: number }[]; pendingRedemptions: { reward: string }[] };
+    assert.equal(points.members[0].balance, 120);
+    assert.equal(points.pendingRedemptions[0].reward, '看电影');
+    const visits = (await tools.invoke('get_upcoming_visits', ctx, {})).result as { title: string; menuPlanned: boolean }[];
+    assert.deepEqual(visits.map((visit) => [visit.title, visit.menuPlanned]), [['外婆来（14 天内）', false]]);
+    await assert.rejects(tools.invoke('get_upcoming_visits', ctx, { days: 61 }));
+    assert.deepEqual((await tools.invoke('get_device_status', ctx, { room: '客厅' })).result, {
+      connection: '连不上 Home Assistant，下面是最近一次读到的状态',
+      devices: [{ id: 'd1', name: '扫地机客厅', room: '客厅', status: '正在清扫 · 80%', online: true }],
+      targetPath: '/house/smart-home',
+    });
   });
 
   console.log('工具过滤（J4.2）');

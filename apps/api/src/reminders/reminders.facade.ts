@@ -14,5 +14,17 @@ export function remindersFacade(reminders: RemindersService): RemindersFacade {
     },
     createReminder: (transaction, input, actor) =>
       reminders.createWithinTransaction(input as CreateReminderDto, actor, fromPluginTransaction(transaction)),
+    async listWindow(from, to, actor) {
+      const rows = await reminders.listWindow(new Date(from), new Date(to), actor);
+      return rows.map((row) => ({
+        id: row.id,
+        title: row.source?.title ?? null,
+        remindAt: row.remindAt,
+        status: row.status as 'scheduled' | 'sent',
+        sourceModule: row.sourceModule,
+        targetPath: row.source?.targetPath ?? null,
+        recipients: row.recipients.map((recipient) => ({ id: recipient.member.id, name: recipient.member.name })),
+      }));
+    },
   };
 }

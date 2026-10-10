@@ -40,8 +40,8 @@ export const CORE_ASSISTANT_TOOLS = {
  * check-plugins 断言它 == agent 目录里实际 get 的门面，且 agent 目录不 import 任何插件目录。
  */
 export const ASSISTANT_DEPENDS_ON = [
-  'assets', 'calendar', 'finance', 'inventory', 'knowledge', 'locations', 'media', 'memories',
-  'menus', 'polls', 'recipes', 'reminders', 'shopping', 'tasks', 'travel',
+  'assets', 'calendar', 'finance', 'guests', 'inventory', 'knowledge', 'locations', 'media', 'memories',
+  'menus', 'points', 'polls', 'recipes', 'reminders', 'shopping', 'smart-home', 'tasks', 'travel',
 ] as const satisfies readonly PluginKey[];
 
 /** 内核工具调用记录的 sourceModule（agent-tools.service.ts 与插件工具的来源表合并后写进调用记录）。 */

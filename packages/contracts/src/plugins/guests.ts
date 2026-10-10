@@ -63,6 +63,15 @@ export const guestsManifest = {
     { id: 'guests.create-visit', label: '加个来访', keywords: ['访客'], deepLink: '/house/guests?create=1' },
   ],
   usage: { label: '访客', activityModules: ['guest'] },
+  queries: [
+    {
+      id: 'guests.upcoming-visits',
+      label: '接下来的来访',
+      server: 'guests.upcoming-visits',
+      toolName: 'get_upcoming_visits',
+      capability: 'manage_guests',
+    },
+  ],
   notifications: [{ key: 'guest', label: '访客', icon: '👋' }],
   capabilities: [{ key: 'manage_guests', roles: ['owner', 'admin'] }],
 } as const satisfies PluginManifest;

@@ -2,7 +2,7 @@
 // smart-home-linkages.service.ts 直接注入 TasksService / RemindersService / ShoppingService，在自己的事务里建任务、提醒、购物项；
 // smart-home-links.service.ts 订阅任务打勾事件触发设备联动。都属跨插件调用，原样保留，J1b 改走契约门面 / 内核事件与事务内钩子。
 // hasData 要读环境变量里的服务器默认 HA 配置，静态 SQL 表达不了：由 smart-home-has-data.ts 按 id 注册到内核，内核不再 import 本插件。
-// ⌘K 与 agent 都还没有智能家居的动作 / 查询（§8.2 缺项，J3 / J4 补）。
+// ⌘K 还没有智能家居的动作（§8.2 缺项，J3 补）；agent 有读工具 get_device_status（J4 第四批，经 smart-home 门面）。
 import type { PluginManifest } from './types';
 
 export const smartHomeManifest = {
@@ -64,6 +64,9 @@ export const smartHomeManifest = {
       status: { server: 'smart-home.connectorStatus' },
       managerOnly: true,
     },
+  ],
+  queries: [
+    { id: 'smart-home.device-status', label: '设备状态', server: 'smart-home.device-status', toolName: 'get_device_status' },
   ],
   usage: {
     label: '智能家居',

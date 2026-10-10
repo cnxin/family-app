@@ -54,6 +54,8 @@ import {
 } from '../entities';
 import { isHouseholdManager, normalizedText } from '@family/shared';
 import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
+import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
+import { pointsFacade } from './points.facade';
 
 interface DeltaInput {
   householdId: string;
@@ -921,6 +923,19 @@ export class PointsTaskHooks implements OnModuleInit {
   }
 }
 
+/** 积分门面（J4 第四批：小管家读工具 get_points_summary）。 */
+@Injectable()
+export class PointsFacadeProvider implements OnModuleInit {
+  constructor(
+    private readonly registry: PluginFacadeRegistry,
+    private readonly db: DataSource,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register('points', pointsFacade(this.db));
+  }
+}
+
 @Module({
   imports: [
     TodayModule,
@@ -934,7 +949,7 @@ export class PointsTaskHooks implements OnModuleInit {
     ]),
   ],
   controllers: [PointsController],
-  providers: [PointsService, PointsRedemptionAttentionRule, PointsAttention, PointsTaskHooks],
+  providers: [PointsService, PointsRedemptionAttentionRule, PointsAttention, PointsTaskHooks, PointsFacadeProvider],
   exports: [PointsService],
 })
 export class PointsModule {}
