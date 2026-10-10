@@ -488,7 +488,45 @@ King 用真实微信账单导入后提出：流水只能撤销不能改、分类
 
 **发现但没修**
 
-- 识别成功、成员没点确认就关掉表单时，截图留在私有目录里没人用（没做定时清理）。
-- 截图内容没有做本地 OCR 兜底；自然语言记账交给 J3（§3-K2 原文）。
-- api-inventory 的生成器把带多行 `@UseInterceptors` 的处理函数名显示成 `FileInterceptor`（导入账单那条原来就这样）。
+- ~~识别成功、成员没点确认就关掉表单时，截图留在私有目录里没人用（没做定时清理）。~~ **已修**（§8.9 孤儿截图清理）。
+- 截图内容没有做本地 OCR 兜底；自然语言记账交给 J3（§3-K2 原文）。（不修，按计划）
+- api-inventory 的生成器把带多行 `@UseInterceptors` 的处理函数名显示成 `FileInterceptor`（导入账单那条原来就这样）。**J6 修**（architecture 进度表 J6 一行）。
+
+### 8.9 第四批收尾（2026-10-11）
+
+不加新功能、不加端点、不改响应形状（api-inventory 无差异）；一个分支 `refactor/batch4-cleanup`，代码一笔、文档一笔。
+
+| 件 | 做了什么 |
+| --- | --- |
+| 访客名脱敏 | `tier2Redact` 开时，本家庭访客名 → 「访客N」（N 按建档先后）。和成员一样不足 2 字不换；成员与访客同名时成员优先（先出现的保留）；成员、访客合在一起统一按长度降序替换（「王小明」先于「小明」）。单测 2 条；黑盒在 `agent-tools.mjs` 第 6 段：走家里配的模型（假模型服务）问「最近谁来家里」，模型先调 `get_upcoming_visits`，第二次请求里的工具结果不含访客真名、含「访客N」（反向验证：去掉访客名后这条断言失败） |
+| 孤儿截图清理 | 财务插件自己的 `FinanceScreenshotCleanup`（不进内核 agent-retention）：启动 5 分钟后首跑、之后每小时一次；修改时间早于 24 小时、没有任何流水的 `attachmentPath` 引用、文件名是识别接口存的格式，才删；每轮最多 200 个，最旧的先删；删不掉只记一行 warn。每轮日志一行 `finance_screenshot_cleanup scanned=… removed=…`。`NODE_ENV=test` 不启动。判定是纯函数 `orphanScreenshots`，单测覆盖「已引用 / 未引用但新 / 未引用且旧 / 不认的文件名」 |
+| 设备状态句只留一份 | web 改从 `@family/shared` 引 `smartHomeStateLine` / `deviceStatusLine` / `isPercentEntity`；删掉 `apps/web/src/lib/smart-home-device-copy.ts` 与 `smart-home-copy.ts` 里的重复实现，只给页面用的（主按钮、今天页设备、家里页状态行、百分比短名）并进 `smart-home-copy.ts`。状态句的用例挪到 `packages/shared/tests/smart-home-status.test.mjs`（12 条，node:test 测 dist），页面那几个函数的用例留在 web；shared 的测试接进 `run-api-tests.mjs` 全量（原来的家庭日期测试也一起跑起来了）；删掉 `smart-home-status.check.ts`。智能家居、家里页、今天页 e2e 51 个照过，卡片文案不变 |
+| 「资产详情」默认值对齐 | 迁移 `AddAgentAssetDetailDefault1785234700000`：`readToolsEnabled` 默认值换成与 `AGENT_READ_TOOLS` 完全一致的 26 个（含顺序）；只给「⊇ 原来 25 个默认且不含 `get_asset_detail`」的家庭补上。实体默认值手写同样 26 个（实体文件只引 typeorm），`agent-tools.check.ts` 断言「实体默认值 == AGENT_READ_TOOLS」 |
+| 设置页说明 | 「云端助理（第 2 档）」服务商一组下面加一行：「开启后，对话内容（已脱敏）和记账截图原图会发给所选服务商」 |
+
+**提交**
+
+| 步 | 内容 | 提交 | 合并 | CI |
+| --- | --- | --- | --- | --- |
+| 代码 | 上表五件 | `8628e2b` | `df56aab` | 分支 #38065695140、main #38067604580，均一次过 |
+| 文档 | 本节、j4-agent-plan §2 第 4 条、architecture §8.3 / 进度表 J6 | 见本次合并 | 见本次合并 | 见本次合并 |
+
+**访客脱敏口径**：访客表 `guests.name`（含已匿名化的）按 `createdAt, id` 编号；替换只在 `tier2Redact` 开、走云端模型时发生，回程不还原；访客的电话等其余字段本来就不进工具结果。
+
+**上一批（第四批）汇报「发现但没修」六条的处理**
+
+1. 识别后没点确认留下的截图 → 已修（孤儿截图清理）。
+2. 访客名不在脱敏范围 → 已修（访客名 → 访客N）。
+3. 设备一句状态有两份实现 → 已修（只留 `@family/shared` 一份）。
+4. 新家庭默认带「资产详情」、库里默认值缺它 → 已修（迁移对齐，实体默认值有单测盯着）。
+5. API 清单生成器把上传接口的处理函数显示成 `FileInterceptor` → 未修，记在 architecture 进度表 J6，J6 修。
+6. 本批三个远端分支 → 已删（连同两条更早的 `refactor/i2-*`，五条删前都确认已合进 main）。
+
+**与指令不一样的地方**
+
+1. 迁移的 `down` 只把默认值换回 25 个，不删数据：回填前就带 `get_asset_detail` 的家庭（`ensureSettings` 按 `AGENT_READ_TOOLS` 建的，演示栈那户就是）和本迁移补上的分不出来，一律删会误伤。
+2. 设置页那行说明加在 `assistant-tiers.tsx`：「云端助理」分段与服务商一组在这个组件里，`agent-settings-ui.tsx` 只是引用它。
+3. `apps/web/src/lib/smart-home-copy.ts`（及其测试）也改了：它里面原本也有一份 `smartHomeStateLine`，要「只留一份」必须去掉；页面专用的函数也并进来。
+4. `packages/shared` 里把 `isPercentEntity` 改成导出（原来是内部函数），供 web 的详情面板复用，没有再抄一份。
+5. lint：0 error，40 条 warning 全是 API 里 35 个早就超过 400 行的文件的 `max-lines`（本批没新增；`finance.module.ts` 仍在线内；web 0 warning）。指令写的「0 警告」要拆这 35 个文件，不在本批范围。
 
