@@ -20,6 +20,7 @@ openssl rand -base64 48 > deploy/secrets/db_password.txt
 openssl rand -hex 64 > deploy/secrets/jwt_secret.txt
 openssl rand -hex 32 > deploy/secrets/bootstrap_secret.txt
 openssl rand -base64 32 > deploy/secrets/integration_secret.txt
+openssl rand -base64 32 > deploy/secrets/agent_data_key.txt
 chmod 600 deploy/.env.production deploy/secrets/*.txt
 ```
 
@@ -30,6 +31,7 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - `APP_VERSION` 建议使用发布版本或 Git 提交短哈希，不要长期依赖 `latest`。
 - 根据主机内存调整资源限制。默认值适合小型家庭实例的起点，不等于容量承诺。
 - `integration_secret.txt` 用于加密数据库中的家庭连接凭据，必须独立备份且在恢复数据库时一并恢复。丢失或错误轮换会使已有家庭凭据无法解密。
+- `agent_data_key.txt`（**生产必需**，不再只属于 Hermes）用 AES-256-GCM 加密小管家的对话正文和云端服务商 key（J4.3 起）。`docker-compose.prod.yml` 直接引用它：文件不存在 API 起不来，升级脚本会先检查。和 `integration_secret.txt` 一样必须独立备份、恢复数据库时一并恢复；丢失或直接轮换会导致已有对话和服务商 key 无法解密。
 
 可选媒体连接器：
 
@@ -61,13 +63,12 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 可选家庭智能体：
 
 ```bash
-openssl rand -base64 32 > deploy/secrets/agent_data_key.txt
 openssl rand -hex 32 > deploy/secrets/agent_mcp_key.txt
 openssl rand -hex 32 > deploy/secrets/agent_runtime_key.txt
 chmod 600 deploy/secrets/agent_*.txt
 ```
 
-- `agent_data_key.txt` 用于 AES-256-GCM 加密对话正文，必须随数据库备份独立保存；丢失或直接轮换会导致已有对话无法解密。
+- `agent_data_key.txt` 已在上面的生产必需密钥里生成，这里不用再建。
 - `agent_mcp_key.txt` 只用于 Hermes 到 Family App MCP 的容器内认证，`agent_runtime_key.txt` 只用于 Family App 到 Hermes API Server 的认证，不能复用家庭账号、JWT 或媒体连接器密钥。
 - 模型密钥通过 `HERMES_OPENAI_API_KEY` 或部署环境的 Secret 管理注入 Hermes，不写入仓库、Compose 文件或日志。
 

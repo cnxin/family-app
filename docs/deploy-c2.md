@@ -12,6 +12,7 @@
 | 当前运行提交 | `2127c70`（2026-09-30 King 确认） |
 | Docker Compose | **≥ 2.20**（`docker compose version`）。升级脚本用 `up --wait --wait-timeout`，旧版本没有这两个参数。**NAS 是 2.20.1，已确认满足**（演练机是 5.3.1，没有在 2.20.1 上单独跑过） |
 | 配置 | `deploy/.env.production` 与 `deploy/secrets/*` 已存在；**`TZ=Asia/Shanghai` 写明在 `.env.production` 里**（示例文件已有这一行，别删） |
+| 小管家数据密钥 | **`deploy/secrets/agent_data_key.txt` 已生成（`openssl rand -base64 32`，`chmod 600`）并和 `integration_secret.txt` 一起备份到数据库之外**。它加密对话正文和云端服务商 key，数据库备份里没有它；丢了已有数据解不开，也不能事后更换。升级脚本在动任何东西之前检查这个文件，不存在或为空直接退出 |
 | 仓库状态 | `git status` 干净。升级脚本发现有未提交改动会直接停 |
 | 磁盘 | 备份目录（默认 `backups-production/`）放得下一份数据库导出 + 附件压缩包 |
 
@@ -162,7 +163,7 @@ docker compose --env-file deploy/.env.production -f docker-compose.prod.yml up -
 | web（api 健康） | 数据库已经迁移完，不能退 api | 只换回 web：`docker tag "family-app-web:<回滚标签>" "family-app-web:${APP_VERSION:-latest}"`，再 `up -d --no-build --wait web` |
 | backup-worker 不在运行 | 不影响家里人使用 | 看 `logs backup-worker`；修好之前每天手动跑一次 `./scripts/backup-prod.sh` |
 
-## 4. 升级后确认（五处）
+## 4. 升级后确认（六处）
 
 下面的 `dc` 是 `docker compose --env-file deploy/.env.production -f docker-compose.prod.yml` 的简写。
 
@@ -202,6 +203,11 @@ dc exec -T api node -e "console.log(Intl.DateTimeFormat().resolvedOptions().time
 
 - 打开「家里 → 位置」（`/house/locations`，没有位置时在「还可以开启」里）能加一个房间；库存页「按位置」分组能切换。
 - 资产详情里原来的「存放位置」文字还在，旁边有「整理到位置」。
+
+**⑥ 小管家数据密钥**
+
+- API 日志里没有 `AGENT_DATA_KEY` 相关的报错：`dc logs api | grep -i agent_data_key` 应为空。
+- 管理员打开「问问小管家 → 设置 → 云端助理」，填一个服务商 key 点保存：能保存，并只显示末 4 位（「key：••••1234」）。没配密钥时这里会拒绝保存。
 
 ## 演练记录
 

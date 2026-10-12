@@ -62,6 +62,9 @@ services:
       LOGIN_RATE_WINDOW_MS: ${LOGIN_RATE_WINDOW_MS:-60000}
       BOOTSTRAP_SECRET_FILE: /run/secrets/bootstrap_secret
       INTEGRATION_SECRET_KEY_FILE: /run/secrets/integration_secret
+      # 小管家数据密钥（J4.3 起加密对话正文与云端服务商 key）：生产必需，文件不存在 API 起不来，升级脚本先检查。
+      # 和 integration_secret 一样不在数据库备份里，要单独备份；不能事后更换（换了已有数据就解不开）
+      AGENT_DATA_KEY_FILE: /run/secrets/agent_data_key
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       TZ: ${TZ:-Asia/Shanghai}
@@ -107,6 +110,7 @@ services:
       - jwt_secret
       - bootstrap_secret
       - integration_secret
+      - agent_data_key
     volumes:
       - family_app_uploads_prod:/app/apps/api/uploads
       - ./deploy/secrets:/run/integration-secrets:ro
@@ -230,6 +234,8 @@ secrets:
     file: ${BOOTSTRAP_SECRET_PATH:-./deploy/secrets/bootstrap_secret.txt}
   integration_secret:
     file: ${INTEGRATION_SECRET_PATH:-./deploy/secrets/integration_secret.txt}
+  agent_data_key:
+    file: ${AGENT_DATA_KEY_SECRET_PATH:-./deploy/secrets/agent_data_key.txt}
 
 volumes:
   family_app_pgdata_prod:
