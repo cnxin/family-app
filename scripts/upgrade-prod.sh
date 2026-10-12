@@ -109,6 +109,22 @@ done
 OLD_COMMIT=$(running_commit)
 printf '正在运行的版本：%s\n' "$OLD_COMMIT"
 
+# 小管家数据密钥（AGENT_DATA_KEY）：生产 compose 起要求有这个文件，缺了 API 读密钥时直接报错、起不来。
+# 在动任何东西之前查：路径同 compose（AGENT_DATA_KEY_SECRET_PATH，shell 环境优先于 .env.production，缺省 deploy/secrets/）。
+AGENT_DATA_KEY_PATH=${AGENT_DATA_KEY_SECRET_PATH:-$(sed -n 's/^AGENT_DATA_KEY_SECRET_PATH=//p' "$ENV_FILE" | tail -n 1)}
+AGENT_DATA_KEY_PATH=${AGENT_DATA_KEY_PATH:-./deploy/secrets/agent_data_key.txt}
+case "$AGENT_DATA_KEY_PATH" in
+  /*) ;;
+  *) AGENT_DATA_KEY_PATH="$REPO_ROOT/${AGENT_DATA_KEY_PATH#./}" ;;
+esac
+if [ ! -s "$AGENT_DATA_KEY_PATH" ] || ! grep -q '[^[:space:]]' "$AGENT_DATA_KEY_PATH"; then
+  printf '缺少小管家数据密钥：%s 不存在或为空。\n' "$AGENT_DATA_KEY_PATH" >&2
+  printf '在仓库根目录生成：openssl rand -base64 32 > deploy/secrets/agent_data_key.txt && chmod 600 deploy/secrets/agent_data_key.txt\n' >&2
+  printf '生成后把它和 integration_secret.txt 一起备份到数据库之外：丢了对话正文和云端 key 都解不开，也不能事后更换。\n' >&2
+  exit 1
+fi
+printf '小管家数据密钥：%s 已就绪\n' "$AGENT_DATA_KEY_PATH"
+
 step "给当前镜像打回滚标签 $ROLLBACK_TAG"
 for service in api web backup-worker; do
   container=$(compose ps -q "$service")
