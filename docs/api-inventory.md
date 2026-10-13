@@ -241,20 +241,20 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/inventory` | `InventoryController.list` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/inventory-batches` | `InventoryController.batches` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/inventory-batches` | `InventoryController.createBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| PATCH | `/inventory-batches/:id` | `InventoryController.updateBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| PATCH | `/inventory-batches/:id/location` | `InventoryController.setBatchLocation` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/inventory-items` | `InventoryController.create` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| PATCH | `/inventory-items/:id` | `InventoryController.update` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| DELETE | `/inventory-items/:id` | `InventoryController.remove` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/inventory-transactions` | `InventoryController.transactions` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/inventory-transactions/:id/reverse` | `InventoryController.reverse` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/menus/:id/confirm-consumption` | `InventoryController.confirmMenuConsumption` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/menus/:id/inventory-preview` | `InventoryController.menuPreview` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| POST | `/shopping-items/:id/confirm-stock` | `InventoryController.confirmShoppingReceipt` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.module.ts` |
-| GET | `/shopping-items/:id/inventory-preview` | `InventoryController.shoppingPreview` | 登录 | ✓ | `apps/api/src/inventory/inventory.module.ts` |
+| GET | `/inventory` | `InventoryController.list` | 登录 | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| GET | `/inventory-batches` | `InventoryController.batches` | 登录 | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| POST | `/inventory-batches` | `InventoryController.createBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| PATCH | `/inventory-batches/:id` | `InventoryController.updateBatch` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| PATCH | `/inventory-batches/:id/location` | `InventoryController.setBatchLocation` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| POST | `/inventory-items` | `InventoryController.create` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| PATCH | `/inventory-items/:id` | `InventoryController.update` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| DELETE | `/inventory-items/:id` | `InventoryController.remove` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| GET | `/inventory-transactions` | `InventoryController.transactions` | 登录 | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| POST | `/inventory-transactions/:id/reverse` | `InventoryController.reverse` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| POST | `/menus/:id/confirm-consumption` | `InventoryController.confirmMenuConsumption` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| GET | `/menus/:id/inventory-preview` | `InventoryController.menuPreview` | 登录 | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| POST | `/shopping-items/:id/confirm-stock` | `InventoryController.confirmShoppingReceipt` | `manage_inventory` | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
+| GET | `/shopping-items/:id/inventory-preview` | `InventoryController.shoppingPreview` | 登录 | ✓ | `apps/api/src/inventory/inventory.controller.ts` |
 
 ## knowledge（8）
 
