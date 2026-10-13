@@ -97,6 +97,8 @@ try {
     deepseek.status === 200 && deepseek.data.providerBaseUrl === 'https://api.deepseek.com' && deepseek.data.providerModel === 'deepseek-chat',
     '选 DeepSeek：地址和推荐模型按预设填',
   );
+  const noKey = await request('/agent/settings/provider-models', owner.accessToken, 'POST');
+  assert(noKey.status === 400 && noKey.error?.message === '先保存地址和 key', '还没存 key 时「获取列表」400「先保存地址和 key」');
   const wrongKey = 'sk-wrong-key-98765';
   const custom = await patch(owner.accessToken, {
     providerKind: 'custom',
@@ -137,6 +139,33 @@ try {
   const changed = await patch(owner.accessToken, { providerModel: 'fake-model-2' });
   assert(changed.data.providerCheckOk === false && changed.data.providerCheckedAt === null, '改了模型，测试结果清掉');
   await patch(owner.accessToken, { providerModel: 'fake-model' });
+  await request('/agent/settings/provider-check', owner.accessToken, 'POST');
+
+  console.log('3b. 获取列表（J4.7）：用已保存的地址和 key 拉 GET /models，纯读');
+  const beforeList = await settings(owner.accessToken);
+  const listed = await request('/agent/settings/provider-models', owner.accessToken, 'POST');
+  const afterList = await settings(owner.accessToken);
+  assert(
+    listed.status === 200 && listed.data.ok === true && listed.data.message === null &&
+      JSON.stringify(listed.data.models) === JSON.stringify(['fake-chat', 'fake-model', 'fake-vision']),
+    `200，models 去重、按字母排好（${listed.data?.models?.join('、')}）`,
+  );
+  assert(
+    afterList.version === beforeList.version && afterList.providerCheckOk === beforeList.providerCheckOk &&
+      afterList.providerModel === beforeList.providerModel,
+    '拉列表不改设置：version、测一下的结果、模型名都不变',
+  );
+  await patch(owner.accessToken, { providerBaseUrl: model.url.replace('/v1', '/plain') });
+  const plainBefore = await settings(owner.accessToken);
+  const unsupported = await request('/agent/settings/provider-models', owner.accessToken, 'POST');
+  const plainAfter = await settings(owner.accessToken);
+  assert(
+    unsupported.status === 200 && unsupported.data.ok === false && unsupported.data.models.length === 0 &&
+      unsupported.data.message === '这个服务商不支持列模型，请手填' && plainAfter.version === plainBefore.version,
+    '服务商没实现 /models（404）：ok=false、message「这个服务商不支持列模型，请手填」，不是 5xx，设置不变',
+  );
+  assert((await request('/agent/settings/provider-models', member.accessToken, 'POST')).status === 403, '普通成员「获取列表」403');
+  await patch(owner.accessToken, { providerBaseUrl: model.url });
   await request('/agent/settings/provider-check', owner.accessToken, 'POST');
 
   console.log('4. tier2Scope：云端档默认只对管理员开放');

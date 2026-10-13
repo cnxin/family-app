@@ -6,6 +6,7 @@ import {
   type AgentSettings,
   type UpdateAgentSettingsBody,
 } from '@family/contracts';
+import { ModelPicker } from './agent-model-picker';
 import { Button, Input, Segmented, selectClass } from './ui';
 import { Switch } from './ui/switch';
 
@@ -103,22 +104,28 @@ function CloudProvider({
             placeholder="地址，比如 https://api.deepseek.com"
             onChange={(event) => setBaseUrl(event.target.value)}
           />
-          <div className="flex items-center gap-2">
-            <Input
-              value={model}
-              aria-label="云端模型名"
-              placeholder="模型名"
-              onChange={(event) => setModel(event.target.value)}
-            />
-            <Button
-              variant="outline"
-              className="h-10 shrink-0 whitespace-nowrap px-3 text-[13px]"
-              disabled={!dirty || !baseUrl.trim() || !model.trim() || pending}
-              onClick={() => onChange({ providerBaseUrl: baseUrl.trim(), providerModel: model.trim() })}
-            >
-              保存模型
-            </Button>
-          </div>
+          {/* J4.7：模型名可手填，也可「获取列表」后从下拉里选（选中即保存）；地址可以先单独存，好拉列表 */}
+          <ModelPicker
+            key={settings.providerKind}
+            value={model}
+            canFetch={Boolean(settings.providerBaseUrl && settings.providerKeyConfigured)}
+            disabled={pending}
+            onInput={setModel}
+            onPick={(picked) => {
+              setModel(picked);
+              if (picked !== settings.providerModel) onChange({ providerModel: picked });
+            }}
+            trailing={
+              <Button
+                variant="outline"
+                className="h-10 shrink-0 whitespace-nowrap px-3 text-[13px]"
+                disabled={!dirty || !baseUrl.trim() || pending}
+                onClick={() => onChange({ providerBaseUrl: baseUrl.trim(), ...(model.trim() ? { providerModel: model.trim() } : {}) })}
+              >
+                保存模型
+              </Button>
+            }
+          />
           {editingKey ? (
             <div className="flex items-center gap-2">
               <Input

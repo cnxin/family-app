@@ -4,12 +4,12 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 339 个端点（POST 134 / GET 111 / PATCH 50 / DELETE 33 / PUT 11），公开端点 28 个，已定义契约 339 个。
+共 340 个端点（POST 135 / GET 111 / PATCH 50 / DELETE 33 / PUT 11），公开端点 28 个，已定义契约 340 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
 | activities | 1 | 1 |
-| agent | 40 | 40 |
+| agent | 41 | 41 |
 | assets | 19 | 19 |
 | assistant | 5 | 5 |
 | auth | 16 | 16 |
@@ -44,7 +44,7 @@
 | --- | --- | --- | --- | :-: | --- |
 | GET | `/activities` | `ActivitiesController.list` | 登录 | ✓ | `apps/api/src/activities/activities.module.ts` |
 
-## agent（40）
+## agent（41）
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
@@ -81,6 +81,7 @@
 | GET | `/agent/settings` | `AgentController.settings` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | PATCH | `/agent/settings` | `AgentController.patchSettings` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | POST | `/agent/settings/provider-check` | `AgentController.checkProvider` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
+| POST | `/agent/settings/provider-models` | `AgentController.providerModels` | `use_agent` `manage_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | GET | `/agent/status` | `AgentController.status` | `use_agent` | ✓ | `apps/api/src/agent/agent.controller.ts` |
 | POST | `/internal/agent/channels/:channelId/messages` | `AgentChannelInternalController.message` | 公开 | ✓ | `apps/api/src/agent/agent-channel-internal.controller.ts` |
 | GET | `/internal/agent/channels/:channelId/runs/:runId` | `AgentChannelInternalController.run` | 公开 | ✓ | `apps/api/src/agent/agent-channel-internal.controller.ts` |

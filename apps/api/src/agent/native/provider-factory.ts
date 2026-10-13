@@ -111,6 +111,17 @@ export function settingProviderConfig(setting: AgentSetting): NativeProviderConf
   };
 }
 
+/** 只要地址和 key（「获取列表」不需要模型名）；没存或 key 解不开返回 null。 */
+export function settingProviderEndpoint(setting: AgentSetting): { baseUrl: string; apiKey: string } | null {
+  if (!setting.providerBaseUrl || !setting.providerKeyEncrypted) return null;
+  try {
+    const apiKey = decryptProviderKey(setting.providerKeyEncrypted, setting.householdId);
+    return apiKey ? { baseUrl: setting.providerBaseUrl, apiKey } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function openAICompatibleProvider(config: NativeProviderConfig): ModelProvider {
   return new OpenAICompatibleProvider({
     baseUrl: config.baseUrl,
