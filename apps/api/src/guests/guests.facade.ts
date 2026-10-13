@@ -2,7 +2,7 @@ import type { GuestsFacade } from '@family/contracts';
 import { addDays, householdToday } from '@family/shared';
 import type { DataSource } from 'typeorm';
 import { Household } from '../entities';
-import type { GuestsService } from './guests.module';
+import type { GuestsService } from './guests.service';
 
 /**
  * 访客门面的实现（J4 第四批，接口见 contracts/plugins/guests.facade.ts），GuestsModule 启动时注册。

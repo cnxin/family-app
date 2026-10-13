@@ -209,27 +209,27 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| DELETE | `/guest-invitations/:id` | `GuestsController.revokeInvitation` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token` | `GuestsController.publicInvitation` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token/meal-options` | `GuestsController.publicMealOptions` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/meal-options/:menuItemId/request` | `GuestsController.claimMealOption` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token/meal-requests` | `GuestsController.publicMealRequests` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/meal-requests` | `GuestsController.submitMealRequest` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-invitations/:token/movie-polls` | `GuestsController.publicMoviePolls` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/movie-polls/:pollId/votes` | `GuestsController.voteMoviePoll` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-invitations/:token/response` | `GuestsController.respond` | 公开 | ✓ | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/guest-meal-requests/:id` | `GuestsController.reviewMealRequest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guest-wifi-profiles` | `GuestsController.listGuestWifiProfiles` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guest-wifi-profiles` | `GuestsController.createGuestWifiProfile` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/guest-wifi-profiles/:id` | `GuestsController.updateGuestWifiProfile` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| GET | `/guests` | `GuestsController.listGuests` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guests` | `GuestsController.createGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/guests/:id` | `GuestsController.updateGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/guests/:id/anonymize` | `GuestsController.anonymizeGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| GET | `/visits` | `GuestsController.listVisits` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/visits` | `GuestsController.createVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| PATCH | `/visits/:id` | `GuestsController.updateVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
-| POST | `/visits/:id/invitations` | `GuestsController.createInvitation` | `manage_guests` | ✓ | `apps/api/src/guests/guests.module.ts` |
+| DELETE | `/guest-invitations/:id` | `GuestsController.revokeInvitation` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| GET | `/guest-invitations/:token` | `GuestsController.publicInvitation` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| GET | `/guest-invitations/:token/meal-options` | `GuestsController.publicMealOptions` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/guest-invitations/:token/meal-options/:menuItemId/request` | `GuestsController.claimMealOption` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| GET | `/guest-invitations/:token/meal-requests` | `GuestsController.publicMealRequests` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/guest-invitations/:token/meal-requests` | `GuestsController.submitMealRequest` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| GET | `/guest-invitations/:token/movie-polls` | `GuestsController.publicMoviePolls` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/guest-invitations/:token/movie-polls/:pollId/votes` | `GuestsController.voteMoviePoll` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/guest-invitations/:token/response` | `GuestsController.respond` | 公开 | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| PATCH | `/guest-meal-requests/:id` | `GuestsController.reviewMealRequest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| GET | `/guest-wifi-profiles` | `GuestsController.listGuestWifiProfiles` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/guest-wifi-profiles` | `GuestsController.createGuestWifiProfile` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| PATCH | `/guest-wifi-profiles/:id` | `GuestsController.updateGuestWifiProfile` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| GET | `/guests` | `GuestsController.listGuests` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/guests` | `GuestsController.createGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| PATCH | `/guests/:id` | `GuestsController.updateGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/guests/:id/anonymize` | `GuestsController.anonymizeGuest` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| GET | `/visits` | `GuestsController.listVisits` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/visits` | `GuestsController.createVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| PATCH | `/visits/:id` | `GuestsController.updateVisit` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
+| POST | `/visits/:id/invitations` | `GuestsController.createInvitation` | `manage_guests` | ✓ | `apps/api/src/guests/guests.controller.ts` |
 
 ## households（1）
 
