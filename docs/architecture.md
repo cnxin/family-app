@@ -191,9 +191,10 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认。**输入 = `assistant_utterances` 导出的 CSV**（设置页「原话记录 → 导出 CSV」，`chosenKind` / `chosenId` 当人工标注）。**补 ⌘K 动作时**：给点菜补一条动作，把 `propose_menu` 从 manifest 顶层 `proposals` 挪回 `actions[].propose`，然后删掉 `proposals` 字段（J1.4 加的过渡结构，2026-10-06 King 认定） | L（约 2 周） | J1；**试用满两周 且 `assistant_utterances` ≥ 100 条 且 覆盖 ≥ 5 个域**（三条同时满足，2026-10-08 King 拍板；怎么数见 `c2-feedback.md`「每周用量」） |
 | **J4 agent 重建为 manifest 消费者** | refactor-plan 3.2 的自研 loop 落到 `packages/agent-core`；工具由 manifest 生成；28 个旧工具名做别名；`/events` 推运行状态（H2 已备）；第 2 档路由接入；脱敏与每日上限。**J4.0～J4.5 已完成，J4.6 等实测一周**（见 `j4-agent-plan.md` §4） | XL（约 3 周） | J1、J3 |
 | **J5 第 1 档本地模型** | OpenAI 兼容适配；Ollama 探测；仅做意图 + 槽位；评测集（用 J2 攒的原话）；默认关 | M | J3 |
-| **J6 收口** | 删 Hermes 相关（compose、配置）；文档；开源版的「写一个插件」指南；拆 api 超长文件（清单见 §10） | S（拆文件另计） | J4 |
+| **J6 收口** | 删 Hermes 相关（compose、配置）；文档；开源版的「写一个插件」指南 | S | J4 |
+| **J7 拆超长文件** | 拆 api 里 34 个超过 400 行的文件（清单与分步见 §10），只搬代码、不改行为；拆完把 api 的 `max-lines` 从告警改成 error，和 web 一样 | L（约 2 周） | 不依赖 J5 / J6；agent 目录那 7 个等 J4.6 删完 Hermes 再拆 |
 
-顺序建议：J0 → J1 → J2（演示栈上进行，与试用何时开始无关）→ 试用两周 → J3 → J4 → J5 → J6。J1 完成后，加一个新域的成本从「改七处」降到「写一份 manifest + 自己的表和页面」。
+顺序建议：J0 → J1 → J2（演示栈上进行，与试用何时开始无关）→ 试用两周 → J3 → J4 → J5 → J6。J7 单独排期（2026-10-14 King 拍板），可以插在等试用数据、等实测的空档里做。J1 完成后，加一个新域的成本从「改七处」降到「写一份 manifest + 自己的表和页面」。
 
 ---
 
@@ -609,11 +610,11 @@ main 上 `105926f`（J1b.2 合并）、`a14ee3a`（J1b.3 合并）两次 CI 被�
 2. ~~**内核（助理 `agent` 目录）→ 插件服务的 import** 还在（`agent-tools` / `agent-proposals` / `agent-routine` / `agent-location-tools` / `agent.module`）：J1b 只管插件之间，J4 重建 agent 时改走门面。~~ **J4.1 已解**：agent 目录零 import 插件目录（check-plugins 把「零 import」扩到 `apps/api/src/agent/`），工具读数据、提案确认后写数据、例行任务汇总都经门面（新增知识库 / 出行 / 观影 / 回忆 / 财务 / 投票 / 提醒 / 菜谱 8 个门面，任务 / 日历 / 购物 / 点菜 / 库存 / 资产 / 位置 7 个补方法，共 15 个）；agent 不是插件，取用的门面由 `core-assistant.ts` 的 `ASSISTANT_DEPENDS_ON` 声明，check-plugins 断言与代码一致。还剩例行任务每晚汇总里两段原生 SQL 直读资产 / 库存的表（`collectExpiryItems`，属第 1 条那类实体层读写）。
 3. 数据库里的引用照旧（§8.7 第 8 条）。
 
-## 10. J6 待办：API 超长文件（2026-10-13 盘点）
+## 10. J7 拆超长文件（2026-10-13 盘点，10-14 单独成期）
 
 lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在 api 只告警（`apps/api/eslint.config.mjs`）。第四批收尾（2026-10-11）起验收口径是「不新增警告」，不是「0 警告」。基线是 main `ee1ccef` 上 api 的 40 条警告：34 条 `max-lines` + 6 条别的（3 条 `no-control-regex`：`agent.service.ts`、`agent-routine.service.ts`、`agent-proposal-groups.service.ts`；2 条 `no-unused-vars`：`travel.module.ts`、`media-metadata.service.ts`；1 条 `no-useless-escape`：`guests.module.ts`）。web 没有超长文件。
 
-下面 34 个文件在 J6 收口时拆或删。行数是 eslint 报的数，路径省掉 `apps/api/`。
+下面 34 个文件在 J7 里拆或删。行数是 eslint 报的数，路径省掉 `apps/api/`。
 
 | 类 | 文件（行数） | 怎么处理 |
 | --- | --- | --- |
@@ -623,7 +624,16 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 | 其他服务（9） | `media/connectors.ts`（1137）、`notifications/external-notifications.service.ts`（917）、`inventory/inventory-transactions.service.ts`（807）、`finance/finance.service.ts`（784）、`media/playback-webhook.service.ts`（684）、`inventory/inventory-batches.service.ts`（632）、`media/media-library.service.ts`（548）、`media/media-connectors.service.ts`（463）、`media/metadata-providers.ts`（458） | 按职责拆；`media` 一个目录占 5 个，可以一起做 |
 | 脚本（1） | `scripts/media-connectors.contract.ts`（540） | 契约测试，按连接器拆文件 |
 
-已经超长的文件后来又加过代码，所以警告数没变，文件还在变长。例如 J4.7（第六批）给 `agent.service.ts` 加了 26 行（1360 → 1386），给 `agent.controller.ts` 加了 6 行（554 → 560）。J6 之前再往这些文件里加功能时，优先把新代码放进新文件。
+分步（每步一个分支，每个文件一笔提交）：
+
+1. **J7.1 插件模块文件 16 个**：模块文件拆出 controller / service。风险最低，可以先做。
+2. **J7.2 其他服务 9 个 + 契约脚本 1 个**：`media` 的 5 个放在一起做。
+3. **J7.3 agent 目录 7 个**：等 J4.6 删完 Hermes，重新数行数，再拆还超的。
+4. **J7.4 实体汇总**：拆到各插件目录，最后做，风险最大（TypeORM 实体注册要改，迁移不动）。拆完 check-plugins 补一条断言：实体层不许跨插件读写。
+
+每步的验收：重新生成 `docs/api-inventory.md`，diff 里只许「文件」列变（方法、路径、处理函数、权限、契约都不变，接口一个不多一个不少）；check-plugins、check-event-routes 通过，`test:api` 全量（含 native 第二遍）、`test:web` 全量通过；api 的 `max-lines` 警告数只减不增。J7 收尾时警告数降到 0，`apps/api/eslint.config.mjs` 的 `max-lines` 改为 error。
+
+已经超长的文件后来又加过代码，所以警告数没变，文件还在变长。例如 J4.7（第六批）给 `agent.service.ts` 加了 26 行（1360 → 1386），给 `agent.controller.ts` 加了 6 行（554 → 560）。J7 做完之前再往这些文件里加功能时，优先把新代码放进新文件。
 
 ## 进度表
 
@@ -636,4 +646,5 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 | J3 第 0 档引擎 | ☐ | | 等试用满两周且原话 ≥ 100 条、覆盖 ≥ 5 个域（2026-10-08 拍板）；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | J4.0～J4.5 已完成，J4.6 等实测一周 | 见 `docs/j4-agent-plan.md` §4 | King 2026-10-09 拍板（§2 十件按建议）。已合：J4.0 `packages/agent-core`（provider / 工具注册表 / loop / 录制回放）、J4.1 工具由 manifest 生成（30 个现名不变，MCP tools/list 逐字节一致）、agent 目录零 import 插件目录、J4.2 NativeAgentRuntime（工具三层过滤、agent_chat 原话落表、agent*.mjs 在 native 下跑第二遍）、J4.3 云端档配置（服务商 / key 加密 / 测一下 / 每日上限 / tier2Scope / 脱敏，设置页「云端助理」分段）、J4.4 流式（`/events` 的 `agent.run` 事件，小管家页逐段出字、断线退回轮询）、J4.5 外围回归（渠道 / 记忆 / 例行任务在 native 下跑通，每日上限加锁，用量报告加流式占比）；J4.6 Hermes 下线等 King 实测一周；J4.7 设置页拉取模型列表（`POST /agent/settings/provider-models`，2026-10-13）。第四批（2026-10-10）：补提醒 / 投票 / 积分 / 访客 / 智能家居 5 个读工具、K2 截图记账（内核云端看图，见 `finance-plan.md` §8.8） |
 | J5 本地模型档 | ☐ | | |
-| J6 收口 | ☐ | | API 清单生成器（`scripts/api-inventory.mjs`）对多行 `@UseInterceptors` 的上传接口把处理函数显示成 `FileInterceptor`（账单导入、截图识别两条），J6 修；api 34 个超长文件（`max-lines` 告警）的拆分清单见 §10 |
+| J6 收口 | ☐ | | API 清单生成器（`scripts/api-inventory.mjs`）对多行 `@UseInterceptors` 的上传接口把处理函数显示成 `FileInterceptor`（账单导入、截图识别两条），J6 修 |
+| J7 拆超长文件 | ☐ | | 2026-10-14 单独成期；api 34 个超长文件，清单与分步见 §10 |
