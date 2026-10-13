@@ -415,11 +415,11 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/reminder-sources` | `RemindersController.listSources` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
-| GET | `/reminders` | `RemindersController.list` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
-| POST | `/reminders` | `RemindersController.create` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
-| PATCH | `/reminders/:id` | `RemindersController.update` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
-| DELETE | `/reminders/:id` | `RemindersController.cancel` | 登录 | ✓ | `apps/api/src/reminders/reminders.module.ts` |
+| GET | `/reminder-sources` | `RemindersController.listSources` | 登录 | ✓ | `apps/api/src/reminders/reminders.controller.ts` |
+| GET | `/reminders` | `RemindersController.list` | 登录 | ✓ | `apps/api/src/reminders/reminders.controller.ts` |
+| POST | `/reminders` | `RemindersController.create` | 登录 | ✓ | `apps/api/src/reminders/reminders.controller.ts` |
+| PATCH | `/reminders/:id` | `RemindersController.update` | 登录 | ✓ | `apps/api/src/reminders/reminders.controller.ts` |
+| DELETE | `/reminders/:id` | `RemindersController.cancel` | 登录 | ✓ | `apps/api/src/reminders/reminders.controller.ts` |
 
 ## shopping（5）
 
