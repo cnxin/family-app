@@ -13,7 +13,7 @@ import { mealType } from './menus';
 import { pollVoteMode } from './polls';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/guests/guests.module.ts 与 docs/m9-guests-acceptance.md
+// 对应 apps/api/src/guests/ 与 docs/m9-guests-acceptance.md
 //
 // 这个域所有响应都经过 profile*() 逐字段挑选，不直接回传实体，
 // 所以加载路径（relations / save()）不会漏字段到响应里；下面的 schema 按 presenter 逐个对照。

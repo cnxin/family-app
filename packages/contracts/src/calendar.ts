@@ -11,7 +11,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/calendar/calendar.module.ts 与 docs/m3-calendar-acceptance.md
+// 对应 apps/api/src/calendar/ 与 docs/m3-calendar-acceptance.md
 
 /** 统一日历聚合的来源模块。 */
 export const CALENDAR_MODULES = [

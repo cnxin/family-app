@@ -4,7 +4,7 @@ import type { JwtUser } from '../auth/jwt.guard';
 import { InventoryItem, InventoryTransaction } from '../entities';
 import { fromPluginTransaction } from '../system/plugin-facades.registry';
 import type { InventoryTransactionsService } from './inventory-transactions.service';
-import type { InventoryService } from './inventory.module';
+import type { InventoryService } from './inventory.service';
 
 /**
  * 库存门面的实现（J1b，接口见 contracts/plugins/inventory.facade.ts），InventoryModule 启动时注册。

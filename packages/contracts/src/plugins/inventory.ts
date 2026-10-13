@@ -1,6 +1,6 @@
 // 库存（J1.5）。物品、批次、出入库流水；用位置的 usableLocationId 校验默认位置，属跨插件引用（J1b）。
 // 「买到后入库」POST /shopping-items/:id/confirm-stock（§8.6 第 4 条）与「确认用料」POST /menus/:id/confirm-consumption
-// （2026-10-06 King 拍板）都写在 inventory.module.ts、归本插件；路径挂在购物 / 点菜下，推送的域照旧带上它们。
+// （2026-10-06 King 拍板）都写在 inventory.controller.ts、归本插件；路径挂在购物 / 点菜下，推送的域照旧带上它们。
 // ⌘K 还没有库存动作（§8.2 缺项，J3 补）。
 import type { PluginManifest } from './types';
 

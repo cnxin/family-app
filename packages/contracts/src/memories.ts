@@ -9,7 +9,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/memories/memories.module.ts 与 docs/m12-memories-acceptance.md
+// 对应 apps/api/src/memories/ 与 docs/m12-memories-acceptance.md
 //
 // 响应经 presentMemory() / presentPhoto() 逐字段挑选；写端点都回传整条回忆（detail()），
 // 上传照片回传那张照片。照片正文走签名 URL（10 分钟有效），@Public + @Res 直接写二进制，

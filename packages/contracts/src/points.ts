@@ -8,7 +8,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/points/points.module.ts 与 docs/m6-points-rewards-acceptance.md
+// 对应 apps/api/src/points/ 与 docs/m6-points-rewards-acceptance.md
 // 积分使用不可变流水 + 行锁余额；所有写操作都要求 idempotencyKey。
 
 export const POINTS_LEDGER_TYPES = [

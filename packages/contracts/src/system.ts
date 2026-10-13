@@ -9,7 +9,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/system/system.module.ts 与 docs/m13-system-backups-acceptance.md
+// 对应 apps/api/src/system/ 与 docs/m13-system-backups-acceptance.md
 //
 // 备份策略与任务经 presentPolicy() / presentRun() 逐字段挑选。bigint 列（*Bytes）在 pg 驱动里是字符串，
 // 响应原样回传字符串，客户端自己 Number()。运行时数据（容量、worker 心跳）在没跑过 worker 时都是 null，

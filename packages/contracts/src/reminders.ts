@@ -11,7 +11,7 @@ import {
 import { CALENDAR_ENTRY_STATUSES } from './calendar';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/reminders/reminders.module.ts 与 docs/m3-reminders-acceptance.md
+// 对应 apps/api/src/reminders/ 与 docs/m3-reminders-acceptance.md
 
 export const REMINDER_SOURCE_MODULES = [
   'menu',

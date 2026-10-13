@@ -3,7 +3,8 @@ import type { MenuIngredientNeed, MenusFacade } from '@family/contracts';
 import { In, type DataSource } from 'typeorm';
 import { Dish, DishRecipeVariant, Menu } from '../entities';
 import { fromPluginTransaction } from '../system/plugin-facades.registry';
-import type { AddItemsDto, MenusService } from './menus.module';
+import type { AddItemsDto } from './menus.dto';
+import type { MenusService } from './menus.service';
 
 /** 点菜门面的实现（J1b，接口见 contracts/plugins/menus.facade.ts），MenusModule 启动时注册。 */
 export function menusFacade(menus: MenusService, dataSource: DataSource): MenusFacade {

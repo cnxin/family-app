@@ -9,7 +9,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/travel/travel.module.ts 与 docs/m10-travel-acceptance.md
+// 对应 apps/api/src/travel/ 与 docs/m10-travel-acceptance.md
 //
 // 所有写操作都带 idempotencyKey + expectedVersion（乐观锁），并且都回传整份行程（detail()）
 // 或整份模板（templateDetail()），响应经 planResponse() / templateResponse() 逐字段挑选，

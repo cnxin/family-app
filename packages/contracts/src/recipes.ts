@@ -3,7 +3,7 @@ import { idParams, isoDateTime, memberSchema, uuid } from './common';
 import { dishSchema, ingredientSchema, numericString } from './dishes';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/recipes/recipes.module.ts 与 docs/recipe-variants-acceptance.md
+// 对应 apps/api/src/recipes/ 与 docs/recipe-variants-acceptance.md
 
 export const DISH_SKILL_LEVELS = ['learning', 'can_cook', 'signature'] as const;
 export const dishSkillLevel = z.enum(DISH_SKILL_LEVELS);

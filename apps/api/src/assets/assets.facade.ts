@@ -1,6 +1,6 @@
 import type { AssetsFacade } from '@family/contracts';
 import type { DataSource } from 'typeorm';
-import type { AssetsService } from './assets.module';
+import type { AssetsService } from './assets.service';
 
 /** 资产门面的实现（K3，接口见 contracts/plugins/assets.facade.ts），AssetsModule 启动时注册。 */
 export function assetsFacade(dataSource: DataSource, assets: AssetsService): AssetsFacade {

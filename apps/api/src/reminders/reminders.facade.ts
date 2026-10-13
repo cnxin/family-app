@@ -1,6 +1,7 @@
 import type { RemindersFacade } from '@family/contracts';
 import { fromPluginTransaction } from '../system/plugin-facades.registry';
-import type { CreateReminderDto, RemindersService } from './reminders.module';
+import type { CreateReminderDto } from './reminders.dto';
+import type { RemindersService } from './reminders.service';
 
 /** 提醒门面的实现（J4.1，接口见 contracts/plugins/reminders.facade.ts），RemindersModule 启动时注册。 */
 export function remindersFacade(reminders: RemindersService): RemindersFacade {
