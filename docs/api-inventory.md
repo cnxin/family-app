@@ -403,13 +403,13 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| POST | `/dishes/:dishId/recipe-variants` | `RecipesController.createVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
-| POST | `/member-dish-skills` | `RecipesController.upsertSkill` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
-| DELETE | `/members/:memberId/dish-skills/:dishId` | `RecipesController.removeSkill` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
-| PATCH | `/recipe-variants/:id` | `RecipesController.updateVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
-| DELETE | `/recipe-variants/:id` | `RecipesController.archiveVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
-| GET | `/recipes` | `RecipesController.list` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
-| GET | `/recipes/:dishId` | `RecipesController.get` | 登录 | ✓ | `apps/api/src/recipes/recipes.module.ts` |
+| POST | `/dishes/:dishId/recipe-variants` | `RecipesController.createVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.controller.ts` |
+| POST | `/member-dish-skills` | `RecipesController.upsertSkill` | 登录 | ✓ | `apps/api/src/recipes/recipes.controller.ts` |
+| DELETE | `/members/:memberId/dish-skills/:dishId` | `RecipesController.removeSkill` | 登录 | ✓ | `apps/api/src/recipes/recipes.controller.ts` |
+| PATCH | `/recipe-variants/:id` | `RecipesController.updateVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.controller.ts` |
+| DELETE | `/recipe-variants/:id` | `RecipesController.archiveVariant` | 登录 | ✓ | `apps/api/src/recipes/recipes.controller.ts` |
+| GET | `/recipes` | `RecipesController.list` | 登录 | ✓ | `apps/api/src/recipes/recipes.controller.ts` |
+| GET | `/recipes/:dishId` | `RecipesController.get` | 登录 | ✓ | `apps/api/src/recipes/recipes.controller.ts` |
 
 ## reminders（5）
 
