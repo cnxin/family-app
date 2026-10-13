@@ -404,6 +404,14 @@ export class AgentController {
     return this.service.checkProvider(user);
   }
 
+  /** J4.7「获取列表」：用已保存的地址和 key 拉服务商的模型列表（纯读）。 */
+  @Post('settings/provider-models')
+  @HttpCode(200)
+  @RequireCapabilities('manage_agent')
+  providerModels(@CurrentUser() user: JwtUser) {
+    return this.service.providerModels(user);
+  }
+
   @Get('routines')
   @RequireCapabilities('manage_agent')
   routinesList(@CurrentUser() user: JwtUser) {

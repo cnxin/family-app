@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
+  MODEL_LIST_LIMIT,
   OpenAICompatibleProvider,
   ProviderError,
   RecordingProvider,
@@ -14,6 +15,7 @@ import {
   ToolRegistry,
   UNTRUSTED_NOTICE,
   fenceUntrusted,
+  listModels,
   requestFingerprint,
   runLoop,
   type AgentEvent,
@@ -290,6 +292,41 @@ void (async () => {
       assert.equal(error.code, 'http');
       assert.equal(error.status, 401);
       assert.equal(error.body, '{"error":{"message":"Authentication Fails, key *** invalid"}}');
+      return true;
+    });
+  });
+  await check('listModels：GET {baseUrl}/models 带 Bearer；data[].id 去重、按字母排序、最多 500 个；不用模型名', async () => {
+    const seen: string[] = [];
+    const ok = await listModels({
+      baseUrl: 'https://x.invalid/v1/',
+      apiKey: 'sk-test-123',
+      fetch: async (url, init) => {
+        seen.push(`${init?.method} ${String(url)} ${(init?.headers as Record<string, string>).Authorization}`);
+        return Response.json({ object: 'list', data: [{ id: 'qwen-plus' }, { id: 'deepseek-chat' }, { id: 'qwen-plus' }, { id: 7 }, { id: ' glm-4 ' }] });
+      },
+    });
+    assert.deepEqual(seen, ['GET https://x.invalid/v1/models Bearer sk-test-123']);
+    assert.deepEqual(ok, { supported: true, models: ['deepseek-chat', 'glm-4', 'qwen-plus'] });
+    const many = await listModels({
+      baseUrl: 'https://x.invalid',
+      apiKey: 'k',
+      fetch: async () => Response.json({ data: Array.from({ length: 600 }, (_, index) => ({ id: `m-${String(index).padStart(3, '0')}` })) }),
+    });
+    assert.ok(many.supported && many.models.length === MODEL_LIST_LIMIT && many.models[0] === 'm-000');
+    const provider = new OpenAICompatibleProvider({ baseUrl: 'https://x.invalid', apiKey: 'k', model: '', fetch: async () => Response.json({ data: [{ id: 'a' }] }) });
+    assert.deepEqual(await provider.listModels(), { supported: true, models: ['a'] });
+  });
+  await check('listModels：没实现（404 / 405 / 501、不是 JSON、没有 data 数组）→ supported=false；401 抛 http（key 打码）', async () => {
+    const answer = (body: string, status = 200) => listModels({ baseUrl: 'https://x.invalid', apiKey: 'sk-test-123', fetch: async () => new Response(body, { status }) });
+    assert.deepEqual(await answer('not found', 404), { supported: false, status: 404 });
+    assert.deepEqual(await answer('', 405), { supported: false, status: 405 });
+    assert.deepEqual(await answer('<html>ok</html>'), { supported: false, status: 200 });
+    assert.deepEqual(await answer('{"models":["a"]}'), { supported: false, status: 200 });
+    await assert.rejects(answer('{"error":"bad key sk-test-123"}', 401), (error: unknown) => {
+      assert.ok(error instanceof ProviderError);
+      assert.equal(error.code, 'http');
+      assert.equal(error.status, 401);
+      assert.equal(error.body, '{"error":"bad key ***"}');
       return true;
     });
   });

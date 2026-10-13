@@ -256,6 +256,17 @@ export const agentProviderCheckSchema = z.object({
 });
 export type AgentProviderCheck = z.infer<typeof agentProviderCheckSchema>;
 
+/**
+ * J4.7「获取列表」：用已保存的地址和 key 请求服务商的 GET /models。纯读，不改设置。
+ * ok = false 时 models 为空、message 说明原因（服务商不支持列模型、key 不对、超时……，key 已打码）。
+ */
+export const agentProviderModelsSchema = z.object({
+  ok: z.boolean(),
+  models: z.array(z.string()),
+  message: z.string().nullable(),
+});
+export type AgentProviderModels = z.infer<typeof agentProviderModelsSchema>;
+
 /** presentRoutine()；lastRunAt 在轮询器跑过一次之后才非 null。 */
 export const agentRoutineSchema = z.object({
   id: uuid,
@@ -710,6 +721,12 @@ export const agent = {
     path: '/agent/settings/provider-check',
     summary: '测一下云端模型：按当前配置发一条 max_tokens=1 的请求（管理员）',
     response: agentProviderCheckSchema,
+  }),
+  providerModels: defineEndpoint({
+    method: 'POST',
+    path: '/agent/settings/provider-models',
+    summary: '获取列表：用已保存的地址和 key 请求服务商的 GET /models，不需要模型名；纯读、不改设置（管理员）',
+    response: agentProviderModelsSchema,
   }),
   routines: defineEndpoint({
     method: 'GET',

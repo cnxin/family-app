@@ -11,7 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'node:crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AGENT_PROVIDER_PRESETS, AGENT_RUN_EVENT, type AgentRunStreamPayload } from '@family/contracts';
-import { ProviderError } from '@family/agent-core';
+import { listModels, ProviderError } from '@family/agent-core';
 import { hasCapability, type Capability } from '../auth/capabilities';
 import { JwtUser } from '../auth/jwt.guard';
 import { agentDataKey } from '../common/config';
@@ -37,7 +37,12 @@ import {
 } from './agent.crypto';
 import { FakeAgentRuntime, HermesAgentRuntime } from './agent-runtimes';
 import { AgentRunError, NativeAgentRuntime } from './native/native-runtime';
-import { isolatedTestMode, openAICompatibleProvider, settingProviderConfig } from './native/provider-factory';
+import {
+  isolatedTestMode,
+  openAICompatibleProvider,
+  settingProviderConfig,
+  settingProviderEndpoint,
+} from './native/provider-factory';
 import { modulesTurnedOff, toolAccess } from './tool-access';
 import {
   AGENT_MEMORY_TOOLS,
@@ -326,6 +331,32 @@ export class AgentService {
       message,
       settings: this.presentSettings((await this.settings.findOneBy({ id: current.id }))!),
     };
+  }
+
+  /**
+   * J4.7「获取列表」：用已保存的地址和 key 请求 GET {baseUrl}/models（不需要模型名）。纯读：不改设置、不动 providerCheckOk。
+   * 服务商不支持列模型、key 不对、超时都回 ok = false 和原因（key 打码、截到 500 字），不抛 5xx。
+   */
+  async providerModels(user: JwtUser) {
+    const endpoint = settingProviderEndpoint(await this.ensureSettings(user));
+    if (!endpoint) throw new BadRequestException('先保存地址和 key');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const list = await listModels({ ...endpoint, signal: controller.signal });
+      return list.supported
+        ? { ok: true, models: [...list.models], message: null }
+        : { ok: false, models: [], message: '这个服务商不支持列模型，请手填' };
+    } catch (error) {
+      const message = controller.signal.aborted
+        ? '15 秒内没有响应'
+        : error instanceof ProviderError
+          ? error.body ? `${error.message}：${error.body}` : error.message
+          : '获取列表失败';
+      return { ok: false, models: [], message: message.split(endpoint.apiKey).join('***').slice(0, 500) };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async getProfile(user: JwtUser) {

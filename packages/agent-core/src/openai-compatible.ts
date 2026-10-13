@@ -210,6 +210,74 @@ export class OpenAICompatibleProvider implements ModelProvider {
     const key = this.options.apiKey;
     return key ? text.split(key).join('***') : text;
   }
+
+  /** 列模型：见 listModels（不用模型名）。 */
+  listModels(signal?: AbortSignal): Promise<ModelList> {
+    const { baseUrl, apiKey, extraHeaders, fetch: doFetch } = this.options;
+    return listModels({ baseUrl, apiKey, extraHeaders, fetch: doFetch, signal });
+  }
+}
+
+export interface ListModelsOptions {
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly extraHeaders?: Readonly<Record<string, string>>;
+  readonly fetch?: typeof fetch;
+  readonly signal?: AbortSignal;
+}
+
+/** 列模型的结果：服务商没实现 /models 时 supported = false（不是错，设置页让人手填）。 */
+export type ModelList =
+  | { readonly supported: true; readonly models: readonly string[] }
+  | { readonly supported: false; readonly status?: number };
+
+/** 最多返回这么多个模型 id。 */
+export const MODEL_LIST_LIMIT = 500;
+
+/** 这些状态码说明服务商没有 /models 这个接口。 */
+const MODELS_UNSUPPORTED_STATUS = new Set([404, 405, 501]);
+
+/**
+ * GET {baseUrl}/models（OpenAI 兼容的列模型，J4.7 设置页「获取列表」用）。不需要模型名。
+ * - 服务商没实现（404 / 405 / 501、不是 JSON、没有 data 数组）→ { supported: false }；
+ * - 鉴权失败等其余非 2xx 抛 ProviderError('http')（服务商原文里的 key 打码）；网络错、取消同 chat；
+ * - models 取 data[].id（字符串），去重、按字母排序，最多 MODEL_LIST_LIMIT 个。
+ */
+export async function listModels(options: ListModelsOptions): Promise<ModelList> {
+  const { signal } = options;
+  if (signal?.aborted) throw aborted(signal);
+  const url = `${options.baseUrl.replace(/\/+$/, '')}/models`;
+  const hide = (text: string) => (options.apiKey ? text.split(options.apiKey).join('***') : text);
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${options.apiKey}`, ...options.extraHeaders },
+      signal,
+    });
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) throw aborted(signal, error);
+    throw new ProviderError('network', `连不上模型服务：${messageOf(error)}`, { cause: error });
+  }
+  if (MODELS_UNSUPPORTED_STATUS.has(response.status)) return { supported: false, status: response.status };
+  const text = await response.text().catch(() => '');
+  if (!response.ok) {
+    throw new ProviderError('http', `模型服务返回 ${response.status}`, { status: response.status, body: hide(text) });
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { supported: false, status: response.status };
+  }
+  const data = isRecord(parsed) ? parsed.data : undefined;
+  if (!Array.isArray(data)) return { supported: false, status: response.status };
+  const ids = new Set<string>();
+  for (const entry of data) {
+    const id = isRecord(entry) ? entry.id : undefined;
+    if (typeof id === 'string' && id.trim()) ids.add(id.trim());
+  }
+  return { supported: true, models: [...ids].sort((a, b) => a.localeCompare(b, 'en')).slice(0, MODEL_LIST_LIMIT) };
 }
 
 function encodeMessage(message: ModelMessage): Record<string, unknown> {

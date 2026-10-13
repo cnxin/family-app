@@ -6,6 +6,8 @@
 //   （没有就第一个支出分类）调 propose_finance_transaction，最后作答；
 // - 「最近谁来家里」→ 先调 get_upcoming_visits，拿到结果后作答（第四批收尾：看工具结果里的访客名有没有脱敏）；
 // - 其余：把成员最后一句话原样回一遍（「收到：…」）。
+// GET <url>/models（J4.7「获取列表」）：key 不对 401；地址是 …/v1 时回 FAKE_MODEL_IDS（故意不按字母排），
+// 别的前缀（比如把 /v1 换成 /plain）回 404，当作服务商不支持列模型。
 // 作答的正文按 chunkMs 分段慢慢吐（J4.4 看对话页的字是不是一段段长出来的）；chunkMs = 0 时一次回完。
 // - 消息里带图片（image_url 块，K2 截图记账）→ 按 vision.mode：json 回 vision.reply（固定 JSON），
 //   garbage 回一句不是 JSON 的话；黑盒 / e2e 改返回对象上的 vision 切换。
@@ -66,6 +68,9 @@ function hasImage(messages) {
   return Array.isArray(last?.content) && last.content.some((part) => part?.type === 'image_url');
 }
 
+/** GET /models 回的模型名（故意不按字母排，看服务端有没有排序、去重）。 */
+export const FAKE_MODEL_IDS = ['fake-vision', 'fake-model', 'fake-chat', 'fake-model'];
+
 /** K2 截图识别的固定回答：美团外卖 36.5 元，花呗付的。 */
 export const FAKE_SCREENSHOT_REPLY = {
   amount: 36.5,
@@ -116,6 +121,21 @@ export async function startFakeModel({ key = 'sk-fake-model-key-1234', port = 0,
   const requests = [];
   const vision = { mode: 'json', reply: FAKE_SCREENSHOT_REPLY };
   const server = createServer((request, response) => {
+    if (request.method === 'GET' && request.url?.endsWith('/models')) {
+      const supplied = (request.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+      if (supplied !== key) {
+        response.writeHead(401, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: `Incorrect API key provided: ${supplied}` } }));
+        return;
+      }
+      if (request.url !== '/v1/models') {
+        response.writeHead(404, { 'Content-Type': 'text/plain' }).end('404 page not found');
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ object: 'list', data: FAKE_MODEL_IDS.map((id) => ({ id, object: 'model' })) }));
+      return;
+    }
     if (request.method !== 'POST' || !request.url?.endsWith('/chat/completions')) {
       response.writeHead(404).end();
       return;
