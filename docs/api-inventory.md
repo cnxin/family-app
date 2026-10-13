@@ -332,14 +332,14 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/memories` | `MemoriesController.list` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories` | `MemoriesController.create` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
-| GET | `/memories/:id` | `MemoriesController.detail` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
-| PATCH | `/memories/:id` | `MemoriesController.update` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories/:id/archive` | `MemoriesController.archive` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories/:id/photos` | `MemoriesController.FileInterceptor` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
-| POST | `/memories/:id/restore` | `MemoriesController.restore` | 登录 | ✓ | `apps/api/src/memories/memories.module.ts` |
-| GET | `/memories/:memoryId/photos/:photoId/content` | `MemoriesController.photoContent` | 公开 | ✓ | `apps/api/src/memories/memories.module.ts` |
+| GET | `/memories` | `MemoriesController.list` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| POST | `/memories` | `MemoriesController.create` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| GET | `/memories/:id` | `MemoriesController.detail` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| PATCH | `/memories/:id` | `MemoriesController.update` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| POST | `/memories/:id/archive` | `MemoriesController.archive` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| POST | `/memories/:id/photos` | `MemoriesController.FileInterceptor` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| POST | `/memories/:id/restore` | `MemoriesController.restore` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| GET | `/memories/:memoryId/photos/:photoId/content` | `MemoriesController.photoContent` | 公开 | ✓ | `apps/api/src/memories/memories.controller.ts` |
 
 ## menus（7）
 
