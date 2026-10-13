@@ -78,6 +78,7 @@
 - `agent_runs` 加列：`tier`（smallint，可空；云端运行方式 hermes / native 的 run 记 2，本地确定性助理 fake 留空）、`redacted`（bool，默认 false；native 且 `tier2Redact` 开时为 true）。`inputTokens` / `outputTokens` 原来就有，native 累加各步用量写进去。
 - 每日用量：不建表，在 `agent_runs` 上按上海时区当天 `count(tier = 2)`；超过 `tier2DailyLimit` 的那次记成一条不执行的 failed run（`errorCode = AGENT_DAILY_LIMIT`，`tier` 留空不占额度），兼作审计；用量报告的「云端档」一段按天数它们。
 - 工具名单：`AGENT_READ_TOOLS` / `AGENT_PROPOSAL_TOOLS` 改为从 manifest + `core-assistant.ts` 生成；30 个现名全部保留（和规则不同的在 manifest 写 `toolName`，`toolAliases` 留给以后改名），`check-plugins` 的手写联合断言随之删掉（J4.1）。
+- 获取模型列表（J4.7）：`POST /agent/settings/provider-models`（管理员，无请求体）用**已保存的地址和 key** 请求服务商的 `GET {baseUrl}/models`（Bearer，15 秒超时），不需要模型名；回 `{ ok, models, message }`，`models` 取 `data[].id` 去重、按字母排序、最多 500 个。服务商没实现（404 / 405 / 501、不是 JSON、没有 `data` 数组）回 `ok: false`、「这个服务商不支持列模型，请手填」；key 不对、超时等也回 `ok: false` 和原因（key 打码、截到 500 字），不抛 5xx；地址或 key 没存 400「先保存地址和 key」。纯读：不改设置、不动 `providerCheckOk`，事件路由里登记为豁免。拼 URL 在 agent-core 的 `listModels()`。设置页模型名一栏是可输入的下拉：手填永远可用，「获取列表」拉到后按输入的子串筛，选中即保存（服务端清掉「测一下」的结果）。
 
 ## 4. 分笔（叠加分支，每笔一个 PR，规矩照旧）
 
