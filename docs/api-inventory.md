@@ -373,18 +373,18 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/points/accounts` | `PointsController.accounts` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
-| POST | `/points/adjustments` | `PointsController.adjust` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
-| GET | `/points/ledger` | `PointsController.ledger` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
-| POST | `/points/ledger/:id/reverse` | `PointsController.reverseLedger` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
-| GET | `/reward-redemptions` | `PointsController.redemptions` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
-| POST | `/reward-redemptions/:id/cancel` | `PointsController.cancel` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
-| POST | `/reward-redemptions/:id/decision` | `PointsController.decide` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
-| POST | `/reward-redemptions/:id/reverse` | `PointsController.reverseRedemption` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
-| GET | `/rewards` | `PointsController.rewards` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
-| POST | `/rewards` | `PointsController.createReward` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
-| PATCH | `/rewards/:id` | `PointsController.updateReward` | `manage_points` | ✓ | `apps/api/src/points/points.module.ts` |
-| POST | `/rewards/:id/redemptions` | `PointsController.redeem` | 登录 | ✓ | `apps/api/src/points/points.module.ts` |
+| GET | `/points/accounts` | `PointsController.accounts` | 登录 | ✓ | `apps/api/src/points/points.controller.ts` |
+| POST | `/points/adjustments` | `PointsController.adjust` | `manage_points` | ✓ | `apps/api/src/points/points.controller.ts` |
+| GET | `/points/ledger` | `PointsController.ledger` | 登录 | ✓ | `apps/api/src/points/points.controller.ts` |
+| POST | `/points/ledger/:id/reverse` | `PointsController.reverseLedger` | `manage_points` | ✓ | `apps/api/src/points/points.controller.ts` |
+| GET | `/reward-redemptions` | `PointsController.redemptions` | 登录 | ✓ | `apps/api/src/points/points.controller.ts` |
+| POST | `/reward-redemptions/:id/cancel` | `PointsController.cancel` | 登录 | ✓ | `apps/api/src/points/points.controller.ts` |
+| POST | `/reward-redemptions/:id/decision` | `PointsController.decide` | `manage_points` | ✓ | `apps/api/src/points/points.controller.ts` |
+| POST | `/reward-redemptions/:id/reverse` | `PointsController.reverseRedemption` | `manage_points` | ✓ | `apps/api/src/points/points.controller.ts` |
+| GET | `/rewards` | `PointsController.rewards` | 登录 | ✓ | `apps/api/src/points/points.controller.ts` |
+| POST | `/rewards` | `PointsController.createReward` | `manage_points` | ✓ | `apps/api/src/points/points.controller.ts` |
+| PATCH | `/rewards/:id` | `PointsController.updateReward` | `manage_points` | ✓ | `apps/api/src/points/points.controller.ts` |
+| POST | `/rewards/:id/redemptions` | `PointsController.redeem` | 登录 | ✓ | `apps/api/src/points/points.controller.ts` |
 
 ## polls（8）
 
