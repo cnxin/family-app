@@ -626,12 +626,14 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 
 分步（每步一个分支，每个文件一笔提交）：
 
-1. **J7.1 插件模块文件 16 个**：模块文件拆出 controller / service。风险最低，可以先做。
-2. **J7.2 其他服务 9 个 + 契约脚本 1 个**：`media` 的 5 个放在一起做。
+1. **J7.1 插件模块文件 16 个**：模块文件拆出 controller / service。风险最低，可以先做。**2026-10-14 已完成**，结果见下。
+2. **J7.2 服务按职责拆**：原来的 9 个服务 + 契约脚本 1 个，再加 J7.1 拆出来仍超 400 行的 14 个服务（共 24 个）。按目录分批：`media` 的 7 个一批，其余每个目录一批。
 3. **J7.3 agent 目录 7 个**：等 J4.6 删完 Hermes，重新数行数，再拆还超的。
 4. **J7.4 实体汇总**：拆到各插件目录，最后做，风险最大（TypeORM 实体注册要改，迁移不动）。拆完 check-plugins 补一条断言：实体层不许跨插件读写。
 
 每步的验收：重新生成 `docs/api-inventory.md`，diff 里只许「文件」列变（方法、路径、处理函数、权限、契约都不变，接口一个不多一个不少）；check-plugins、check-event-routes 通过，`test:api` 全量（含 native 第二遍）、`test:web` 全量通过；api 的 `max-lines` 警告数只减不增。J7 收尾时警告数降到 0，`apps/api/eslint.config.mjs` 的 `max-lines` 改为 error。
+
+**J7.1 结果（2026-10-14）**：16 个模块文件拆成 `<域>.dto.ts` / `*.service.ts` / `*.controller.ts`，模块文件只留装配（门面注册、钩子订阅和 `@Module`），每个域一笔提交。用一个脚本按 TypeScript 语法树搬：顶层语句逐字搬，核对过没有丢、没有多；只补跨文件要用的 `export` 和 import；几个文件共用的小函数和常量，放进被依赖的那个文件（如 `auth.shared.ts`），文件之间不成环。唯一不是逐字搬的地方：travel 原来有一个没用到的 import（`TravelPlanStatus`），拆的时候没带过去。api 警告 40 → 37：`max-lines` 34 → 32，`no-unused-vars` 2 → 1。完全降到 400 以内的只有 calendar、inventory、auth 三个域，其余 13 个域各剩一个超长的服务（media 剩两个），交给 J7.2：`assets.service.ts`（1432）、`travel.service.ts`（1183）、`guests.service.ts`（1017）、`polls.service.ts`（781）、`points.service.ts`（750）、`memories.service.ts`（727）、`system-backup.service.ts`（679）、`media.service.ts`（654）、`reminders.service.ts`（649）、`menus.service.ts`（567）、`tasks.service.ts`（530）、`knowledge.service.ts`（489）、`recipes.service.ts`（463）、`media-requests.service.ts`（451）。
 
 已经超长的文件后来又加过代码，所以警告数没变，文件还在变长。例如 J4.7（第六批）给 `agent.service.ts` 加了 26 行（1360 → 1386），给 `agent.controller.ts` 加了 6 行（554 → 560）。J7 做完之前再往这些文件里加功能时，优先把新代码放进新文件。
 
@@ -647,4 +649,4 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 | J4 agent 重建 | J4.0～J4.5 已完成，J4.6 等实测一周 | 见 `docs/j4-agent-plan.md` §4 | King 2026-10-09 拍板（§2 十件按建议）。已合：J4.0 `packages/agent-core`（provider / 工具注册表 / loop / 录制回放）、J4.1 工具由 manifest 生成（30 个现名不变，MCP tools/list 逐字节一致）、agent 目录零 import 插件目录、J4.2 NativeAgentRuntime（工具三层过滤、agent_chat 原话落表、agent*.mjs 在 native 下跑第二遍）、J4.3 云端档配置（服务商 / key 加密 / 测一下 / 每日上限 / tier2Scope / 脱敏，设置页「云端助理」分段）、J4.4 流式（`/events` 的 `agent.run` 事件，小管家页逐段出字、断线退回轮询）、J4.5 外围回归（渠道 / 记忆 / 例行任务在 native 下跑通，每日上限加锁，用量报告加流式占比）；J4.6 Hermes 下线等 King 实测一周；J4.7 设置页拉取模型列表（`POST /agent/settings/provider-models`，2026-10-13）。第四批（2026-10-10）：补提醒 / 投票 / 积分 / 访客 / 智能家居 5 个读工具、K2 截图记账（内核云端看图，见 `finance-plan.md` §8.8） |
 | J5 本地模型档 | ☐ | | |
 | J6 收口 | ☐ | | API 清单生成器（`scripts/api-inventory.mjs`）对多行 `@UseInterceptors` 的上传接口把处理函数显示成 `FileInterceptor`（账单导入、截图识别两条），J6 修 |
-| J7 拆超长文件 | ☐ | | 2026-10-14 单独成期；api 34 个超长文件，清单与分步见 §10 |
+| J7 拆超长文件 | J7.1 已完成 | 见 §10 | 2026-10-14 单独成期；api 34 个超长文件，清单与分步见 §10。J7.1（2026-10-14）：16 个模块文件拆成 dto / service / controller，警告 40 → 37；剩 14 个超长服务并入 J7.2 |
