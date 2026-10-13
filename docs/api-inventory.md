@@ -94,25 +94,25 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| DELETE | `/asset-documents/:id` | `AssetsController.removeDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| GET | `/asset-documents/:id/access` | `AssetsController.documentAccess` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
-| GET | `/asset-documents/:id/content` | `AssetsController.documentContent` | 公开 | ✓ | `apps/api/src/assets/assets.module.ts` |
-| GET | `/assets` | `AssetsController.list` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets` | `AssetsController.create` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| GET | `/assets/:id` | `AssetsController.get` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
-| PATCH | `/assets/:id` | `AssetsController.update` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/documents` | `AssetsController.createDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/documents/upload` | `AssetsController.FileInterceptor` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| PATCH | `/assets/:id/location` | `AssetsController.setLocation` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/maintenance-plans` | `AssetsController.createPlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/assets/:id/renew` | `AssetsController.renewSubscription` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| PATCH | `/maintenance-consumables/:id` | `AssetsController.updateConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| DELETE | `/maintenance-consumables/:id` | `AssetsController.removeConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| PATCH | `/maintenance-plans/:id` | `AssetsController.updatePlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/maintenance-plans/:id/complete` | `AssetsController.completePlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/maintenance-plans/:id/consumables` | `AssetsController.createConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.module.ts` |
-| GET | `/maintenance-plans/:id/consumables-preview` | `AssetsController.consumablesPreview` | 登录 | ✓ | `apps/api/src/assets/assets.module.ts` |
-| POST | `/maintenance-plans/:id/shopping-items` | `AssetsController.addConsumablesToShopping` | `manage_assets` `manage_shopping` | ✓ | `apps/api/src/assets/assets.module.ts` |
+| DELETE | `/asset-documents/:id` | `AssetsController.removeDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| GET | `/asset-documents/:id/access` | `AssetsController.documentAccess` | 登录 | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| GET | `/asset-documents/:id/content` | `AssetsController.documentContent` | 公开 | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| GET | `/assets` | `AssetsController.list` | 登录 | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/assets` | `AssetsController.create` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| GET | `/assets/:id` | `AssetsController.get` | 登录 | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| PATCH | `/assets/:id` | `AssetsController.update` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/assets/:id/documents` | `AssetsController.createDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/assets/:id/documents/upload` | `AssetsController.FileInterceptor` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| PATCH | `/assets/:id/location` | `AssetsController.setLocation` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/assets/:id/maintenance-plans` | `AssetsController.createPlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/assets/:id/renew` | `AssetsController.renewSubscription` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| PATCH | `/maintenance-consumables/:id` | `AssetsController.updateConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| DELETE | `/maintenance-consumables/:id` | `AssetsController.removeConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| PATCH | `/maintenance-plans/:id` | `AssetsController.updatePlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/maintenance-plans/:id/complete` | `AssetsController.completePlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/maintenance-plans/:id/consumables` | `AssetsController.createConsumable` | `manage_assets` `manage_inventory` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| GET | `/maintenance-plans/:id/consumables-preview` | `AssetsController.consumablesPreview` | 登录 | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/maintenance-plans/:id/shopping-items` | `AssetsController.addConsumablesToShopping` | `manage_assets` `manage_shopping` | ✓ | `apps/api/src/assets/assets.controller.ts` |
 
 ## assistant（5）
 
