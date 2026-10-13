@@ -1,5 +1,5 @@
 import type { KnowledgeFacade } from '@family/contracts';
-import type { KnowledgeService } from './knowledge.module';
+import type { KnowledgeService } from './knowledge.service';
 
 /** 知识库门面的实现（J4.1，接口见 contracts/plugins/knowledge.facade.ts），KnowledgeModule 启动时注册。 */
 export function knowledgeFacade(knowledge: KnowledgeService): KnowledgeFacade {

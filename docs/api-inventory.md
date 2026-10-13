@@ -260,14 +260,14 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/knowledge-articles` | `KnowledgeController.list` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles` | `KnowledgeController.create` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
-| GET | `/knowledge-articles/:id` | `KnowledgeController.detail` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
-| PATCH | `/knowledge-articles/:id` | `KnowledgeController.update` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles/:id/archive` | `KnowledgeController.archive` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles/:id/restore` | `KnowledgeController.restore` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
-| GET | `/knowledge-articles/:id/revisions` | `KnowledgeController.revisions` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
-| POST | `/knowledge-articles/:id/revisions/:version/restore` | `KnowledgeController.restoreRevision` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.module.ts` |
+| GET | `/knowledge-articles` | `KnowledgeController.list` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
+| POST | `/knowledge-articles` | `KnowledgeController.create` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
+| GET | `/knowledge-articles/:id` | `KnowledgeController.detail` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
+| PATCH | `/knowledge-articles/:id` | `KnowledgeController.update` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
+| POST | `/knowledge-articles/:id/archive` | `KnowledgeController.archive` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
+| POST | `/knowledge-articles/:id/restore` | `KnowledgeController.restore` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
+| GET | `/knowledge-articles/:id/revisions` | `KnowledgeController.revisions` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
+| POST | `/knowledge-articles/:id/revisions/:version/restore` | `KnowledgeController.restoreRevision` | 登录 | ✓ | `apps/api/src/knowledge/knowledge.controller.ts` |
 
 ## locations（17）
 
