@@ -345,13 +345,13 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/menu-dates` | `MenusController.dateCounts` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
-| PATCH | `/menu-items/:id` | `MenusController.updateItem` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
-| GET | `/menus` | `MenusController.get` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
-| PATCH | `/menus/:id/chef` | `MenusController.assignChef` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.module.ts` |
-| POST | `/menus/:id/complete` | `MenusController.complete` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.module.ts` |
-| GET | `/menus/:id/events` | `MenusController.events` | 登录 | ✓ | `apps/api/src/menus/menus.module.ts` |
-| POST | `/menus/:id/items` | `MenusController.addItems` | `place_meal_order` | ✓ | `apps/api/src/menus/menus.module.ts` |
+| GET | `/menu-dates` | `MenusController.dateCounts` | 登录 | ✓ | `apps/api/src/menus/menus.controller.ts` |
+| PATCH | `/menu-items/:id` | `MenusController.updateItem` | 登录 | ✓ | `apps/api/src/menus/menus.controller.ts` |
+| GET | `/menus` | `MenusController.get` | 登录 | ✓ | `apps/api/src/menus/menus.controller.ts` |
+| PATCH | `/menus/:id/chef` | `MenusController.assignChef` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.controller.ts` |
+| POST | `/menus/:id/complete` | `MenusController.complete` | `update_meal_status` | ✓ | `apps/api/src/menus/menus.controller.ts` |
+| GET | `/menus/:id/events` | `MenusController.events` | 登录 | ✓ | `apps/api/src/menus/menus.controller.ts` |
+| POST | `/menus/:id/items` | `MenusController.addItems` | `place_meal_order` | ✓ | `apps/api/src/menus/menus.controller.ts` |
 
 ## notifications（11）
 
