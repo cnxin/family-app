@@ -479,11 +479,11 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/tasks` | `TasksController.list` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
-| POST | `/tasks` | `TasksController.create` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
-| PATCH | `/tasks/:id` | `TasksController.update` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
-| DELETE | `/tasks/:id` | `TasksController.archive` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
-| PATCH | `/tasks/:taskId/instances/:dueDate` | `TasksController.updateOccurrence` | 登录 | ✓ | `apps/api/src/tasks/tasks.module.ts` |
+| GET | `/tasks` | `TasksController.list` | 登录 | ✓ | `apps/api/src/tasks/tasks.controller.ts` |
+| POST | `/tasks` | `TasksController.create` | 登录 | ✓ | `apps/api/src/tasks/tasks.controller.ts` |
+| PATCH | `/tasks/:id` | `TasksController.update` | 登录 | ✓ | `apps/api/src/tasks/tasks.controller.ts` |
+| DELETE | `/tasks/:id` | `TasksController.archive` | 登录 | ✓ | `apps/api/src/tasks/tasks.controller.ts` |
+| PATCH | `/tasks/:taskId/instances/:dueDate` | `TasksController.updateOccurrence` | 登录 | ✓ | `apps/api/src/tasks/tasks.controller.ts` |
 
 ## today（1）
 

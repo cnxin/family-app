@@ -1,6 +1,6 @@
 import type { TasksFacade } from '@family/contracts';
 import { fromPluginTransaction } from '../system/plugin-facades.registry';
-import type { TasksService } from './tasks.module';
+import type { TasksService } from './tasks.service';
 
 /**
  * 任务门面的实现（J1b）：日历、智能家居通过 PluginFacadeRegistry 取，不 import 任务目录。
