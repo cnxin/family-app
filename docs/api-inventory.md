@@ -495,27 +495,27 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/travel-plans` | `TravelController.listPlans` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans` | `TravelController.createPlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| GET | `/travel-plans/:id` | `TravelController.detail` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| PATCH | `/travel-plans/:id` | `TravelController.updatePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/archive` | `TravelController.archivePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/cancel` | `TravelController.cancelPlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/complete` | `TravelController.completePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/reopen` | `TravelController.reopenPlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:id/restore` | `TravelController.restorePlan` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items` | `TravelController.createItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| PATCH | `/travel-plans/:planId/items/:itemId` | `TravelController.updateItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/archive` | `TravelController.archiveItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/complete` | `TravelController.completeItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/restore` | `TravelController.restoreItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/items/:itemId/skip` | `TravelController.skipItem` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-plans/:planId/templates/:templateId/apply` | `TravelController.applyTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| GET | `/travel-templates` | `TravelController.listTemplates` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-templates` | `TravelController.createTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| PATCH | `/travel-templates/:id` | `TravelController.updateTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-templates/:id/archive` | `TravelController.archiveTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
-| POST | `/travel-templates/:id/restore` | `TravelController.restoreTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.module.ts` |
+| GET | `/travel-plans` | `TravelController.listPlans` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans` | `TravelController.createPlan` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| GET | `/travel-plans/:id` | `TravelController.detail` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| PATCH | `/travel-plans/:id` | `TravelController.updatePlan` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:id/archive` | `TravelController.archivePlan` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:id/cancel` | `TravelController.cancelPlan` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:id/complete` | `TravelController.completePlan` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:id/reopen` | `TravelController.reopenPlan` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:id/restore` | `TravelController.restorePlan` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:planId/items` | `TravelController.createItem` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| PATCH | `/travel-plans/:planId/items/:itemId` | `TravelController.updateItem` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/archive` | `TravelController.archiveItem` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/complete` | `TravelController.completeItem` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/restore` | `TravelController.restoreItem` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:planId/items/:itemId/skip` | `TravelController.skipItem` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-plans/:planId/templates/:templateId/apply` | `TravelController.applyTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| GET | `/travel-templates` | `TravelController.listTemplates` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-templates` | `TravelController.createTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| PATCH | `/travel-templates/:id` | `TravelController.updateTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-templates/:id/archive` | `TravelController.archiveTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
+| POST | `/travel-templates/:id/restore` | `TravelController.restoreTemplate` | 登录 | ✓ | `apps/api/src/travel/travel.controller.ts` |
 
 ## upload（1）
 
