@@ -128,22 +128,22 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| PATCH | `/accounts/me/password` | `AuthController.updatePassword` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/invitations/preview` | `AuthController.previewInvitation` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/invitations/redeem` | `AuthController.redeemInvitation` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/login` | `AuthController.login` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/logout` | `AuthController.logout` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/refresh` | `AuthController.refresh` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| POST | `/auth/setup/bootstrap` | `AuthController.bootstrap` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| GET | `/auth/setup/status` | `AuthController.setupStatus` | 公开 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| GET | `/household/invitations` | `AuthController.listInvitations` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
-| POST | `/household/invitations` | `AuthController.createInvitation` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
-| DELETE | `/household/invitations/:id` | `AuthController.revokeInvitation` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
-| GET | `/household/members` | `AuthController.managedMembers` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
-| PATCH | `/household/members/:id` | `AuthController.updateManagedMember` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
-| PATCH | `/household/members/:id/status` | `AuthController.updateManagedMemberStatus` | `manage_members` | ✓ | `apps/api/src/auth/auth.module.ts` |
-| GET | `/members` | `AuthController.list` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
-| PATCH | `/members/me/preferences` | `AuthController.updatePreferences` | 登录 | ✓ | `apps/api/src/auth/auth.module.ts` |
+| PATCH | `/accounts/me/password` | `AuthController.updatePassword` | 登录 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| POST | `/auth/invitations/preview` | `AuthController.previewInvitation` | 公开 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| POST | `/auth/invitations/redeem` | `AuthController.redeemInvitation` | 公开 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| POST | `/auth/login` | `AuthController.login` | 公开 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| POST | `/auth/logout` | `AuthController.logout` | 登录 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| POST | `/auth/refresh` | `AuthController.refresh` | 公开 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| POST | `/auth/setup/bootstrap` | `AuthController.bootstrap` | 公开 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| GET | `/auth/setup/status` | `AuthController.setupStatus` | 公开 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| GET | `/household/invitations` | `AuthController.listInvitations` | `manage_members` | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| POST | `/household/invitations` | `AuthController.createInvitation` | `manage_members` | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| DELETE | `/household/invitations/:id` | `AuthController.revokeInvitation` | `manage_members` | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| GET | `/household/members` | `AuthController.managedMembers` | `manage_members` | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| PATCH | `/household/members/:id` | `AuthController.updateManagedMember` | `manage_members` | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| PATCH | `/household/members/:id/status` | `AuthController.updateManagedMemberStatus` | `manage_members` | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| GET | `/members` | `AuthController.list` | 登录 | ✓ | `apps/api/src/auth/auth.controller.ts` |
+| PATCH | `/members/me/preferences` | `AuthController.updatePreferences` | 登录 | ✓ | `apps/api/src/auth/auth.controller.ts` |
 
 ## calendar（4）
 
