@@ -464,14 +464,14 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/health/live` | `HealthController.live` | 公开 | ✓ | `apps/api/src/system/system.module.ts` |
-| GET | `/health/ready` | `HealthController.ready` | 公开 | ✓ | `apps/api/src/system/system.module.ts` |
-| GET | `/system/backups` | `SystemBackupController.dashboard` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
-| POST | `/system/backups/capacity-checks` | `SystemBackupController.queueCapacityCheck` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
-| PUT | `/system/backups/policy` | `SystemBackupController.updatePolicy` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
-| POST | `/system/backups/runs` | `SystemBackupController.queueBackup` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
-| PATCH | `/system/backups/runs/:id/cancel` | `SystemBackupController.cancelRun` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
-| POST | `/system/backups/runs/:id/restore-drills` | `SystemBackupController.queueRestoreDrill` | 登录 | ✓ | `apps/api/src/system/system.module.ts` |
+| GET | `/health/live` | `HealthController.live` | 公开 | ✓ | `apps/api/src/system/health.controller.ts` |
+| GET | `/health/ready` | `HealthController.ready` | 公开 | ✓ | `apps/api/src/system/health.controller.ts` |
+| GET | `/system/backups` | `SystemBackupController.dashboard` | 登录 | ✓ | `apps/api/src/system/system-backup.controller.ts` |
+| POST | `/system/backups/capacity-checks` | `SystemBackupController.queueCapacityCheck` | 登录 | ✓ | `apps/api/src/system/system-backup.controller.ts` |
+| PUT | `/system/backups/policy` | `SystemBackupController.updatePolicy` | 登录 | ✓ | `apps/api/src/system/system-backup.controller.ts` |
+| POST | `/system/backups/runs` | `SystemBackupController.queueBackup` | 登录 | ✓ | `apps/api/src/system/system-backup.controller.ts` |
+| PATCH | `/system/backups/runs/:id/cancel` | `SystemBackupController.cancelRun` | 登录 | ✓ | `apps/api/src/system/system-backup.controller.ts` |
+| POST | `/system/backups/runs/:id/restore-drills` | `SystemBackupController.queueRestoreDrill` | 登录 | ✓ | `apps/api/src/system/system-backup.controller.ts` |
 | GET | `/system/modules` | `SystemModulesController.list` | 登录 | ✓ | `apps/api/src/system/system-modules.controller.ts` |
 | PATCH | `/system/modules/:key` | `SystemModulesController.update` | `manage_integrations` | ✓ | `apps/api/src/system/system-modules.controller.ts` |
 
