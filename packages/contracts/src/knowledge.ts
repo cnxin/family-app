@@ -8,7 +8,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/knowledge/knowledge.module.ts 与 docs/m11-knowledge-acceptance.md
+// 对应 apps/api/src/knowledge/ 与 docs/m11-knowledge-acceptance.md
 //
 // 所有响应经 articleResponse() / revisionResponse() 逐字段挑选；每次写操作都落一条 revision，
 // 幂等键也存在 revision 上。写端点最后都 return this.detail()，只有两种响应形状。

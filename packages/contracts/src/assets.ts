@@ -15,7 +15,7 @@ import { shoppingItemRecordSchema } from './shopping';
 import { setLocationBody } from './locations';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/assets/assets.module.ts 与 docs/m5-home-assets-acceptance.md
+// 对应 apps/api/src/assets/ 与 docs/m5-home-assets-acceptance.md
 //
 // 这个域 present() 是 `{ ...asset }` 展开实体再补字段，所以响应形状由加载路径决定，按端点列出：
 // - 资产五个端点（list/get/create/update/renew）：requireAsset()

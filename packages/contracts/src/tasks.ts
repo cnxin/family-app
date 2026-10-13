@@ -9,7 +9,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/tasks/tasks.module.ts 与 docs/m3-tasks-acceptance.md
+// 对应 apps/api/src/tasks/ 与 docs/m3-tasks-acceptance.md
 
 export const TASK_RECURRENCES = ['once', 'daily', 'weekly', 'monthly'] as const;
 export const taskRecurrence = z.enum(TASK_RECURRENCES);

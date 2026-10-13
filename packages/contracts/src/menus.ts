@@ -17,7 +17,7 @@ import {
 import { dishRecipeVariantSchema } from './recipes';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/menus/menus.module.ts（点菜、厨房协作、菜单事件与点菜提醒）
+// 对应 apps/api/src/menus/（点菜、厨房协作、菜单事件与点菜提醒）
 // 与 docs/m2-acceptance.md、docs/recipe-variants-acceptance.md
 
 export const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'] as const;

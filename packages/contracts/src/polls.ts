@@ -11,7 +11,7 @@ import {
 import { householdMediaStatus, mediaType } from './media';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/polls/polls.module.ts 与 docs/m3-polls-acceptance.md
+// 对应 apps/api/src/polls/ 与 docs/m3-polls-acceptance.md
 
 export const POLL_CATEGORIES = [
   'general',

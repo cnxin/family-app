@@ -8,7 +8,7 @@ import {
 } from './common';
 import { defineEndpoint } from './registry';
 
-// 对应 apps/api/src/auth/auth.module.ts（账号、会话、成员管理、邀请）
+// 对应 apps/api/src/auth/（账号、会话、成员管理、邀请）
 // 与 docs/m2-acceptance.md、docs/m3-members-activity-acceptance.md
 //
 // 加载方式说明（决定嵌套形态）：
