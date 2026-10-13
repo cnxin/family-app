@@ -149,10 +149,10 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/calendar` | `CalendarController.list` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
-| POST | `/calendar-events` | `CalendarController.create` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
-| PATCH | `/calendar-events/:id` | `CalendarController.update` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
-| DELETE | `/calendar-events/:id` | `CalendarController.remove` | 登录 | ✓ | `apps/api/src/calendar/calendar.module.ts` |
+| GET | `/calendar` | `CalendarController.list` | 登录 | ✓ | `apps/api/src/calendar/calendar.controller.ts` |
+| POST | `/calendar-events` | `CalendarController.create` | 登录 | ✓ | `apps/api/src/calendar/calendar.controller.ts` |
+| PATCH | `/calendar-events/:id` | `CalendarController.update` | 登录 | ✓ | `apps/api/src/calendar/calendar.controller.ts` |
+| DELETE | `/calendar-events/:id` | `CalendarController.remove` | 登录 | ✓ | `apps/api/src/calendar/calendar.controller.ts` |
 
 ## dishes（5）
 
