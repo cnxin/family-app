@@ -14,6 +14,8 @@ import {
 } from '../entities';
 import { InventoryBatchesService } from './inventory-batches.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
+import { InventoryShoppingReceiptService } from './inventory-shopping-receipt.service';
+import { InventoryMenuConsumptionService } from './inventory-menu-consumption.service';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import { inventoryFacade } from './inventory.facade';
 import { InventoryService } from './inventory.service';
@@ -52,6 +54,8 @@ export class InventoryFacadeProvider implements OnModuleInit {
     InventoryService,
     InventoryBatchesService,
     InventoryTransactionsService,
+    InventoryShoppingReceiptService,
+    InventoryMenuConsumptionService,
     InventoryExpiryAttentionRule,
     InventoryAttention,
     InventoryFacadeProvider,

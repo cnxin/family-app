@@ -13,6 +13,8 @@ import { RequireCapabilities } from '../auth/capabilities';
 import { CurrentUser, JwtUser } from '../auth/jwt.guard';
 import { InventoryBatchesService } from './inventory-batches.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
+import { InventoryShoppingReceiptService } from './inventory-shopping-receipt.service';
+import { InventoryMenuConsumptionService } from './inventory-menu-consumption.service';
 import {
   CreateInventoryItemDto,
   UpdateInventoryItemDto,
@@ -32,6 +34,8 @@ export class InventoryController {
     private readonly service: InventoryService,
     private readonly ledger: InventoryTransactionsService,
     private readonly batchesService: InventoryBatchesService,
+    private readonly shoppingReceipt: InventoryShoppingReceiptService,
+    private readonly menuConsumption: InventoryMenuConsumptionService,
   ) {}
 
   @Get('inventory')
@@ -121,7 +125,7 @@ export class InventoryController {
     @Query() query: ShoppingInventoryPreviewDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.ledger.shoppingPreview(
+    return this.shoppingReceipt.shoppingPreview(
       id,
       user.householdId,
       query.inventoryItemId,
@@ -135,7 +139,7 @@ export class InventoryController {
     @Body() dto: ConfirmShoppingReceiptDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.ledger.confirmShoppingReceipt(
+    return this.shoppingReceipt.confirmShoppingReceipt(
       id,
       dto.inventoryItemId,
       dto.batch,
@@ -146,7 +150,7 @@ export class InventoryController {
 
   @Get('menus/:id/inventory-preview')
   menuPreview(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.ledger.menuPreview(id, user.householdId);
+    return this.menuConsumption.menuPreview(id, user.householdId);
   }
 
   @Post('menus/:id/confirm-consumption')
@@ -155,7 +159,7 @@ export class InventoryController {
     @Param('id') id: string,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.ledger.confirmMenuConsumption(id, user);
+    return this.menuConsumption.confirmMenuConsumption(id, user);
   }
 
   @Post('inventory-transactions/:id/reverse')
