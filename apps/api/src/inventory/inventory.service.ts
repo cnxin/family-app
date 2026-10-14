@@ -17,6 +17,7 @@ import {
   ShoppingItem,
 } from '../entities';
 import { InventoryBatchesService } from './inventory-batches.service';
+import { InventoryBatchMovementsService } from './inventory-batch-movements.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
 import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
 import { isUniqueViolation } from '@family/shared';
@@ -34,6 +35,7 @@ export class InventoryService {
     private readonly dataSource: DataSource,
     private readonly ledger: InventoryTransactionsService,
     private readonly batchService: InventoryBatchesService,
+    private readonly batchMovements: InventoryBatchMovementsService,
     private readonly facades: PluginFacadeRegistry,
   ) {}
 
@@ -226,7 +228,7 @@ export class InventoryService {
           transaction.id = randomUUID();
           await manager.getRepository(InventoryTransaction).save(transaction);
           if (quantityAfter < quantityBefore) {
-            await this.batchService.applyConsumption(manager, {
+            await this.batchMovements.applyConsumption(manager, {
               item,
               quantity: quantityBefore - quantityAfter,
               transaction,

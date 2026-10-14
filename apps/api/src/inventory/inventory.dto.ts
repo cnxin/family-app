@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { InventoryCategory } from '../entities';
-import { BatchDatesInput } from './inventory-batches.service';
+import { BatchDatesInput } from './inventory-batches.rules';
 
 const INVENTORY_CATEGORIES: InventoryCategory[] = [
   '调料',
