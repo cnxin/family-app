@@ -1,8 +1,6 @@
-import {
-  EmbyLibraryProvider,
-  MoviePilotAutomationProvider,
-  PlexLibraryProvider,
-} from '../src/media/connectors';
+import { EmbyLibraryProvider } from '../src/media/connectors.emby';
+import { MoviePilotAutomationProvider } from '../src/media/connectors.moviepilot';
+import { PlexLibraryProvider } from '../src/media/connectors.plex';
 import { MediaConnectorConfig } from '../src/media/connectors.config';
 import { MediaMetadataSnapshot } from '../src/media/providers';
 

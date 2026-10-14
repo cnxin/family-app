@@ -1,13 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { IntegrationKind } from '../entities';
 import { MediaConnectorConfig } from './connectors.config';
-import {
-  EmbyLibraryProvider,
-  MediaConnectorError,
-  MoviePilotAutomationProvider,
-  PlexLibraryProvider,
-  connectorRole,
-} from './connectors';
+import { MediaConnectorError, connectorRole } from './connectors';
+import { EmbyLibraryProvider } from './connectors.emby';
+import { MoviePilotAutomationProvider } from './connectors.moviepilot';
+import { PlexLibraryProvider } from './connectors.plex';
 import { IntegrationSettingsService } from './integration-settings.service';
 import {
   MediaAutomationRequest,
