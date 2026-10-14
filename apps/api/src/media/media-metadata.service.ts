@@ -1,10 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { MediaExternalProvider, MediaType } from '../entities';
-import {
-  BangumiMetadataProvider,
-  DoubanMetadataProvider,
-  TmdbMetadataProvider,
-} from './metadata-providers';
+import { BangumiMetadataProvider } from './metadata-providers.bangumi';
+import { DoubanMetadataProvider } from './metadata-providers.douban';
+import { TmdbMetadataProvider } from './metadata-providers.tmdb';
 import {
   MediaExternalReference,
   MediaMetadataProvider,
