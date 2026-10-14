@@ -13,6 +13,7 @@ import {
   ShoppingItem,
 } from '../entities';
 import { InventoryBatchesService } from './inventory-batches.service';
+import { InventoryBatchMovementsService } from './inventory-batch-movements.service';
 import { InventoryTransactionsService } from './inventory-transactions.service';
 import { InventoryShoppingReceiptService } from './inventory-shopping-receipt.service';
 import { InventoryMenuConsumptionService } from './inventory-menu-consumption.service';
@@ -53,6 +54,7 @@ export class InventoryFacadeProvider implements OnModuleInit {
   providers: [
     InventoryService,
     InventoryBatchesService,
+    InventoryBatchMovementsService,
     InventoryTransactionsService,
     InventoryShoppingReceiptService,
     InventoryMenuConsumptionService,

@@ -8,10 +8,8 @@ import {
 import { DataSource } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import { InventoryItem, InventoryTransaction, ShoppingItem } from '../entities';
-import {
-  BatchDatesInput,
-  InventoryBatchesService,
-} from './inventory-batches.service';
+import { InventoryBatchMovementsService } from './inventory-batch-movements.service';
+import { BatchDatesInput } from './inventory-batches.rules';
 import { PluginFacadeRegistry, toPluginTransaction } from '../system/plugin-facades.registry';
 import {
   MAX_QUANTITY,
@@ -71,7 +69,7 @@ export class InventoryShoppingReceiptService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly facades: PluginFacadeRegistry,
-    private readonly batches: InventoryBatchesService,
+    private readonly batches: InventoryBatchMovementsService,
     private readonly ledger: InventoryTransactionsService,
   ) {}
 

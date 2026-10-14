@@ -3,7 +3,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { DataSource, EntityManager } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import { InventoryItem, InventoryBatch, InventoryTransaction, Menu, MenuItem } from '../entities';
-import { InventoryBatchesService } from './inventory-batches.service';
+import { InventoryBatchMovementsService } from './inventory-batch-movements.service';
 import { roundQuantity, quantityString } from './inventory-quantity';
 import { InventoryTransactionsService } from './inventory-transactions.service';
 
@@ -22,7 +22,7 @@ type MenuInventoryPreviewRow = MenuRequirement & {
   quantityAfter: number | null;
   availableUnits: string[];
   batchAllocations: ReturnType<
-    InventoryBatchesService['previewAllocations']
+    InventoryBatchMovementsService['previewAllocations']
   >['allocations'];
   untrackedQuantity: number;
 };
@@ -83,7 +83,7 @@ function menuRequirements(menu: Menu) {
 export class InventoryMenuConsumptionService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly batches: InventoryBatchesService,
+    private readonly batches: InventoryBatchMovementsService,
     private readonly ledger: InventoryTransactionsService,
   ) {}
 

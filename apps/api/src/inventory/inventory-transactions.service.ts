@@ -9,7 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import { InventoryItem, InventoryTransaction } from '../entities';
-import { InventoryBatchesService } from './inventory-batches.service';
+import { InventoryBatchMovementsService } from './inventory-batch-movements.service';
 import { roundQuantity, quantityString, assertQuantityRange } from './inventory-quantity';
 
 @Injectable()
@@ -18,7 +18,7 @@ export class InventoryTransactionsService {
     @InjectRepository(InventoryTransaction)
     private readonly transactions: Repository<InventoryTransaction>,
     private readonly dataSource: DataSource,
-    private readonly batches: InventoryBatchesService,
+    private readonly batches: InventoryBatchMovementsService,
   ) {}
 
   createTransaction(
