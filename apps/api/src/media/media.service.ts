@@ -5,104 +5,37 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
-import {
-  HouseholdMedia,
-  HouseholdMediaStatus,
-  MediaExternalRef,
-  MediaRequest,
-  MediaTitle,
-  MediaType,
-  Poll,
-  PollOption,
-} from '../entities';
-import { MediaConnectorsService } from './media-connectors.service';
-import { MediaLibraryService } from './media-library.service';
+import { HouseholdMedia, MediaExternalRef, MediaTitle } from '../entities';
 import { isUniqueViolation } from '@family/shared';
+import { linkMediaExternalRefs } from './media-external-refs';
 import {
   MediaQueryDto,
-  MediaExternalRefDto,
   CreateMediaDto,
   UpdateMediaDto,
   AddMediaExternalRefsDto,
 } from './media.dto';
-
-const STATUS_LABELS: Record<HouseholdMediaStatus, string> = {
-  watchlist: '想看',
-  voting: '投票中',
-  scheduled: '已排期',
-  watching: '观看中',
-  completed: '已看完',
-  dropped: '不再观看',
-};
-
-const STATUS_TRANSITIONS: Record<
-  HouseholdMediaStatus,
-  HouseholdMediaStatus[]
-> = {
-  watchlist: ['voting', 'scheduled', 'watching', 'completed', 'dropped'],
-  voting: ['watchlist', 'scheduled', 'dropped'],
-  scheduled: ['watchlist', 'watching', 'completed', 'dropped'],
-  watching: ['completed', 'dropped', 'watchlist'],
-  completed: ['watchlist', 'watching'],
-  dropped: ['watchlist'],
-};
-
-export function normalizeText(value: string) {
-  return value.normalize('NFKC').trim().replace(/\s+/g, ' ');
-}
-
-function titleDedupeKey(type: MediaType, title: string, year: number | null) {
-  return `${type}:${year ?? 'unknown'}:${normalizeText(title).toLocaleLowerCase(
-    'zh-CN',
-  )}`;
-}
-
-function parseDateOnly(value: string | null | undefined) {
-  if (!value) return null;
-  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-    !Number.isFinite(timestamp) ||
-    new Date(timestamp).toISOString().slice(0, 10) !== value
-  ) {
-    throw new BadRequestException('观影日期不是有效的 YYYY-MM-DD 日期');
-  }
-  return value;
-}
-
-function normalizeExternalRefs(refs: MediaExternalRefDto[] = []) {
-  const normalized = refs.map((ref) => ({
-    provider: ref.provider,
-    externalId:
-      ref.provider === 'imdb'
-        ? normalizeText(ref.externalId).toLocaleLowerCase('en-US')
-        : normalizeText(ref.externalId),
-  }));
-  if (normalized.some((ref) => !ref.externalId)) {
-    throw new BadRequestException('外部编号不能为空');
-  }
-  const keys = normalized.map(
-    (ref) => `${ref.provider}:${ref.externalId.toLocaleLowerCase('en-US')}`,
-  );
-  if (new Set(keys).size !== keys.length) {
-    throw new BadRequestException('外部编号不能重复');
-  }
-  return normalized;
-}
+import {
+  STATUS_LABELS,
+  STATUS_TRANSITIONS,
+  normalizeText,
+  titleDedupeKey,
+  parseDateOnly,
+  normalizeExternalRefs,
+  present,
+  hasActivePoll,
+  hasActiveRequest,
+  hasMediaPollReference,
+} from './media-rules';
 
 @Injectable()
 export class MediaService {
   constructor(
     @InjectRepository(HouseholdMedia)
     private readonly householdMedia: Repository<HouseholdMedia>,
-    @InjectRepository(MediaRequest)
-    private readonly mediaRequests: Repository<MediaRequest>,
     private readonly dataSource: DataSource,
-    private readonly connectors: MediaConnectorsService,
-    private readonly library: MediaLibraryService,
   ) {}
 
   async list(query: MediaQueryDto, user: JwtUser) {
@@ -128,7 +61,7 @@ export class MediaService {
         { search: `%${search}%` },
       );
     }
-    return (await builder.getMany()).map((entry) => this.present(entry));
+    return (await builder.getMany()).map((entry) => present(entry));
   }
 
   async get(id: string, user: JwtUser, manager?: EntityManager) {
@@ -140,72 +73,7 @@ export class MediaService {
       relations: { mediaTitle: { externalRefs: true }, createdBy: true },
     });
     if (!entry) throw new NotFoundException('观影片单不存在');
-    return this.present(entry);
-  }
-
-  connectorStatus(user: JwtUser, refresh = false) {
-    return this.connectors.status(user.householdId, refresh);
-  }
-
-  async libraryAvailability(mediaIds: string[], user: JwtUser) {
-    if (!mediaIds.length) return {};
-    const entries = await this.householdMedia.find({
-      where: mediaIds.map((id) => ({ id, householdId: user.householdId })),
-      relations: { mediaTitle: { externalRefs: true } },
-    });
-    const requests = await this.mediaRequests.find({
-      where: {
-        householdId: user.householdId,
-        householdMediaId: In(entries.map((entry) => entry.id)),
-      },
-      order: { updatedAt: 'DESC' },
-    });
-    const requestedSeasonsByMedia = new Map<string, number[]>();
-    for (const request of requests) {
-      if (requestedSeasonsByMedia.has(request.householdMediaId)) continue;
-      if (!request.season || request.status === 'cancelled') {
-        requestedSeasonsByMedia.set(request.householdMediaId, []);
-        continue;
-      }
-      const seasons = requestedSeasonsByMedia.get(request.householdMediaId) ?? [];
-      seasons.push(request.season);
-      requestedSeasonsByMedia.set(request.householdMediaId, seasons);
-    }
-    const media = entries.map((entry) => ({
-      id: entry.id,
-      mediaTitleId: entry.mediaTitleId,
-      requestedSeasons: requestedSeasonsByMedia.get(entry.id) ?? [],
-      externalRefs: (entry.mediaTitle.externalRefs ?? []).map((ref) => ({
-        provider: ref.provider,
-        mediaType: ref.mediaType,
-        externalId: ref.externalId,
-        connectorKey: ref.connectorKey ?? undefined,
-      })),
-    }));
-    const [live, snapshots] = await Promise.all([
-      this.connectors.availability(
-      user.householdId,
-      media.map((entry) => ({
-        id: entry.id,
-        externalRefs: entry.externalRefs,
-        requestedSeasons: entry.requestedSeasons,
-      })),
-      ),
-      this.library.availability(user.householdId, media),
-    ]);
-    for (const entry of media) {
-      const keys = new Set(
-        live[entry.id].map(
-          (match) => `${match.connectorKey}:${match.libraryItemId}`,
-        ),
-      );
-      live[entry.id].push(
-        ...snapshots[entry.id].filter(
-          (match) => !keys.has(`${match.connectorKey}:${match.libraryItemId}`),
-        ),
-      );
-    }
-    return live;
+    return present(entry);
   }
 
   async create(dto: CreateMediaDto, user: JwtUser) {
@@ -391,7 +259,7 @@ export class MediaService {
       if (
         oldStatus === 'voting' &&
         nextStatus !== 'voting' &&
-        (await this.hasActivePoll(manager, entry.id, user.householdId))
+        (await hasActivePoll(manager, entry.id, user.householdId))
       ) {
         throw new ConflictException('请先结束这部影视的家庭投票，再修改观影状态');
       }
@@ -461,103 +329,9 @@ export class MediaService {
       throw new BadRequestException('TMDB ID 只能填写数字');
     }
     try {
-      await this.dataSource.transaction(async (manager) => {
-        const entries = manager.getRepository(HouseholdMedia);
-        const entry = await entries
-          .createQueryBuilder('entry')
-          .innerJoinAndSelect('entry.mediaTitle', 'mediaTitle')
-          .where('entry.id = :id AND entry.householdId = :householdId', {
-            id,
-            householdId: user.householdId,
-          })
-          .setLock('pessimistic_write')
-          .getOne();
-        if (!entry) throw new NotFoundException('观影片单不存在');
-
-        const lockKeys = [
-          `media-metadata:${entry.mediaTitleId}`,
-          ...externalRefs.map((reference) =>
-            reference.provider === 'tmdb'
-              ? `external:${reference.provider}:${entry.mediaTitle.type}:${reference.externalId}`
-              : `external:${reference.provider}:${reference.externalId}`,
-          ),
-        ].sort();
-        for (const lockKey of lockKeys) {
-          await manager.query(
-            'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-            [lockKey],
-          );
-        }
-
-        const titles = manager.getRepository(MediaTitle);
-        const mediaTitle = await titles.findOne({
-          where: { id: entry.mediaTitleId },
-          relations: { externalRefs: true },
-        });
-        if (!mediaTitle) throw new NotFoundException('影视资料不存在');
-
-        const existingByProvider = new Map(
-          (mediaTitle.externalRefs ?? [])
-            .filter((reference) => reference.connectorKey == null)
-            .map((reference) => [reference.provider, reference]),
-        );
-        const refs = manager.getRepository(MediaExternalRef);
-        const additions: typeof externalRefs = [];
-        for (const reference of externalRefs) {
-          const current = existingByProvider.get(reference.provider);
-          if (current) {
-            if (current.externalId !== reference.externalId) {
-              throw new ConflictException(
-                `这部影视已经关联其他 ${reference.provider.toUpperCase()} 编号`,
-              );
-            }
-            continue;
-          }
-
-          const owner = await refs.findOne({
-            where:
-              reference.provider === 'tmdb'
-                ? {
-                    provider: reference.provider,
-                    mediaType: mediaTitle.type,
-                    externalId: reference.externalId,
-                  }
-                : {
-                    provider: reference.provider,
-                    externalId: reference.externalId,
-                  },
-          });
-          if (owner && owner.mediaTitleId !== mediaTitle.id) {
-            throw new ConflictException('这个外部编号已经关联到其他影视条目');
-          }
-          if (!owner) additions.push(reference);
-        }
-
-        if (!additions.length) return;
-        await refs.save(
-          additions.map((reference) =>
-            refs.create({
-              mediaTitleId: mediaTitle.id,
-              mediaType: mediaTitle.type,
-              provider: reference.provider,
-              externalId: reference.externalId,
-              connectorKey: null,
-              metadata: {},
-            }),
-          ),
-        );
-        await recordActivity(manager, user, {
-          module: 'media',
-          action: 'media_metadata_linked',
-          summary: `${user.name} 补充了「${mediaTitle.title}」的影视编号`,
-          targetPath: `/media?mediaId=${entry.id}&view=detail`,
-          metadata: {
-            mediaId: entry.id,
-            mediaTitleId: mediaTitle.id,
-            providers: additions.map((reference) => reference.provider),
-          },
-        });
-      });
+      await this.dataSource.transaction((manager) =>
+        linkMediaExternalRefs(manager, id, externalRefs, user),
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException('这个外部编号已经关联到其他影视条目');
@@ -584,13 +358,13 @@ export class MediaService {
         .setLock('pessimistic_write')
         .getOne();
       if (!entry) throw new NotFoundException('观影片单不存在');
-      if (await this.hasActivePoll(manager, entry.id, user.householdId)) {
+      if (await hasActivePoll(manager, entry.id, user.householdId)) {
         throw new ConflictException('请先结束或删除这部影视的家庭投票，再移出片单');
       }
-      if (await this.hasMediaPollReference(manager, entry.id)) {
+      if (await hasMediaPollReference(manager, entry.id)) {
         throw new ConflictException('请先删除包含这部影视的历史选片投票，再移出片单');
       }
-      if (await this.hasActiveRequest(manager, entry.id, user.householdId)) {
+      if (await hasActiveRequest(manager, entry.id, user.householdId)) {
         throw new ConflictException('请先取消这部影视进行中的 MoviePilot 订阅，再移出片单');
       }
       await recordActivity(manager, user, {
@@ -606,82 +380,5 @@ export class MediaService {
       await manager.getRepository(HouseholdMedia).remove(entry);
     });
     return { id, removed: true as const };
-  }
-
-  private present(entry: HouseholdMedia) {
-    return {
-      id: entry.id,
-      householdId: entry.householdId,
-      status: entry.status,
-      scheduledFor: entry.scheduledFor,
-      note: entry.note,
-      mediaTitle: {
-        id: entry.mediaTitle.id,
-        type: entry.mediaTitle.type,
-        title: entry.mediaTitle.title,
-        originalTitle: entry.mediaTitle.originalTitle,
-        year: entry.mediaTitle.year,
-        overview: entry.mediaTitle.overview,
-        posterUrl: entry.mediaTitle.posterUrl,
-        externalRefs: (entry.mediaTitle.externalRefs ?? [])
-          .map((ref) => ({
-            id: ref.id,
-            provider: ref.provider,
-            externalId: ref.externalId,
-            connectorKey: ref.connectorKey,
-          }))
-          .sort((left, right) => left.provider.localeCompare(right.provider)),
-      },
-      createdBy: {
-        id: entry.createdBy.id,
-        name: entry.createdBy.name,
-        avatarEmoji: entry.createdBy.avatarEmoji,
-      },
-      createdAt: entry.createdAt,
-      updatedAt: entry.updatedAt,
-    };
-  }
-
-  private async hasActivePoll(
-    manager: EntityManager,
-    mediaId: string,
-    householdId: string,
-  ) {
-    const polls = await manager
-      .getRepository(Poll)
-      .createQueryBuilder('poll')
-      .leftJoin('poll.options', 'option')
-      .where('poll.householdId = :householdId', { householdId })
-      .andWhere('poll.status = :status', { status: 'open' })
-      .andWhere('poll.isArchived = false')
-      .andWhere(
-        `((poll."sourceModule" = 'media' AND poll."sourceId" = :mediaId) OR option."mediaId" = :mediaId)`,
-        { mediaId },
-      )
-      .distinct(true)
-      .getMany();
-    return polls.some(
-      (poll) => !poll.closesAt || poll.closesAt.getTime() > Date.now(),
-    );
-  }
-
-  private async hasActiveRequest(
-    manager: EntityManager,
-    mediaId: string,
-    householdId: string,
-  ) {
-    return manager.getRepository(MediaRequest).exists({
-      where: [
-        { householdId, householdMediaId: mediaId, status: 'pending' },
-        { householdId, householdMediaId: mediaId, status: 'processing' },
-      ],
-    });
-  }
-
-  private async hasMediaPollReference(
-    manager: EntityManager,
-    mediaId: string,
-  ) {
-    return manager.getRepository(PollOption).existsBy({ mediaId });
   }
 }

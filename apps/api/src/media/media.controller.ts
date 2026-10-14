@@ -49,8 +49,10 @@ import {
   MediaRequestQueryDto,
   CreateMediaRequestDto,
 } from './media.dto';
-import { normalizeText, MediaService } from './media.service';
+import { MediaService } from './media.service';
+import { normalizeText } from './media-rules';
 import { MediaRequestsService } from './media-requests.service';
+import { MediaAvailabilityService } from './media-availability.service';
 
 @Controller('media')
 export class MediaController {
@@ -66,6 +68,7 @@ export class MediaController {
     private readonly userMappings: MediaUserMappingsService,
     private readonly connectorsService: MediaConnectorsService,
     private readonly library: MediaLibraryService,
+    private readonly availability: MediaAvailabilityService,
   ) {}
 
   @Get('search')
@@ -129,7 +132,7 @@ export class MediaController {
     @CurrentUser() user: JwtUser,
     @Query('refresh') refresh?: string,
   ) {
-    return this.service.connectorStatus(user, refresh === 'true');
+    return this.availability.connectorStatus(user, refresh === 'true');
   }
 
   @Get('connector-settings')
@@ -300,7 +303,7 @@ export class MediaController {
     @Body() dto: MediaAvailabilityDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.libraryAvailability(dto.mediaIds, user);
+    return this.availability.libraryAvailability(dto.mediaIds, user);
   }
 
   @Get('library')

@@ -31,6 +31,7 @@ import { ViewingHistoryService } from './viewing-history.service';
 import { MediaLibraryService } from './media-library.service';
 import { MediaSourceSettingsService } from './media-source-settings.service';
 import { MediaService } from './media.service';
+import { MediaAvailabilityService } from './media-availability.service';
 import { MediaRequestsService } from './media-requests.service';
 import { MediaController } from './media.controller';
 
@@ -71,6 +72,7 @@ export class MediaFacadeProvider implements OnModuleInit {
   controllers: [MediaController],
   providers: [
     MediaService,
+    MediaAvailabilityService,
     MediaRequestsService,
     MediaConnectorsService,
     MediaLibraryService,
