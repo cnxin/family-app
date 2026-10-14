@@ -29,8 +29,10 @@ import { MediaUserMappingsService } from './media-user-mappings.service';
 import { PlaybackWebhookService } from './playback-webhook.service';
 import { ViewingHistoryService } from './viewing-history.service';
 import { MediaLibraryService } from './media-library.service';
+import { MediaLibrarySyncService } from './media-library-sync.service';
 import { MediaSourceSettingsService } from './media-source-settings.service';
 import { MediaService } from './media.service';
+import { MediaAvailabilityService } from './media-availability.service';
 import { MediaRequestsService } from './media-requests.service';
 import { MediaController } from './media.controller';
 
@@ -71,9 +73,11 @@ export class MediaFacadeProvider implements OnModuleInit {
   controllers: [MediaController],
   providers: [
     MediaService,
+    MediaAvailabilityService,
     MediaRequestsService,
     MediaConnectorsService,
     MediaLibraryService,
+    MediaLibrarySyncService,
     IntegrationSettingsService,
     MoviePilotWebhookService,
     MoviePilotReconciliationService,

@@ -7,19 +7,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
-import { HouseholdMedia, MediaRequest, MediaRequestStatus, MediaTitle } from '../entities';
+import { HouseholdMedia, MediaRequest, MediaTitle } from '../entities';
 import { MediaConnectorsService } from './media-connectors.service';
 import { MediaConnectorError } from './connectors';
 import { isUniqueViolation } from '@family/shared';
 import { MediaRequestQueryDto, CreateMediaRequestDto } from './media.dto';
-
-function connectorErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message.trim() : '';
-  return (message || '连接 MoviePilot 失败').slice(0, 1000);
-}
+import {
+  connectorErrorMessage,
+  lockRequest,
+  metadataSnapshot,
+  present,
+} from './media-requests.helpers';
 
 @Injectable()
 export class MediaRequestsService {
@@ -39,7 +40,7 @@ export class MediaRequestsService {
       order: { updatedAt: 'DESC' },
       take: 100,
     });
-    return requests.map((request) => this.present(request, user));
+    return requests.map((request) => present(request, user));
   }
 
   async create(mediaId: string, dto: CreateMediaRequestDto, user: JwtUser) {
@@ -120,7 +121,7 @@ export class MediaRequestsService {
       externalRequest = await this.connectors.requestMedia(
         user.householdId,
         connectorKey,
-        this.metadataSnapshot(reserved.mediaTitle),
+        metadataSnapshot(reserved.mediaTitle),
         reserved.id,
         reserved.season ? { season: reserved.season } : {},
       );
@@ -132,7 +133,7 @@ export class MediaRequestsService {
 
     try {
       await this.dataSource.transaction(async (manager) => {
-        const request = await this.lockRequest(manager, reserved.id, user);
+        const request = await lockRequest(manager, reserved.id, user);
         request.status = externalRequest.status;
         request.externalRequestId = externalRequest.requestId;
         request.message = externalRequest.message?.slice(0, 1000) ?? null;
@@ -199,7 +200,7 @@ export class MediaRequestsService {
 
     const title = await this.mediaTitle(current.householdMediaId, user);
     await this.dataSource.transaction(async (manager) => {
-      const request = await this.lockRequest(manager, current.id, user);
+      const request = await lockRequest(manager, current.id, user);
       if (request.status === 'completed' || request.status === 'cancelled') {
         throw new ConflictException('订阅状态已经结束，请重新载入最新状态');
       }
@@ -298,7 +299,7 @@ export class MediaRequestsService {
 
     const title = await this.mediaTitle(current.householdMediaId, user);
     await this.dataSource.transaction(async (manager) => {
-      const request = await this.lockRequest(manager, current.id, user);
+      const request = await lockRequest(manager, current.id, user);
       if (!['pending', 'processing'].includes(request.status)) {
         throw new ConflictException('订阅状态已经发生变化，请刷新后重试');
       }
@@ -327,33 +328,13 @@ export class MediaRequestsService {
   }
 
   private async get(id: string, user: JwtUser) {
-    return this.present(await this.getEntity(id, user), user);
+    return present(await this.getEntity(id, user), user);
   }
 
   private async getEntity(id: string, user: JwtUser) {
     const request = await this.mediaRequests.findOne({
       where: { id, householdId: user.householdId },
     });
-    if (!request) throw new NotFoundException('MoviePilot 订阅请求不存在');
-    return request;
-  }
-
-  private async lockRequest(
-    manager: EntityManager,
-    id: string,
-    user: JwtUser,
-  ) {
-    const request = await manager
-      .getRepository(MediaRequest)
-      .createQueryBuilder('request')
-      .innerJoinAndSelect('request.requestedBy', 'requestedBy')
-      .leftJoinAndSelect('request.cancelledBy', 'cancelledBy')
-      .where('request.id = :id AND request.householdId = :householdId', {
-        id,
-        householdId: user.householdId,
-      })
-      .setLock('pessimistic_write', undefined, ['request'])
-      .getOne();
     if (!request) throw new NotFoundException('MoviePilot 订阅请求不存在');
     return request;
   }
@@ -376,31 +357,13 @@ export class MediaRequestsService {
     return this.connectors.findRequest(
       user.householdId,
       request.connectorKey,
-      this.metadataSnapshot(title),
+      metadataSnapshot(title),
       request.season ? { season: request.season } : {},
     );
   }
 
   private externalRequestIdForPersistence(requestId: string) {
     return requestId.startsWith('media-') ? null : requestId;
-  }
-
-  private metadataSnapshot(title: MediaTitle) {
-    return {
-      type: title.type,
-      title: title.title,
-      originalTitle: title.originalTitle,
-      year: title.year,
-      overview: title.overview,
-      posterUrl: title.posterUrl,
-      metadata: title.metadata,
-      externalRefs: (title.externalRefs ?? []).map((reference) => ({
-        provider: reference.provider,
-        mediaType: reference.mediaType,
-        externalId: reference.externalId,
-        connectorKey: reference.connectorKey ?? undefined,
-      })),
-    };
   }
 
   private async failCreate(
@@ -410,7 +373,7 @@ export class MediaRequestsService {
     user: JwtUser,
   ) {
     await this.dataSource.transaction(async (manager) => {
-      const request = await this.lockRequest(manager, id, user);
+      const request = await lockRequest(manager, id, user);
       request.status = 'failed';
       request.message = message;
       request.lastSyncedAt = new Date();
@@ -433,44 +396,12 @@ export class MediaRequestsService {
 
   private async recordSyncError(id: string, message: string, user: JwtUser) {
     await this.dataSource.transaction(async (manager) => {
-      const request = await this.lockRequest(manager, id, user);
+      const request = await lockRequest(manager, id, user);
       if (request.status === 'completed' || request.status === 'cancelled') {
         return;
       }
       request.message = `同步失败：${message}`.slice(0, 1000);
       await manager.getRepository(MediaRequest).save(request);
     });
-  }
-
-  private present(request: MediaRequest, user: JwtUser) {
-    return {
-      id: request.id,
-      householdMediaId: request.householdMediaId,
-      connectorKey: request.connectorKey,
-      season: request.season,
-      status: request.status as MediaRequestStatus,
-      externalRequestId: request.externalRequestId,
-      message: request.message,
-      requestedBy: {
-        id: request.requestedBy.id,
-        name: request.requestedBy.name,
-        avatarEmoji: request.requestedBy.avatarEmoji,
-      },
-      cancelledBy: request.cancelledBy
-        ? {
-            id: request.cancelledBy.id,
-            name: request.cancelledBy.name,
-            avatarEmoji: request.cancelledBy.avatarEmoji,
-          }
-        : null,
-      canCancel:
-        ['pending', 'processing'].includes(request.status) &&
-        (request.requestedById === user.memberId ||
-          user.role === 'owner' ||
-          user.role === 'admin'),
-      lastSyncedAt: request.lastSyncedAt,
-      createdAt: request.createdAt,
-      updatedAt: request.updatedAt,
-    };
   }
 }
