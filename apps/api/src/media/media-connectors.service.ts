@@ -10,79 +10,22 @@ import {
   MediaAutomationRequest,
   MediaAutomationProvider,
   MediaExternalReference,
-  MediaLibraryCatalogItem,
   MediaLibraryMatch,
   MediaLibraryPoster,
   MediaLibraryProvider,
   MediaMetadataSnapshot,
   MediaProviderHealth,
-  MediaServerUser,
 } from './providers';
-
-export interface PublicMediaConnector {
-  key: string;
-  kind: MediaConnectorConfig['kind'];
-  name: string;
-  role: 'library' | 'automation';
-  primary: boolean;
-  state:
-    | 'disabled'
-    | 'not_configured'
-    | 'needs_credential'
-    | 'online'
-    | 'offline';
-  available: boolean;
-  message: string;
-  checkedAt: Date | null;
-}
-
-export interface PublicLibraryMatch {
-  connectorKey: string;
-  provider: 'plex' | 'emby';
-  name: string;
-  primary: boolean;
-  libraryItemId: string;
-  playbackUrl: string | null;
-  seasons: {
-    season: number;
-    episodeCount: number | null;
-  }[];
-}
-
-interface LibraryConnector {
-  config: MediaConnectorConfig;
-  provider: MediaLibraryProvider;
-}
-
-export interface MediaLibraryScan {
-  connectorKey: string;
-  provider: 'plex' | 'emby';
-  name: string;
-  primary: boolean;
-  items: MediaLibraryCatalogItem[];
-}
-
-export interface PublicMediaPlaybackUserDirectory {
-  connectorKey: string;
-  provider: 'plex' | 'emby';
-  name: string;
-  state: PublicMediaConnector['state'];
-  message: string;
-  serverId: string | null;
-  users: MediaServerUser[];
-}
-
-interface ConnectorContext {
-  configs: MediaConnectorConfig[];
-  libraries: LibraryConnector[];
-  moviePilot: MoviePilotAutomationProvider | null;
-  version: string;
-}
-
-interface TimedValue<T> {
-  expiresAt: number;
-  value: Promise<T>;
-}
+import {
+  PublicMediaConnector,
+  PublicLibraryMatch,
+  LibraryConnector,
+  MediaLibraryScan,
+  PublicMediaPlaybackUserDirectory,
+  ConnectorContext,
+  TimedValue,
+  publicStatus,
+} from './media-connectors.types';
 
 @Injectable()
 export class MediaConnectorsService {
@@ -105,13 +48,13 @@ export class MediaConnectorsService {
     return Promise.all(
       context.configs.map(async (config) => {
         if (config.enabled === false) {
-          return this.publicStatus(config, 'disabled', '此家庭已停用');
+          return publicStatus(config, 'disabled', '此家庭已停用');
         }
         if (!config.baseUrl) {
-          return this.publicStatus(config, 'not_configured', '未配置服务地址');
+          return publicStatus(config, 'not_configured', '未配置服务地址');
         }
         if (!config.credential) {
-          return this.publicStatus(
+          return publicStatus(
             config,
             'needs_credential',
             config.kind === 'plex' ? '等待配置 Token' : '等待配置 API Key',
@@ -390,24 +333,6 @@ export class MediaConnectorsService {
         ? new MoviePilotAutomationProvider(moviePilotConfig)
         : null,
       version: resolved.version,
-    };
-  }
-
-  private publicStatus(
-    config: MediaConnectorConfig,
-    state: PublicMediaConnector['state'],
-    message: string,
-  ): PublicMediaConnector {
-    return {
-      key: config.key,
-      kind: config.kind,
-      name: config.name,
-      role: connectorRole(config.kind),
-      primary: config.primary,
-      state,
-      available: false,
-      message,
-      checkedAt: null,
     };
   }
 

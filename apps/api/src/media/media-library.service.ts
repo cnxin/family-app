@@ -19,10 +19,8 @@ import {
   MediaTitle,
   MediaType,
 } from '../entities';
-import {
-  MediaConnectorsService,
-  PublicLibraryMatch,
-} from './media-connectors.service';
+import { MediaConnectorsService } from './media-connectors.service';
+import { PublicLibraryMatch } from './media-connectors.types';
 
 export interface MediaLibraryQuery {
   connectorKey?: string;
