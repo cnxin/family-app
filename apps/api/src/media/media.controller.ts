@@ -29,6 +29,7 @@ import { MediaUserMappingsService } from './media-user-mappings.service';
 import { PlaybackWebhookService } from './playback-webhook.service';
 import { ViewingHistoryService } from './viewing-history.service';
 import { MediaLibraryService } from './media-library.service';
+import { MediaLibrarySyncService } from './media-library-sync.service';
 import { MediaSourceSettingsService } from './media-source-settings.service';
 import {
   MediaQueryDto,
@@ -69,6 +70,7 @@ export class MediaController {
     private readonly connectorsService: MediaConnectorsService,
     private readonly library: MediaLibraryService,
     private readonly availability: MediaAvailabilityService,
+    private readonly librarySync: MediaLibrarySyncService,
   ) {}
 
   @Get('search')
@@ -339,7 +341,7 @@ export class MediaController {
     @Body() dto: SyncMediaLibraryDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.library.sync(dto.connectorKey, user);
+    return this.librarySync.sync(dto.connectorKey, user);
   }
 
   @Post('library/:libraryItemId/add')
