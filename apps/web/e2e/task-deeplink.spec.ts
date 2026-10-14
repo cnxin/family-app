@@ -6,7 +6,7 @@ import { apiClient, stamp } from './helpers';
 // （后端通知、日历、提醒、动态、小管家写的 targetPath；旧路径 /tasks?… 会带着查询串跳过来）。
 // 滚到那一次并高亮 2 秒；date 在两周显示范围里取那天，否则今天优先、再否则最早；处理完 task / taskId / date 一起抹。
 
-/** 没有实例行的那一次，occurrence id 是 task:<taskId>:<date>（tasks.service.ts presentOccurrence） */
+/** 没有实例行的那一次，occurrence id 是 task:<taskId>:<date>（tasks.helpers.ts presentOccurrence） */
 const occurrenceRow = (page: Page, taskId: string, date: string) =>
   page.locator(`[data-task-occurrence="task:${taskId}:${date}"]`);
 
@@ -111,7 +111,7 @@ test('消息：点「交给了你」通知（date 是第 4 天）→ 任务页�
   const title = stamp('深链改派');
   const task = await mom.post<{ id: string }>('/tasks', { title, startsOn: today, recurrence: 'daily' });
   try {
-    // tasks.service.ts updateOccurrence：创建者把某一次交给别人 → task_assigned，targetPath=/tasks?date=<dueDate>&taskId=<id>
+    // task-occurrences.service.ts updateOccurrence：创建者把某一次交给别人 → task_assigned，targetPath=/tasks?date=<dueDate>&taskId=<id>
     // 这一次因此有了实例行，id 是实例 uuid，从响应里拿
     const handed = await mom.patch<{ id: string }>(`/tasks/${task.id}/instances/${target}`, { assigneeId: dad.memberId });
     await page.goto('/schedule/notifications');

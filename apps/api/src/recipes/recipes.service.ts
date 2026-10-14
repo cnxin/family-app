@@ -10,7 +10,6 @@ import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { JwtUser } from '../auth/jwt.guard';
 import {
   Dish,
-  DishIngredient,
   DishRecipeVariant,
   DishRecipeVariantIngredient,
   DishRecipeVariantLink,
@@ -19,11 +18,16 @@ import {
   Member,
   MemberDishSkill,
 } from '../entities';
-import { VariantIngredientDto, UpsertRecipeVariantDto, UpsertDishSkillDto } from './recipes.dto';
-
-function isHouseholdAdmin(user: JwtUser) {
-  return user.role === 'owner' || user.role === 'admin';
-}
+import { UpsertRecipeVariantDto, UpsertDishSkillDto } from './recipes.dto';
+import {
+  isHouseholdAdmin,
+  presentVariant,
+  assertVariantManageable,
+  assertMember,
+  resolveIngredient,
+  ensureAuthorSkill,
+  syncLegacyDefault,
+} from './recipes.helpers';
 
 @Injectable()
 export class RecipesService {
@@ -75,25 +79,9 @@ export class RecipesService {
       ...dish,
       recipeVariants: variants
         .filter((variant) => variant.dishId === dish.id)
-        .map((variant) => this.presentVariant(variant, user)),
+        .map((variant) => presentVariant(variant, user)),
       skills: skills.filter((skill) => skill.dishId === dish.id),
     }));
-  }
-
-  private presentVariant(variant: DishRecipeVariant, user: JwtUser) {
-    variant.steps?.sort((left, right) => left.position - right.position);
-    variant.referenceLinks?.sort(
-      (left, right) => left.position - right.position,
-    );
-    variant.ingredients?.sort((left, right) =>
-      left.ingredient.name.localeCompare(right.ingredient.name, 'zh'),
-    );
-    return {
-      ...variant,
-      canManage:
-        isHouseholdAdmin(user) ||
-        (!variant.isDefault && variant.authorMemberId === user.memberId),
-    };
   }
 
   async createVariant(
@@ -112,7 +100,7 @@ export class RecipesService {
       });
       if (!dish) throw new NotFoundException('菜品不存在');
       const authorMemberId = dto.authorMemberId ?? user.memberId;
-      await this.assertMember(authorMemberId, user, manager);
+      await assertMember(authorMemberId, user, manager);
       if (authorMemberId !== user.memberId && !isHouseholdAdmin(user)) {
         throw new ForbiddenException('只能为自己创建个人做法');
       }
@@ -138,9 +126,9 @@ export class RecipesService {
       );
       await this.replaceContent(variant, dto, user.householdId, manager);
       if (variant.isDefault) {
-        await this.syncLegacyDefault(variant, manager);
+        await syncLegacyDefault(variant, manager);
       } else {
-        await this.ensureAuthorSkill(variant, manager);
+        await ensureAuthorSkill(variant, manager);
       }
       return this.loadVariant(variant.id, user, manager);
     });
@@ -164,10 +152,10 @@ export class RecipesService {
       if (!variant || variant.isArchived) {
         throw new NotFoundException('做法不存在');
       }
-      this.assertVariantManageable(variant, user);
+      assertVariantManageable(variant, user);
       if (dto.authorMemberId !== undefined) {
         const authorMemberId = dto.authorMemberId ?? user.memberId;
-        await this.assertMember(authorMemberId, user, manager);
+        await assertMember(authorMemberId, user, manager);
         if (authorMemberId !== user.memberId && !isHouseholdAdmin(user)) {
           throw new ForbiddenException('不能将做法关联给其他成员');
         }
@@ -197,7 +185,7 @@ export class RecipesService {
       }
       await variants.save(variant);
       await this.replaceContent(variant, dto, user.householdId, manager);
-      if (variant.isDefault) await this.syncLegacyDefault(variant, manager);
+      if (variant.isDefault) await syncLegacyDefault(variant, manager);
       return this.loadVariant(variant.id, user, manager);
     });
   }
@@ -208,7 +196,7 @@ export class RecipesService {
       householdId: user.householdId,
     });
     if (!variant || variant.isArchived) throw new NotFoundException('做法不存在');
-    this.assertVariantManageable(variant, user);
+    assertVariantManageable(variant, user);
     if (variant.isDefault) throw new ConflictException('家庭默认做法不能归档');
     variant.isArchived = true;
     await this.variants.save(variant);
@@ -279,56 +267,6 @@ export class RecipesService {
     return { dishId, memberId, removed: true as const };
   }
 
-  private assertVariantManageable(variant: DishRecipeVariant, user: JwtUser) {
-    if (isHouseholdAdmin(user)) return;
-    if (variant.isDefault) {
-      throw new ForbiddenException('只有家庭管理员可以维护默认做法');
-    }
-    if (variant.authorMemberId !== user.memberId) {
-      throw new ForbiddenException('只能维护自己的做法');
-    }
-  }
-
-  private async assertMember(
-    memberId: string,
-    user: JwtUser,
-    manager: EntityManager,
-  ) {
-    const member = await manager.getRepository(Member).findOneBy({
-      id: memberId,
-      householdId: user.householdId,
-    });
-    if (!member) throw new NotFoundException('家庭成员不存在');
-  }
-
-  private async resolveIngredient(
-    dto: VariantIngredientDto,
-    householdId: string,
-    manager: EntityManager,
-  ) {
-    const ingredients = manager.getRepository(Ingredient);
-    if (dto.ingredientId) {
-      const ingredient = await ingredients.findOneBy({
-        id: dto.ingredientId,
-        householdId,
-      });
-      if (!ingredient) throw new NotFoundException('食材不存在');
-      return ingredient;
-    }
-    const name = dto.name?.trim();
-    if (!name) throw new BadRequestException('食材名称不能为空');
-    const existing = await ingredients.findOneBy({ householdId, name });
-    if (existing) return existing;
-    return ingredients.save(
-      ingredients.create({
-        householdId,
-        name,
-        category: (dto.category as Ingredient['category']) || '其他',
-        defaultUnit: dto.unit.trim() || '份',
-      }),
-    );
-  }
-
   private async replaceContent(
     variant: DishRecipeVariant,
     dto: UpsertRecipeVariantDto,
@@ -379,7 +317,7 @@ export class RecipesService {
         { ingredient: Ingredient; quantity: number; unit: string }
       >();
       for (const input of dto.ingredients) {
-        const ingredient = await this.resolveIngredient(
+        const ingredient = await resolveIngredient(
           input,
           householdId,
           manager,
@@ -407,66 +345,6 @@ export class RecipesService {
     }
   }
 
-  private async ensureAuthorSkill(
-    variant: DishRecipeVariant,
-    manager: EntityManager,
-  ) {
-    if (!variant.authorMemberId) return;
-    const skills = manager.getRepository(MemberDishSkill);
-    let skill = await skills.findOneBy({
-      householdId: variant.householdId,
-      memberId: variant.authorMemberId,
-      dishId: variant.dishId,
-    });
-    if (!skill) {
-      skill = skills.create({
-        householdId: variant.householdId,
-        memberId: variant.authorMemberId,
-        dishId: variant.dishId,
-        level: 'can_cook',
-      });
-    }
-    if (!skill.preferredRecipeId) skill.preferredRecipeId = variant.id;
-    await skills.save(skill);
-  }
-
-  private async syncLegacyDefault(
-    variant: DishRecipeVariant,
-    manager: EntityManager,
-  ) {
-    const loaded = await manager.getRepository(DishRecipeVariant).findOne({
-      where: { id: variant.id },
-    });
-    if (!loaded) throw new NotFoundException('做法不存在');
-    const dishes = manager.getRepository(Dish);
-    const dishIngredients = manager.getRepository(DishIngredient);
-    const dish = await dishes.findOneBy({
-      id: loaded.dishId,
-      householdId: loaded.householdId,
-    });
-    if (!dish) throw new NotFoundException('菜品不存在');
-    dish.note = loaded.note;
-    dish.estMinutes = loaded.estMinutes;
-    dish.recipeSteps = [...(loaded.steps ?? [])]
-      .sort((left, right) => left.position - right.position)
-      .map((step) => ({ text: step.text, imageUrl: step.imageUrl }));
-    dish.referenceLinks = [...(loaded.referenceLinks ?? [])]
-      .sort((left, right) => left.position - right.position)
-      .map((link) => ({ title: link.title ?? undefined, url: link.url }));
-    await dishes.save(dish);
-    await dishIngredients.delete({ dishId: dish.id });
-    await dishIngredients.save(
-      (loaded.ingredients ?? []).map((item) =>
-        dishIngredients.create({
-          dishId: dish.id,
-          ingredientId: item.ingredientId,
-          quantity: item.quantity,
-          unit: item.unit,
-        }),
-      ),
-    );
-  }
-
   private async loadVariant(
     id: string,
     user: JwtUser,
@@ -476,6 +354,6 @@ export class RecipesService {
       where: { id, householdId: user.householdId },
     });
     if (!variant) throw new NotFoundException('做法不存在');
-    return this.presentVariant(variant, user);
+    return presentVariant(variant, user);
   }
 }

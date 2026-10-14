@@ -22,19 +22,13 @@ import {
   UpdateKnowledgeArticleDto,
   KnowledgeVersionOperationDto,
 } from './knowledge.dto';
-
-function normalizedTags(values?: string[]) {
-  const result: string[] = [];
-  const seen = new Set<string>();
-  for (const value of values ?? []) {
-    const tag = value.trim();
-    const key = tag.toLocaleLowerCase('zh-CN');
-    if (!tag || seen.has(key)) continue;
-    seen.add(key);
-    result.push(tag);
-  }
-  return result;
-}
+import {
+  normalizedTags,
+  saveRevision,
+  articleResponse,
+  revisionResponse,
+  assertCanManage,
+} from './knowledge.helpers';
 
 @Injectable()
 export class KnowledgeService {
@@ -82,11 +76,11 @@ export class KnowledgeService {
       .addOrderBy('article.updatedAt', 'DESC')
       .take(query.limit ?? 100)
       .getMany();
-    return articles.map((article) => this.articleResponse(article, user));
+    return articles.map((article) => articleResponse(article, user));
   }
 
   async detail(id: string, user: JwtUser) {
-    return this.articleResponse(await this.requireArticle(id, user.householdId), user);
+    return articleResponse(await this.requireArticle(id, user.householdId), user);
   }
 
   async listRevisions(id: string, user: JwtUser) {
@@ -96,7 +90,7 @@ export class KnowledgeService {
       order: { version: 'DESC' },
       take: 100,
     });
-    return revisions.map((revision) => this.revisionResponse(revision));
+    return revisions.map((revision) => revisionResponse(revision));
   }
 
   async create(dto: CreateKnowledgeArticleDto, user: JwtUser) {
@@ -122,7 +116,7 @@ export class KnowledgeService {
       requestFingerprint,
       user,
     );
-    if (existing) return this.articleResponse(existing, user);
+    if (existing) return articleResponse(existing, user);
 
     try {
       const id = await this.dataSource.transaction(async (manager) => {
@@ -145,7 +139,7 @@ export class KnowledgeService {
             archivedAt: null,
           }),
         );
-        await this.saveRevision(
+        await saveRevision(
           manager,
           article,
           'create',
@@ -308,7 +302,7 @@ export class KnowledgeService {
       requestFingerprint,
       user,
     );
-    if (existing) return this.articleResponse(existing, user);
+    if (existing) return articleResponse(existing, user);
 
     try {
       const articleId = await this.dataSource.transaction(async (manager) => {
@@ -330,7 +324,7 @@ export class KnowledgeService {
           })
           .getOne();
         if (!article) throw new NotFoundException('知识文章不存在');
-        this.assertCanManage(article, user);
+        assertCanManage(article, user);
         if (article.version !== dto.expectedVersion) {
           throw new ConflictException(
             `文章已更新，请刷新后重试（当前 v${article.version}）`,
@@ -341,7 +335,7 @@ export class KnowledgeService {
         article.version += 1;
         article.updatedById = user.memberId;
         const saved = await manager.getRepository(KnowledgeArticle).save(article);
-        await this.saveRevision(
+        await saveRevision(
           manager,
           saved,
           changeType,
@@ -367,37 +361,6 @@ export class KnowledgeService {
         user,
       );
     }
-  }
-
-  private async saveRevision(
-    manager: EntityManager,
-    article: KnowledgeArticle,
-    changeType: KnowledgeRevisionChangeType,
-    idempotencyKey: string,
-    requestFingerprint: string,
-    user: JwtUser,
-  ) {
-    const repository = manager.getRepository(KnowledgeArticleRevision);
-    await repository.save(
-      repository.create({
-        householdId: article.householdId,
-        articleId: article.id,
-        version: article.version,
-        changeType,
-        title: article.title,
-        category: article.category,
-        summary: article.summary,
-        content: article.content,
-        referenceUrl: article.referenceUrl,
-        tags: article.tags,
-        isPinned: article.isPinned,
-        archivedAt: article.archivedAt,
-        changedById: user.memberId,
-        changedByName: user.name,
-        idempotencyKey,
-        requestFingerprint,
-      }),
-    );
   }
 
   private async findIdempotent(
@@ -441,7 +404,7 @@ export class KnowledgeService {
         requestFingerprint,
         user,
       );
-      if (existing) return this.articleResponse(existing, user);
+      if (existing) return articleResponse(existing, user);
     }
     throw error;
   }
@@ -453,62 +416,5 @@ export class KnowledgeService {
       if (!article) throw new NotFoundException('知识文章不存在');
       return article;
     });
-  }
-
-  private assertCanManage(article: KnowledgeArticle, user: JwtUser) {
-    if (!isHouseholdManager(user) && article.createdById !== user.memberId) {
-      throw new ForbiddenException('只能维护自己创建的知识文章');
-    }
-  }
-
-  private articleResponse(article: KnowledgeArticle, user: JwtUser) {
-    return {
-      id: article.id,
-      title: article.title,
-      category: article.category,
-      summary: article.summary,
-      content: article.content,
-      referenceUrl: article.referenceUrl,
-      tags: article.tags,
-      isPinned: article.isPinned,
-      version: article.version,
-      createdBy: {
-        id: article.createdBy.id,
-        name: article.createdBy.name,
-        avatarEmoji: article.createdBy.avatarEmoji,
-      },
-      updatedBy: {
-        id: article.updatedBy.id,
-        name: article.updatedBy.name,
-        avatarEmoji: article.updatedBy.avatarEmoji,
-      },
-      archivedAt: article.archivedAt,
-      createdAt: article.createdAt,
-      updatedAt: article.updatedAt,
-      canEdit: isHouseholdManager(user) || article.createdById === user.memberId,
-      canPin: isHouseholdManager(user),
-    };
-  }
-
-  private revisionResponse(revision: KnowledgeArticleRevision) {
-    return {
-      id: revision.id,
-      version: revision.version,
-      changeType: revision.changeType,
-      title: revision.title,
-      category: revision.category,
-      summary: revision.summary,
-      content: revision.content,
-      referenceUrl: revision.referenceUrl,
-      tags: revision.tags,
-      isPinned: revision.isPinned,
-      archivedAt: revision.archivedAt,
-      changedBy: {
-        id: revision.changedBy.id,
-        name: revision.changedByName,
-        avatarEmoji: revision.changedBy.avatarEmoji,
-      },
-      createdAt: revision.createdAt,
-    };
   }
 }

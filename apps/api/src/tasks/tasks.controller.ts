@@ -12,10 +12,14 @@ import {
 } from '@family/contracts';
 import { ZodBody, ZodQuery } from '../common/zod';
 import { TasksService } from './tasks.service';
+import { TaskOccurrencesService } from './task-occurrences.service';
 
 @Controller()
 export class TasksController {
-  constructor(private readonly service: TasksService) {}
+  constructor(
+    private readonly service: TasksService,
+    private readonly occurrences: TaskOccurrencesService,
+  ) {}
 
   @Get('tasks')
   list(@ZodQuery(taskRangeQuery) query: TaskRangeQuery, @CurrentUser() user: JwtUser) {
@@ -48,6 +52,6 @@ export class TasksController {
     @ZodBody(updateTaskInstanceBody) dto: UpdateTaskInstanceBody,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updateOccurrence(taskId, dueDate, dto, user);
+    return this.occurrences.updateOccurrence(taskId, dueDate, dto, user);
   }
 }

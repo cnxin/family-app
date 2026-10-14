@@ -11,6 +11,7 @@ import {
   Notification,
 } from '../entities';
 import { TasksService } from './tasks.service';
+import { TaskOccurrencesService } from './task-occurrences.service';
 import { TasksController } from './tasks.controller';
 
 /** 把任务门面注册到内核（J1b）。放在 TasksService 之后：门面文件只引类型，不反过来 import 本文件。 */
@@ -19,10 +20,11 @@ export class TasksFacadeProvider implements OnModuleInit {
   constructor(
     private readonly registry: PluginFacadeRegistry,
     private readonly tasks: TasksService,
+    private readonly occurrences: TaskOccurrencesService,
   ) {}
 
   onModuleInit() {
-    this.registry.register('tasks', tasksFacade(this.tasks));
+    this.registry.register('tasks', tasksFacade(this.tasks, this.occurrences));
   }
 }
 
@@ -58,7 +60,7 @@ export class TasksLinkHooks implements OnModuleInit {
     ]),
   ],
   controllers: [TasksController],
-  providers: [TasksService, TasksFacadeProvider, TasksLinkHooks],
+  providers: [TasksService, TaskOccurrencesService, TasksFacadeProvider, TasksLinkHooks],
   exports: [TasksService],
 })
 export class TasksModule {}
