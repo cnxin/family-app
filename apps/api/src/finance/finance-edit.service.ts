@@ -26,7 +26,8 @@ import { ZodBody, ZodParam } from '../common/zod';
 import { FinanceAccount, FinanceCategory, FinancePosting, FinanceTransaction } from '../entities';
 import { learnMerchantRule } from './finance-merchant-rules';
 import { RECURRING_ACTOR_NAME } from './finance-recurring.service';
-import { amount, assertDate, FinanceService } from './finance.service';
+import { FinanceService } from './finance.service';
+import { amount, assertDate } from './finance.helpers';
 import { normalizeMerchant } from './import/merchant-rules';
 
 type MoneyFields = { type: 'expense' | 'income' | 'transfer'; amount: number; accountId: string; toAccountId: string | null };

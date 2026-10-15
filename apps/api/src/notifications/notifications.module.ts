@@ -23,6 +23,8 @@ import {
 } from '../entities';
 import { ExternalNotificationsController } from './external-notifications.controller';
 import { ExternalNotificationsService } from './external-notifications.service';
+import { ExternalNotificationsDispatcher } from './external-notifications.dispatcher';
+import { ExternalNotificationDeliveriesService } from './external-notification-deliveries.service';
 
 class NotificationQueryDto {
   @IsOptional()
@@ -166,7 +168,12 @@ export class NotificationsController {
     ]),
   ],
   controllers: [NotificationsController, ExternalNotificationsController],
-  providers: [NotificationsService, ExternalNotificationsService],
+  providers: [
+    NotificationsService,
+    ExternalNotificationsService,
+    ExternalNotificationsDispatcher,
+    ExternalNotificationDeliveriesService,
+  ],
   exports: [NotificationsService, ExternalNotificationsService],
 })
 export class NotificationsModule {}

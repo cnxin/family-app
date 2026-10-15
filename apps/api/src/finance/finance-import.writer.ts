@@ -5,7 +5,7 @@ import { JwtUser } from '../auth/jwt.guard';
 import { fingerprint } from '../common/fingerprint';
 import { FinanceAccount, FinanceCategory, FinancePosting, FinanceTransaction } from '../entities';
 import type { StoredPreviewRow } from './finance-import.preview';
-import { amount } from './finance.service';
+import { amount } from './finance.helpers';
 
 /** 确认时决定要导的一行：记成什么、分类、转入账户。 */
 export interface PlannedImportRow {
