@@ -15,6 +15,8 @@ import { TransactionHookRegistry } from '../system/transaction-hooks.registry';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import { pointsFacade } from './points.facade';
 import { PointsService } from './points.service';
+import { PointsRewardsService } from './points-rewards.service';
+import { PointsRedemptionsService } from './points-redemptions.service';
 import { PointsController } from './points.controller';
 
 /** 积分订阅任务的事务内钩子（J1b）：打勾记积分、取消打勾冲销，不再由任务 import PointsService。 */
@@ -61,7 +63,7 @@ export class PointsFacadeProvider implements OnModuleInit {
     ]),
   ],
   controllers: [PointsController],
-  providers: [PointsService, PointsRedemptionAttentionRule, PointsAttention, PointsTaskHooks, PointsFacadeProvider],
+  providers: [PointsService, PointsRewardsService, PointsRedemptionsService, PointsRedemptionAttentionRule, PointsAttention, PointsTaskHooks, PointsFacadeProvider],
   exports: [PointsService],
 })
 export class PointsModule {}

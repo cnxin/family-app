@@ -25,6 +25,8 @@ import {
   UploadMemoryPhotoDto,
 } from './memories.dto';
 import { MemoriesService } from './memories.service';
+import { MemoryPhotosService } from './memory-photos.service';
+import { MemoryWritesService } from './memory-writes.service';
 
 const MEMORY_PHOTO_MIME_TYPES = new Set([
   'image/gif',
@@ -35,7 +37,11 @@ const MEMORY_PHOTO_MIME_TYPES = new Set([
 
 @Controller()
 export class MemoriesController {
-  constructor(private readonly service: MemoriesService) {}
+  constructor(
+    private readonly service: MemoriesService,
+    private readonly photoService: MemoryPhotosService,
+    private readonly writes: MemoryWritesService,
+  ) {}
 
   @Get('memories')
   list(@Query() query: MemoryListQueryDto, @CurrentUser() user: JwtUser) {
@@ -49,7 +55,7 @@ export class MemoriesController {
 
   @Post('memories')
   create(@Body() dto: CreateMemoryDto, @CurrentUser() user: JwtUser) {
-    return this.service.create(dto, user);
+    return this.writes.create(dto, user);
   }
 
   @Patch('memories/:id')
@@ -58,7 +64,7 @@ export class MemoriesController {
     @Body() dto: UpdateMemoryDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.update(id, dto, user);
+    return this.writes.update(id, dto, user);
   }
 
   @Post('memories/:id/archive')
@@ -67,7 +73,7 @@ export class MemoriesController {
     @Body() dto: MemoryVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.archive(id, dto, user);
+    return this.writes.archive(id, dto, user);
   }
 
   @Post('memories/:id/restore')
@@ -76,7 +82,7 @@ export class MemoriesController {
     @Body() dto: MemoryVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.restore(id, dto, user);
+    return this.writes.restore(id, dto, user);
   }
 
   @Post('memories/:id/photos')
@@ -99,7 +105,7 @@ export class MemoriesController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.uploadPhoto(id, dto, file, user);
+    return this.photoService.uploadPhoto(id, dto, file, user);
   }
 
   @Public()
@@ -111,7 +117,7 @@ export class MemoriesController {
     @Query('signature') signature: string,
     @Res() response: Response,
   ) {
-    const content = await this.service.photoContent(
+    const content = await this.photoService.photoContent(
       memoryId,
       photoId,
       expires,

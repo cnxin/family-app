@@ -21,10 +21,16 @@ import {
 } from '@family/contracts';
 import { ZodBody, ZodQuery } from '../common/zod';
 import { PointsService } from './points.service';
+import { PointsRewardsService } from './points-rewards.service';
+import { PointsRedemptionsService } from './points-redemptions.service';
 
 @Controller()
 export class PointsController {
-  constructor(private readonly service: PointsService) {}
+  constructor(
+    private readonly service: PointsService,
+    private readonly rewardsService: PointsRewardsService,
+    private readonly redemptionsService: PointsRedemptionsService,
+  ) {}
 
   @Get('points/accounts')
   accounts(@CurrentUser() user: JwtUser) {
@@ -57,13 +63,13 @@ export class PointsController {
     @ZodQuery(rewardsQuery) query: RewardsQuery,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.listRewards(query.includeInactive === 'true', user);
+    return this.rewardsService.listRewards(query.includeInactive === 'true', user);
   }
 
   @Post('rewards')
   @RequireCapabilities('manage_points')
   createReward(@ZodBody(createRewardBody) dto: CreateRewardBody, @CurrentUser() user: JwtUser) {
-    return this.service.createReward(dto, user);
+    return this.rewardsService.createReward(dto, user);
   }
 
   @Patch('rewards/:id')
@@ -73,7 +79,7 @@ export class PointsController {
     @ZodBody(updateRewardBody) dto: UpdateRewardBody,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updateReward(id, dto, user);
+    return this.rewardsService.updateReward(id, dto, user);
   }
 
   @Post('rewards/:id/redemptions')
@@ -82,7 +88,7 @@ export class PointsController {
     @ZodBody(ledgerOperationBody) dto: LedgerOperationBody,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.redeem(id, dto, user);
+    return this.redemptionsService.redeem(id, dto, user);
   }
 
   @Get('reward-redemptions')
@@ -90,7 +96,7 @@ export class PointsController {
     @ZodQuery(redemptionQuery) query: RedemptionQuery,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.listRedemptions(query, user);
+    return this.redemptionsService.listRedemptions(query, user);
   }
 
   @Post('reward-redemptions/:id/decision')
@@ -100,7 +106,7 @@ export class PointsController {
     @ZodBody(decideRedemptionBody) dto: DecideRedemptionBody,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.decide(id, dto, user);
+    return this.redemptionsService.decide(id, dto, user);
   }
 
   @Post('reward-redemptions/:id/cancel')
@@ -109,7 +115,7 @@ export class PointsController {
     @ZodBody(ledgerOperationBody) dto: LedgerOperationBody,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.cancel(id, dto, user);
+    return this.redemptionsService.cancel(id, dto, user);
   }
 
   @Post('reward-redemptions/:id/reverse')
@@ -119,6 +125,6 @@ export class PointsController {
     @ZodBody(ledgerOperationBody) dto: LedgerOperationBody,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.reverseRedemption(id, dto, user);
+    return this.redemptionsService.reverseRedemption(id, dto, user);
   }
 }
