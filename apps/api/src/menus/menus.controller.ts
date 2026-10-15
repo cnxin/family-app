@@ -18,10 +18,14 @@ import {
   MenuQueryDto,
 } from './menus.dto';
 import { MenusService } from './menus.service';
+import { MenuKitchenService } from './menu-kitchen.service';
 
 @Controller()
 export class MenusController {
-  constructor(private readonly service: MenusService) {}
+  constructor(
+    private readonly service: MenusService,
+    private readonly kitchen: MenuKitchenService,
+  ) {}
 
   @Get('menu-dates')
   dateCounts(@Query() query: MenuDateRangeDto, @CurrentUser() user: JwtUser) {
@@ -56,7 +60,7 @@ export class MenusController {
     @Body() dto: UpdateItemDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updateItem(id, dto, user);
+    return this.kitchen.updateItem(id, dto, user);
   }
 
   @Patch('menus/:id/chef')
@@ -69,13 +73,13 @@ export class MenusController {
     if (!Object.prototype.hasOwnProperty.call(dto, 'chefId')) {
       throw new BadRequestException('需要指定主厨成员或明确设为未指定');
     }
-    return this.service.assignChef(id, dto.chefId ?? null, user);
+    return this.kitchen.assignChef(id, dto.chefId ?? null, user);
   }
 
   @Post('menus/:id/complete')
   @RequireCapabilities('update_meal_status')
   complete(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.service.complete(id, user);
+    return this.kitchen.complete(id, user);
   }
 
   @Get('menus/:id/events')
