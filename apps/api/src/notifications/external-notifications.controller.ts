@@ -27,10 +27,9 @@ import {
   NotificationDeliveryStatus,
   NotificationModule,
 } from '../entities';
-import {
-  ExternalNotificationsService,
-  UpdateNotificationChannelInput,
-} from './external-notifications.service';
+import { ExternalNotificationsService } from './external-notifications.service';
+import { UpdateNotificationChannelInput } from './external-notifications.helpers';
+import { ExternalNotificationDeliveriesService } from './external-notification-deliveries.service';
 
 const MODULES: NotificationModule[] = [
   'menu',
@@ -115,7 +114,10 @@ class NotificationDeliveryQueryDto {
 
 @Controller()
 export class ExternalNotificationsController {
-  constructor(private readonly service: ExternalNotificationsService) {}
+  constructor(
+    private readonly service: ExternalNotificationsService,
+    private readonly deliveriesService: ExternalNotificationDeliveriesService,
+  ) {}
 
   @Get('notification-channels')
   listChannels(@CurrentUser() user: JwtUser) {
@@ -173,7 +175,7 @@ export class ExternalNotificationsController {
     @Query() query: NotificationDeliveryQueryDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.listDeliveries(query.status, user);
+    return this.deliveriesService.listDeliveries(query.status, user);
   }
 
   @Post('notification-deliveries/:id/retry')
@@ -181,6 +183,6 @@ export class ExternalNotificationsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.retryDelivery(id, user);
+    return this.deliveriesService.retryDelivery(id, user);
   }
 }
