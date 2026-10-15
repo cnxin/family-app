@@ -1,13 +1,14 @@
 import type { FinanceFacade, FinanceSummary } from '@family/contracts';
 import { fromPluginTransaction } from '../system/plugin-facades.registry';
-import type { CreateFinanceTransactionDto } from './finance.module';
+import type { CreateFinanceTransactionDto } from './finance.dto';
 import type { FinanceService } from './finance.service';
+import type { FinanceBudgetsService } from './finance-budgets.service';
 
 /** 财务门面的实现（J4.1，接口见 contracts/plugins/finance.facade.ts），FinanceModule 启动时注册。 */
-export function financeFacade(finance: FinanceService): FinanceFacade {
+export function financeFacade(finance: FinanceService, budgets: FinanceBudgetsService): FinanceFacade {
   return {
     // 与 GET /finance/summary 返回同一个对象（实体里的 Date 序列化后就是契约里的 ISO 字符串）
-    summary: (month, actor) => finance.summary(month, actor) as unknown as Promise<FinanceSummary>,
+    summary: (month, actor) => budgets.summary(month, actor) as unknown as Promise<FinanceSummary>,
     previewTransaction: (input, actor) =>
       finance.previewTransaction(input as CreateFinanceTransactionDto, actor),
     async createTransaction(transaction, input, actor, source) {

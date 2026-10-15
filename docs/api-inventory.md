@@ -174,15 +174,15 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| GET | `/finance/accounts` | `FinanceController.accounts` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| POST | `/finance/accounts` | `FinanceController.createAccount` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| PATCH | `/finance/accounts/:id` | `FinanceController.updateAccount` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| GET | `/finance/budgets` | `FinanceController.budgets` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| PUT | `/finance/budgets` | `FinanceController.upsertBudget` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| DELETE | `/finance/budgets/:id` | `FinanceController.deleteBudget` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| GET | `/finance/categories` | `FinanceController.categories` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| POST | `/finance/categories` | `FinanceController.createCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| PATCH | `/finance/categories/:id` | `FinanceController.updateCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| GET | `/finance/accounts` | `FinanceController.accounts` | `view_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| POST | `/finance/accounts` | `FinanceController.createAccount` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| PATCH | `/finance/accounts/:id` | `FinanceController.updateAccount` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| GET | `/finance/budgets` | `FinanceController.budgets` | `view_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| PUT | `/finance/budgets` | `FinanceController.upsertBudget` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| DELETE | `/finance/budgets/:id` | `FinanceController.deleteBudget` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| GET | `/finance/categories` | `FinanceController.categories` | `view_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| POST | `/finance/categories` | `FinanceController.createCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| PATCH | `/finance/categories/:id` | `FinanceController.updateCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
 | GET | `/finance/imports` | `FinanceImportController.list` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
 | POST | `/finance/imports` | `FinanceImportController.FileInterceptor` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
 | GET | `/finance/imports/:id` | `FinanceImportController.preview` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
@@ -196,13 +196,13 @@
 | POST | `/finance/recurring/:id/pay` | `FinanceRecurringController.pay` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
 | POST | `/finance/recurring/:id/retry` | `FinanceRecurringController.retry` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
 | POST | `/finance/screenshot-recognize` | `FinanceScreenshotController.FileInterceptor` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-screenshot.controller.ts` |
-| GET | `/finance/summary` | `FinanceController.summary` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| GET | `/finance/transactions` | `FinanceController.transactions` | `view_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
-| POST | `/finance/transactions` | `FinanceController.createTransaction` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| GET | `/finance/summary` | `FinanceController.summary` | `view_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| GET | `/finance/transactions` | `FinanceController.transactions` | `view_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
+| POST | `/finance/transactions` | `FinanceController.createTransaction` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
 | PATCH | `/finance/transactions/:id` | `FinanceEditController.update` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-edit.service.ts` |
 | DELETE | `/finance/transactions/:id` | `FinanceEditController.remove` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-edit.service.ts` |
 | GET | `/finance/transactions/:id/attachment` | `FinanceScreenshotController.attachment` | `view_finance` | ✓ | `apps/api/src/finance/finance-screenshot.controller.ts` |
-| POST | `/finance/transactions/:id/reverse` | `FinanceController.reverseTransaction` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.module.ts` |
+| POST | `/finance/transactions/:id/reverse` | `FinanceController.reverseTransaction` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
 | POST | `/finance/transactions/batch` | `FinanceEditController.batch` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-edit.service.ts` |
 
 ## guests（21）
