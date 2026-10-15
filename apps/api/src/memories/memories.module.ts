@@ -4,6 +4,8 @@ import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import { memoriesFacade } from './memories.facade';
 import { FamilyMemory, FamilyMemoryOperation, FamilyMemoryPhoto } from '../entities';
 import { MemoriesService } from './memories.service';
+import { MemoryPhotosService } from './memory-photos.service';
+import { MemoryWritesService } from './memory-writes.service';
 import { MemoriesController } from './memories.controller';
 
 /** 把回忆门面注册到内核（J4.1）：小管家读最近回忆走这里。 */
@@ -28,7 +30,7 @@ export class MemoriesFacadeProvider implements OnModuleInit {
     ]),
   ],
   controllers: [MemoriesController],
-  providers: [MemoriesService, MemoriesFacadeProvider],
+  providers: [MemoriesService, MemoryPhotosService, MemoryWritesService, MemoriesFacadeProvider],
   exports: [MemoriesService],
 })
 export class MemoriesModule {}
