@@ -22,6 +22,9 @@ import {
   VisitGuest,
 } from '../entities';
 import { GuestsService } from './guests.service';
+import { GuestPortalService } from './guest-portal.service';
+import { GuestWifiProfilesService } from './guest-wifi-profiles.service';
+import { GuestInvitationsService } from './guest-invitations.service';
 import { GuestsController } from './guests.controller';
 
 /** 访客门面（J4 第四批：小管家读工具 get_upcoming_visits）。 */
@@ -41,7 +44,7 @@ export class GuestsFacadeProvider implements OnModuleInit {
 @Module({
   imports: [TodayModule, TypeOrmModule.forFeature([Guest, Visit, VisitGuest, GuestInvitation, GuestMealRequest, GuestWifiProfile, GuestPollVote, Poll, PollOption, Menu, MenuItem, Member, Notification, HouseholdActivityLog])],
   controllers: [GuestsController],
-  providers: [GuestsService, GuestMenuAttentionRule, GuestMealRequestAttentionRule, GuestsAttention, GuestsFacadeProvider],
+  providers: [GuestsService, GuestPortalService, GuestWifiProfilesService, GuestInvitationsService, GuestMenuAttentionRule, GuestMealRequestAttentionRule, GuestsAttention, GuestsFacadeProvider],
   exports: [GuestsService],
 })
 export class GuestsModule {}

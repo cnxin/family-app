@@ -26,10 +26,18 @@ import {
   UpdateGuestWifiProfileDto,
 } from './guests.dto';
 import { GuestsService } from './guests.service';
+import { GuestPortalService } from './guest-portal.service';
+import { GuestWifiProfilesService } from './guest-wifi-profiles.service';
+import { GuestInvitationsService } from './guest-invitations.service';
 
 @Controller()
 export class GuestsController {
-  constructor(private readonly service: GuestsService) {}
+  constructor(
+    private readonly service: GuestsService,
+    private readonly portal: GuestPortalService,
+    private readonly wifiProfiles: GuestWifiProfilesService,
+    private readonly invitations: GuestInvitationsService,
+  ) {}
 
   @Get('guests')
   @RequireCapabilities('manage_guests')
@@ -58,19 +66,19 @@ export class GuestsController {
   @Get('guest-wifi-profiles')
   @RequireCapabilities('manage_guests')
   listGuestWifiProfiles(@CurrentUser() user: JwtUser) {
-    return this.service.listGuestWifiProfiles(user);
+    return this.wifiProfiles.listGuestWifiProfiles(user);
   }
 
   @Post('guest-wifi-profiles')
   @RequireCapabilities('manage_guests')
   createGuestWifiProfile(@Body() dto: CreateGuestWifiProfileDto, @CurrentUser() user: JwtUser) {
-    return this.service.createGuestWifiProfile(dto, user);
+    return this.wifiProfiles.createGuestWifiProfile(dto, user);
   }
 
   @Patch('guest-wifi-profiles/:id')
   @RequireCapabilities('manage_guests')
   updateGuestWifiProfile(@Param('id') id: string, @Body() dto: UpdateGuestWifiProfileDto, @CurrentUser() user: JwtUser) {
-    return this.service.updateGuestWifiProfile(id, dto, user);
+    return this.wifiProfiles.updateGuestWifiProfile(id, dto, user);
   }
 
   @Get('visits')
@@ -97,31 +105,31 @@ export class GuestsController {
   @Post('visits/:id/invitations')
   @RequireCapabilities('manage_guests')
   createInvitation(@Param('id') id: string, @Body() dto: CreateGuestInvitationDto, @CurrentUser() user: JwtUser) {
-    return this.service.createInvitation(id, dto, user);
+    return this.invitations.createInvitation(id, dto, user);
   }
 
   @Delete('guest-invitations/:id')
   @RequireCapabilities('manage_guests')
   revokeInvitation(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.service.revokeInvitation(id, user);
+    return this.invitations.revokeInvitation(id, user);
   }
 
   @Public()
   @Get('guest-invitations/:token')
   publicInvitation(@Param('token') token: string) {
-    return this.service.publicInvitation(token);
+    return this.portal.publicInvitation(token);
   }
 
   @Public()
   @Post('guest-invitations/:token/response')
   respond(@Param('token') token: string, @Body() dto: GuestResponseDto) {
-    return this.service.respond(token, dto);
+    return this.portal.respond(token, dto);
   }
 
   @Public()
   @Get('guest-invitations/:token/movie-polls')
   publicMoviePolls(@Param('token') token: string) {
-    return this.service.publicMoviePolls(token);
+    return this.portal.publicMoviePolls(token);
   }
 
   @Public()
@@ -131,31 +139,31 @@ export class GuestsController {
     @Param('pollId') pollId: string,
     @Body() dto: GuestPollVoteDto,
   ) {
-    return this.service.voteMoviePoll(token, pollId, dto);
+    return this.portal.voteMoviePoll(token, pollId, dto);
   }
 
   @Public()
   @Get('guest-invitations/:token/meal-requests')
   publicMealRequests(@Param('token') token: string) {
-    return this.service.publicMealRequests(token);
+    return this.portal.publicMealRequests(token);
   }
 
   @Public()
   @Get('guest-invitations/:token/meal-options')
   publicMealOptions(@Param('token') token: string) {
-    return this.service.publicMealOptions(token);
+    return this.portal.publicMealOptions(token);
   }
 
   @Public()
   @Post('guest-invitations/:token/meal-options/:menuItemId/request')
   claimMealOption(@Param('token') token: string, @Param('menuItemId') menuItemId: string) {
-    return this.service.claimMealOption(token, menuItemId);
+    return this.portal.claimMealOption(token, menuItemId);
   }
 
   @Public()
   @Post('guest-invitations/:token/meal-requests')
   submitMealRequest(@Param('token') token: string, @Body() dto: GuestMealRequestDto) {
-    return this.service.submitMealRequest(token, dto);
+    return this.portal.submitMealRequest(token, dto);
   }
 
   @Patch('guest-meal-requests/:id')
