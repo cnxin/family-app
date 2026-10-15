@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,61 +9,30 @@ import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
 import {
-  Member,
-  Reminder,
   TravelChecklistItem,
-  TravelChecklistStatus,
   TravelOperation,
   TravelPackingTemplate,
-  TravelPackingTemplateItem,
   TravelPlan,
   TravelTemplateApplication,
 } from '../entities';
 import { rawFingerprint as fingerprint } from '../common/fingerprint';
-import { isHouseholdManager, normalizedRequiredText, normalizedText } from '@family/shared';
+import { normalizedRequiredText, normalizedText } from '@family/shared';
 import {
   TravelListQueryDto,
-  TravelTemplateListQueryDto,
   CreateTravelPlanDto,
   UpdateTravelPlanDto,
   TravelVersionOperationDto,
-  CreateTravelItemDto,
-  UpdateTravelItemDto,
-  TravelItemVersionOperationDto,
-  TravelTemplateItemDto,
-  CreateTravelTemplateDto,
-  UpdateTravelTemplateDto,
-  ApplyTravelTemplateDto,
 } from './travel.dto';
-
-function parseDateOnly(value: string, label: string) {
-  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-    !Number.isFinite(timestamp) ||
-    new Date(timestamp).toISOString().slice(0, 10) !== value
-  ) {
-    throw new BadRequestException(`${label}不是有效日期`);
-  }
-  return timestamp;
-}
-
-function assertDateRange(startDate: string, endDate: string) {
-  if (parseDateOnly(startDate, '出发日期') > parseDateOnly(endDate, '返程日期')) {
-    throw new BadRequestException('返程日期不能早于出发日期');
-  }
-  const days = (Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) / 86_400_000;
-  if (days > 730) throw new BadRequestException('单个出行计划最长为 731 天');
-}
-
-function normalizedTemplateItems(items: TravelTemplateItemDto[]) {
-  return items.map((item, index) => ({
-    title: normalizedRequiredText(item.title, `第 ${index + 1} 项`),
-    category: item.category,
-    quantity: item.quantity ?? 1,
-    sortOrder: index,
-  }));
-}
+import {
+  assertDateRange,
+  lockPlan,
+  assertCanManagePlan,
+  assertPlanActionable,
+  cancelScheduledReminders,
+  saveOperation,
+  planResponse,
+  templateResponse,
+} from './travel.helpers';
 
 @Injectable()
 export class TravelService {
@@ -106,7 +74,7 @@ export class TravelService {
       .orderBy('plan.startDate', status === 'active' ? 'ASC' : 'DESC')
       .addOrderBy('plan.createdAt', 'DESC')
       .getMany();
-    return plans.map((plan) => this.planResponse(plan, user));
+    return plans.map((plan) => planResponse(plan, user));
   }
 
   async detail(id: string, user: JwtUser) {
@@ -114,7 +82,7 @@ export class TravelService {
     const applications = await this.dataSource
       .getRepository(TravelTemplateApplication)
       .findBy({ householdId: user.householdId, planId: id });
-    return this.planResponse(
+    return planResponse(
       plan,
       user,
       applications.map((application) => application.templateId),
@@ -153,7 +121,7 @@ export class TravelService {
             archivedAt: null,
           }),
         );
-        await this.saveOperation(manager, user, {
+        await saveOperation(manager, user, {
           operation: 'plan_create',
           targetType: 'plan',
           targetId: plan.id,
@@ -199,7 +167,7 @@ export class TravelService {
       { operation: 'plan_update', planId: id, ...fields },
       user,
       (plan) => {
-        this.assertPlanActionable(plan);
+        assertPlanActionable(plan);
         const startDate = fields.startDate ?? plan.startDate;
         const endDate = fields.endDate ?? plan.endDate;
         assertDateRange(startDate, endDate);
@@ -217,7 +185,7 @@ export class TravelService {
       { operation: 'plan_complete', planId: id },
       user,
       async (plan, manager) => {
-        this.assertPlanActionable(plan);
+        assertPlanActionable(plan);
         const pending = await manager.getRepository(TravelChecklistItem).count({
           where: {
             householdId: user.householdId,
@@ -232,7 +200,7 @@ export class TravelService {
         plan.status = 'completed';
         plan.completedById = user.memberId;
         plan.completedAt = new Date();
-        await this.cancelScheduledReminders(manager, plan.id, 'travel_completed');
+        await cancelScheduledReminders(manager, plan.id, 'travel_completed');
       },
       '完成',
     );
@@ -264,9 +232,9 @@ export class TravelService {
       { operation: 'plan_cancel', planId: id },
       user,
       async (plan, manager) => {
-        this.assertPlanActionable(plan);
+        assertPlanActionable(plan);
         plan.status = 'cancelled';
-        await this.cancelScheduledReminders(manager, plan.id, 'travel_cancelled');
+        await cancelScheduledReminders(manager, plan.id, 'travel_cancelled');
       },
       '取消',
     );
@@ -282,7 +250,7 @@ export class TravelService {
       async (plan, manager) => {
         if (plan.archivedAt) throw new ConflictException('行程已经归档');
         plan.archivedAt = new Date();
-        await this.cancelScheduledReminders(manager, plan.id, 'travel_archived');
+        await cancelScheduledReminders(manager, plan.id, 'travel_archived');
       },
       '归档',
     );
@@ -301,476 +269,6 @@ export class TravelService {
       },
       '恢复',
     );
-  }
-
-  async createItem(planId: string, dto: CreateTravelItemDto, user: JwtUser) {
-    const payload = {
-      title: normalizedRequiredText(dto.title, '清单项'),
-      category: dto.category,
-      quantity: dto.quantity ?? 1,
-      note: normalizedText(dto.note),
-      sortOrder: dto.sortOrder ?? 0,
-      assignedMemberId: dto.assignedMemberId ?? null,
-    };
-    const key = normalizedRequiredText(dto.idempotencyKey, '幂等键');
-    const requestFingerprint = fingerprint({
-      operation: 'item_create',
-      planId,
-      ...payload,
-    });
-    const existing = await this.findOperation(key, requestFingerprint, user);
-    if (existing) return this.operationResult(existing, user);
-
-    try {
-      const resultPlanId = await this.dataSource.transaction(async (manager) => {
-        const duplicate = await this.findOperation(key, requestFingerprint, user, manager);
-        if (duplicate) return duplicate.planId!;
-        const plan = await this.lockPlan(planId, user, manager);
-        this.assertPlanActionable(plan);
-        await this.requireAssignedMember(payload.assignedMemberId, user, manager);
-        const repository = manager.getRepository(TravelChecklistItem);
-        const item = await repository.save(
-          repository.create({
-            householdId: user.householdId,
-            planId: plan.id,
-            ...payload,
-            status: 'pending',
-            version: 1,
-            completedById: null,
-            completedAt: null,
-            createdById: user.memberId,
-            updatedById: user.memberId,
-            templateApplicationId: null,
-            sourceTemplateItemId: null,
-            archivedAt: null,
-          }),
-        );
-        await this.saveOperation(manager, user, {
-          operation: 'item_create',
-          targetType: 'item',
-          targetId: item.id,
-          planId: plan.id,
-          key,
-          requestFingerprint,
-          metadata: { version: item.version },
-        });
-        return plan.id;
-      });
-      return this.detail(resultPlanId, user);
-    } catch (error) {
-      return this.resolveRace(error, key, requestFingerprint, user);
-    }
-  }
-
-  async updateItem(
-    planId: string,
-    itemId: string,
-    dto: UpdateTravelItemDto,
-    user: JwtUser,
-  ) {
-    const fields = {
-      ...(dto.title !== undefined
-        ? { title: normalizedRequiredText(dto.title, '清单项') }
-        : {}),
-      ...(dto.category !== undefined ? { category: dto.category } : {}),
-      ...(dto.quantity !== undefined ? { quantity: dto.quantity } : {}),
-      ...(dto.note !== undefined ? { note: normalizedText(dto.note) } : {}),
-      ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
-      ...(dto.assignedMemberId !== undefined
-        ? { assignedMemberId: dto.assignedMemberId ?? null }
-        : {}),
-    };
-    if (!Object.keys(fields).length) {
-      throw new BadRequestException('至少提供一个需要更新的字段');
-    }
-    return this.mutateItem(
-      planId,
-      itemId,
-      dto,
-      'item_update',
-      { operation: 'item_update', planId, itemId, ...fields },
-      user,
-      async (item, _plan, manager) => {
-        await this.requireAssignedMember(
-          fields.assignedMemberId === undefined
-            ? item.assignedMemberId
-            : fields.assignedMemberId,
-          user,
-          manager,
-        );
-        Object.assign(item, fields);
-      },
-    );
-  }
-
-  completeItem(
-    planId: string,
-    itemId: string,
-    dto: TravelItemVersionOperationDto,
-    user: JwtUser,
-  ) {
-    return this.mutateItem(
-      planId,
-      itemId,
-      dto,
-      'item_complete',
-      { operation: 'item_complete', planId, itemId },
-      user,
-      (item) => {
-        if (item.status === 'completed') throw new ConflictException('清单项已经完成');
-        item.status = 'completed';
-        item.completedById = user.memberId;
-        item.completedAt = new Date();
-      },
-    );
-  }
-
-  restoreItem(
-    planId: string,
-    itemId: string,
-    dto: TravelItemVersionOperationDto,
-    user: JwtUser,
-  ) {
-    return this.mutateItem(
-      planId,
-      itemId,
-      dto,
-      'item_restore',
-      { operation: 'item_restore', planId, itemId },
-      user,
-      (item) => {
-        if (item.status === 'pending') throw new ConflictException('清单项已经是待处理状态');
-        item.status = 'pending';
-        item.completedById = null;
-        item.completedAt = null;
-      },
-    );
-  }
-
-  skipItem(
-    planId: string,
-    itemId: string,
-    dto: TravelItemVersionOperationDto,
-    user: JwtUser,
-  ) {
-    return this.mutateItem(
-      planId,
-      itemId,
-      dto,
-      'item_skip',
-      { operation: 'item_skip', planId, itemId },
-      user,
-      (item) => {
-        if (item.status === 'skipped') throw new ConflictException('清单项已经跳过');
-        item.status = 'skipped';
-        item.completedById = null;
-        item.completedAt = null;
-      },
-    );
-  }
-
-  archiveItem(
-    planId: string,
-    itemId: string,
-    dto: TravelItemVersionOperationDto,
-    user: JwtUser,
-  ) {
-    return this.mutateItem(
-      planId,
-      itemId,
-      dto,
-      'item_archive',
-      { operation: 'item_archive', planId, itemId },
-      user,
-      (item, plan) => {
-        this.assertCanManagePlan(plan, user);
-        if (item.archivedAt) throw new ConflictException('清单项已经移除');
-        item.archivedAt = new Date();
-      },
-    );
-  }
-
-  async listTemplates(query: TravelTemplateListQueryDto, user: JwtUser) {
-    const status = query.status ?? 'active';
-    const builder = this.templates
-      .createQueryBuilder('template')
-      .leftJoinAndSelect('template.createdBy', 'createdBy')
-      .leftJoinAndSelect('template.updatedBy', 'updatedBy')
-      .leftJoinAndSelect('template.items', 'item')
-      .where('template.householdId = :householdId', {
-        householdId: user.householdId,
-      });
-    if (status === 'active') builder.andWhere('template.archivedAt IS NULL');
-    if (status === 'archived') builder.andWhere('template.archivedAt IS NOT NULL');
-    const templates = await builder
-      .orderBy('template.updatedAt', 'DESC')
-      .addOrderBy('item.sortOrder', 'ASC')
-      .getMany();
-    return templates.map((template) => this.templateResponse(template, user));
-  }
-
-  async createTemplate(dto: CreateTravelTemplateDto, user: JwtUser) {
-    const payload = {
-      title: normalizedRequiredText(dto.title, '模板名称'),
-      description: normalizedText(dto.description),
-      items: normalizedTemplateItems(dto.items),
-    };
-    const key = normalizedRequiredText(dto.idempotencyKey, '幂等键');
-    const requestFingerprint = fingerprint({ operation: 'template_create', ...payload });
-    const existing = await this.findOperation(key, requestFingerprint, user);
-    if (existing) return this.operationResult(existing, user);
-
-    try {
-      const templateId = await this.dataSource.transaction(async (manager) => {
-        const duplicate = await this.findOperation(key, requestFingerprint, user, manager);
-        if (duplicate) return duplicate.targetId;
-        const repository = manager.getRepository(TravelPackingTemplate);
-        const template = await repository.save(
-          repository.create({
-            householdId: user.householdId,
-            title: payload.title,
-            description: payload.description,
-            version: 1,
-            createdById: user.memberId,
-            updatedById: user.memberId,
-            archivedAt: null,
-          }),
-        );
-        await manager.getRepository(TravelPackingTemplateItem).save(
-          payload.items.map((item) => ({
-            ...item,
-            householdId: user.householdId,
-            templateId: template.id,
-          })),
-        );
-        await this.saveOperation(manager, user, {
-          operation: 'template_create',
-          targetType: 'template',
-          targetId: template.id,
-          planId: null,
-          key,
-          requestFingerprint,
-          metadata: { version: 1, itemCount: payload.items.length },
-        });
-        await recordActivity(manager, user, {
-          module: 'travel',
-          action: 'travel_template_created',
-          summary: `${user.name}创建了出行模板「${template.title}」`,
-          targetPath: '/travel?view=templates',
-          metadata: { templateId: template.id, itemCount: payload.items.length },
-        });
-        return template.id;
-      });
-      return this.templateDetail(templateId, user);
-    } catch (error) {
-      return this.resolveRace(error, key, requestFingerprint, user);
-    }
-  }
-
-  async updateTemplate(
-    id: string,
-    dto: UpdateTravelTemplateDto,
-    user: JwtUser,
-  ) {
-    const fields = {
-      ...(dto.title !== undefined
-        ? { title: normalizedRequiredText(dto.title, '模板名称') }
-        : {}),
-      ...(dto.description !== undefined
-        ? { description: normalizedText(dto.description) }
-        : {}),
-      ...(dto.items !== undefined
-        ? { items: normalizedTemplateItems(dto.items) }
-        : {}),
-    };
-    if (!Object.keys(fields).length) {
-      throw new BadRequestException('至少提供一个需要更新的字段');
-    }
-    return this.mutateTemplate(
-      id,
-      dto,
-      'template_update',
-      { operation: 'template_update', templateId: id, ...fields },
-      user,
-      async (template, manager) => {
-        if (template.archivedAt) throw new ConflictException('已归档模板需要先恢复');
-        if (fields.title !== undefined) template.title = fields.title;
-        if (fields.description !== undefined) template.description = fields.description;
-        if (fields.items) {
-          await manager.getRepository(TravelPackingTemplateItem).delete({
-            householdId: user.householdId,
-            templateId: template.id,
-          });
-          await manager.getRepository(TravelPackingTemplateItem).save(
-            fields.items.map((item) => ({
-              ...item,
-              householdId: user.householdId,
-              templateId: template.id,
-            })),
-          );
-        }
-      },
-    );
-  }
-
-  archiveTemplate(id: string, dto: TravelVersionOperationDto, user: JwtUser) {
-    return this.mutateTemplate(
-      id,
-      dto,
-      'template_archive',
-      { operation: 'template_archive', templateId: id },
-      user,
-      (template) => {
-        if (template.archivedAt) throw new ConflictException('模板已经归档');
-        template.archivedAt = new Date();
-      },
-    );
-  }
-
-  restoreTemplate(id: string, dto: TravelVersionOperationDto, user: JwtUser) {
-    return this.mutateTemplate(
-      id,
-      dto,
-      'template_restore',
-      { operation: 'template_restore', templateId: id },
-      user,
-      (template) => {
-        if (!template.archivedAt) throw new ConflictException('模板当前未归档');
-        template.archivedAt = null;
-      },
-    );
-  }
-
-  async applyTemplate(
-    planId: string,
-    templateId: string,
-    dto: ApplyTravelTemplateDto,
-    user: JwtUser,
-  ) {
-    const key = normalizedRequiredText(dto.idempotencyKey, '幂等键');
-    const requestFingerprint = fingerprint({
-      operation: 'template_apply',
-      planId,
-      templateId,
-      expectedPlanVersion: dto.expectedPlanVersion,
-      expectedTemplateVersion: dto.expectedTemplateVersion,
-    });
-    const existing = await this.findOperation(key, requestFingerprint, user);
-    if (existing) return this.operationResult(existing, user);
-
-    try {
-      const resultPlanId = await this.dataSource.transaction(async (manager) => {
-        const duplicate = await this.findOperation(key, requestFingerprint, user, manager);
-        if (duplicate) return duplicate.planId!;
-        const plan = await this.lockPlan(planId, user, manager);
-        this.assertCanManagePlan(plan, user);
-        this.assertPlanActionable(plan);
-        if (plan.version !== dto.expectedPlanVersion) {
-          throw new ConflictException(`行程已更新，请刷新后重试（当前 v${plan.version}）`);
-        }
-        const template = await manager
-          .getRepository(TravelPackingTemplate)
-          .createQueryBuilder('template')
-          .leftJoinAndSelect('template.items', 'item')
-          .where('template.id = :templateId', { templateId })
-          .andWhere('template.householdId = :householdId', {
-            householdId: user.householdId,
-          })
-          .setLock('pessimistic_write', undefined, ['template'])
-          .getOne();
-        if (!template) throw new NotFoundException('出行模板不存在');
-        if (template.archivedAt) throw new ConflictException('已归档模板不能应用');
-        if (template.version !== dto.expectedTemplateVersion) {
-          throw new ConflictException(
-            `模板已更新，请刷新后重试（当前 v${template.version}）`,
-          );
-        }
-        const prior = await manager.getRepository(TravelTemplateApplication).findOneBy({
-          householdId: user.householdId,
-          planId,
-          templateId,
-        });
-        if (prior) throw new ConflictException('这个模板已经应用到当前行程');
-
-        const applicationRepository = manager.getRepository(TravelTemplateApplication);
-        const application = await applicationRepository.save(
-          applicationRepository.create({
-            householdId: user.householdId,
-            planId,
-            templateId,
-            templateVersion: template.version,
-            appliedById: user.memberId,
-          }),
-        );
-        const rawMax = await manager
-          .getRepository(TravelChecklistItem)
-          .createQueryBuilder('item')
-          .select('COALESCE(MAX(item.sortOrder), -1)', 'max')
-          .where('item.planId = :planId', { planId })
-          .andWhere('item.householdId = :householdId', {
-            householdId: user.householdId,
-          })
-          .getRawOne<{ max: string }>();
-        const startOrder = Number(rawMax?.max ?? -1) + 1;
-        const sortedItems = [...template.items].sort(
-          (left, right) => left.sortOrder - right.sortOrder,
-        );
-        await manager.getRepository(TravelChecklistItem).save(
-          sortedItems.map((item, index) => ({
-            householdId: user.householdId,
-            planId,
-            title: item.title,
-            category: item.category,
-            quantity: item.quantity,
-            note: null,
-            sortOrder: startOrder + index,
-            status: 'pending' as TravelChecklistStatus,
-            version: 1,
-            assignedMemberId: null,
-            completedById: null,
-            completedAt: null,
-            createdById: user.memberId,
-            updatedById: user.memberId,
-            templateApplicationId: application.id,
-            sourceTemplateItemId: item.id,
-            archivedAt: null,
-          })),
-        );
-        plan.version += 1;
-        plan.updatedById = user.memberId;
-        await manager.getRepository(TravelPlan).save(plan);
-        await this.saveOperation(manager, user, {
-          operation: 'template_apply',
-          targetType: 'application',
-          targetId: application.id,
-          planId,
-          key,
-          requestFingerprint,
-          metadata: {
-            planVersion: plan.version,
-            templateId,
-            templateVersion: template.version,
-            itemCount: sortedItems.length,
-          },
-        });
-        await recordActivity(manager, user, {
-          module: 'travel',
-          action: 'travel_template_applied',
-          summary: `${user.name}将模板「${template.title}」应用到「${plan.title}」`,
-          targetPath: `/travel?planId=${plan.id}`,
-          metadata: { planId, templateId, itemCount: sortedItems.length },
-        });
-        return plan.id;
-      });
-      return this.detail(resultPlanId, user);
-    } catch (error) {
-      const constraint = (error as { driverError?: { constraint?: string } })
-        ?.driverError?.constraint;
-      if (constraint === 'UQ_travel_template_applications_plan_template') {
-        throw new ConflictException('这个模板已经应用到当前行程');
-      }
-      return this.resolveRace(error, key, requestFingerprint, user);
-    }
   }
 
   private async mutatePlan(
@@ -793,8 +291,8 @@ export class TravelService {
       const planId = await this.dataSource.transaction(async (manager) => {
         const duplicate = await this.findOperation(key, requestFingerprint, user, manager);
         if (duplicate) return duplicate.targetId;
-        const plan = await this.lockPlan(id, user, manager);
-        this.assertCanManagePlan(plan, user);
+        const plan = await lockPlan(id, user, manager);
+        assertCanManagePlan(plan, user);
         if (plan.version !== dto.expectedVersion) {
           throw new ConflictException(`行程已更新，请刷新后重试（当前 v${plan.version}）`);
         }
@@ -802,7 +300,7 @@ export class TravelService {
         plan.version += 1;
         plan.updatedById = user.memberId;
         await manager.getRepository(TravelPlan).save(plan);
-        await this.saveOperation(manager, user, {
+        await saveOperation(manager, user, {
           operation,
           targetType: 'plan',
           targetId: plan.id,
@@ -826,131 +324,6 @@ export class TravelService {
     }
   }
 
-  private async mutateItem(
-    planId: string,
-    itemId: string,
-    dto: TravelItemVersionOperationDto,
-    operation: string,
-    fingerprintPayload: Record<string, unknown>,
-    user: JwtUser,
-    apply: (
-      item: TravelChecklistItem,
-      plan: TravelPlan,
-      manager: EntityManager,
-    ) => void | Promise<void>,
-  ) {
-    const key = normalizedRequiredText(dto.idempotencyKey, '幂等键');
-    const requestFingerprint = fingerprint({
-      ...fingerprintPayload,
-      expectedVersion: dto.expectedVersion,
-    });
-    const existing = await this.findOperation(key, requestFingerprint, user);
-    if (existing) return this.operationResult(existing, user);
-    try {
-      const resultPlanId = await this.dataSource.transaction(async (manager) => {
-        const duplicate = await this.findOperation(key, requestFingerprint, user, manager);
-        if (duplicate) return duplicate.planId!;
-        const plan = await this.lockPlan(planId, user, manager);
-        this.assertPlanActionable(plan);
-        const item = await manager
-          .getRepository(TravelChecklistItem)
-          .createQueryBuilder('item')
-          .where('item.id = :itemId', { itemId })
-          .andWhere('item.planId = :planId', { planId })
-          .andWhere('item.householdId = :householdId', {
-            householdId: user.householdId,
-          })
-          .setLock('pessimistic_write')
-          .getOne();
-        if (!item) throw new NotFoundException('出行清单项不存在');
-        if (item.archivedAt && operation !== 'item_archive') {
-          throw new ConflictException('清单项已经移除');
-        }
-        if (item.version !== dto.expectedVersion) {
-          throw new ConflictException(
-            `清单项已更新，请刷新后重试（当前 v${item.version}）`,
-          );
-        }
-        await apply(item, plan, manager);
-        item.version += 1;
-        item.updatedById = user.memberId;
-        await manager.getRepository(TravelChecklistItem).save(item);
-        await this.saveOperation(manager, user, {
-          operation,
-          targetType: 'item',
-          targetId: item.id,
-          planId,
-          key,
-          requestFingerprint,
-          metadata: { version: item.version, status: item.status },
-        });
-        return planId;
-      });
-      return this.detail(resultPlanId, user);
-    } catch (error) {
-      return this.resolveRace(error, key, requestFingerprint, user);
-    }
-  }
-
-  private async mutateTemplate(
-    id: string,
-    dto: TravelVersionOperationDto,
-    operation: string,
-    fingerprintPayload: Record<string, unknown>,
-    user: JwtUser,
-    apply: (
-      template: TravelPackingTemplate,
-      manager: EntityManager,
-    ) => void | Promise<void>,
-  ) {
-    const key = normalizedRequiredText(dto.idempotencyKey, '幂等键');
-    const requestFingerprint = fingerprint({
-      ...fingerprintPayload,
-      expectedVersion: dto.expectedVersion,
-    });
-    const existing = await this.findOperation(key, requestFingerprint, user);
-    if (existing) return this.operationResult(existing, user);
-    try {
-      const templateId = await this.dataSource.transaction(async (manager) => {
-        const duplicate = await this.findOperation(key, requestFingerprint, user, manager);
-        if (duplicate) return duplicate.targetId;
-        const template = await manager
-          .getRepository(TravelPackingTemplate)
-          .createQueryBuilder('template')
-          .where('template.id = :id', { id })
-          .andWhere('template.householdId = :householdId', {
-            householdId: user.householdId,
-          })
-          .setLock('pessimistic_write')
-          .getOne();
-        if (!template) throw new NotFoundException('出行模板不存在');
-        this.assertCanManageTemplate(template, user);
-        if (template.version !== dto.expectedVersion) {
-          throw new ConflictException(
-            `模板已更新，请刷新后重试（当前 v${template.version}）`,
-          );
-        }
-        await apply(template, manager);
-        template.version += 1;
-        template.updatedById = user.memberId;
-        await manager.getRepository(TravelPackingTemplate).save(template);
-        await this.saveOperation(manager, user, {
-          operation,
-          targetType: 'template',
-          targetId: template.id,
-          planId: null,
-          key,
-          requestFingerprint,
-          metadata: { version: template.version },
-        });
-        return template.id;
-      });
-      return this.templateDetail(templateId, user);
-    } catch (error) {
-      return this.resolveRace(error, key, requestFingerprint, user);
-    }
-  }
-
   private requirePlan(id: string, householdId: string) {
     return this.plans
       .createQueryBuilder('plan')
@@ -969,85 +342,16 @@ export class TravelService {
       });
   }
 
-  private async templateDetail(id: string, user: JwtUser) {
+  async templateDetail(id: string, user: JwtUser) {
     const template = await this.templates.findOne({
       where: { id, householdId: user.householdId },
       relations: { items: true },
     });
     if (!template) throw new NotFoundException('出行模板不存在');
-    return this.templateResponse(template, user);
+    return templateResponse(template, user);
   }
 
-  private lockPlan(id: string, user: JwtUser, manager: EntityManager) {
-    return manager
-      .getRepository(TravelPlan)
-      .createQueryBuilder('plan')
-      .where('plan.id = :id', { id })
-      .andWhere('plan.householdId = :householdId', {
-        householdId: user.householdId,
-      })
-      .setLock('pessimistic_write')
-      .getOne()
-      .then((plan) => {
-        if (!plan) throw new NotFoundException('出行计划不存在');
-        return plan;
-      });
-  }
-
-  private assertCanManagePlan(plan: TravelPlan, user: JwtUser) {
-    if (!isHouseholdManager(user) && plan.createdById !== user.memberId) {
-      throw new ForbiddenException('只能维护自己创建的出行计划');
-    }
-  }
-
-  private assertCanManageTemplate(template: TravelPackingTemplate, user: JwtUser) {
-    if (!isHouseholdManager(user) && template.createdById !== user.memberId) {
-      throw new ForbiddenException('只能维护自己创建的出行模板');
-    }
-  }
-
-  private assertPlanActionable(plan: TravelPlan) {
-    if (plan.archivedAt) throw new ConflictException('已归档行程需要先恢复');
-    if (plan.status !== 'planned') {
-      throw new ConflictException('只有计划中的行程可以修改清单');
-    }
-  }
-
-  private async requireAssignedMember(
-    memberId: string | null,
-    user: JwtUser,
-    manager: EntityManager,
-  ) {
-    if (!memberId) return;
-    const member = await manager.getRepository(Member).findOneBy({
-      id: memberId,
-      householdId: user.householdId,
-    });
-    if (!member || member.disabledAt) {
-      throw new NotFoundException('清单负责人不属于当前家庭或已停用');
-    }
-  }
-
-  private cancelScheduledReminders(
-    manager: EntityManager,
-    planId: string,
-    reason: string,
-  ) {
-    return manager.getRepository(Reminder).update(
-      {
-        sourceModule: 'travel',
-        sourceId: planId,
-        status: 'scheduled',
-      },
-      {
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        cancelReason: reason,
-      },
-    );
-  }
-
-  private async findOperation(
+  async findOperation(
     key: string,
     requestFingerprint: string,
     user: JwtUser,
@@ -1062,43 +366,13 @@ export class TravelService {
     return operation;
   }
 
-  private saveOperation(
-    manager: EntityManager,
-    user: JwtUser,
-    input: {
-      operation: string;
-      targetType: TravelOperation['targetType'];
-      targetId: string;
-      planId: string | null;
-      key: string;
-      requestFingerprint: string;
-      metadata: Record<string, unknown>;
-    },
-  ) {
-    const repository = manager.getRepository(TravelOperation);
-    return repository.save(
-      repository.create({
-        householdId: user.householdId,
-        operation: input.operation,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        planId: input.planId,
-        actorId: user.memberId,
-        actorName: user.name,
-        idempotencyKey: input.key,
-        requestFingerprint: input.requestFingerprint,
-        metadata: input.metadata,
-      }),
-    );
-  }
-
-  private operationResult(operation: TravelOperation, user: JwtUser) {
+  operationResult(operation: TravelOperation, user: JwtUser) {
     return operation.targetType === 'template'
       ? this.templateDetail(operation.targetId, user)
       : this.detail(operation.planId ?? operation.targetId, user);
   }
 
-  private async resolveRace(
+  async resolveRace(
     error: unknown,
     key: string,
     requestFingerprint: string,
@@ -1112,119 +386,5 @@ export class TravelService {
       if (existing) return this.operationResult(existing, user);
     }
     throw error;
-  }
-
-  private planResponse(
-    plan: TravelPlan,
-    user: JwtUser,
-    appliedTemplateIds: string[] = [],
-  ) {
-    const items = [...(plan.items ?? [])]
-      .filter((item) => !item.archivedAt)
-      .sort(
-        (left, right) =>
-          left.sortOrder - right.sortOrder ||
-          left.createdAt.getTime() - right.createdAt.getTime(),
-      )
-      .map((item) => ({
-        id: item.id,
-        title: item.title,
-        category: item.category,
-        quantity: item.quantity,
-        note: item.note,
-        sortOrder: item.sortOrder,
-        status: item.status,
-        version: item.version,
-        assignedMember: item.assignedMember
-          ? {
-              id: item.assignedMember.id,
-              name: item.assignedMember.name,
-              avatarEmoji: item.assignedMember.avatarEmoji,
-            }
-          : null,
-        completedBy: item.completedBy
-          ? {
-              id: item.completedBy.id,
-              name: item.completedBy.name,
-              avatarEmoji: item.completedBy.avatarEmoji,
-            }
-          : null,
-        completedAt: item.completedAt,
-        fromTemplate: Boolean(item.templateApplicationId),
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      }));
-    return {
-      id: plan.id,
-      title: plan.title,
-      destination: plan.destination,
-      startDate: plan.startDate,
-      endDate: plan.endDate,
-      note: plan.note,
-      status: plan.status,
-      version: plan.version,
-      createdBy: {
-        id: plan.createdBy.id,
-        name: plan.createdBy.name,
-        avatarEmoji: plan.createdBy.avatarEmoji,
-      },
-      updatedBy: {
-        id: plan.updatedBy.id,
-        name: plan.updatedBy.name,
-        avatarEmoji: plan.updatedBy.avatarEmoji,
-      },
-      completedBy: plan.completedBy
-        ? {
-            id: plan.completedBy.id,
-            name: plan.completedBy.name,
-            avatarEmoji: plan.completedBy.avatarEmoji,
-          }
-        : null,
-      completedAt: plan.completedAt,
-      archivedAt: plan.archivedAt,
-      items,
-      counts: {
-        total: items.length,
-        pending: items.filter((item) => item.status === 'pending').length,
-        completed: items.filter((item) => item.status === 'completed').length,
-        skipped: items.filter((item) => item.status === 'skipped').length,
-      },
-      appliedTemplateIds,
-      canManage: isHouseholdManager(user) || plan.createdById === user.memberId,
-      canEditChecklist: plan.status === 'planned' && !plan.archivedAt,
-      createdAt: plan.createdAt,
-      updatedAt: plan.updatedAt,
-    };
-  }
-
-  private templateResponse(template: TravelPackingTemplate, user: JwtUser) {
-    return {
-      id: template.id,
-      title: template.title,
-      description: template.description,
-      version: template.version,
-      items: [...(template.items ?? [])]
-        .sort(
-          (left, right) =>
-            left.sortOrder - right.sortOrder ||
-            left.createdAt.getTime() - right.createdAt.getTime(),
-        )
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          category: item.category,
-          quantity: item.quantity,
-          sortOrder: item.sortOrder,
-        })),
-      createdBy: {
-        id: template.createdBy.id,
-        name: template.createdBy.name,
-        avatarEmoji: template.createdBy.avatarEmoji,
-      },
-      archivedAt: template.archivedAt,
-      canManage: isHouseholdManager(user) || template.createdById === user.memberId,
-      createdAt: template.createdAt,
-      updatedAt: template.updatedAt,
-    };
   }
 }

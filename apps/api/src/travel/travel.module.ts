@@ -15,6 +15,8 @@ import {
   TravelTemplateApplication,
 } from '../entities';
 import { TravelService } from './travel.service';
+import { TravelItemsService } from './travel-items.service';
+import { TravelTemplatesService } from './travel-templates.service';
 import { TravelController } from './travel.controller';
 
 /** 把出行门面注册到内核（J4.1）：小管家读行程清单走这里。 */
@@ -45,7 +47,7 @@ export class TravelFacadeProvider implements OnModuleInit {
     ]),
   ],
   controllers: [TravelController],
-  providers: [TravelService, TravelChecklistAttentionRule, TravelAttention, TravelFacadeProvider],
+  providers: [TravelService, TravelItemsService, TravelTemplatesService, TravelChecklistAttentionRule, TravelAttention, TravelFacadeProvider],
   exports: [TravelService],
 })
 export class TravelModule {}
