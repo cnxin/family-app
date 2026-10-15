@@ -5,6 +5,7 @@ import { Member, Menu, MenuEvent, MenuItem, Notification } from '../entities';
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import { menusFacade } from './menus.facade';
 import { MenusService } from './menus.service';
+import { MenuKitchenService } from './menu-kitchen.service';
 import { MenusController } from './menus.controller';
 
 /** 把点菜门面注册到内核（J1b）：购物生成清单读某天的菜从这里取，不再直读 Menu 实体。 */
@@ -32,7 +33,7 @@ export class MenusFacadeProvider implements OnModuleInit {
     ]),
   ],
   controllers: [MenusController],
-  providers: [MenusService, MenusFacadeProvider],
+  providers: [MenusService, MenuKitchenService, MenusFacadeProvider],
   exports: [MenusService],
 })
 export class MenusModule {}

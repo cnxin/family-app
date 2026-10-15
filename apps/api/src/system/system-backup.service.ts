@@ -1,104 +1,34 @@
-import { EventBus } from '../events/event-bus';
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
-  OnApplicationBootstrap,
-  OnApplicationShutdown,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  DataSource,
-  EntityManager,
-  In,
-  IsNull,
-  Not,
-  Repository,
-} from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { recordActivity } from '../activities/activity-log';
 import { JwtUser } from '../auth/jwt.guard';
-import { BackupPolicy, BackupRun, BackupRunKind, Member, Notification } from '../entities';
+import { BackupPolicy, BackupRun, BackupRunKind } from '../entities';
 import { UpdateBackupPolicyDto, QueueBackupRunDto } from './system.dto';
-
-function assertBackupAdmin(user: JwtUser) {
-  if (user.role !== 'owner' && user.role !== 'admin') {
-    throw new ForbiddenException('只有家庭管理员可以管理备份');
-  }
-}
-
-function runLabel(kind: BackupRunKind) {
-  if (kind === 'backup') return '完整备份';
-  if (kind === 'restore_drill') return '恢复演练';
-  return '容量检查';
-}
+import {
+  assertBackupAdmin,
+  runLabel,
+  lockOrCreatePolicy,
+  calculateNextBackup,
+  calculateNextRestoreDrill,
+  presentPolicy,
+  presentRun,
+} from './system-backup.helpers';
 
 @Injectable()
-export class SystemBackupService
-  implements OnApplicationBootstrap, OnApplicationShutdown
-{
-  private timer: NodeJS.Timeout | null = null;
-  private watchTimer: NodeJS.Timeout | null = null;
-  private processing = false;
-  /** 每个家庭上一次看到的「运行记录最新更新时间 / 备份程序是否在线」，变了才推事件。 */
-  private readonly lastSeen = new Map<string, string>();
-
+export class SystemBackupService {
   constructor(
     @InjectRepository(BackupPolicy)
     private readonly policies: Repository<BackupPolicy>,
     @InjectRepository(BackupRun)
     private readonly runs: Repository<BackupRun>,
     private readonly dataSource: DataSource,
-    private readonly events: EventBus,
   ) {}
-
-  onApplicationBootstrap() {
-    const configured = Number(process.env.BACKUP_SCHEDULER_POLL_INTERVAL_MS || 30_000);
-    const interval = Number.isFinite(configured)
-      ? Math.max(500, Math.min(configured, 300_000))
-      : 30_000;
-    void this.processOperations();
-    this.timer = setInterval(() => void this.processOperations(), interval);
-    this.timer.unref();
-    // 备份 worker 是 shell 脚本，直接改库，API 感知不到；这里看一眼有没有变化，变了推 backups
-    const watch = Number(process.env.BACKUP_EVENTS_WATCH_MS || 5_000);
-    this.watchTimer = setInterval(
-      () => void this.publishBackupChanges(),
-      Number.isFinite(watch) ? Math.max(100, Math.min(watch, 60_000)) : 5_000,
-    );
-    this.watchTimer.unref();
-  }
-
-  onApplicationShutdown() {
-    if (this.timer) clearInterval(this.timer);
-    if (this.watchTimer) clearInterval(this.watchTimer);
-    this.timer = null;
-    this.watchTimer = null;
-  }
-
-  private async publishBackupChanges() {
-    try {
-      const rows: { householdId: string; runsAt: Date | null; seenAt: Date | null }[] =
-        await this.dataSource.query(`
-          SELECT p."householdId" AS "householdId",
-                 (SELECT MAX(r."updatedAt") FROM backup_runs r WHERE r."householdId" = p."householdId") AS "runsAt",
-                 p."workerLastSeenAt" AS "seenAt"
-            FROM backup_policies p`);
-      const now = Date.now();
-      for (const row of rows) {
-        const online = Boolean(row.seenAt && now - new Date(row.seenAt).getTime() < 90_000);
-        const signature = `${row.runsAt ? new Date(row.runsAt).toISOString() : '-'}|${online}`;
-        const previous = this.lastSeen.get(row.householdId);
-        this.lastSeen.set(row.householdId, signature);
-        if (previous !== undefined && previous !== signature) {
-          this.events.publish({ householdId: row.householdId, domains: ['backups'] });
-        }
-      }
-    } catch {
-      /* 观察失败不影响备份本身；下一轮再看 */
-    }
-  }
 
   async dashboard(user: JwtUser) {
     assertBackupAdmin(user);
@@ -113,14 +43,14 @@ export class SystemBackupService
         Date.now() - policy.workerLastSeenAt.getTime() < 90_000,
     );
     return {
-      policy: this.presentPolicy(policy),
+      policy: presentPolicy(policy),
       workerOnline,
       activeRun: runs.find((run) => ['queued', 'running'].includes(run.status))
-        ? this.presentRun(
+        ? presentRun(
             runs.find((run) => ['queued', 'running'].includes(run.status))!,
           )
         : null,
-      runs: runs.map((run) => this.presentRun(run)),
+      runs: runs.map((run) => presentRun(run)),
     };
   }
 
@@ -147,10 +77,10 @@ export class SystemBackupService
         weeklyDay: dto.frequency === 'weekly' ? dto.weeklyDay! : null,
       });
       current.nextBackupAt = dto.scheduleEnabled
-        ? await this.calculateNextBackup(manager, current)
+        ? await calculateNextBackup(manager, current)
         : null;
       current.nextRestoreDrillAt = dto.restoreDrillEnabled
-        ? await this.calculateNextRestoreDrill(manager, current)
+        ? await calculateNextRestoreDrill(manager, current)
         : null;
       await manager.getRepository(BackupPolicy).save(current);
       await recordActivity(manager, user, {
@@ -168,7 +98,7 @@ export class SystemBackupService
       });
       return current;
     });
-    return this.presentPolicy(policy);
+    return presentPolicy(policy);
   }
 
   queueBackup(dto: QueueBackupRunDto, user: JwtUser) {
@@ -213,7 +143,7 @@ export class SystemBackupService
         loadEagerRelations: false,
       });
       if (!run) throw new NotFoundException('备份操作不存在');
-      if (run.status === 'cancelled') return this.presentRun(run);
+      if (run.status === 'cancelled') return presentRun(run);
       if (run.status !== 'queued') {
         throw new ConflictException('只有等待执行的操作可以取消');
       }
@@ -228,7 +158,7 @@ export class SystemBackupService
         targetPath: '/system-backups',
         metadata: { runId: run.id, kind: run.kind },
       });
-      return this.presentRun(run);
+      return presentRun(run);
     });
   }
 
@@ -240,13 +170,13 @@ export class SystemBackupService
   ) {
     assertBackupAdmin(user);
     return this.dataSource.transaction(async (manager) => {
-      const policy = await this.lockOrCreatePolicy(manager, user.householdId);
+      const policy = await lockOrCreatePolicy(manager, user.householdId);
       const repository = manager.getRepository(BackupRun);
       const existing = await repository.findOneBy({
         householdId: user.householdId,
         idempotencyKey,
       });
-      if (existing) return this.presentRun(existing);
+      if (existing) return presentRun(existing);
       const active = await repository.findOne({
         where: {
           householdId: user.householdId,
@@ -277,7 +207,7 @@ export class SystemBackupService
         targetPath: '/system-backups',
         metadata: { runId: run.id, sourceBackupRunId, policyId: policy.id },
       });
-      return this.presentRun(run);
+      return presentRun(run);
     });
   }
 
@@ -289,419 +219,5 @@ export class SystemBackupService
       .orIgnore()
       .execute();
     return this.policies.findOneByOrFail({ householdId });
-  }
-
-  private async lockOrCreatePolicy(manager: EntityManager, householdId: string) {
-    await manager
-      .getRepository(BackupPolicy)
-      .createQueryBuilder()
-      .insert()
-      .values({ householdId })
-      .orIgnore()
-      .execute();
-    return manager.getRepository(BackupPolicy).findOneOrFail({
-      where: { householdId },
-      lock: { mode: 'pessimistic_write' },
-      loadEagerRelations: false,
-    });
-  }
-
-  private async processOperations() {
-    if (this.processing) return;
-    this.processing = true;
-    try {
-      await this.recoverStaleRuns();
-      const due = await this.policies
-        .createQueryBuilder('policy')
-        .where(
-          '(policy."scheduleEnabled" = true AND (policy."nextBackupAt" IS NULL OR policy."nextBackupAt" <= now()))',
-        )
-        .orWhere(
-          '(policy."restoreDrillEnabled" = true AND (policy."nextRestoreDrillAt" IS NULL OR policy."nextRestoreDrillAt" <= now()))',
-        )
-        .orderBy('policy.updatedAt', 'ASC')
-        .take(20)
-        .getMany();
-      for (const policy of due) await this.enqueueDuePolicy(policy.id);
-      await this.notifyFinishedRuns();
-      await this.notifyCapacityAlerts();
-    } finally {
-      this.processing = false;
-    }
-  }
-
-  private async enqueueDuePolicy(policyId: string) {
-    await this.dataSource.transaction(async (manager) => {
-      const policies = manager.getRepository(BackupPolicy);
-      const runs = manager.getRepository(BackupRun);
-      const policy = await policies.findOne({
-        where: { id: policyId },
-        lock: { mode: 'pessimistic_write' },
-        loadEagerRelations: false,
-      });
-      if (!policy) return;
-      const now = new Date();
-      if (policy.scheduleEnabled && (!policy.nextBackupAt || policy.nextBackupAt <= now)) {
-        const scheduledFor = policy.nextBackupAt ?? now;
-        await runs
-          .createQueryBuilder()
-          .insert()
-          .values({
-            householdId: policy.householdId,
-            kind: 'backup',
-            status: 'queued',
-            trigger: 'scheduled',
-            requestedById: null,
-            idempotencyKey: `scheduled:backup:${scheduledFor.toISOString()}`,
-            scheduledFor,
-          })
-          .orIgnore()
-          .execute();
-        policy.nextBackupAt = await this.calculateNextBackup(manager, policy);
-      }
-      if (
-        policy.restoreDrillEnabled &&
-        (!policy.nextRestoreDrillAt || policy.nextRestoreDrillAt <= now)
-      ) {
-        const scheduledFor = policy.nextRestoreDrillAt ?? now;
-        const source = await runs.findOne({
-          where: {
-            householdId: policy.householdId,
-            kind: 'backup',
-            status: 'succeeded',
-            retained: true,
-            checksumVerified: true,
-          },
-          order: { finishedAt: 'DESC' },
-        });
-        if (source) {
-          await runs
-            .createQueryBuilder()
-            .insert()
-            .values({
-              householdId: policy.householdId,
-              kind: 'restore_drill',
-              status: 'queued',
-              trigger: 'scheduled',
-              sourceBackupRunId: source.id,
-              requestedById: null,
-              idempotencyKey: `scheduled:restore:${scheduledFor.toISOString()}`,
-              scheduledFor,
-            })
-            .orIgnore()
-            .execute();
-        }
-        policy.nextRestoreDrillAt = await this.calculateNextRestoreDrill(
-          manager,
-          policy,
-        );
-      }
-      await policies.save(policy);
-    });
-  }
-
-  private async recoverStaleRuns() {
-    const configured = Number(process.env.BACKUP_RUN_STALE_MS || 7_200_000);
-    const staleMs = Number.isFinite(configured)
-      ? Math.max(300_000, Math.min(configured, 86_400_000))
-      : 7_200_000;
-    await this.runs
-      .createQueryBuilder()
-      .update()
-      .set({
-        status: 'failed',
-        finishedAt: () => 'now()',
-        errorCode: 'worker_timeout',
-        errorMessage: '备份 worker 心跳超时，任务已停止',
-      })
-      .where('status = :status', { status: 'running' })
-      .andWhere(
-        `COALESCE("heartbeatAt", "startedAt", "updatedAt") < now() - (:staleMs * interval '1 millisecond')`,
-        { staleMs },
-      )
-      .execute();
-  }
-
-  private async notifyFinishedRuns() {
-    const completed = await this.runs.find({
-      where: {
-        notifiedAt: IsNull(),
-        finishedAt: Not(IsNull()),
-        status: In(['succeeded', 'failed']),
-      },
-      order: { finishedAt: 'ASC' },
-      take: 30,
-    });
-    for (const candidate of completed) {
-      await this.dataSource.transaction(async (manager) => {
-        const runs = manager.getRepository(BackupRun);
-        const run = await runs.findOne({
-          where: { id: candidate.id },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        if (!run || run.notifiedAt || run.kind === 'capacity_check') return;
-        const recipients = await manager.getRepository(Member).find({
-          where: {
-            householdId: run.householdId,
-            role: In(['owner', 'admin']),
-            disabledAt: IsNull(),
-          },
-        });
-        const successful = run.status === 'succeeded';
-        await manager.getRepository(Notification).save(
-          recipients.map((recipient) =>
-            manager.getRepository(Notification).create({
-              householdId: run.householdId,
-              recipientId: recipient.id,
-              module: 'system',
-              type: `backup_${run.kind}_${run.status}`,
-              sourceId: run.id,
-              title: `${runLabel(run.kind)}${successful ? '成功' : '失败'}`,
-              body: successful
-                ? run.resultSummary ?? '运维任务已经完成'
-                : run.errorMessage ?? '请在系统备份页查看状态并重试',
-              targetPath: '/system-backups',
-              readAt: null,
-              externalRoutedAt: null,
-            }),
-          ),
-        );
-        run.notifiedAt = new Date();
-        await runs.save(run);
-      });
-    }
-  }
-
-  private async notifyCapacityAlerts() {
-    const candidates = await this.policies
-      .createQueryBuilder('policy')
-      .where(`policy."capacityStatus" IN ('warning', 'critical')`)
-      .andWhere(
-        `(policy."capacityNotifiedStatus" IS NULL OR policy."capacityNotifiedStatus" <> policy."capacityStatus")`,
-      )
-      .take(20)
-      .getMany();
-    for (const candidate of candidates) {
-      await this.dataSource.transaction(async (manager) => {
-        const policies = manager.getRepository(BackupPolicy);
-        const policy = await policies.findOne({
-          where: { id: candidate.id },
-          lock: { mode: 'pessimistic_write' },
-          loadEagerRelations: false,
-        });
-        if (
-          !policy ||
-          !['warning', 'critical'].includes(policy.capacityStatus) ||
-          policy.capacityNotifiedStatus === policy.capacityStatus
-        ) {
-          return;
-        }
-        const recipients = await manager.getRepository(Member).find({
-          where: {
-            householdId: policy.householdId,
-            role: In(['owner', 'admin']),
-            disabledAt: IsNull(),
-          },
-        });
-        const used = policy.storageTotalBytes
-          ? Math.round(
-              (Number(policy.storageUsedBytes ?? 0) /
-                Number(policy.storageTotalBytes)) *
-                100,
-            )
-          : null;
-        await manager.getRepository(Notification).save(
-          recipients.map((recipient) =>
-            manager.getRepository(Notification).create({
-              householdId: policy.householdId,
-              recipientId: recipient.id,
-              module: 'system',
-              type: `backup_capacity_${policy.capacityStatus}`,
-              sourceId: policy.id,
-              title:
-                policy.capacityStatus === 'critical'
-                  ? '备份空间严重不足'
-                  : '备份空间接近上限',
-              body:
-                used == null
-                  ? '备份存储容量状态异常，请检查存储目录'
-                  : `备份存储已使用 ${used}%，请及时清理或扩容`,
-              targetPath: '/system-backups',
-              readAt: null,
-              externalRoutedAt: null,
-            }),
-          ),
-        );
-        policy.capacityNotifiedStatus = policy.capacityStatus as
-          | 'warning'
-          | 'critical';
-        policy.capacityAlertedAt = new Date();
-        await policies.save(policy);
-      });
-    }
-  }
-
-  private async calculateNextBackup(
-    executor: Pick<EntityManager, 'query'>,
-    policy: Pick<
-      BackupPolicy,
-      | 'householdId'
-      | 'frequency'
-      | 'weeklyDay'
-      | 'scheduledHour'
-      | 'scheduledMinute'
-    >,
-  ) {
-    const rows = await executor.query(
-      `
-        WITH local_time AS (
-          SELECT h."timezone", now() AT TIME ZONE h."timezone" AS local_now
-          FROM households h WHERE h.id = $1
-        ), candidate AS (
-          SELECT "timezone", local_now,
-            date_trunc('day', local_now)
-              + make_interval(
-                  days => CASE WHEN $2 = 'weekly'
-                    THEN mod($3 - extract(dow FROM local_now)::integer + 7, 7)
-                    ELSE 0 END,
-                  hours => $4,
-                  mins => $5
-                ) AS local_candidate
-          FROM local_time
-        )
-        SELECT (
-          local_candidate + CASE
-            WHEN local_candidate <= local_now
-              THEN CASE WHEN $2 = 'weekly' THEN interval '7 days' ELSE interval '1 day' END
-            ELSE interval '0 days'
-          END
-        ) AT TIME ZONE "timezone" AS "nextAt"
-        FROM candidate
-      `,
-      [
-        policy.householdId,
-        policy.frequency,
-        policy.weeklyDay ?? 0,
-        policy.scheduledHour,
-        policy.scheduledMinute,
-      ],
-    );
-    return new Date(rows[0].nextAt);
-  }
-
-  private async calculateNextRestoreDrill(
-    executor: Pick<EntityManager, 'query'>,
-    policy: Pick<BackupPolicy, 'householdId' | 'restoreDrillDay' | 'restoreDrillHour'>,
-  ) {
-    const rows = await executor.query(
-      `
-        WITH local_time AS (
-          SELECT h."timezone", now() AT TIME ZONE h."timezone" AS local_now
-          FROM households h WHERE h.id = $1
-        ), candidate AS (
-          SELECT "timezone", local_now,
-            date_trunc('month', local_now)
-              + make_interval(days => $2 - 1, hours => $3) AS local_candidate
-          FROM local_time
-        )
-        SELECT (
-          local_candidate + CASE WHEN local_candidate <= local_now
-            THEN interval '1 month' ELSE interval '0 months' END
-        ) AT TIME ZONE "timezone" AS "nextAt"
-        FROM candidate
-      `,
-      [policy.householdId, policy.restoreDrillDay, policy.restoreDrillHour],
-    );
-    return new Date(rows[0].nextAt);
-  }
-
-  private presentPolicy(policy: BackupPolicy) {
-    const {
-      id,
-      scheduleEnabled,
-      frequency,
-      weeklyDay,
-      scheduledHour,
-      scheduledMinute,
-      retentionDays,
-      retentionCount,
-      capacityWarningPercent,
-      capacityCriticalPercent,
-      restoreDrillEnabled,
-      restoreDrillDay,
-      restoreDrillHour,
-      nextBackupAt,
-      nextRestoreDrillAt,
-      lastStorageCheckedAt,
-      storageTotalBytes,
-      storageAvailableBytes,
-      storageUsedBytes,
-      capacityStatus,
-      capacityAlertedAt,
-      workerLastSeenAt,
-      updatedAt,
-    } = policy;
-    return {
-      id,
-      scheduleEnabled,
-      frequency,
-      weeklyDay,
-      scheduledHour,
-      scheduledMinute,
-      retentionDays,
-      retentionCount,
-      capacityWarningPercent,
-      capacityCriticalPercent,
-      restoreDrillEnabled,
-      restoreDrillDay,
-      restoreDrillHour,
-      nextBackupAt,
-      nextRestoreDrillAt,
-      lastStorageCheckedAt,
-      storageTotalBytes,
-      storageAvailableBytes,
-      storageUsedBytes,
-      capacityStatus,
-      capacityAlertedAt,
-      workerLastSeenAt,
-      updatedAt,
-    };
-  }
-
-  private presentRun(run: BackupRun) {
-    return {
-      id: run.id,
-      kind: run.kind,
-      status: run.status,
-      trigger: run.trigger,
-      sourceBackupRunId: run.sourceBackupRunId,
-      requestedBy: run.requestedBy
-        ? {
-            id: run.requestedBy.id,
-            name: run.requestedBy.name,
-            avatarEmoji: run.requestedBy.avatarEmoji,
-          }
-        : null,
-      scheduledFor: run.scheduledFor,
-      startedAt: run.startedAt,
-      finishedAt: run.finishedAt,
-      heartbeatAt: run.heartbeatAt,
-      databaseBytes: run.databaseBytes,
-      uploadsBytes: run.uploadsBytes,
-      totalBytes: run.totalBytes,
-      checksumVerified: run.checksumVerified,
-      restoredMigrationCount: run.restoredMigrationCount,
-      retentionDeletedCount: run.retentionDeletedCount,
-      retained: run.retained,
-      purgedAt: run.purgedAt,
-      artifactAvailable:
-        run.kind === 'backup' && run.status === 'succeeded' && run.retained,
-      errorCode: run.errorCode,
-      errorMessage: run.errorMessage,
-      resultSummary: run.resultSummary,
-      createdAt: run.createdAt,
-      updatedAt: run.updatedAt,
-    };
   }
 }

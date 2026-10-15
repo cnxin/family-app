@@ -18,6 +18,7 @@ import {
   TravelPlan,
 } from '../entities';
 import { RemindersService } from './reminders.service';
+import { ReminderDispatcher } from './reminders.dispatcher';
 import { RemindersController } from './reminders.controller';
 
 /** 提醒订阅智能家居联动的事务内钩子（J1b）：联动要建提醒时，用联动的事务建（家务由任务先建好，见 TRANSACTION_HOOK_ORDER）。 */
@@ -66,7 +67,7 @@ export class RemindersFacadeProvider implements OnModuleInit {
     ]),
   ],
   controllers: [RemindersController],
-  providers: [RemindersService, RemindersLinkHooks, RemindersFacadeProvider],
+  providers: [RemindersService, ReminderDispatcher, RemindersLinkHooks, RemindersFacadeProvider],
   exports: [RemindersService],
 })
 export class RemindersModule {}

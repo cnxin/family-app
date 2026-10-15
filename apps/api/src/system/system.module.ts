@@ -9,6 +9,7 @@ import { PluginFacadeRegistry } from './plugin-facades.registry';
 import { TransactionHookRegistry } from './transaction-hooks.registry';
 import { BackupPolicy, BackupRun, Member, Notification } from '../entities';
 import { SystemBackupService } from './system-backup.service';
+import { SystemBackupScheduler } from './system-backup.scheduler';
 import { HealthController } from './health.controller';
 import { SystemBackupController } from './system-backup.controller';
 
@@ -22,6 +23,7 @@ import { SystemBackupController } from './system-backup.controller';
   controllers: [HealthController, SystemBackupController, SystemModulesController],
   providers: [
     SystemBackupService,
+    SystemBackupScheduler,
     SystemModulesService,
     ModuleHasDataRegistry,
     PluginFacadeRegistry,
