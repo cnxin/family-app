@@ -14,10 +14,16 @@ import {
   ApplyTravelTemplateDto,
 } from './travel.dto';
 import { TravelService } from './travel.service';
+import { TravelItemsService } from './travel-items.service';
+import { TravelTemplatesService } from './travel-templates.service';
 
 @Controller()
 export class TravelController {
-  constructor(private readonly service: TravelService) {}
+  constructor(
+    private readonly service: TravelService,
+    private readonly items: TravelItemsService,
+    private readonly templatesService: TravelTemplatesService,
+  ) {}
 
   @Get('travel-plans')
   listPlans(@Query() query: TravelListQueryDto, @CurrentUser() user: JwtUser) {
@@ -94,7 +100,7 @@ export class TravelController {
     @Body() dto: CreateTravelItemDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.createItem(planId, dto, user);
+    return this.items.createItem(planId, dto, user);
   }
 
   @Patch('travel-plans/:planId/items/:itemId')
@@ -104,7 +110,7 @@ export class TravelController {
     @Body() dto: UpdateTravelItemDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updateItem(planId, itemId, dto, user);
+    return this.items.updateItem(planId, itemId, dto, user);
   }
 
   @Post('travel-plans/:planId/items/:itemId/complete')
@@ -114,7 +120,7 @@ export class TravelController {
     @Body() dto: TravelItemVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.completeItem(planId, itemId, dto, user);
+    return this.items.completeItem(planId, itemId, dto, user);
   }
 
   @Post('travel-plans/:planId/items/:itemId/restore')
@@ -124,7 +130,7 @@ export class TravelController {
     @Body() dto: TravelItemVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.restoreItem(planId, itemId, dto, user);
+    return this.items.restoreItem(planId, itemId, dto, user);
   }
 
   @Post('travel-plans/:planId/items/:itemId/skip')
@@ -134,7 +140,7 @@ export class TravelController {
     @Body() dto: TravelItemVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.skipItem(planId, itemId, dto, user);
+    return this.items.skipItem(planId, itemId, dto, user);
   }
 
   @Post('travel-plans/:planId/items/:itemId/archive')
@@ -144,7 +150,7 @@ export class TravelController {
     @Body() dto: TravelItemVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.archiveItem(planId, itemId, dto, user);
+    return this.items.archiveItem(planId, itemId, dto, user);
   }
 
   @Get('travel-templates')
@@ -152,7 +158,7 @@ export class TravelController {
     @Query() query: TravelTemplateListQueryDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.listTemplates(query, user);
+    return this.templatesService.listTemplates(query, user);
   }
 
   @Post('travel-templates')
@@ -160,7 +166,7 @@ export class TravelController {
     @Body() dto: CreateTravelTemplateDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.createTemplate(dto, user);
+    return this.templatesService.createTemplate(dto, user);
   }
 
   @Patch('travel-templates/:id')
@@ -169,7 +175,7 @@ export class TravelController {
     @Body() dto: UpdateTravelTemplateDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updateTemplate(id, dto, user);
+    return this.templatesService.updateTemplate(id, dto, user);
   }
 
   @Post('travel-templates/:id/archive')
@@ -178,7 +184,7 @@ export class TravelController {
     @Body() dto: TravelVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.archiveTemplate(id, dto, user);
+    return this.templatesService.archiveTemplate(id, dto, user);
   }
 
   @Post('travel-templates/:id/restore')
@@ -187,7 +193,7 @@ export class TravelController {
     @Body() dto: TravelVersionOperationDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.restoreTemplate(id, dto, user);
+    return this.templatesService.restoreTemplate(id, dto, user);
   }
 
   @Post('travel-plans/:planId/templates/:templateId/apply')
@@ -197,6 +203,6 @@ export class TravelController {
     @Body() dto: ApplyTravelTemplateDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.applyTemplate(planId, templateId, dto, user);
+    return this.templatesService.applyTemplate(planId, templateId, dto, user);
   }
 }
