@@ -36,6 +36,9 @@ import {
   SetAssetLocationDto,
 } from './assets.dto';
 import { AssetsService } from './assets.service';
+import { AssetDocumentsService } from './asset-documents.service';
+import { AssetMaintenanceService } from './asset-maintenance.service';
+import { AssetConsumablesService } from './asset-consumables.service';
 
 const ASSET_DOCUMENT_MIME_TYPES = new Set([
   'image/gif',
@@ -47,7 +50,12 @@ const ASSET_DOCUMENT_MIME_TYPES = new Set([
 
 @Controller()
 export class AssetsController {
-  constructor(private readonly service: AssetsService) {}
+  constructor(
+    private readonly service: AssetsService,
+    private readonly documentsService: AssetDocumentsService,
+    private readonly maintenance: AssetMaintenanceService,
+    private readonly consumablesService: AssetConsumablesService,
+  ) {}
 
   @Get('assets')
   list(@Query() query: AssetListQueryDto, @CurrentUser() user: JwtUser) {
@@ -102,7 +110,7 @@ export class AssetsController {
     @Body() dto: CreateAssetDocumentDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.createDocument(id, dto, user);
+    return this.documentsService.createDocument(id, dto, user);
   }
 
   @Post('assets/:id/documents/upload')
@@ -126,12 +134,12 @@ export class AssetsController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.createUploadedDocument(id, dto, file, user);
+    return this.documentsService.createUploadedDocument(id, dto, file, user);
   }
 
   @Get('asset-documents/:id/access')
   documentAccess(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.service.documentAccess(id, user);
+    return this.documentsService.documentAccess(id, user);
   }
 
   @Public()
@@ -142,7 +150,7 @@ export class AssetsController {
     @Query('signature') signature: string,
     @Res() response: Response,
   ) {
-    const content = await this.service.documentContent(
+    const content = await this.documentsService.documentContent(
       id,
       expires,
       signature,
@@ -162,7 +170,7 @@ export class AssetsController {
   @Delete('asset-documents/:id')
   @RequireCapabilities('manage_assets')
   removeDocument(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.service.removeDocument(id, user);
+    return this.documentsService.removeDocument(id, user);
   }
 
   @Post('assets/:id/maintenance-plans')
@@ -172,7 +180,7 @@ export class AssetsController {
     @Body() dto: CreateMaintenancePlanDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.createPlan(id, dto, user);
+    return this.maintenance.createPlan(id, dto, user);
   }
 
   @Patch('maintenance-plans/:id')
@@ -182,7 +190,7 @@ export class AssetsController {
     @Body() dto: UpdateMaintenancePlanDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updatePlan(id, dto, user);
+    return this.maintenance.updatePlan(id, dto, user);
   }
 
   @Post('maintenance-plans/:id/consumables')
@@ -192,7 +200,7 @@ export class AssetsController {
     @Body() dto: CreateMaintenanceConsumableDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.createConsumable(id, dto, user);
+    return this.consumablesService.createConsumable(id, dto, user);
   }
 
   @Patch('maintenance-consumables/:id')
@@ -202,18 +210,18 @@ export class AssetsController {
     @Body() dto: UpdateMaintenanceConsumableDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.updateConsumable(id, dto, user);
+    return this.consumablesService.updateConsumable(id, dto, user);
   }
 
   @Delete('maintenance-consumables/:id')
   @RequireCapabilities('manage_assets', 'manage_inventory')
   removeConsumable(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.service.removeConsumable(id, user);
+    return this.consumablesService.removeConsumable(id, user);
   }
 
   @Get('maintenance-plans/:id/consumables-preview')
   consumablesPreview(@Param('id') id: string, @CurrentUser() user: JwtUser) {
-    return this.service.consumablesPreview(id, user.householdId);
+    return this.consumablesService.consumablesPreview(id, user.householdId);
   }
 
   @Post('maintenance-plans/:id/shopping-items')
@@ -223,7 +231,7 @@ export class AssetsController {
     @Body() dto: AddMaintenanceShoppingDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.addConsumablesToShopping(id, dto, user);
+    return this.consumablesService.addConsumablesToShopping(id, dto, user);
   }
 
   @Post('maintenance-plans/:id/complete')
@@ -233,6 +241,6 @@ export class AssetsController {
     @Body() dto: CompleteMaintenanceDto,
     @CurrentUser() user: JwtUser,
   ) {
-    return this.service.completePlan(id, dto, user);
+    return this.maintenance.completePlan(id, dto, user);
   }
 }

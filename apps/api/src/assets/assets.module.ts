@@ -17,6 +17,9 @@ import {
 import { PluginFacadeRegistry } from '../system/plugin-facades.registry';
 import { assetsFacade } from './assets.facade';
 import { AssetsService } from './assets.service';
+import { AssetDocumentsService } from './asset-documents.service';
+import { AssetMaintenanceService } from './asset-maintenance.service';
+import { AssetConsumablesService } from './asset-consumables.service';
 import { AssetsController } from './assets.controller';
 
 /** 把资产门面注册到内核（K3）：财务汇总页的「固定支出」读资产续费月均走这里。 */
@@ -51,6 +54,9 @@ export class AssetsFacadeProvider implements OnModuleInit {
   controllers: [AssetsController],
   providers: [
     AssetsService,
+    AssetDocumentsService,
+    AssetMaintenanceService,
+    AssetConsumablesService,
     AssetMaintenanceAttentionRule,
     AssetRenewalAttentionRule,
     AssetWarrantyAttentionRule,
