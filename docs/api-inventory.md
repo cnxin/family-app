@@ -102,7 +102,7 @@
 | GET | `/assets/:id` | `AssetsController.get` | 登录 | ✓ | `apps/api/src/assets/assets.controller.ts` |
 | PATCH | `/assets/:id` | `AssetsController.update` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
 | POST | `/assets/:id/documents` | `AssetsController.createDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
-| POST | `/assets/:id/documents/upload` | `AssetsController.FileInterceptor` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
+| POST | `/assets/:id/documents/upload` | `AssetsController.uploadDocument` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
 | PATCH | `/assets/:id/location` | `AssetsController.setLocation` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
 | POST | `/assets/:id/maintenance-plans` | `AssetsController.createPlan` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
 | POST | `/assets/:id/renew` | `AssetsController.renewSubscription` | `manage_assets` | ✓ | `apps/api/src/assets/assets.controller.ts` |
@@ -184,7 +184,7 @@
 | POST | `/finance/categories` | `FinanceController.createCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
 | PATCH | `/finance/categories/:id` | `FinanceController.updateCategory` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
 | GET | `/finance/imports` | `FinanceImportController.list` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
-| POST | `/finance/imports` | `FinanceImportController.FileInterceptor` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
+| POST | `/finance/imports` | `FinanceImportController.upload` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
 | GET | `/finance/imports/:id` | `FinanceImportController.preview` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
 | DELETE | `/finance/imports/:id` | `FinanceImportController.discard` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
 | POST | `/finance/imports/:id/commit` | `FinanceImportController.commit` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-import.controller.ts` |
@@ -195,7 +195,7 @@
 | DELETE | `/finance/recurring/:id` | `FinanceRecurringController.remove` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
 | POST | `/finance/recurring/:id/pay` | `FinanceRecurringController.pay` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
 | POST | `/finance/recurring/:id/retry` | `FinanceRecurringController.retry` | `view_finance` `manage_finance` | ✓ | `apps/api/src/finance/finance-recurring.controller.ts` |
-| POST | `/finance/screenshot-recognize` | `FinanceScreenshotController.FileInterceptor` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-screenshot.controller.ts` |
+| POST | `/finance/screenshot-recognize` | `FinanceScreenshotController.recognize` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance-screenshot.controller.ts` |
 | GET | `/finance/summary` | `FinanceController.summary` | `view_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
 | GET | `/finance/transactions` | `FinanceController.transactions` | `view_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
 | POST | `/finance/transactions` | `FinanceController.createTransaction` | `view_finance` `record_finance` | ✓ | `apps/api/src/finance/finance.controller.ts` |
@@ -287,7 +287,7 @@
 | GET | `/map` | `MapController.get` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |
 | PUT | `/map` | `MapController.put` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |
 | GET | `/map/background` | `MapController.background` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |
-| POST | `/map/background` | `MapController.FileInterceptor` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |
+| POST | `/map/background` | `MapController.uploadBackground` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |
 | PUT | `/map/decorations` | `MapController.putDecorations` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |
 | GET | `/map/export` | `MapController.export` | 登录 | ✓ | `apps/api/src/locations/map.controller.ts` |
 
@@ -326,7 +326,7 @@
 | GET | `/media/viewing-progress` | `MediaController.viewingProgress` | 登录 | ✓ | `apps/api/src/media/media.controller.ts` |
 | GET | `/media/viewing-sessions` | `MediaController.viewingSessions` | 登录 | ✓ | `apps/api/src/media/media.controller.ts` |
 | POST | `/media/webhooks/moviepilot/:integrationId/:secret` | `MediaController.receiveMoviePilotWebhook` | 公开 | ✓ | `apps/api/src/media/media.controller.ts` |
-| POST | `/media/webhooks/playback/:provider/:integrationId/:secret` | `MediaController.AnyFilesInterceptor` | 公开 | ✓ | `apps/api/src/media/media.controller.ts` |
+| POST | `/media/webhooks/playback/:provider/:integrationId/:secret` | `MediaController.receivePlaybackWebhook` | 公开 | ✓ | `apps/api/src/media/media.controller.ts` |
 
 ## memories（8）
 
@@ -337,7 +337,7 @@
 | GET | `/memories/:id` | `MemoriesController.detail` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
 | PATCH | `/memories/:id` | `MemoriesController.update` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
 | POST | `/memories/:id/archive` | `MemoriesController.archive` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
-| POST | `/memories/:id/photos` | `MemoriesController.FileInterceptor` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
+| POST | `/memories/:id/photos` | `MemoriesController.uploadPhoto` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
 | POST | `/memories/:id/restore` | `MemoriesController.restore` | 登录 | ✓ | `apps/api/src/memories/memories.controller.ts` |
 | GET | `/memories/:memoryId/photos/:photoId/content` | `MemoriesController.photoContent` | 公开 | ✓ | `apps/api/src/memories/memories.controller.ts` |
 
@@ -521,5 +521,5 @@
 
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
-| POST | `/upload` | `UploadController.FileInterceptor` | 登录 | ✓ | `apps/api/src/upload/upload.module.ts` |
+| POST | `/upload` | `UploadController.upload` | 登录 | ✓ | `apps/api/src/upload/upload.module.ts` |
 

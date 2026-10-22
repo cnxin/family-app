@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 从 apps/api/src 的 Controller 源码提取 HTTP 端点清单，输出 docs/api-inventory.md。
-// 零依赖，纯正则扫描；用于重构期间对照"哪些端点已迁移"。
+// 零依赖，轻量源码扫描；用于重构期间对照"哪些端点已迁移"。
 //
 //   node scripts/api-inventory.mjs          # 重新生成 docs/api-inventory.md
 //   node scripts/api-inventory.mjs --check  # 仅校验文件是否过期（CI 用），过期时退出码 1
@@ -16,7 +16,7 @@ const OUTPUT = join(ROOT, 'docs', 'api-inventory.md');
 const METHODS = ['Get', 'Post', 'Put', 'Patch', 'Delete'];
 
 // 已定义契约的端点集合（需要先构建 packages/contracts；未构建时视为无契约并给出提示）
-function loadContractKeys() {
+export function loadContractKeys() {
   try {
     const require = createRequire(import.meta.url);
     const { contractIndex } = require(join(ROOT, 'packages', 'contracts', 'dist', 'index.js'));
@@ -54,7 +54,7 @@ function joinPath(prefix, path) {
   return `/${parts.join('/')}`;
 }
 
-function extractControllers(source) {
+export function extractControllers(source) {
   const controllers = [];
   // @Controller 与 class 之间允许出现其他类级装饰器（@Public()、@RequireCapabilities(...)）
   const pattern =
@@ -80,7 +80,102 @@ function extractControllers(source) {
   return controllers;
 }
 
-function extractRoutes(controller, file) {
+function skipTrivia(source, start) {
+  let index = start;
+  while (index < source.length) {
+    if (/\s/.test(source[index])) {
+      index += 1;
+      continue;
+    }
+    if (source.startsWith('//', index)) {
+      const end = source.indexOf('\n', index + 2);
+      index = end === -1 ? source.length : end + 1;
+      continue;
+    }
+    if (source.startsWith('/*', index)) {
+      const end = source.indexOf('*/', index + 2);
+      index = end === -1 ? source.length : end + 2;
+      continue;
+    }
+    break;
+  }
+  return index;
+}
+
+function skipQuoted(source, start) {
+  const quote = source[start];
+  let index = start + 1;
+  while (index < source.length) {
+    if (source[index] === '\\') {
+      index += 2;
+      continue;
+    }
+    if (source[index] === quote) return index + 1;
+    index += 1;
+  }
+  return source.length;
+}
+
+function skipBalanced(source, start) {
+  const closing = { '(': ')', '[': ']', '{': '}' };
+  const stack = [closing[source[start]]];
+  let index = start + 1;
+  while (index < source.length && stack.length > 0) {
+    if (source[index] === "'" || source[index] === '"' || source[index] === '`') {
+      index = skipQuoted(source, index);
+      continue;
+    }
+    if (source.startsWith('//', index) || source.startsWith('/*', index)) {
+      index = skipTrivia(source, index);
+      continue;
+    }
+    if (closing[source[index]]) {
+      stack.push(closing[source[index]]);
+      index += 1;
+      continue;
+    }
+    if (source[index] === stack.at(-1)) stack.pop();
+    index += 1;
+  }
+  return index;
+}
+
+function skipDecorator(source, start) {
+  let index = start + 1;
+  while (/[\w$.]/.test(source[index] ?? '')) index += 1;
+  index = skipTrivia(source, index);
+  return source[index] === '(' ? skipBalanced(source, index) : index;
+}
+
+function findHandler(source, start) {
+  let index = skipTrivia(source, start);
+  while (source[index] === '@') {
+    index = skipTrivia(source, skipDecorator(source, index));
+  }
+
+  const signatureStart = index;
+  const modifiers = new Set([
+    'abstract',
+    'async',
+    'override',
+    'private',
+    'protected',
+    'public',
+    'static',
+  ]);
+  let token;
+  while ((token = source.slice(index).match(/^[$A-Z_a-z][$\w]*/)?.[0])) {
+    if (!modifiers.has(token)) break;
+    index = skipTrivia(source, index + token.length);
+  }
+  const name = source.slice(index).match(/^[$A-Z_a-z][$\w]*/)?.[0];
+  if (!name) return null;
+  index = skipTrivia(source, index + name.length);
+  if (source[index] !== '(') return null;
+  return { name, start: signatureStart };
+}
+
+export function extractRoutes(controller, file) {
   const routes = [];
   const routePattern = new RegExp(
     `@(${METHODS.join('|')})\\(([^)]*)\\)`,
@@ -91,7 +186,7 @@ function extractRoutes(controller, file) {
     const method = match[1].toUpperCase();
     const path = stringArg(match[2]) ?? '';
     const after = controller.body.slice(match.index + match[0].length);
-    const handlerMatch = after.match(/^[\s\S]*?\n\s*(?:async\s+)?(\w+)\s*\(/);
+    const handler = findHandler(after, 0);
     const before = controller.body.slice(0, match.index);
     const previousRouteEnd = Math.max(
       ...METHODS.map((name) => before.lastIndexOf(`@${name}(`)),
@@ -100,9 +195,7 @@ function extractRoutes(controller, file) {
     );
     // 装饰器可能写在路由装饰器之前或之后（如 @Post(...) 下面再 @RequireCapabilities(...)），
     // 所以窗口 = 上一个方法结束之后 ~ 本方法签名之前
-    const afterDecorators = handlerMatch
-      ? after.slice(0, handlerMatch[0].length)
-      : '';
+    const afterDecorators = handler ? after.slice(0, handler.start) : '';
     const decoratorWindow = before.slice(previousRouteEnd) + afterDecorators;
     const capabilities = [
       ...decoratorWindow.matchAll(/@RequireCapabilities\(([^)]*)\)/g),
@@ -123,7 +216,7 @@ function extractRoutes(controller, file) {
     routes.push({
       method,
       path: joinPath(controller.prefix, path),
-      handler: handlerMatch ? handlerMatch[1] : '?',
+      handler: handler?.name ?? '?',
       controller: controller.name,
       file: relative(ROOT, file).replaceAll('\\', '/'),
       module: relative(SRC, file).split(/[\\/]/)[0],
@@ -136,7 +229,7 @@ function extractRoutes(controller, file) {
   return routes;
 }
 
-function collect() {
+export function collect() {
   const routes = [];
   for (const file of walk(SRC)) {
     const source = readFileSync(file, 'utf8');
@@ -154,7 +247,7 @@ function collect() {
   );
 }
 
-function render(routes, contractKeys) {
+export function render(routes, contractKeys) {
   const byModule = new Map();
   for (const route of routes) {
     if (!byModule.has(route.module)) byModule.set(route.module, []);
@@ -216,23 +309,27 @@ function render(routes, contractKeys) {
   return `${lines.join('\n')}\n`;
 }
 
-const routes = collect();
-const markdown = render(routes, loadContractKeys());
-if (process.argv.includes('--check')) {
-  let existing = '';
-  try {
-    existing = readFileSync(OUTPUT, 'utf8');
-  } catch {
-    // 文件不存在视为过期
+function main() {
+  const routes = collect();
+  const markdown = render(routes, loadContractKeys());
+  if (process.argv.includes('--check')) {
+    let existing = '';
+    try {
+      existing = readFileSync(OUTPUT, 'utf8');
+    } catch {
+      // 文件不存在视为过期
+    }
+    if (existing !== markdown) {
+      console.error(
+        `docs/api-inventory.md 已过期，请运行 node scripts/api-inventory.mjs 重新生成（当前 ${routes.length} 个端点）。`,
+      );
+      process.exit(1);
+    }
+    console.log(`docs/api-inventory.md 与代码一致（${routes.length} 个端点）。`);
+  } else {
+    writeFileSync(OUTPUT, markdown);
+    console.log(`已写入 ${relative(ROOT, OUTPUT)}（${routes.length} 个端点）。`);
   }
-  if (existing !== markdown) {
-    console.error(
-      `docs/api-inventory.md 已过期，请运行 node scripts/api-inventory.mjs 重新生成（当前 ${routes.length} 个端点）。`,
-    );
-    process.exit(1);
-  }
-  console.log(`docs/api-inventory.md 与代码一致（${routes.length} 个端点）。`);
-} else {
-  writeFileSync(OUTPUT, markdown);
-  console.log(`已写入 ${relative(ROOT, OUTPUT)}（${routes.length} 个端点）。`);
 }
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

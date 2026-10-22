@@ -38,6 +38,8 @@ jobs:
         run: corepack pnpm typecheck
       - name: Lint（客户端 + API）
         run: corepack pnpm lint
+      - name: API 清单生成器回归
+        run: node --test scripts/api-inventory.test.mjs
       - name: 端点清单与代码一致
         run: node scripts/api-inventory.mjs --check
       - name: 写端点都登记了事件域（/events）
@@ -49,7 +51,20 @@ jobs:
       - name: 备份脚本语法
         run: corepack pnpm backup:worker:check
       - name: Compose 配置
-        run: docker compose -f docker-compose.dev.yml config --quiet
+        env:
+          CORS_ORIGINS: https://family.invalid
+          SITE_ADDRESS: ':80'
+          DB_PASSWORD_SECRET_PATH: /dev/null
+          JWT_SECRET_PATH: /dev/null
+          BOOTSTRAP_SECRET_PATH: /dev/null
+          INTEGRATION_SECRET_PATH: /dev/null
+          AGENT_DATA_KEY_SECRET_PATH: /dev/null
+          AGENT_MCP_KEY_SECRET_PATH: /dev/null
+          AGENT_RUNTIME_KEY_SECRET_PATH: /dev/null
+        run: |
+          docker compose --env-file /dev/null -f docker-compose.dev.yml config --quiet
+          docker compose --env-file /dev/null -f docker-compose.prod.yml config --quiet
+          docker compose --env-file /dev/null -f docker-compose.prod.yml -f docker-compose.agent.yml config --quiet
 
   # API 黑盒测试：临时 PostgreSQL + 临时 API 进程
   api-tests:
@@ -161,6 +176,8 @@ jobs:
         run: docker build -f Dockerfile.prod -t family-app-api:ci .
       - name: 构建 API 开发镜像
         run: docker build -f Dockerfile -t family-app-api:dev-ci .
+      - name: 构建备份 worker 镜像
+        run: docker build -f Dockerfile.backup-worker -t family-app-backup-worker:ci .
       - name: 生产镜像能加载入口
         run: docker run --rm family-app-api:ci node -e "require('@family/shared'); require('@family/contracts'); require('@family/agent-core'); console.log('workspace packages ok')"
       - name: 构建前端镜像

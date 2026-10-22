@@ -60,7 +60,11 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 元数据凭据同样优先使用 `/run/integration-secrets/` 下的 `*_FILE`，文件权限规则与媒体连接器一致。
 - 服务器变量是所有家庭的默认值。家庭管理员也可在“家庭观影 -> 观影设置 -> 搜索数据源”建立家庭覆盖；其 Token 使用 `integration_secret.txt` 进行 AES-256-GCM 加密，界面和 API 均不回显明文。
 
-可选家庭智能体：
+Native 小管家不需要额外的 Compose 叠加文件。基础生产编排已经通过
+`AGENT_DATA_KEY_FILE=/run/secrets/agent_data_key` 提供数据加密密钥；各家庭在“小管家设置”里保存的云端服务商 key
+也使用这把密钥加密。不要在未迁移已有密文时直接更换 `agent_data_key.txt`。
+
+Hermes 兼容运行时（仅 J4.6 下线前可选）：
 
 ```bash
 openssl rand -hex 32 > deploy/secrets/agent_mcp_key.txt
@@ -68,7 +72,7 @@ openssl rand -hex 32 > deploy/secrets/agent_runtime_key.txt
 chmod 600 deploy/secrets/agent_*.txt
 ```
 
-- `agent_data_key.txt` 已在上面的生产必需密钥里生成，这里不用再建。
+- `agent_data_key.txt` 已由基础生产编排挂载，这里不用再建。
 - `agent_mcp_key.txt` 只用于 Hermes 到 Family App MCP 的容器内认证，`agent_runtime_key.txt` 只用于 Family App 到 Hermes API Server 的认证，不能复用家庭账号、JWT 或媒体连接器密钥。
 - 模型密钥通过 `HERMES_OPENAI_API_KEY` 或部署环境的 Secret 管理注入 Hermes，不写入仓库、Compose 文件或日志。
 
@@ -82,7 +86,7 @@ docker compose -f docker-compose.dev.yml -f docker-compose.local-agent.yml up -d
 ```
 
 `deploy/hermes/config.local.yaml` 只为 API Server 启用 Family MCP；`docker-compose.local-agent.yml` 让容器内 API 通过 `host.docker.internal:8642` 连接本机 Hermes。脚本只在 profile 尚无配置时写入模板，并只生成缺失密钥；重复执行不会轮换现有密钥。切换模型提供方时，应同步调整该 profile 的 `model` 配置和所需的单个提供方凭据，不要复制个人消息渠道配置。
-- Hermes 是可选服务，不启用 `docker-compose.agent.yml` 时不影响家庭平台和 `/health/ready`。
+- Hermes 是 J4.6 前保留的兼容服务，不启用 `docker-compose.agent.yml` 不影响 Native 小管家、家庭平台或 `/health/ready`。在收集连续一周 Native 实测证据并满足 J4.6 验收条件前，保留该兼容编排及密钥。
 
 环境文件和 `deploy/secrets/` 已被 Git 忽略。数据库密码、JWT 密钥、首户初始化密钥、集成加密密钥以及连接器令牌不得提交到仓库，也不得写入镜像构建参数。轮换 JWT 密钥会使所有现有登录立即失效；集成加密密钥不能在未迁移现有密文时直接轮换。
 
@@ -99,7 +103,23 @@ docker compose --env-file deploy/.env.production \
   -f docker-compose.prod.yml up -d
 ```
 
-启用家庭智能体时，将可选叠加文件加入相同命令：
+### 3.1 启用 Native 小管家
+
+上面的基础生产命令已经部署 Native 运行时所需的 API 和 `AGENT_DATA_KEY_FILE`，启用 Native 无需叠加
+`docker-compose.agent.yml`。使用具有家庭管理权限的账号完成以下设置：
+
+1. 从“家庭设置”进入“小管家设置”，或在“问问小管家”页面点“设置”。
+2. 打开“云端助理（第 2 档）”，选择云端服务商，保存模型地址、模型名和 key。试用期间保留“只对管理员开放”，并按需要确认每日上限和“发出前脱敏”。
+3. 点“测一下”，确认状态为“测通了”。只要服务商、地址、模型或 key 有变化，就要重新测试。
+4. 在“谁来回答”中选择“小管家自带”。后端会拒绝在云端模型未测通时切换到该运行方式。
+5. 回到“问问小管家”，确认标题下显示“小管家自带 · 服务商”，再发送一条实际问题验证回答与工具事件。页面显示“暂时连不上”时先检查家庭服务商配置，不要通过启动 Hermes 来代替 Native 配置。
+
+全新数据库的 `runtimeKind` 默认仍为 `fake`（“本地摘要”），因此部署完成不会自动开始向云端服务商发送内容。服务商 key
+只通过家庭设置保存，API 仅返回是否已配置和末四位；它不需要写入服务器环境文件。
+
+### 3.2 保留 Hermes 兼容运行时
+
+只有仍需验证或回退到 Hermes 时，才将兼容叠加文件加入相同命令：
 
 ```bash
 docker compose --env-file deploy/.env.production \
@@ -113,7 +133,7 @@ docker compose --env-file deploy/.env.production \
 
 生产环境不会发布 Hermes API 或 Dashboard 端口。Compose 已固定官方多架构清单 digest；首次启用前仍应在目标主机实际拉取并完成健康检查，再在家庭平台后台选择 Hermes。运行时不可用会回退到本地只读摘要。
 
-**首次部署必须显式选择 Hermes：** 全新数据库的智能体运行方式默认为本地摘要（`runtimeKind = fake`）。即使 Hermes 容器、密钥和 MCP 健康检查全部正常，管理员仍需打开“问问小管家 -> 助理设置”，选择“Hermes”，并确认页面状态显示“Hermes 已连接”。如果跳过这一步，对话不会报错，而会静默使用基于正则的本地兜底回答；普通用户若未留意状态文案，无法从回答流程中判断模型并未参与。空库验收中的真机 0/9/连接失败排查曾因忽略这一设置而绕路，因此新环境上线清单必须把运行时选择与 Hermes/MCP 健康检查分开验证。
+**启用 Hermes 必须显式选择该运行方式：** 即使 Hermes 容器、密钥和 MCP 健康检查全部正常，管理员仍需在“小管家设置”的“谁来回答”中选择“Hermes”。如果跳过这一步，对话仍会使用默认的本地摘要。新环境验收必须把运行时选择与 Hermes/MCP 健康检查分开验证。
 
 首次启动会在空数据库上执行 TypeORM 迁移，但不会创建“爸爸/妈妈”等演示数据。打开站点后，初始化页面要求填写家庭名称、首位管理员、登录账号、至少 8 位密码，以及 `deploy/secrets/bootstrap_secret.txt` 中的初始化密钥。初始化使用数据库事务与互斥锁，只有数据库完全未建户时可成功一次；之后同一密钥不能再创建家庭。
 
