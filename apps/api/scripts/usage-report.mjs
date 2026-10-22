@@ -15,6 +15,7 @@
  * NAS（在仓库根目录，借 api 镜像里的 node 与 pg，连生产库）：
  *   docker compose --env-file deploy/.env.production -f docker-compose.prod.yml run --rm --no-deps -T \
  *     -v "$PWD/apps/api/scripts/usage-report.mjs:/app/apps/api/usage-report.mjs:ro" \
+ *     -v "$PWD/apps/api/scripts/usage-report-native.mjs:/app/apps/api/usage-report-native.mjs:ro" \
  *     api node usage-report.mjs --days 14
  *
  * 连接参数读 DB_HOST / DB_PORT / DB_USER / DB_PASSWORD（或 DB_PASSWORD_FILE）/ DB_NAME，
@@ -23,6 +24,13 @@
 import { readFileSync } from 'node:fs';
 import contracts from '@family/contracts';
 import pg from 'pg';
+
+import {
+  nativeRunSectionLines,
+  NATIVE_DAILY_SQL,
+  NATIVE_ERRORS_SQL,
+  NATIVE_RUN_COLUMNS,
+} from './usage-report-native.mjs';
 
 // 插件的流水名、主表来源、未计入说明、快照都由 manifest 生成（J1）；下面只写内核的。
 const generated = contracts.pluginUsage();
@@ -182,6 +190,15 @@ try {
     `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agent_runs' AND column_name = 'tier') AS ok`,
   )).rows[0].ok;
   const cloudRows = hasCloud ? (await client.query(CLOUD_DAILY, [DAYS])).rows : [];
+  const nativeColumnCount = (await client.query(
+    `SELECT COUNT(DISTINCT column_name)::int AS count
+       FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'agent_runs' AND column_name = ANY($1::text[])`,
+    [NATIVE_RUN_COLUMNS],
+  )).rows[0].count;
+  const hasNativeRuns = nativeColumnCount === NATIVE_RUN_COLUMNS.length;
+  const nativeRows = hasNativeRuns ? (await client.query(NATIVE_DAILY_SQL, [DAYS])).rows : [];
+  const nativeErrorRows = hasNativeRuns ? (await client.query(NATIVE_ERRORS_SQL, [DAYS])).rows : [];
   await client.query('COMMIT');
 
   console.log(`# 小管家用量：最近 ${DAYS} 天的写操作次数\n`);
@@ -244,11 +261,21 @@ try {
       for (const row of mine) console.log(`| ${row.day} | ${row.runs} | ${row.tokens} | ${row.refused} | ${share(row)} |`);
       console.log('');
     };
+    const printNativeRuns = () => {
+      if (!hasNativeRuns) return;
+      const lines = nativeRunSectionLines({
+        days: DAYS,
+        dailyRows: nativeRows.filter((row) => row.household === household.id),
+        errorRows: nativeErrorRows.filter((row) => row.household === household.id),
+      });
+      console.log(`${lines.join('\n')}\n`);
+    };
     if (!domains.length) {
       console.log('这段时间没有写操作。\n');
       printSnapshots();
       printUtterances();
       printCloud();
+      printNativeRuns();
       continue;
     }
     console.log(`| 域 | ${columns.map((column) => column.name).join(' | ')} | 合计 | 计数来源 |`);
@@ -271,8 +298,10 @@ try {
     printSnapshots();
     printUtterances();
     printCloud();
+    printNativeRuns();
   }
   if (!hasUtterances) console.log('**助理原话（J2）**：库里还没有 assistant_utterances（J2 迁移之前），这一段跳过\n');
+  if (!hasNativeRuns) console.log('**Native 运行轨迹**：库里还没有所需的 agent_runs 字段，这一段跳过\n');
   console.log('**没有计入的写操作**\n');
   for (const line of UNCOUNTED) console.log(`- ${line}`);
 } catch (error) {

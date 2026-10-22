@@ -40,6 +40,8 @@ jobs:
         run: corepack pnpm lint
       - name: API 清单生成器回归
         run: node --test scripts/api-inventory.test.mjs
+      - name: Native 用量汇总回归
+        run: node --test apps/api/scripts/usage-report-native.test.mjs
       - name: 端点清单与代码一致
         run: node scripts/api-inventory.mjs --check
       - name: 写端点都登记了事件域（/events）

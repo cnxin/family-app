@@ -421,6 +421,7 @@ try {
       'ts-node/register',
       'scripts/check-schema-drift.ts',
     ]);
+    await runScript('scripts/usage-report-native.integration.mjs');
     // J1b：内核注册表与共享纯函数的单测
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/kernel-units.check.ts']);
     await runProcess(process.execPath, ['-r', 'ts-node/register', 'scripts/finance-recurring.check.ts']);
