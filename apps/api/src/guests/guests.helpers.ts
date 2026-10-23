@@ -173,7 +173,7 @@ function publicWifiProfile(profile: GuestWifiProfile, householdId: string) {
       ? decryptIntegrationCredential(profile.passwordEncrypted, householdId, 'guest-wifi', '访客 Wi-Fi')
       : null;
     if (profile.security === 'WPA' && !password) return null;
-    const escape = (value: string) => value.replace(/([\\\\;,:\"])/g, '\\\\$1');
+    const escape = (value: string) => value.replace(/([\\\\;,:"])/g, '\\\\$1');
     const qrPayload = profile.security === 'WPA'
       ? `WIFI:T:WPA;S:${escape(profile.ssid)};P:${escape(password!)};;`
       : `WIFI:T:nopass;S:${escape(profile.ssid)};;`;

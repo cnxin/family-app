@@ -104,7 +104,7 @@ function trimmed(value: string, fallback: string) {
 }
 
 function sanitizeAssistantName(value: string) {
-  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+  return value.replace(/\p{Cc}/gu, '').trim();
 }
 
 @Injectable()
