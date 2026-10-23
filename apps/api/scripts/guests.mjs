@@ -50,9 +50,10 @@ assert(invalidWifi.status === 400, 'WPA 访客 Wi-Fi 拒绝弱密码');
 
 const wifiCreated = await request('/guest-wifi-profiles', adminToken, 'POST', {
   name: '验收访客网络',
-  ssid: 'Family-Guest-Test',
+  // SSID 与密码故意带上 ; : , 这些要转义的字符，下面核对二维码载荷
+  ssid: 'Family;Guest:Test',
   security: 'WPA',
-  password: 'guest-pass-2468',
+  password: 'guest,pass-2468',
 });
 const wifiProfile = wifiCreated.body.data;
 assert(
@@ -201,6 +202,10 @@ assert(
     !('password' in (preview.body.data.wifi ?? {})) &&
     !('tokenHash' in preview.body.data),
   '公开邀请页只返回本次来访的 Wi-Fi 二维码载荷，不返回密码字段、家庭成员或令牌摘要',
+);
+assert(
+  preview.body.data.wifi?.qrPayload === 'WIFI:T:WPA;S:Family\\;Guest\\:Test;P:guest\\,pass-2468;;',
+  'Wi-Fi 二维码载荷按 WIFI: 规范用一个反斜杠转义 ; : , 等特殊字符',
 );
 
 const moviePolls = await request(`/guest-invitations/${invitation.invitationToken}/movie-polls`, null);
