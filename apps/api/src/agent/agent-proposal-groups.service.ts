@@ -48,7 +48,7 @@ type GroupAgentActionType = (typeof GROUPABLE_ACTION_TYPES)[number];
 
 function untrustedText(value: unknown) {
   return typeof value === 'string'
-    ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim()
+    ? value.replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim()
     : value;
 }
 

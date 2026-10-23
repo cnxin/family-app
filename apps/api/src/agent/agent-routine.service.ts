@@ -152,7 +152,7 @@ function untrustedText(value: string, maximum: number) {
       /\b(?:AGENT_DATA_KEY|AGENT_MCP_KEY|OPENWEATHER_API_KEY|MOVIEPILOT_API_KEY|PLEX_TOKEN|EMBY_API_KEY)\s*[:=]\s*[^\s,;]+/gi,
       '[敏感信息已隐藏]',
     )
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+    .replace(/\p{Cc}/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, maximum);
