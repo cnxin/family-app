@@ -173,7 +173,8 @@ function publicWifiProfile(profile: GuestWifiProfile, householdId: string) {
       ? decryptIntegrationCredential(profile.passwordEncrypted, householdId, 'guest-wifi', '访客 Wi-Fi')
       : null;
     if (profile.security === 'WPA' && !password) return null;
-    const escape = (value: string) => value.replace(/([\\\\;,:"])/g, '\\\\$1');
+    // Wi-Fi 二维码（WIFI:T:…;S:…;P:…;;）里的 \ ; , : " 用一个反斜杠转义；原来写成了两个，带这些字符的 SSID / 密码扫出来连不上
+    const escape = (value: string) => value.replace(/([\\;,:"])/g, '\\$1');
     const qrPayload = profile.security === 'WPA'
       ? `WIFI:T:WPA;S:${escape(profile.ssid)};P:${escape(password!)};;`
       : `WIFI:T:nopass;S:${escape(profile.ssid)};;`;
