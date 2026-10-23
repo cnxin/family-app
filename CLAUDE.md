@@ -6,7 +6,7 @@
 
 ## 结构
 
-- `apps/api` — NestJS 10 + TypeORM + PostgreSQL 16。J7.1/J7.2 已把主要业务模块按 module / controller / service / DTO 及子服务拆分，少量简单域仍保留合并文件；实体暂时集中在 `src/entities/index.ts`，留待 J7.4 拆分。schema 由 `src/database/migrations` 管理（不用 synchronize）
+- `apps/api` — NestJS 10 + TypeORM + PostgreSQL 16。J7.1/J7.2 已把主要业务模块按 module / controller / service / DTO 及子服务拆分，少量简单域仍保留合并文件；实体按域拆在 `src/entities/<域>.ts`（J7.4，2026-10-23），`src/entities/index.ts` 只做汇总导出与 `ALL_ENTITIES`，业务代码照旧 `from '../entities'`。schema 由 `src/database/migrations` 管理（不用 synchronize）
 - `apps/web` — Vite + React 19 + TanStack Query + React Router + Tailwind 4；数据 hook 在 `src/lib/queries/`，类型一律从 `@family/contracts` 取。旧 Expo 客户端 `apps/mobile` 已在 H1（2026-09-28）删除
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
 - `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数。**依赖 `node:` 的公共函数不要放这里**（shared 要保持纯 TS，客户端将来可能直接吃它），放 `apps/api/src/common/`，比如 `fingerprint.ts`（幂等指纹，注意有规范化/非规范化两种算法，改算法会让落库指纹作废）
@@ -38,7 +38,7 @@
 ## 当前主线顺序（2026-10-21）
 
 1. 收集 Native 小管家连续一周实测证据；满足后执行 J4.6，下线 Hermes 兼容路径。
-2. J4.6 后重新统计 `apps/api/src/agent` 超长文件并执行 J7.3；随后执行 J7.4，拆 `src/entities/index.ts`。
+2. J4.6 后重新统计 `apps/api/src/agent` 超长文件并执行 J7.3（J7.4 实体拆分已于 2026-10-23 完成）。
 3. J6 继续做文档和工程收口；`docs/plugin-development.md` 已交付并接入文档入口，API 清单生成器的多行装饰器误识别已于 2026-10-21 修复并通过回归与 `--check` 验收；J6 整体仍未完成。
 4. J3 仅在试用满两周、原话不少于 100 条、覆盖不少于 5 个域三项同时满足后启动；2026-10-15～2026-10-28 只是暂定试用窗口，不代表实际试用已经开始。J5 尚未启动。
 

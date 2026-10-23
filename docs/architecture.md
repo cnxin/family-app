@@ -618,7 +618,7 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 
 | 类 | 文件（行数） | 怎么处理 |
 | --- | --- | --- |
-| 实体汇总（1） | `src/entities/index.ts`（6979） | 拆到各插件目录；J1 / J1b 没做（§8.5、§9.5 第 1 条），拆完 check-plugins 才能查实体层的跨插件读写 |
+| 实体汇总（1） | `src/entities/index.ts`（6979） | J7.4 已做（2026-10-23）：在 entities 目录里按域拆，见下文「J7.4 结果」 |
 | 插件模块文件（16） | `assets.module.ts`（1927）、`media.module.ts`（1768）、`travel.module.ts`（1605）、`guests.module.ts`（1342）、`auth.module.ts`（1156）、`memories.module.ts`（1002）、`points.module.ts`（903）、`polls.module.ts`（869）、`system.module.ts`（836）、`reminders.module.ts`（781）、`menus.module.ts`（727）、`knowledge.module.ts`（690）、`recipes.module.ts`（645）、`inventory.module.ts`（627）、`tasks.module.ts`（622）、`calendar.module.ts`（499） | controller、service 和 DTO 都写在模块文件里（26 个模块文件里有 controller，这是早期的写法）。拆成 `*.controller.ts` / `*.service.ts`，模块文件只留装配，参考 `agent/` 目录和 `finance-*.controller.ts` |
 | agent 目录（7） | `agent.service.ts`（1386）、`agent-routine.service.ts`（809）、`agent-proposals.service.ts`（659）、`agent-memory.service.ts`（594）、`agent.controller.ts`（560）、`agent-tools.service.ts`（548）、`agent-proposal-groups.service.ts`（486） | 先做 J4.6 删 Hermes，删完重新数行数，再拆剩下超的 |
 | 其他服务（9） | `media/connectors.ts`（1137）、`notifications/external-notifications.service.ts`（917）、`inventory/inventory-transactions.service.ts`（807）、`finance/finance.service.ts`（784）、`media/playback-webhook.service.ts`（684）、`inventory/inventory-batches.service.ts`（632）、`media/media-library.service.ts`（548）、`media/media-connectors.service.ts`（463）、`media/metadata-providers.ts`（458） | 按职责拆；`media` 一个目录占 5 个，可以一起做 |
@@ -629,7 +629,7 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 1. **J7.1 插件模块文件 16 个**：模块文件拆出 controller / service。风险最低，可以先做。**2026-10-14 已完成**，结果见下。
 2. **J7.2 服务按职责拆**：原来的 9 个服务 + 契约脚本 1 个，再加 J7.1 拆出来仍超 400 行的 14 个服务（共 24 个）。按目录分批：`media` 的 7 个一批，其余每个目录一批。**media 一批 2026-10-14 试做完**，拆法见下，King 认可后铺开；**inventory 一批 2026-10-14 完成**；**recipes / knowledge / tasks 一批 2026-10-15 完成**；**menus / reminders / system-backup 一批 2026-10-15 完成**；**polls / points / memories 一批 2026-10-15 完成**；**finance / external-notifications / 契约脚本一批 2026-10-15 完成**；**guests 2026-10-15 完成**；**travel 2026-10-15 完成**；**assets 2026-10-16 完成，J7.2 全部做完**。
 3. **J7.3 agent 目录 7 个**：等 J4.6 删完 Hermes，重新数行数，再拆还超的。
-4. **J7.4 实体汇总**：拆到各插件目录，最后做，风险最大（TypeORM 实体注册要改，迁移不动）。拆完 check-plugins 补一条断言：实体层不许跨插件读写。
+4. **J7.4 实体汇总**：**2026-10-23 已完成**。原计划拆到各插件目录，执行时改为在 entities 目录里按域拆（King 拍板），理由见下文「J7.4 结果」；「实体层不许跨插件读写」的断言因此没加，另立待办。
 
 每步的验收：重新生成 `docs/api-inventory.md`，diff 里只许「文件」列变（方法、路径、处理函数、权限、契约都不变，接口一个不多一个不少）；check-plugins、check-event-routes 通过，`test:api` 全量（含 native 第二遍）、`test:web` 全量通过；api 的 `max-lines` 警告数只减不增。J7 收尾时警告数降到 0，`apps/api/eslint.config.mjs` 的 `max-lines` 改为 error。
 
@@ -659,11 +659,13 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 
 **J7.2 assets（2026-10-16）**：警告 14 → 13。按资源拆：证件 / 附件拆成 `AssetDocumentsService`（签名密钥字段和只给它用的文件 helper 跟着走），维护计划拆成 `AssetMaintenanceService`，耗材拆成 `AssetConsumablesService`。`AssetsService` 只留资产本身的增改查、位置与续费。
 
+**J7.4 结果（2026-10-23）**：`src/entities/index.ts`（6979 行）按域拆成同目录 32 个文件，每个 ≤ 400 行；`index.ts` 只留 `export *` 汇总和原样的 `ALL_ENTITIES`，184 处 `from '../entities'` 不用改，不需要迁移。没有按原计划拆进各插件目录：113 个实体之间有大量跨域 TypeORM 关联（投票选项 → 片单、购物项 → 库存 / 维护耗材、任务实例 → 积分流水、几乎所有表 → Household / Member），`() => X` 关联在运行时需要 import 对方的类，拆进插件目录就会让插件目录互相 import，违反 J1b 的零 import 边界。拆分时核对过：209 条顶层语句逐字搬；装饰器里没有跨文件的运行时值（非类声明全是类型），文件之间的循环引用只出现在 `() => X` 里；分别用原文件和新文件构建 TypeORM 元数据对比，113 张表、1393 列，表 / 列 / 关联 / 索引 / 唯一 / 检查约束完全一致。「实体层不许跨插件读写」要等跨域关联改成只存 id 之后才能断言，不在 J7 范围。
+
 **J7.2 小结**：24 个文件（9 个原来就超的服务、14 个 J7.1 拆出来仍超的服务、1 个契约脚本）全部降到 400 行以内，分 9 批合并，每批都升级了演示栈。api 警告从 37 降到 13：超长文件 8 个，归 J7.3（agent 目录 7 个）和 J7.4（实体汇总 1 个）；另外 5 条是别的规则的老警告。拆的过程中删掉 3 个注入却从没用过的仓库（库存批次服务的 movements、menus 的 notifications、guests 的 pollOptions）。
 
 已经超长的文件后来又加过代码，所以警告数没变，文件还在变长。例如 J4.7（第六批）给 `agent.service.ts` 加了 26 行（1360 → 1386），给 `agent.controller.ts` 加了 6 行（554 → 560）。J7 做完之前再往这些文件里加功能时，优先把新代码放进新文件。
 
-**后续执行顺序（2026-10-21）**：先收集 Native 小管家连续一周实测证据，满足后做 J4.6 下线 Hermes；再重新统计 agent 目录并做 J7.3，最后做 J7.4 实体汇总拆分。J6 可并行收口文档、插件指南和工程尾项；[插件开发指南](plugin-development.md) 已交付并接入 README 与开发约定，插件守门检查（18 个 manifest、35 个助理工具）和事件路由检查（229 个写端点）通过；清单生成器的多行装饰器误识别也已修复并通过回归与 `--check` 验收。J6 整体仍未完成。J3 仍受「试用满两周、原话 ≥ 100 条、覆盖 ≥ 5 个域」三项门槛约束；2026-10-15～2026-10-28 只是暂定试用窗口，没有记录就不能宣称已开始或已完成。J5 尚未启动。
+**后续执行顺序（2026-10-21）**：先收集 Native 小管家连续一周实测证据，满足后做 J4.6 下线 Hermes；再重新统计 agent 目录并做 J7.3，J7.4 实体汇总拆分已提前在 2026-10-23 做完。J6 可并行收口文档、插件指南和工程尾项；[插件开发指南](plugin-development.md) 已交付并接入 README 与开发约定，插件守门检查（18 个 manifest、35 个助理工具）和事件路由检查（229 个写端点）通过；清单生成器的多行装饰器误识别也已修复并通过回归与 `--check` 验收。J6 整体仍未完成。J3 仍受「试用满两周、原话 ≥ 100 条、覆盖 ≥ 5 个域」三项门槛约束；2026-10-15～2026-10-28 只是暂定试用窗口，没有记录就不能宣称已开始或已完成。J5 尚未启动。
 
 **J6 本批补充（2026-10-21）**：[生产部署说明](production-deployment.md) 已补 Native 配置与启用步骤，Hermes 编排明确为 J4.6 前的兼容路径；[J4 计划](j4-agent-plan.md) 的云端 key 加密主密钥已更正为 `AGENT_DATA_KEY` / `AGENT_DATA_KEY_FILE`。CI 已补开发、生产及生产叠加 Hermes 的 Compose 解析，并增加备份 worker 镜像构建步骤。三种 Compose 配置已在本地解析通过，备份 worker 的 `linux/arm64` 镜像也已实际构建并完成入口与产物核查。本地验收通过：typecheck；lint 0 error、13 条既有 warning；清单回归 2 / 2、端点 340 / 340；插件 18 / 18、助理工具 35 个及事件路由 229 个写端点检查；备份脚本语法检查；Web 单测 223 pass、10 skip；全量 `test:api`（含 Native 第二遍经 API 发起的 40 个 run 全部为 `native-loop-1`）和全量 `test:web`（444 pass、65 条件 skip、0 fail）。本批临时测试库与容器已清理。随后确认提交 `a98cf2c` 的远端 CI #479（run `39705609376`）于 2026-10-22 09:53:40（北京时间）四项全部通过；PR #3 尚未合并，部署与人工实测仍待实际执行，不代表 J4.6 人工验收或 J6 整体完成。
 
@@ -681,4 +683,4 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 | J4 agent 重建 | J4.0～J4.5 已完成，J4.6 等实测一周 | 见 `docs/j4-agent-plan.md` §4 | King 2026-10-09 拍板（§2 十件按建议）。已合：J4.0 `packages/agent-core`（provider / 工具注册表 / loop / 录制回放）、J4.1 工具由 manifest 生成（30 个现名不变，MCP tools/list 逐字节一致）、agent 目录零 import 插件目录、J4.2 NativeAgentRuntime（工具三层过滤、agent_chat 原话落表、agent*.mjs 在 native 下跑第二遍）、J4.3 云端档配置（服务商 / key 加密 / 测一下 / 每日上限 / tier2Scope / 脱敏，设置页「云端助理」分段）、J4.4 流式（`/events` 的 `agent.run` 事件，小管家页逐段出字、断线退回轮询）、J4.5 外围回归（渠道 / 记忆 / 例行任务在 native 下跑通，每日上限加锁，用量报告加流式占比）；J4.6 Hermes 下线等 King 实测一周；J4.7 设置页拉取模型列表（`POST /agent/settings/provider-models`，2026-10-13）。第四批（2026-10-10）：补提醒 / 投票 / 积分 / 访客 / 智能家居 5 个读工具、K2 截图记账（内核云端看图，见 `finance-plan.md` §8.8） |
 | J5 本地模型档 | ☐，尚未启动 | | 依赖 J3 与真实试用语料 |
 | J6 收口 | ☐ | | [插件开发指南](plugin-development.md) 已交付并接入 README、CLAUDE 与本进度表，插件及事件路由守门检查通过；2026-10-21 已修 API 清单生成器的多行装饰器误识别，纠正 7 个处理函数名，340 个端点的方法、路径、权限、契约不变，回归测试与 `--check` 通过；J6 整体仍未完成，Hermes 下线归 J4.6 |
-| J7 拆超长文件 | J7.1、J7.2 已完成；J7.3 等 J4.6 | 见 §10 | 2026-10-14 单独成期；api 34 个超长文件，清单与分步见 §10。J7.1（2026-10-14）：16 个模块文件拆成 dto / service / controller，警告 40 → 37；剩 14 个超长服务并入 J7.2。J7.2 media 试做（2026-10-14）：7 个文件降到 400 以内，警告 37 → 30；inventory 2 个，警告 30 → 28；recipes / knowledge / tasks 3 个，警告 28 → 25；menus / reminders / system-backup 3 个，警告 25 → 22；polls / points / memories 3 个，警告 22 → 19；finance / external-notifications / 契约脚本 3 个，警告 19 → 16；guests 1 个，警告 16 → 15；travel 1 个，警告 15 → 14；assets 1 个，警告 14 → 13。J7.2 全部完成（2026-10-16），剩 J7.3（agent 7 个，等 J4.6）、J7.4（实体汇总） |
+| J7 拆超长文件 | J7.1、J7.2、J7.4 已完成；J7.3 等 J4.6 | 见 §10 | 2026-10-14 单独成期；api 34 个超长文件，清单与分步见 §10。J7.1（2026-10-14）：16 个模块文件拆成 dto / service / controller，警告 40 → 37；剩 14 个超长服务并入 J7.2。J7.2 media 试做（2026-10-14）：7 个文件降到 400 以内，警告 37 → 30；inventory 2 个，警告 30 → 28；recipes / knowledge / tasks 3 个，警告 28 → 25；menus / reminders / system-backup 3 个，警告 25 → 22；polls / points / memories 3 个，警告 22 → 19；finance / external-notifications / 契约脚本 3 个，警告 19 → 16；guests 1 个，警告 16 → 15；travel 1 个，警告 15 → 14；assets 1 个，警告 14 → 13。J7.2 全部完成（2026-10-16），剩 J7.3（agent 7 个，等 J4.6）、J7.4（实体汇总） |

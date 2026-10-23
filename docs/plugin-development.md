@@ -205,9 +205,9 @@ manifest 只派生工具清单，不生成执行实现。每个工具还必须�
 
 TypeORM 使用 `ALL_ENTITIES` 和 `ALL_MIGRATIONS`，生产配置 `migrationsRun: true`、`synchronize: false`。
 
-在 J7.4 完成前，实体仍集中登记在 `apps/api/src/entities/index.ts`。新增表时：
+实体按域放在 `apps/api/src/entities/<域>.ts`（J7.4 起），`index.ts` 汇总导出并登记 `ALL_ENTITIES`。实体之间跨域的 TypeORM 关联让它们暂时不能搬进各插件目录（会违反插件目录之间零 import）。新增表时：
 
-1. 新建实体并加入 `ALL_ENTITIES`。
+1. 在对应域的 `entities/<域>.ts` 里新建实体（新域就新建一个文件并在 `index.ts` 里 `export *`），再加入 `ALL_ENTITIES`。
 2. 生成或手写一份新的时间戳迁移。
 3. 把迁移加入 `apps/api/src/database/migrations/index.ts` 的 `ALL_MIGRATIONS`。
 4. 验证全新库、已有数据升级、up/down/up 和 schema drift。
