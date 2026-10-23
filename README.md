@@ -6,13 +6,15 @@
 
 完整的产品边界、数据模型、MoviePilot/Plex/Emby 连接方式、访客系统、网络设备接入和实施路线见 [家庭管理平台总体方案](docs/family-platform-plan.md)。
 
+维护与扩展前请先阅读 [当前架构与主线进度](docs/architecture.md)；新增业务域的声明、后端、Web、助理、数据迁移和验证接入见 [插件开发指南](docs/plugin-development.md)。
+
 ## 当前功能
 
 - **点菜**：按日期选择早餐、午餐或晚餐，分类与搜索菜品，填写口味备注并提交菜单。
 - **统一日历**：按月聚合菜单、家庭事件、任务、观影排期、访客来访、资产维护与家庭出行；支持事件管理和来源模块跳转。
 - **家庭任务**：安排一次性、每日、每周或每月任务，支持负责人、认领、改派、完成、跳过、恢复和停用；管理员可设置完成积分，恢复任务会反向冲销。
 - **积分奖励**：家庭通用积分使用不可变流水和行锁余额；支持手工调整、任务发放、奖励目录、申请时扣分、兑换审批、取消、拒绝与撤销退分。
-- **家庭财务**：维护家庭共享账户、收入、支出、账户间转账和月度分类预算；交易与过账不可修改，误记通过反向流水撤销；Hermes 可查询汇总并生成需成员确认的单笔记账提案。
+- **家庭财务**：维护家庭共享账户、收入、支出、账户间转账和月度分类预算；交易与过账不可修改，误记通过反向流水撤销；小管家可查询汇总并生成需成员确认的单笔记账提案。
 - **家庭投票**：为家庭决定、点菜、活动、观影或采购发起单选/多选投票；支持截止时间、改票、撤票、结束、重开和透明成员结果。
 - **家庭观影**：维护连接器无关的电影/剧集片单、状态和月份排期；可从片单发起关联投票，并在片单与投票之间直接跳转。
 - **在线影视搜索**：并行查询豆瓣兼容桥接、TMDB 和 Bangumi，显示逐源状态并谨慎合并候选；任一来源离线时仍可搜索其他来源或手动录入。
@@ -54,8 +56,8 @@
 前置环境：Docker Desktop、Node.js 20+。仓库根目录执行：
 
 ```bash
-# 安装工作区依赖（首次运行或依赖变更后）
-npx pnpm install
+# 安装工作区依赖（首次运行或依赖变更后，使用 packageManager 固定的 pnpm 版本）
+corepack pnpm install
 
 # 启动 PostgreSQL、种子任务和 API
 docker compose -f docker-compose.dev.yml up --build
@@ -149,16 +151,16 @@ node apps/api/scripts/smoke.mjs
 corepack pnpm --filter api test:metadata
 
 # 家庭数据隔离测试（API 已启动）
-npx pnpm --filter api test:isolation
+corepack pnpm --filter api test:isolation
 
 # 检查实体元数据与已执行迁移是否一致
-npx pnpm --filter api test:schema
+corepack pnpm --filter api test:schema
 
 # 自动创建临时数据库和 API，验证首户初始化、账号迁移、邀请、CORS、权限、限流、
 # 家庭隔离、统一日历、周期任务、积分奖励、通用通知、家庭投票、可配置提醒、多人菜谱、菜单做法快照、采购库存流水、资产维护、安全附件、菜单协作、审计、健康检查、请求日志、敏感信息保护、
 # 唯一约束和事务回滚，结束后自动清理
 docker compose -f docker-compose.dev.yml run --rm --no-deps api \
-  pnpm --filter api test:api
+  corepack pnpm --filter api test:api
 
 # 只跑部分业务脚本（跳过契约测试与初始化演练，适合改动单个模块时快速回归）
 corepack pnpm --filter api test:api -- --only tasks,points
@@ -183,11 +185,11 @@ API 在 `NODE_ENV=test`（或 `CONTRACT_CHECK=1`）下会按 `packages/contracts
 | `Dockerfile.prod` | API 生产镜像 |
 | `Dockerfile.web` | Web 客户端静态站点 + Caddy 镜像 |
 | `Dockerfile.backup-worker` | 备份 worker 镜像（`scripts/backup-worker.sh`） |
-| `docker-compose.yml` | 只起 PostgreSQL，配合本机 `npx pnpm api` |
+| `docker-compose.yml` | 只起 PostgreSQL，配合本机 `corepack pnpm api` |
 | `docker-compose.dev.yml` | 本地演示：PostgreSQL + 种子 + API + 备份 worker |
 | `docker-compose.prod.yml` | 家庭长期运行：db / api / web / backup-worker + Caddy |
-| `docker-compose.agent.yml` | 在 prod 基础上追加 Hermes 智能体运行时 |
-| `docker-compose.local-agent.yml` | 开发覆盖：让容器内 API 连接宿主机上运行的 Hermes |
+| `docker-compose.agent.yml` | 在 prod 基础上追加 Hermes 兼容运行时（待 J4.6 验收后下线） |
+| `docker-compose.local-agent.yml` | 开发覆盖：让容器内 API 连接宿主机上的 Hermes 兼容运行时 |
 
 ## 项目结构
 
@@ -224,6 +226,7 @@ apps/
 
 docs/
 ├── family-platform-plan.md       # 家庭管理平台总体方案
+├── plugin-development.md         # 仓库内编译期插件的完整接入与验证指南
 ├── m3-reminders-acceptance.md    # 可配置提醒验收约定
 ├── m3-polls-acceptance.md        # 通用家庭投票验收约定
 ├── m4-media-polls-acceptance.md  # 片单来源投票验收约定

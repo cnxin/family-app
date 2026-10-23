@@ -28,8 +28,13 @@
 cd ~/AI/family-app || exit 1
 docker compose --env-file deploy/.env.production -f docker-compose.prod.yml run --rm --no-deps -T \
   -v "$PWD/apps/api/scripts/usage-report.mjs:/app/apps/api/usage-report.mjs:ro" \
+  -v "$PWD/apps/api/scripts/usage-report-native.mjs:/app/apps/api/usage-report-native.mjs:ro" \
   api node usage-report.mjs --days 7
 ```
+
+输出里的「Native 运行轨迹」一段也要原样保留：它按上海创建日列出 completed / failed / cancelled / queued / running / unknown，汇总 `runtimeVersion`、实际启动数、首末记录、有记录日数、completed 最长连续日数和 `errorCode`。`--days` 同样作用于这一段；脚本会逐个输出全部家庭，分享前应仅摘取所需家庭。粘贴时一并写明执行日期、参数和所贴家庭，后续才能复核同一范围。
+
+这段统计只用于交叉核对，不能单独证明 King 已人工实测一周。模拟 / 回放、黑盒测试、外部渠道或其它自动调用也可能产生 Native run；时间跨度、有记录日数、completed 连续日数、`runtimeVersion` 和当前 settings 都不等于整周的人工使用记录。不要凭报告自动判断 J4.6 达标，也不要把 queued / running 直接当失败；问题结论以实际体验和查明后的处理结果为准。
 
 某个域两周都是 0，说明要么没人用，要么没找到：结合上面的反馈判断，别直接下结论。
 
@@ -42,6 +47,21 @@ docker compose --env-file deploy/.env.production -f docker-compose.prod.yml run 
 ### 第 2 周
 
 （贴 usage-report 输出）
+
+## Native 一周实测记录（J4.6 前置）
+
+由 King 记录真实的人工实测起止日期、演示版本和当时使用的 Native 配置（服务商、模型、`runtimeVersion`；不要记录 key）。设置发生变化时在当天注明，不能用结束时的 settings 倒推整周。每天按实际情况记体验、问题与结果；没有使用就如实写「未使用」，不补记自动化 run，也不增加每天必须问答几次或固定失败率之类的新门槛。
+
+- 实际开始日期：
+- 实际结束日期：
+- 演示版本（提交 / 镜像标签）：
+- 报告执行日期与参数：
+
+| 日期 | 当天演示版本 | Native 配置（服务商 / 模型 / runtimeVersion） | 实际体验 | 问题与结果 |
+| --- | --- | --- | --- | --- |
+|  |  |  |  |  |
+
+判断 J4.6 的「King 在演示栈实测一周」条件时，以真实人工记录为依据，同期 Native 报告用于辅助核对，不能由脚本自动判定。这里的结论只用于 J4.6；J3 仍单独按「试用满两周、原话 ≥ 100 条、覆盖 ≥ 5 个域」三项门槛判断，两者不能互相替代。
 
 ## 两周后的结论
 

@@ -191,10 +191,10 @@ A + B 是「基础功能」，C + D 是「高级功能」。**A + B 不需要模
 | **J3 第 0 档引擎** | 意图匹配、槽位归一化（金额 / 数量 / 相对日期 / 餐次 / 成员 / 位置 / 设备）、置信度、候选回退；首批模板覆盖 A、B 两类；接进 ⌘K 与今天页搜索条，命中后走现有提案确认。**输入 = `assistant_utterances` 导出的 CSV**（设置页「原话记录 → 导出 CSV」，`chosenKind` / `chosenId` 当人工标注）。**补 ⌘K 动作时**：给点菜补一条动作，把 `propose_menu` 从 manifest 顶层 `proposals` 挪回 `actions[].propose`，然后删掉 `proposals` 字段（J1.4 加的过渡结构，2026-10-06 King 认定） | L（约 2 周） | J1；**试用满两周 且 `assistant_utterances` ≥ 100 条 且 覆盖 ≥ 5 个域**（三条同时满足，2026-10-08 King 拍板；怎么数见 `c2-feedback.md`「每周用量」） |
 | **J4 agent 重建为 manifest 消费者** | refactor-plan 3.2 的自研 loop 落到 `packages/agent-core`；工具由 manifest 生成；28 个旧工具名做别名；`/events` 推运行状态（H2 已备）；第 2 档路由接入；脱敏与每日上限。**J4.0～J4.5 已完成，J4.6 等实测一周**（见 `j4-agent-plan.md` §4） | XL（约 3 周） | J1、J3 |
 | **J5 第 1 档本地模型** | OpenAI 兼容适配；Ollama 探测；仅做意图 + 槽位；评测集（用 J2 攒的原话）；默认关 | M | J3 |
-| **J6 收口** | 删 Hermes 相关（compose、配置）；文档；开源版的「写一个插件」指南 | S | J4 |
+| **J6 收口** | 文档与开源版「写一个插件」指南；清单生成器等工程尾项 | S | J4 |
 | **J7 拆超长文件** | 拆 api 里 34 个超过 400 行的文件（清单与分步见 §10），只搬代码、不改行为；拆完把 api 的 `max-lines` 从告警改成 error，和 web 一样 | L（约 2 周） | 不依赖 J5 / J6；agent 目录那 7 个等 J4.6 删完 Hermes 再拆 |
 
-顺序建议：J0 → J1 → J2（演示栈上进行，与试用何时开始无关）→ 试用两周 → J3 → J4 → J5 → J6。J7 单独排期（2026-10-14 King 拍板），可以插在等试用数据、等实测的空档里做。J1 完成后，加一个新域的成本从「改七处」降到「写一份 manifest + 自己的表和页面」。
+顺序建议：J0 → J1 → J2（演示栈上进行，与试用何时开始无关）→ 试用两周 → J3 → J4 → J5 → J6。Hermes 的实际下线归 J4.6，不归 J6；J6 只做文档、插件指南与工程尾项。J7 单独排期（2026-10-14 King 拍板），可以插在等试用数据、等实测的空档里做。J1 完成后，加一个新域的成本从「改七处」降到「写一份 manifest + 自己的表和页面」。
 
 ---
 
@@ -663,6 +663,12 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 
 已经超长的文件后来又加过代码，所以警告数没变，文件还在变长。例如 J4.7（第六批）给 `agent.service.ts` 加了 26 行（1360 → 1386），给 `agent.controller.ts` 加了 6 行（554 → 560）。J7 做完之前再往这些文件里加功能时，优先把新代码放进新文件。
 
+**后续执行顺序（2026-10-21）**：先收集 Native 小管家连续一周实测证据，满足后做 J4.6 下线 Hermes；再重新统计 agent 目录并做 J7.3，最后做 J7.4 实体汇总拆分。J6 可并行收口文档、插件指南和工程尾项；[插件开发指南](plugin-development.md) 已交付并接入 README 与开发约定，插件守门检查（18 个 manifest、35 个助理工具）和事件路由检查（229 个写端点）通过；清单生成器的多行装饰器误识别也已修复并通过回归与 `--check` 验收。J6 整体仍未完成。J3 仍受「试用满两周、原话 ≥ 100 条、覆盖 ≥ 5 个域」三项门槛约束；2026-10-15～2026-10-28 只是暂定试用窗口，没有记录就不能宣称已开始或已完成。J5 尚未启动。
+
+**J6 本批补充（2026-10-21）**：[生产部署说明](production-deployment.md) 已补 Native 配置与启用步骤，Hermes 编排明确为 J4.6 前的兼容路径；[J4 计划](j4-agent-plan.md) 的云端 key 加密主密钥已更正为 `AGENT_DATA_KEY` / `AGENT_DATA_KEY_FILE`。CI 已补开发、生产及生产叠加 Hermes 的 Compose 解析，并增加备份 worker 镜像构建步骤。三种 Compose 配置已在本地解析通过，备份 worker 的 `linux/arm64` 镜像也已实际构建并完成入口与产物核查。本地验收通过：typecheck；lint 0 error、13 条既有 warning；清单回归 2 / 2、端点 340 / 340；插件 18 / 18、助理工具 35 个及事件路由 229 个写端点检查；备份脚本语法检查；Web 单测 223 pass、10 skip；全量 `test:api`（含 Native 第二遍经 API 发起的 40 个 run 全部为 `native-loop-1`）和全量 `test:web`（444 pass、65 条件 skip、0 fail）。本批临时测试库与容器已清理。随后确认提交 `a98cf2c` 的远端 CI #479（run `39705609376`）于 2026-10-22 09:53:40（北京时间）四项全部通过；PR #3 尚未合并，部署与人工实测仍待实际执行，不代表 J4.6 人工验收或 J6 整体完成。
+
+**Native 实测记录准备（2026-10-22）**：`usage-report.mjs` 新增只读「Native 运行轨迹」，按上海创建日及运行时版本汇总状态、实际启动、首末记录和连续 completed 自然日，只聚合错误码，不读取错误正文。Node 单测已接入静态 CI；真实 PostgreSQL SQL 回归使用 runner 创建的隔离测试库与合成临时表，已接入全量 API 验收。[反馈台账](c2-feedback.md) 已补真实人工起止日期、演示版本和配置记录模板；运行报告只作辅助核对，不代表 King 已人工实测一周，J4.6、J3 的原定门槛不变。 本地验收通过：Node 单测 5 / 5、真实 SQL 回归及完整报告合成库运行、typecheck、lint（0 error、13 条既有 warning）、340 端点清单检查、全量 `test:api`（含 Native 第二遍 40 个 `native-loop-1` run）；隔离测试库已删除，临时 PostgreSQL 16 已停止。新增改动的远端验收须对应新提交，不沿用 `a98cf2c` 的 CI 结果。
+
 ## 进度表
 
 | 任务 | 状态 | 提交 | 备注 |
@@ -671,8 +677,8 @@ lint 的 `max-lines`（400 行，不算空行和注释）在 web 是 error，在
 | J1 插件注册表（18 域） | ☑ | 见 §8.7 | 18 / 18 个插件都有 manifest，14 处登记里插件的条目全部由 manifest 导出，check-plugins 全量断言；剩余手写项与 J1b 输入见 §8.7 末尾；J1.7 合完后升演示栈 |
 | J1b 跨插件解耦 | ☑ | 见 §9 | 插件目录之间零 import（check-plugins 断言）；门面 6 个、事务内钩子 3 个、插件事件 1 个，manifest 的 `dependsOn` / `hooks` 与代码一致；assistant 内核工具清单收进 `core-assistant.ts`；实体层的跨插件读写与内核（agent）→ 插件的 import 不在范围，见 §9「没解的」；演示栈随本批升级，人工走查由 King 本人做 |
 | J2 助理数据与开关 | ☑ | 见 §8.8 | `assistant_utterances` 表与接口、三档开关、⌘K 原话落表；演示栈随本批升级，King 本人去 ⌘K 输几句再看「原话记录」做人工验收 |
-| J3 第 0 档引擎 | ☐ | | 等试用满两周且原话 ≥ 100 条、覆盖 ≥ 5 个域（2026-10-08 拍板）；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
+| J3 第 0 档引擎 | ☐ | | 等试用满两周且原话 ≥ 100 条、覆盖 ≥ 5 个域（2026-10-08 拍板）；2026-10-15～2026-10-28 仅为暂定窗口，不能代替实际记录；补点菜 ⌘K 动作时收掉 manifest 顶层 `proposals`（见 §4 J3 一行） |
 | J4 agent 重建 | J4.0～J4.5 已完成，J4.6 等实测一周 | 见 `docs/j4-agent-plan.md` §4 | King 2026-10-09 拍板（§2 十件按建议）。已合：J4.0 `packages/agent-core`（provider / 工具注册表 / loop / 录制回放）、J4.1 工具由 manifest 生成（30 个现名不变，MCP tools/list 逐字节一致）、agent 目录零 import 插件目录、J4.2 NativeAgentRuntime（工具三层过滤、agent_chat 原话落表、agent*.mjs 在 native 下跑第二遍）、J4.3 云端档配置（服务商 / key 加密 / 测一下 / 每日上限 / tier2Scope / 脱敏，设置页「云端助理」分段）、J4.4 流式（`/events` 的 `agent.run` 事件，小管家页逐段出字、断线退回轮询）、J4.5 外围回归（渠道 / 记忆 / 例行任务在 native 下跑通，每日上限加锁，用量报告加流式占比）；J4.6 Hermes 下线等 King 实测一周；J4.7 设置页拉取模型列表（`POST /agent/settings/provider-models`，2026-10-13）。第四批（2026-10-10）：补提醒 / 投票 / 积分 / 访客 / 智能家居 5 个读工具、K2 截图记账（内核云端看图，见 `finance-plan.md` §8.8） |
-| J5 本地模型档 | ☐ | | |
-| J6 收口 | ☐ | | API 清单生成器（`scripts/api-inventory.mjs`）对多行 `@UseInterceptors` 的上传接口把处理函数显示成 `FileInterceptor`（账单导入、截图识别两条），J6 修 |
+| J5 本地模型档 | ☐，尚未启动 | | 依赖 J3 与真实试用语料 |
+| J6 收口 | ☐ | | [插件开发指南](plugin-development.md) 已交付并接入 README、CLAUDE 与本进度表，插件及事件路由守门检查通过；2026-10-21 已修 API 清单生成器的多行装饰器误识别，纠正 7 个处理函数名，340 个端点的方法、路径、权限、契约不变，回归测试与 `--check` 通过；J6 整体仍未完成，Hermes 下线归 J4.6 |
 | J7 拆超长文件 | J7.1、J7.2 已完成；J7.3 等 J4.6 | 见 §10 | 2026-10-14 单独成期；api 34 个超长文件，清单与分步见 §10。J7.1（2026-10-14）：16 个模块文件拆成 dto / service / controller，警告 40 → 37；剩 14 个超长服务并入 J7.2。J7.2 media 试做（2026-10-14）：7 个文件降到 400 以内，警告 37 → 30；inventory 2 个，警告 30 → 28；recipes / knowledge / tasks 3 个，警告 28 → 25；menus / reminders / system-backup 3 个，警告 25 → 22；polls / points / memories 3 个，警告 22 → 19；finance / external-notifications / 契约脚本 3 个，警告 19 → 16；guests 1 个，警告 16 → 15；travel 1 个，警告 15 → 14；assets 1 个，警告 14 → 13。J7.2 全部完成（2026-10-16），剩 J7.3（agent 7 个，等 J4.6）、J7.4（实体汇总） |
