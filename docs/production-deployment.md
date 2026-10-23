@@ -44,7 +44,7 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 
 可选智能家居（Home Assistant，H3）：
 
-- `HOME_ASSISTANT_BASE_URL` 默认 `http://host.docker.internal:8123`（HA 跑在同一台宿主机上；编排给 API 加了 `host.docker.internal:host-gateway`，Linux/NAS 上也能解析）。
+- `HOME_ASSISTANT_BASE_URL` 默认 `http://host.docker.internal:8123`（HA 跑在同一台宿主机上；编排给 API 加了 `host.docker.internal:host-gateway`，Linux/NAS 上也能解析）。**宿主机 8123 被别的程序占用时**（`lsof -nP -iTCP:8123 -sTCP:LISTEN` 能看到非 Docker 的进程），把 HA 的端口映射改成别的端口（如 `8124:8123`），这里同步写 `http://host.docker.internal:8124`；家庭在设置页单独填过地址的，那条地址也要一起改。注意宿主机 `curl localhost:8123` 可能走 IPv6 绕过占用者，看起来是通的，要在 API 容器里测。
 - `HOME_ASSISTANT_TOKEN_FILE` 默认 `/run/integration-secrets/home_assistant_token.txt`，即 `deploy/secrets/home_assistant_token.txt`，放 HA 的长期访问令牌，权限 `600`、属主规则同媒体连接器。**文件不存在时只是「没配」**，API 照常启动；写入后不用重启，下次请求就会读到。
 - 同样是服务器默认值；家庭管理员可在「家庭设置 → 智能家居」填自己的地址和令牌（加密存库、不回显）。所有对 HA 的调用 3 秒超时，HA 挂了只影响智能家居那一页。
 - 控制（E2）：`HOME_ASSISTANT_COMMAND_TIMEOUT_MS` 默认 8000——HA 要等 service 执行完才回，石头、米家这类云端设备常要好几秒；超时只算这一次失败并记进审计。

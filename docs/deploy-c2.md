@@ -60,7 +60,7 @@
 
 ### 智能家居：NAS 上连 Mac mini 上的 HA
 
-HA 仍然装在 Mac mini 上（`~/family-ha`，8123 端口），NAS 通过局域网访问它。演示栈里写的 `host.docker.internal` 指的是「跑容器的这台机器」，**在 NAS 上指的是 NAS 自己，不能用**。
+HA 仍然装在 Mac mini 上（`~/family-ha`，默认 8123 端口），NAS 通过局域网访问它。Mac mini 的 8123 被别的程序占用时，把 `~/family-ha/compose.yaml` 的映射改成别的端口（演示栈 2026-10-23 起用 `8124:8123`），下面地址里的端口跟着改。演示栈里写的 `host.docker.internal` 指的是「跑容器的这台机器」，**在 NAS 上指的是 NAS 自己，不能用**。
 
 1. `deploy/.env.production` 里加两行（地址换成 Mac mini 的局域网地址；建议在路由器里给 Mac mini 固定这个 IP）：
 
@@ -197,7 +197,7 @@ dc exec -T api node -e "console.log(Intl.DateTimeFormat().resolvedOptions().time
 **④ 智能家居页**
 
 - 管理员打开「家里 → 智能家居」（没挑设备时在「还可以开启」里）→「设置」：连接显示「服务器默认」、地址是 Mac mini 的局域网地址，点「测一下」显示 `Home Assistant 2026.x`。
-- 测不通先在 NAS 上 `curl -s -o /dev/null -w '%{http_code}\n' http://<Mac mini 地址>:8123/api/`：`401` 说明网络通、只差令牌（看 §1 令牌文件的属主）；连不上说明是网络或 Mac mini 没开 HA。
+- 测不通先在 NAS 上 `curl -s -o /dev/null -w '%{http_code}\n' http://<Mac mini 地址>:<HA 端口>/api/`（默认 8123；被占用改过端口的用新端口）：`401` 说明网络通、只差令牌（看 §1 令牌文件的属主）；连不上说明是网络或 Mac mini 没开 HA。
 
 **⑤ 位置页**
 
