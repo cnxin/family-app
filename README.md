@@ -227,6 +227,7 @@ apps/
 docs/
 ├── family-platform-plan.md       # 家庭管理平台总体方案
 ├── plugin-development.md         # 仓库内编译期插件的完整接入与验证指南
+├── dependency-upgrade-assessment.md # 依赖升级评估：落后版本、风险与建议顺序（2026-10-23）
 ├── m3-reminders-acceptance.md    # 可配置提醒验收约定
 ├── m3-polls-acceptance.md        # 通用家庭投票验收约定
 ├── m4-media-polls-acceptance.md  # 片单来源投票验收约定
