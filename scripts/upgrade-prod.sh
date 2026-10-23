@@ -1,10 +1,12 @@
 #!/bin/sh
-# 生产升级：给当前镜像打回滚标签 → 备份 → 拉代码 → 构建 → 启动 → 健康检查。
+# 生产升级：给当前镜像打回滚标签 → 备份 → 拉代码 → 构建 → 启动 → 健康检查 → 清理旧回滚标签。
 # 任一步失败立即停止，不自动回滚；回滚步骤见 docs/deploy-c2.md。
 #
 #   ./scripts/upgrade-prod.sh            # git pull --ff-only 后升级
 #   ./scripts/upgrade-prod.sh --no-pull  # 代码已经手动 git pull 好，只做其余步骤
 #                                        # （NAS 上的旧版本还没有这个脚本时，第一次升级用它）
+#
+# 回滚标签默认只留最近 2 组（含本次），FAMILY_APP_KEEP_ROLLBACK_TAGS 可改。
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -13,6 +15,7 @@ COMPOSE_FILE="$REPO_ROOT/docker-compose.prod.yml"
 BACKUP_ROOT=${FAMILY_APP_PROD_BACKUP_ROOT:-"$REPO_ROOT/backups-production"}
 ENV_FILE=${FAMILY_APP_PROD_ENV:-"$REPO_ROOT/deploy/.env.production"}
 HEALTH_TIMEOUT_SECONDS=${FAMILY_APP_HEALTH_TIMEOUT:-300}
+KEEP_ROLLBACK_TAGS=${FAMILY_APP_KEEP_ROLLBACK_TAGS:-2}
 
 PULL=1
 case "${1:-}" in
@@ -23,6 +26,15 @@ case "${1:-}" in
     exit 2
     ;;
 esac
+
+# 至少留 1 组：本次打的回滚标签就是回滚要用的那组。
+case "$KEEP_ROLLBACK_TAGS" in
+  ''|*[!0-9]*) KEEP_ROLLBACK_TAGS=0 ;;
+esac
+if [ "$KEEP_ROLLBACK_TAGS" -lt 1 ]; then
+  printf 'FAMILY_APP_KEEP_ROLLBACK_TAGS 要是不小于 1 的整数（含本次的回滚标签），现在是：%s\n' "${FAMILY_APP_KEEP_ROLLBACK_TAGS:-}" >&2
+  exit 2
+fi
 
 if [ -n "${DOCKER_BIN:-}" ]; then
   :
@@ -93,6 +105,29 @@ running_commit() {
     return
   fi
   printf 'unknown（镜像没有 revision 标签，也没有找到备份清单，以 git reflog 为准）'
+}
+
+# 每次升级都打一组回滚标签，不清的话旧镜像会一直堆着；只留最近 KEEP_ROLLBACK_TAGS 组（含本次）。
+# 标签里的时间戳按字典序就是时间序。删不掉的（比如还有停着的容器在用）返回非 0，由调用处提示。
+prune_rollback_tags() {
+  tags=$("$DOCKER_BIN" image ls --format '{{.Repository}}:{{.Tag}}') || return 1
+  stamps=$(printf '%s\n' "$tags" \
+    | sed -n -E 's/^family-app-(api|web|backup-worker):prod-before-([0-9]{8}-[0-9]{6})$/\2/p' \
+    | sort -ru)
+  printf '保留：%s\n' "$(printf '%s\n' "$stamps" | sed -n "1,${KEEP_ROLLBACK_TAGS}p" | tr '\n' ' ')"
+  failed=0
+  for stamp in $(printf '%s\n' "$stamps" | sed "1,${KEEP_ROLLBACK_TAGS}d"); do
+    for service in api web backup-worker; do
+      tag="family-app-$service:prod-before-$stamp"
+      "$DOCKER_BIN" image inspect "$tag" >/dev/null 2>&1 || continue
+      if "$DOCKER_BIN" rmi "$tag" >/dev/null; then
+        printf '已删 %s\n' "$tag"
+      else
+        failed=1
+      fi
+    done
+  done
+  return "$failed"
 }
 
 step '检查工作区与运行状态'
@@ -189,6 +224,11 @@ DB_NAME=$(compose exec -T db sh -c 'printf %s "$POSTGRES_DB"')
 printf '最近三个迁移：\n'
 compose exec -T db psql -U "$DB_USER" -d "$DB_NAME" -Atc \
   'SELECT name FROM app_migrations ORDER BY timestamp DESC LIMIT 3'
+
+step "清理旧回滚标签（只留最近 $KEEP_ROLLBACK_TAGS 组）"
+if ! prune_rollback_tags; then
+  printf '有旧回滚标签没删掉（原因见上面的报错）。升级本身已经完成，可以之后手动 docker rmi。\n' >&2
+fi
 
 STEP='完成'
 printf '\n升级完成：%s -> %s\n' "$OLD_COMMIT" "$NEW_COMMIT"

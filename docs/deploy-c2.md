@@ -106,7 +106,8 @@ git pull --ff-only
 4. `git pull --ff-only`（`--no-pull` 时跳过）；
 5. `compose build`（带上 `FAMILY_APP_COMMIT=<新提交>`，写进镜像的 revision 标签）；
 6. `compose up -d --wait`（API 启动时执行迁移；起不来会在超时后报错并打出 API 日志）；
-7. 逐个等 db / api / web 变成 healthy，确认 backup-worker 在运行，打印最近三个迁移。
+7. 逐个等 db / api / web 变成 healthy，确认 backup-worker 在运行，打印最近三个迁移；
+8. 清理旧回滚标签，只留最近 2 组（含本次；环境变量 `FAMILY_APP_KEEP_ROLLBACK_TAGS` 可改，至少 1）。只在升级成功后做；有标签删不掉（比如还有停着的容器在用）只提示，不算升级失败。
 
 **把脚本最后打印的「回滚镜像标签」和「升级前备份」记下来**，回滚要用。脚本打印的「升级前提交」是**正在运行的版本**：优先读运行中 api 容器的镜像标签 `org.opencontainers.image.revision`（脚本构建时用 `FAMILY_APP_COMMIT` 写进三个镜像）；镜像是加这个标签之前建的、或手动 `compose build` 没带提交号（标签为 `unknown`）时，退回最近一份完整备份 `manifest.txt` 里的 `git_commit`——那是那次备份时仓库的 HEAD，仓库若在备份后又被拉新过就不准，输出里会注明来源，以 `git reflog` 核对。不再用 `ORIG_HEAD`：代码常常早已拉到新提交，它说明不了跑的是哪一版（2026-10-06 演示栈升级时它打印了 `db108c4`，实际运行的是 `b5c4e7c`）。`--no-pull` 时本次备份清单里的 `git_commit` 已经是新代码的提交（备份在手动拉代码之后做）。
 
@@ -122,6 +123,8 @@ for s in api web backup-worker; do docker tag "family-app-${s}:<回滚标签>" "
 ```
 
 > 变量一律写成 `${s}` 这种带花括号的形式。zsh 会把 `$s:c…` 当成修饰符，拼出错误的镜像名。
+
+> 回滚标签只留最近 2 组（§2 第 8 步），换镜像最多退到前两次升级之前的版本；`docker image ls | grep prod-before` 看还剩哪几组。要退得更早，就 `git reset --hard` 到那个提交后用 `compose build` 重新构建。
 
 ### 情形 A：迁移失败，新 API 起不来 → 只换镜像
 
