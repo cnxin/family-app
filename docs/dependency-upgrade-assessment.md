@@ -35,10 +35,10 @@
 
 | 步 | 内容 | 风险 | 前置 |
 | --- | --- | --- | --- |
-| 1 | 小步：`@types/node` 统一 22、`dotenv` 18、`class-validator` 0.15、`eslint` 10 + `@eslint/js` 10 + `globals` 17；根 `package.json` 加 `engines.node >= 22` | 低 | 无 |
-| 2 | Web 工具链：`vite` 8、`vitest` 5、`@vitejs/plugin-react` 6 | 低到中 | 无；Playwright 全量兜底 |
+| 1 | **已完成（2026-10-26，`5ee5920`）**：`@types/node` 统一 22、`dotenv` 18、`class-validator` 0.15、`eslint` 10 + `@eslint/js` 10 + `globals` 17 + `typescript-eslint` 8.72；根 `package.json` 加 `engines.node >= 22`。ESLint 10 新默认规则 `no-useless-assignment` 查出 8 处无效赋值，一并清掉 | 低 | 无 |
+| 2 | **已完成（2026-10-26，`fe1e913`）**：`vite` 8（打包内核换成 rolldown）、`vitest` 5、`@vitejs/plugin-react` 6；`@tailwindcss/vite` 4.1 只支持到 Vite 7，连同 `tailwindcss` 升到 4.3.3。`vite.config` 不用改，Playwright 全量与演示栈升级后页面都正常 | 低到中 | 无；Playwright 全量兜底 |
 | 3 | NestJS 10 → 11 → 12 一次做完，连同 `@nestjs/typeorm` / `jwt` / `throttler`、`@types/express` 5、`@types/multer` 2；逐个核对 13 处 `@Res()` | 中到高 | 读 11、12 发布说明；J7.3 之后做，免得和 agent 目录的拆分撞车 |
 | 4 | TypeORM 1.x | 高 | 读 1.0 迁移说明；复用 J7.4 的元数据比对脚本；四项迁移验收 |
 | 5 | TypeScript 7 | 高 | 先把 `ts-node/register` 换掉（7 个脚本 + `run-api-tests.mjs` 里 21 处）；可以先升到 6.x 看弃用警告 |
 
-第 1、2 步现在就能做；第 3 步排在 J7.3 之后；第 4、5 步要先各出一页读完迁移说明后的具体改动清单，再定要不要做。
+第 1、2 步已于 2026-10-26 做完并升到演示栈；第 3 步排在 J7.3 之后；第 4、5 步要先各出一页读完迁移说明后的具体改动清单，再定要不要做。
