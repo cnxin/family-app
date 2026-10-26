@@ -38,7 +38,7 @@ const tmdbId = String(910000000 + Math.floor(Math.random() * 80000000));
 const subscriptionId = String(700000 + Math.floor(Math.random() * 200000));
 const fakeMoviePilot = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-  let responseBody = {};
+  let responseBody;
   if (req.headers['x-api-key'] !== API_KEY) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ message: 'unauthorized' }));

@@ -31,7 +31,7 @@ export function traceOutline(pixels: number[], w: number): Point[] {
     // 优先右转，其次直走，再左转
     const right = (dir + 1) % 4;
     const left = (dir + 3) % 4;
-    let next = dir;
+    let next: number;
     if (cellRight(x, y, right) && !cellLeft(x, y, right)) next = right;
     else if (cellRight(x, y, dir) && !cellLeft(x, y, dir)) next = dir;
     else if (cellRight(x, y, left) && !cellLeft(x, y, left)) next = left;

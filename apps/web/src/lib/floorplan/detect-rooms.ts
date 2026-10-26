@@ -206,7 +206,7 @@ export function detectRooms(input: DetectInput, now: () => number = () => Date.n
     let best: [number, number][] | null = null;
     for (let smooth = baseSmooth; smooth <= Math.round(w * MAX_SMOOTH_SHARE); smooth = Math.ceil(smooth * 1.4)) {
       // 腐蚀比膨胀少半个墙厚：色块只到墙边，房间的边界在墙中线，相邻房间正好贴上
-      let mask = fillHoles(erode(dilate(local, bw, bh, smooth), bw, bh, smooth - wallHalf), bw, bh);
+      const mask = fillHoles(erode(dilate(local, bw, bh, smooth), bw, bh, smooth - wallHalf), bw, bh);
       for (let i = 0; i < mask.length; i += 1) if (foreign[i]) mask[i] = 0;
       const part = components(mask, bw).sort((a, b) => b.length - a.length)[0];
       if (!part || part.length < minPixels) break;
@@ -220,7 +220,6 @@ export function detectRooms(input: DetectInput, now: () => number = () => Date.n
         if (polygon.length <= VERTEX_LIMIT || smooth * 1.4 <= w * MAX_SMOOTH_SHARE) break;
       }
       if (best && best.length <= VERTEX_BUDGET) break;
-      mask = new Uint8Array(0);
     }
     if (!best) return;
     const points = best.map(([x, y]) => [toView(x, 'x'), toView(y, 'y')] as [number, number]);

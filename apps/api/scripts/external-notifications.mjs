@@ -59,7 +59,7 @@ const receiver = createServer(async (incoming, response) => {
   const chunks = [];
   for await (const chunk of incoming) chunks.push(chunk);
   const rawBody = Buffer.concat(chunks).toString('utf8');
-  let body = null;
+  let body;
   try {
     body = rawBody ? JSON.parse(rawBody) : null;
   } catch {
