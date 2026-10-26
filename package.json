@@ -2,6 +2,7 @@
   "name": "family-app",
   "private": true,
   "packageManager": "pnpm@10.34.5",
+  "engines": { "node": ">=22" },
   "scripts": {
     "api": "corepack pnpm --filter api start:dev",
     "api:inventory": "node scripts/api-inventory.mjs",
