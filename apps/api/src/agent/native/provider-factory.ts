@@ -96,7 +96,7 @@ export interface NativeProviderConfig {
 /** 家庭设置里的云端档配置；地址、模型、key 缺一个或 key 解不开都算没配好。custom 用通用差异表。 */
 export function settingProviderConfig(setting: AgentSetting): NativeProviderConfig | null {
   if (!setting.providerBaseUrl || !setting.providerModel || !setting.providerKeyEncrypted) return null;
-  let apiKey: string | null = null;
+  let apiKey: string | null;
   try {
     apiKey = decryptProviderKey(setting.providerKeyEncrypted, setting.householdId);
   } catch {

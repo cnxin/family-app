@@ -22,7 +22,7 @@ export async function copyText(text: string): Promise<boolean> {
   const previous = document.activeElement as HTMLElement | null;
   area.select();
   area.setSelectionRange(0, text.length);
-  let copied = false;
+  let copied: boolean;
   try {
     copied = document.execCommand('copy');
   } catch {

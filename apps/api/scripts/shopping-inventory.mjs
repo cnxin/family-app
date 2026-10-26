@@ -49,7 +49,7 @@ const db = new Client({
 });
 
 await db.connect();
-let householdId = null;
+let householdId;
 let inventoryIds = [];
 
 try {

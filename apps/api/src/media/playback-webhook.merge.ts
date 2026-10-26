@@ -19,7 +19,7 @@ export async function mergeSession(
   libraryItem: MediaLibraryItem,
 ) {
   const repository = manager.getRepository(ViewingSession);
-  let session: ViewingSession | null = null;
+  let session: ViewingSession | null;
   if (event.externalSessionId) {
     session = await repository.findOneBy({
       integrationId: integration.id,
