@@ -161,6 +161,7 @@ curl https://family.example.com/api/health/ready
 
 - 宿主机只映射 Caddy 的 80/443；PostgreSQL 与 API 没有宿主机端口。API 同时接入无入站端口的 `integrations` 网络，以便主动访问 NAS 上的媒体服务。
 - Caddy 为前端和 API 设置基础安全响应头；关闭含客户端地址和完整 URI 的访问日志，只保留轮转后的运行与错误日志。
+- 前端产物只有 `index.html` 和带内容哈希的 `/assets/*`：`/assets/*` 存在的文件返回 `Cache-Control: public, max-age=31536000, immutable`，不存在的直接 404（不回退到 index.html，前端靠它判断发版后旧分块失效并整页刷新一次）；`index.html` 返回 `no-cache`，每次用 ETag 回源校验。
 - API 只记录请求 ID、路由模板、状态、耗时和账号/成员/家庭 UUID，不记录请求体、查询值、姓名、IP、密码或令牌。
 - `TRUST_PROXY_HOPS=1` 只信任紧邻 API 的 Caddy。改变代理层数时必须同步调整，不能使用无边界的代理信任。
 - Web 会话当前仍保存在 `localStorage`，因此 HTTPS 不能消除 XSS 风险。对外开放前应保持依赖更新，并评估改用同站 `HttpOnly` Cookie。
