@@ -1,49 +1,54 @@
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import { LoginPage } from './pages/login';
-import { SetPasswordPage } from './pages/set-password';
-import { JoinPage } from './pages/join';
-import { SetupPage } from './pages/setup';
 import { TodayPage } from './pages/today';
-import { TasksPage } from './pages/tasks';
-import { OrderPage } from './pages/order';
-import { KitchenPage } from './pages/kitchen';
-import { RecipesPage } from './pages/recipes';
-import { ShoppingPage } from './pages/shopping';
-import { InventoryPage } from './pages/inventory';
-import { CalendarPage } from './pages/calendar';
-import { RemindersPage } from './pages/reminders';
-import { NotificationsPage } from './pages/notifications';
-import { PollsPage } from './pages/polls';
-import { PointsPage } from './pages/points';
-import { MembersPage } from './pages/members';
-import { GuestsPage } from './pages/guests';
-import { AssetsPage } from './pages/assets';
-import { FinancePage } from './pages/finance';
-import { KnowledgePage } from './pages/knowledge';
-import { MemoriesPage } from './pages/memories';
-import { TravelPage } from './pages/travel';
-import { BackupsPage } from './pages/backups';
-import { SmartHomePage } from './pages/smart-home';
-import { SmartHomeSettingsPage } from './pages/smart-home-settings';
-import { HouseMapPage } from './pages/house-map';
-import { HouseMapImportPage } from './pages/house-map-import';
-import { ActivityPage } from './pages/activity';
-import { MediaPage } from './pages/media';
-import { MediaLibraryPage } from './pages/media-library';
-import { MediaHistoryPage } from './pages/media-history';
-import { MediaWatchlistPage } from './pages/media-watchlist';
-import { MediaSettingsPage } from './pages/media-settings';
-import { TravelPlanPage } from './pages/travel-plan';
-import { AssetDetailPage } from './pages/asset-detail';
-import { GuestInvitationPage } from './pages/guest-invitation';
-import { ProfilePage } from './pages/profile';
-import { AssistantPage } from './pages/assistant';
-import { AgentMemoriesPage } from './pages/agent-memories';
 import { Shell } from './components/shell';
 import { CommandPalette } from './components/command-palette';
-import HomePage from './pages/home';
-import { SettingsPage } from './pages/settings';
+import { lazy, Suspense } from 'react';
+import { lazyPage } from './lib/lazy-page';
+import { PageFallback } from './components/page-fallback';
+
+// 除登录页和「今天」外，页面都按路由懒加载（见 lib/lazy-page.tsx）；首屏只带壳子和首页。
+const HomePage = lazy(() => import('./pages/home'));
+const SetPasswordPage = lazyPage(() => import('./pages/set-password'), 'SetPasswordPage');
+const JoinPage = lazyPage(() => import('./pages/join'), 'JoinPage');
+const SetupPage = lazyPage(() => import('./pages/setup'), 'SetupPage');
+const TasksPage = lazyPage(() => import('./pages/tasks'), 'TasksPage');
+const OrderPage = lazyPage(() => import('./pages/order'), 'OrderPage');
+const KitchenPage = lazyPage(() => import('./pages/kitchen'), 'KitchenPage');
+const RecipesPage = lazyPage(() => import('./pages/recipes'), 'RecipesPage');
+const ShoppingPage = lazyPage(() => import('./pages/shopping'), 'ShoppingPage');
+const InventoryPage = lazyPage(() => import('./pages/inventory'), 'InventoryPage');
+const CalendarPage = lazyPage(() => import('./pages/calendar'), 'CalendarPage');
+const RemindersPage = lazyPage(() => import('./pages/reminders'), 'RemindersPage');
+const NotificationsPage = lazyPage(() => import('./pages/notifications'), 'NotificationsPage');
+const PollsPage = lazyPage(() => import('./pages/polls'), 'PollsPage');
+const PointsPage = lazyPage(() => import('./pages/points'), 'PointsPage');
+const MembersPage = lazyPage(() => import('./pages/members'), 'MembersPage');
+const GuestsPage = lazyPage(() => import('./pages/guests'), 'GuestsPage');
+const AssetsPage = lazyPage(() => import('./pages/assets'), 'AssetsPage');
+const FinancePage = lazyPage(() => import('./pages/finance'), 'FinancePage');
+const KnowledgePage = lazyPage(() => import('./pages/knowledge'), 'KnowledgePage');
+const MemoriesPage = lazyPage(() => import('./pages/memories'), 'MemoriesPage');
+const TravelPage = lazyPage(() => import('./pages/travel'), 'TravelPage');
+const BackupsPage = lazyPage(() => import('./pages/backups'), 'BackupsPage');
+const SmartHomePage = lazyPage(() => import('./pages/smart-home'), 'SmartHomePage');
+const SmartHomeSettingsPage = lazyPage(() => import('./pages/smart-home-settings'), 'SmartHomeSettingsPage');
+const HouseMapPage = lazyPage(() => import('./pages/house-map'), 'HouseMapPage');
+const HouseMapImportPage = lazyPage(() => import('./pages/house-map-import'), 'HouseMapImportPage');
+const ActivityPage = lazyPage(() => import('./pages/activity'), 'ActivityPage');
+const MediaPage = lazyPage(() => import('./pages/media'), 'MediaPage');
+const MediaLibraryPage = lazyPage(() => import('./pages/media-library'), 'MediaLibraryPage');
+const MediaHistoryPage = lazyPage(() => import('./pages/media-history'), 'MediaHistoryPage');
+const MediaWatchlistPage = lazyPage(() => import('./pages/media-watchlist'), 'MediaWatchlistPage');
+const MediaSettingsPage = lazyPage(() => import('./pages/media-settings'), 'MediaSettingsPage');
+const TravelPlanPage = lazyPage(() => import('./pages/travel-plan'), 'TravelPlanPage');
+const AssetDetailPage = lazyPage(() => import('./pages/asset-detail'), 'AssetDetailPage');
+const GuestInvitationPage = lazyPage(() => import('./pages/guest-invitation'), 'GuestInvitationPage');
+const ProfilePage = lazyPage(() => import('./pages/profile'), 'ProfilePage');
+const AssistantPage = lazyPage(() => import('./pages/assistant'), 'AssistantPage');
+const AgentMemoriesPage = lazyPage(() => import('./pages/agent-memories'), 'AgentMemoriesPage');
+const SettingsPage = lazyPage(() => import('./pages/settings'), 'SettingsPage');
 
 /** 旧路径（一层）保留跳转，免得家里人存的书签全废掉；查询串原样带过去（通知里的 ?pollId= 靠它）。 */
 const REDIRECTS: [string, string][] = [
@@ -98,26 +103,36 @@ export function App() {
   // 公开邀请页在登录闸门之前：访客没有家庭账号，既不该被弹到登录页，也不用等鉴权就绪。
   if (pathname.startsWith('/guest/')) {
     return (
-      <Routes>
-        <Route path="/guest/:token" element={<GuestInvitationPage />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/guest/:token" element={<GuestInvitationPage />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   // 邀请兑换、首次初始化同样在闸门之前：来的人还没有账号。
   if (pathname === '/join' || pathname === '/setup') {
     return (
-      <Routes>
-        <Route path="/join" element={<JoinPage />} />
-        <Route path="/setup" element={<SetupPage />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/join" element={<JoinPage />} />
+          <Route path="/setup" element={<SetupPage />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   if (!ready) return null;
   if (!session) return <LoginPage />;
   // 迁移来的老账号第一次登录（空密码）：先设密码，别的页都不让进（服务端同样只放行设密码和退出登录）
-  if (session.account.requiresPasswordSetup) return <SetPasswordPage />;
+  if (session.account.requiresPasswordSetup) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <SetPasswordPage />
+      </Suspense>
+    );
+  }
 
   return (
     <>

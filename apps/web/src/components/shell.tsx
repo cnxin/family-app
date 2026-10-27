@@ -13,6 +13,8 @@ import { applyTheme, readTheme } from '../lib/theme';
 import { Button } from './ui';
 import { openPalette } from './command-palette';
 import { SoftLink, useSoftNavigate } from './soft-link';
+import { Suspense } from 'react';
+import { PageFallback } from './page-fallback';
 
 function Sidebar() {
   const { pathname } = useLocation();
@@ -119,7 +121,9 @@ function ShellLayout() {
           </div>
         </header>
         <main className="flex-1 [view-transition-name:page] lg:h-dvh lg:overflow-y-auto" key={pathname}>
-          <Outlet />
+          <Suspense fallback={<PageFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       <BottomTabs manager={manager} />

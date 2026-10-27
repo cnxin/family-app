@@ -12,6 +12,19 @@ export default defineConfig({
   plugins: [react(), tailwind()],
   // shared 同时出 CJS（API 用）和 ESM（dist/esm，生产构建经 module 字段取用）；开发服务器照旧预打包。
   optimizeDeps: { include: ["@family/shared", "@family/api-client"] },
+  build: {
+    // 页面按路由懒加载后（App.tsx），把 React、路由、查询库、zod 这些长期不变的第三方库单独切成 vendor 块：
+    // 发版只换业务代码的哈希，vendor 的文件名不变，浏览器直接用缓存。
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'vendor', test: /node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@tanstack|zod)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   server: {
     port: 5180,
     host: true,
