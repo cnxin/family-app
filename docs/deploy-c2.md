@@ -227,6 +227,28 @@ dc exec -T api node -e "console.log(Intl.DateTimeFormat().resolvedOptions().time
 - API 日志里没有 `AGENT_DATA_KEY` 相关的报错：`dc logs api | grep -i agent_data_key` 应为空。
 - 管理员打开「问问小管家 → 设置 → 云端助理」，填一个服务商 key 点保存：能保存，并只显示末 4 位（「key：••••1234」）。没配密钥时这里会拒绝保存。
 
+## 5. 看门狗：掉了自动拉起（Mac mini 演示栈）
+
+三次事故（09-29 重启、10-08 卡死、10-27 磁盘满）都是「停了几小时才有人发现」。`scripts/demo-stack-watchdog.sh` 由 launchd 每 5 分钟跑一次：
+
+- 健康（`/api/health/ready` 200）→ 什么都不做，只在状态变化时记一行日志。
+- **连续两次**不健康（间隔 5 分钟，避免升级或抖动误判）→ 先看磁盘：剩余不到 5 GB 只发通知不拉起（磁盘满时拉起只会再崩）；Docker 引擎无响应就强制结束 `com.docker.backend` 再 `open -a Docker`，等最多 3 分钟；然后在部署目录 `compose up -d --no-build`（容器丢了就从本地 `latest` 镜像重建，不构建、不拉取），HA 目录有 compose 文件就一并 `up -d`；等 2 分钟看健康，结果发 macOS 通知。
+- 不动的情况：`scripts/upgrade-prod.sh` 正在跑；部署目录里有 `.watchdog-pause` 文件（维护时 `touch` 它，完了删掉）。
+
+日志在 `~/Library/Logs/family-app-watchdog.log`，状态在 `~/Library/Application Support/family-app-watchdog/`。`FAMILY_APP_WATCHDOG_DRY_RUN=1 sh scripts/demo-stack-watchdog.sh` 只打印要做的事。
+
+安装（一次）：
+
+```bash
+sed "s|__HOME__|$HOME|g" deploy/macos/ai.family-app.watchdog.plist > ~/Library/LaunchAgents/ai.family-app.watchdog.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.family-app.watchdog.plist
+launchctl print gui/$(id -u)/ai.family-app.watchdog | grep -E 'state|last exit'
+```
+
+卸载：`launchctl bootout gui/$(id -u)/ai.family-app.watchdog && rm ~/Library/LaunchAgents/ai.family-app.watchdog.plist`。脚本路径指向部署目录 `~/AI/family-app`，改了脚本只要部署目录快进到新版就生效，不用重装。
+
+它解决的是「没人发现」；Docker Desktop 本身的「登录时启动」是系统偏好，要在 Docker Desktop → Settings → General 里勾，看门狗只是在它没起来时代为 `open -a Docker`。
+
 ## 演练记录
 
 在本机起了一套独立的 compose 项目 `family-app-c2r`（端口 18088、独立的卷和镜像标签，不碰演示栈），先用旧 main `2127c70` 起栈，造一个家庭、一件资产、一条上海 00:30 完成的维护记录。结果见下表。

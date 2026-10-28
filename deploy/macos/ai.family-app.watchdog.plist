@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 演示栈看门狗（Mac mini）。安装：把 __HOME__ 换成家目录后放到 ~/Library/LaunchAgents，见 docs/deploy-c2.md §5 -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ai.family-app.watchdog</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>__HOME__/AI/family-app/scripts/demo-stack-watchdog.sh</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>FAMILY_APP_DEPLOY_DIR</key>
+		<string>__HOME__/AI/family-app</string>
+		<key>FAMILY_HA_DIR</key>
+		<string>__HOME__/family-ha</string>
+	</dict>
+	<key>StartInterval</key>
+	<integer>300</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>__HOME__/Library/Logs/family-app-watchdog.launchd.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/Library/Logs/family-app-watchdog.launchd.log</string>
+</dict>
+</plist>
