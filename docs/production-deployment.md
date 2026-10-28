@@ -182,4 +182,6 @@ curl https://family.example.com/api/health/ready
 ./scripts/upgrade-prod.sh
 ```
 
+宿主机磁盘满会让 Docker 引擎崩掉并丢失容器（镜像和卷不丢），恢复步骤见 `deploy-c2.md` §3 情形 D；平时留意 `df -h`，数据盘剩余不到 20 GB 就清缓存。
+
 不要使用 `docker compose down -v`；该命令会删除生产数据库、附件和 Caddy 证书卷。恢复时先创建独立空数据库并用 `pg_restore --list` 和校验和检查备份，禁止直接覆盖仍在运行的生产库。

@@ -166,6 +166,20 @@ docker compose --env-file deploy/.env.production -f docker-compose.prod.yml up -
 | web（api 健康） | 数据库已经迁移完，不能退 api | 只换回 web：`docker tag "family-app-web:<回滚标签>" "family-app-web:${APP_VERSION:-latest}"`，再 `up -d --no-build --wait web` |
 | backup-worker 不在运行 | 不影响家里人使用 | 看 `logs backup-worker`；修好之前每天手动跑一次 `./scripts/backup-prod.sh` |
 
+### 情形 D：Docker 引擎崩了、容器消失 → 用 compose 从现有镜像重建
+
+**怎么认**：`docker info` 只回 `EOF` 或挂住，8088 不通；Docker Desktop 的 `~/Library/Containers/com.docker.docker/Data/log/host/com.docker.backend.log` 里有 `no space left on device`（宿主机磁盘满）或 `engine crash`。重启 Docker Desktop 后 `docker ps -a` 少了容器（2026-10-27 一次丢了 api、web、backup-worker 和 HA，只剩 db），但 `docker images` 和 `docker volume ls` 都还在。
+**为什么不用回滚也不用恢复备份**：丢的只是容器元数据，镜像（`latest` 就是当前版本）和数据卷（库、附件、Caddy 证书）都完好。
+
+```bash
+df -h /System/Volumes/Data                      # 先确认磁盘有空余，不然起来还会崩
+pkill -9 -f com.docker.backend; open -a Docker  # 后端卡死时先强制结束再启动
+docker compose --env-file deploy/.env.production -f docker-compose.prod.yml up -d --no-build --wait --wait-timeout 300
+(cd ~/family-ha && docker compose up -d)        # HA 的配置在 ~/family-ha/config，是绑定挂载，重建不丢
+```
+
+`--no-build` 必带：用本地 `latest` 镜像重建，别顺手重新构建。起来后按 §4 走一遍，重点是 ① 迁移数不变、112 张表行数与上次升级后一致、HA 走 `host.docker.internal:8124` 返回 401。
+
 ## 4. 升级后确认（六处）
 
 下面的 `dc` 是 `docker compose --env-file deploy/.env.production -f docker-compose.prod.yml` 的简写。
