@@ -6,7 +6,7 @@
 
 - 一台长期在线、已安装 Docker Compose 的主机。
 - 使用公网域名时，将 DNS 指向该主机并开放 TCP 80/443 和 UDP 443；Caddy 会自动申请和续期证书。
-- 不准备直接开放公网时，优先通过 Tailscale、WireGuard 等 VPN 访问。局域网 HTTP 仅适合部署演练，不能承载真实会话。
+- 不准备直接开放公网时，优先通过 Tailscale、WireGuard 等 VPN 访问；Tailscale Serve 私有 HTTPS 入口的拓扑、配置改动和验收清单见 [外部访问与网络管理方案](external-access-plan.md) §3、§4。局域网 HTTP 仅适合部署演练，不能承载真实会话。
 - 在升级或迁移前，先确认数据库和附件已经生成可校验的备份。
 
 ## 2. 创建本地生产配置
@@ -163,7 +163,7 @@ curl https://family.example.com/api/health/ready
 - Caddy 为前端和 API 设置基础安全响应头；关闭含客户端地址和完整 URI 的访问日志，只保留轮转后的运行与错误日志。
 - 前端产物只有 `index.html` 和带内容哈希的 `/assets/*`：`/assets/*` 存在的文件返回 `Cache-Control: public, max-age=31536000, immutable`，不存在的直接 404（不回退到 index.html，前端靠它判断发版后旧分块失效并整页刷新一次）；`index.html` 返回 `no-cache`，每次用 ETag 回源校验。
 - API 只记录请求 ID、路由模板、状态、耗时和账号/成员/家庭 UUID，不记录请求体、查询值、姓名、IP、密码或令牌。
-- `TRUST_PROXY_HOPS=1` 只信任紧邻 API 的 Caddy。改变代理层数时必须同步调整，不能使用无边界的代理信任。
+- `TRUST_PROXY_HOPS=1` 只信任紧邻 API 的 Caddy。改变代理层数时必须同步调整，不能使用无边界的代理信任。经 Tailscale Serve 接入时是 Serve 与 Caddy 两跳，须改为 2，并给 Serve 单独开一个只绑 `127.0.0.1` 的入口端口，见 [外部访问与网络管理方案](external-access-plan.md) §3。
 - Web 会话当前仍保存在 `localStorage`，因此 HTTPS 不能消除 XSS 风险。对外开放前应保持依赖更新，并评估改用同站 `HttpOnly` Cookie。
 
 ## 5. 备份与更新
