@@ -182,6 +182,12 @@ jobs:
         run: docker build -f Dockerfile.backup-worker -t family-app-backup-worker:ci .
       - name: 生产镜像能加载入口
         run: docker run --rm family-app-api:ci node -e "require('@family/shared'); require('@family/contracts'); require('@family/agent-core'); console.log('workspace packages ok')"
+      # TypeScript 6 起 rootDir 默认是 tsconfig 所在目录：apps/api 不显式写 rootDir 的话产物会变成 dist/src/main.js，
+      # 镜像构建照样成功、启动才失败。这里把入口和备份 worker 跑迁移用的 data-source 的位置钉死。
+      - name: 编译产物在约定位置
+        run: |
+          docker run --rm --entrypoint sh family-app-api:ci -c "test -f dist/main.js && test ! -e dist/src && echo 'api dist ok'"
+          docker run --rm --entrypoint sh family-app-backup-worker:ci -c "test -f /app/apps/api/dist/database/data-source.js && echo 'backup-worker dist ok'"
       - name: 构建前端镜像
         run: docker build -f Dockerfile.web -t family-app-web:ci .
       - name: 前端镜像的 Caddy 配置有效
