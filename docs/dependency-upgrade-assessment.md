@@ -1,4 +1,4 @@
-# 依赖升级评估（2026-10-23；第 3～5 步改动清单 2026-10-28；5a 已做 2026-11-11、第 3 步已做 2026-11-12）
+# 依赖升级评估（2026-10-23；第 3～5 步改动清单 2026-10-28；5a 已做 2026-11-11、第 3、4 步已做 2026-11-12）
 
 > 只是评估，没有升级。数据来自 `npm outdated`（2026-10-23，main `2ff7efa`）。运行时：镜像与 CI 都是 Node 22，本机 Node 24，pnpm 10.34。
 
@@ -56,7 +56,7 @@
 | --- | --- | --- | --- |
 | 5a | TypeScript 5.9 → **6.0**（全仓库） | 低到中 | ☑ 2026-11-11 已做，结果见下 |
 | 3 | NestJS 10 → 12（经 11），连 cli / typeorm / jwt / throttler / @types/express 5 / @types/multer 2 | 中 | ☑ 2026-11-12 已做，结果见下 |
-| 4 | TypeORM 0.3 → 1.1 | 中到高 | 代码改 2 处，关键在约束命名与 where 行为 |
+| 4 | TypeORM 0.3 → 1.1 | 中到高 | ☑ 2026-11-12 已做，结果见下 |
 | 5b | TypeScript → 7 | 高 | **等 7.1 出 API 且 typescript-eslint / ts-node 跟上再说**，现在做没有收益 |
 
 原来「第 3 步排在 J7.3 之后」的理由是怕和 agent 目录拆分撞车。Nest 升级在 src 里只碰 1 个文件（见下），撞车概率可忽略，**不必再等 J7.3**。
@@ -125,7 +125,19 @@ Nest 11 / 12 其他破坏性变更对照：
 
 验收：typecheck、lint、`api-inventory --check`（340 条路由的方法/路径/权限不变）、`test:api` 全量（含 13 个 `@Res` 端点与事件流 `hello`/`heartbeat`）、`test:web` 全量、镜像构建、演示栈升级后按 deploy-c2 §4 走一遍并多看启动日志的 WARN。
 
-### 4. TypeORM 0.3.31 → 1.1.2
+### 4. TypeORM 0.3.31 → 1.1.2（☑ 2026-11-12）
+
+**实际结果**：`typeorm` 0.3.31 → 1.1.2，lockfile 里直接依赖只变这一个，包条目 593 → 558。
+
+- 源码改 3 处。① `src/finance/finance-merchant-rules.ts`：`onConflict()` 被删，数组形式的 `orUpdate()` 表达不了「hits 在原值上 +1」，改成等价的 `manager.query` 原生 upsert（唯一一处编译失败，和预计一致）；原来没有断言覆盖冲突分支，`scripts/finance-edit.mjs` 补了「同一商户再改一次分类 → 分类被替换、hits 变 2」。② `smart-home-merge.service.ts`：已弃用的 `manager.connection` → `manager.dataSource`。③ `src/database/database.options.ts` 加 `invalidWhereValuesBehavior: { null: 'ignore', undefined: 'ignore' }`。
+- **不需要 `NamingStrategyV03`**：动手前担心的「自动约束名哈希算法变了」实测不存在——新算法只是不再对输入做 URI 编码，本仓库的表名、列名全是 ASCII，两种算法结果相同。用 1.1.2 的默认命名在空库上跑完 84 个迁移，`createSchemaBuilder().log()` 漂移语句 0 条。`@typeorm/legacy-naming-strategies` 没有引入。
+- **where 空值行为**：实测 1.1.2 默认（`throw`）下 `find*` / `count` / `update` / `delete` 的条件对象里出现 `null`、`undefined` 都抛 `TypeORMError`，`IsNull()` 和 QueryBuilder 的 `.where()` 不受影响。**默认 `throw` 下全量 `test:api` 零命中、全部通过**（未处理异常 11 条，与升级前同数同分布，都是用例故意触发的）。这次发布仍按原计划设成 `ignore` 保持 0.3 行为；改回 `throw` 是把 `database.options.ts` 里那一行删掉，另开一笔。
+- 其余行为变化逐条对过：软删除没用到；`select: false` 的 15 个敏感列都靠显式 `addSelect` 读（30 处）；`DishIngredient` 的 `cascade + eager` 所在的用料替换是「先显式 delete 再 save」，不依赖孤儿行处理；没有 `nullable: false` 的关系，INNER JOIN 变化不涉及；81 处 `setLock` 全是 `pessimistic_write`。
+- 编译目标没动（仍是 ES2021）：`skipLibCheck` 开着，typecheck 零错误；运行时是 Node 22。
+- 四项迁移验收（全新库初始化、已有库升级、模块迁移 up → down → up、结构漂移）都在全量 `test:api` 里通过；`typeorm-ts-node-commonjs migration:show` 可用。
+- 官方 codemod 没有跑：手工对照后要改的只有上面 3 处。
+
+下面是动手前写的对照表，留作记录。
 
 前置：Nest 已在 12（`@nestjs/typeorm` ≥ 11.0.1 才不在启动时崩）。官方 `npx @typeorm/codemod v1 src/ --dry` 能自动改大部分，本次评估时自动模式没放行外部代码，**由 King 跑一次 dry 看它的 TODO 列表**。
 
@@ -156,7 +168,7 @@ Nest 11 / 12 其他破坏性变更对照：
 
 1. ~~现在就做 **5a（TS 6）**：半天，纯配置。~~ 2026-11-11 已做。
 2. ~~接着做 **3（Nest 12）**：代码 1 行 + 类型若干，重点是黑盒和 13 个 `@Res` 端点。~~ 2026-11-12 已做。
-3. 然后 **4（TypeORM 1.1）**：代码 2 处 + `NamingStrategyV03` + `invalidWhereValuesBehavior: 'ignore'`，四项迁移验收；之后单独一笔改回 `throw`。
+3. ~~然后 **4（TypeORM 1.1）**：代码 2 处 + `NamingStrategyV03` + `invalidWhereValuesBehavior: 'ignore'`，四项迁移验收；之后单独一笔改回 `throw`。~~ 2026-11-12 已做（没用 `NamingStrategyV03`）。**剩一笔：把 where 空值行为改回默认的 `throw`**，已实测能过全量黑盒。
 4. **5b 不做**，等 TS 7.1 + typescript-eslint 支持；ts-node 替换（方案 ③）可以在任何时候单独做。
 
 每步一个分支、一次合并、一次演示栈升级，改动清单在动手前再按当天的 npm 版本核一遍。

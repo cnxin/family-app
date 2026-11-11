@@ -162,7 +162,7 @@ export class SmartHomeMergeService {
 
     const report = mergeReport(plan, rows, { dryRun: false, mergedAt: this.clock.now(), references, deviceIds });
     await manager.getRepository(SmartHomeMergeReportRecord).save({ householdId, report: report as unknown as Record<string, unknown> });
-    const actor = await smartHomeActor(manager.connection, householdId);
+    const actor = await smartHomeActor(manager.dataSource, householdId);
     if (actor) {
       await recordActivity(manager, actor, {
         module: 'system',

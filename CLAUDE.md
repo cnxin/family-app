@@ -6,7 +6,7 @@
 
 ## 结构
 
-- `apps/api` — NestJS 12（Express 5）+ TypeORM + PostgreSQL 16。J7.1/J7.2 已把主要业务模块按 module / controller / service / DTO 及子服务拆分，少量简单域仍保留合并文件；实体按域拆在 `src/entities/<域>.ts`（J7.4，2026-10-23），`src/entities/index.ts` 只做汇总导出与 `ALL_ENTITIES`，业务代码照旧 `from '../entities'`。schema 由 `src/database/migrations` 管理（不用 synchronize）
+- `apps/api` — NestJS 12（Express 5）+ TypeORM 1.1 + PostgreSQL 16。J7.1/J7.2 已把主要业务模块按 module / controller / service / DTO 及子服务拆分，少量简单域仍保留合并文件；实体按域拆在 `src/entities/<域>.ts`（J7.4，2026-10-23），`src/entities/index.ts` 只做汇总导出与 `ALL_ENTITIES`，业务代码照旧 `from '../entities'`。schema 由 `src/database/migrations` 管理（不用 synchronize）
 - `apps/web` — Vite + React 19 + TanStack Query + React Router + Tailwind 4；数据 hook 在 `src/lib/queries/`，类型一律从 `@family/contracts` 取。旧 Expo 客户端 `apps/mobile` 已在 H1（2026-09-28）删除
 - `apps/api/scripts/*.mjs` — 黑盒 HTTP 测试，`run-api-tests.mjs` 自建临时库跑全套；`run-web-tests.mjs` 起隔离 API 跑 Playwright
 - `packages/shared` — 框架无关的公共工具（`DomainError` 系列、日期、文本、`isUniqueViolation`、`isHouseholdManager`）；API 里不要再复制这些函数。**依赖 `node:` 的公共函数不要放这里**（shared 要保持纯 TS，客户端将来可能直接吃它），放 `apps/api/src/common/`，比如 `fingerprint.ts`（幂等指纹，注意有规范化/非规范化两种算法，改算法会让落库指纹作废）
@@ -39,7 +39,7 @@
 
 1. 收集 Native 小管家连续一周实测证据；满足后执行 J4.6，下线 Hermes 兼容路径。
 2. J4.6 后重新统计 `apps/api/src/agent` 超长文件并执行 J7.3（J7.4 实体拆分已于 2026-10-23 完成）。
-3. J6 已于 2026-10-23 收口（插件指南、清单生成器修复、lint 老警告清零、升级脚本自动修剪回滚标签、依赖升级评估 `docs/dependency-upgrade-assessment.md`）。依赖升级第 1、2 步已于 2026-10-26 做完；第 3～5 步的改动清单见该文档第四节（2026-10-28），顺序改为 TS 6 → NestJS 12 → TypeORM 1.1，TS 7 暂缓，不再等 J7.3；TS 6（5a）已于 2026-11-11 做完，NestJS 12（含 Express 5）已于 2026-11-12 做完，下一步是 TypeORM 1.1。
+3. J6 已于 2026-10-23 收口（插件指南、清单生成器修复、lint 老警告清零、升级脚本自动修剪回滚标签、依赖升级评估 `docs/dependency-upgrade-assessment.md`）。依赖升级第 1、2 步已于 2026-10-26 做完；第 3～5 步的改动清单见该文档第四节（2026-10-28），顺序改为 TS 6 → NestJS 12 → TypeORM 1.1，TS 7 暂缓，不再等 J7.3；TS 6（5a）已于 2026-11-11 做完，NestJS 12（含 Express 5）与 TypeORM 1.1 已于 2026-11-12 做完；剩一笔把 where 空值行为从 `ignore` 改回默认的 `throw`，TS 7 等 7.1。
 4. J3 仅在试用满两周、原话不少于 100 条、覆盖不少于 5 个域三项同时满足后启动；2026-10-15～2026-10-28 只是暂定试用窗口，不代表实际试用已经开始。J5 尚未启动。
 
 ## 常用命令
