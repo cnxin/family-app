@@ -41,6 +41,6 @@ class IsolatedTestClockMiddleware implements NestMiddleware {
 @Module({ providers: [Clock, IsolatedTestClockMiddleware], exports: [Clock] })
 export class ClockModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(IsolatedTestClockMiddleware).forRoutes('*');
+    consumer.apply(IsolatedTestClockMiddleware).forRoutes('{*splat}');
   }
 }

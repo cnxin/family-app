@@ -31,7 +31,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   constructor(private readonly logger: StructuredLogger) {}
 
   catch(raw: unknown, host: ArgumentsHost) {
-    // Nest 10 按英文文案认 multer 错误，multer 2.4 改了文案、加了新码：先按 code 换成 400 / 413（common/multipart.ts）
+    // 没被 FileInterceptor 转成 HttpException 的 MulterError 先按 code 换成 400 / 413（common/multipart.ts；Nest 12 起拦截器自己会转）
     const exception = multerErrorToHttp(raw) ?? raw;
     const http = host.switchToHttp();
     const req = http.getRequest<ObservedRequest>();
