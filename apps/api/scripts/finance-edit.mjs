@@ -289,6 +289,14 @@ try {
     followUp.data.done === 2 && ownerView.data.sameMerchantPending === 2,
     '「同时改另外 2 笔」走批量：都改好；管理员把它改回餐饮时同商户的 2 笔又和它不一样了',
   );
+  const relearned = (await db.query(
+    `SELECT "categoryId", hits FROM finance_merchant_rules WHERE "householdId" = $1 AND pattern = $2 AND kind = 'expense'`,
+    [householdId, `美团${suffix}`],
+  )).rows;
+  assert(
+    meituanRule.hits === 1 && relearned.length === 1 && relearned[0].categoryId === byKey.expense_food && relearned[0].hits === 2,
+    '同一商户再改一次分类：还是那一条规则，分类换成这次的、hits 从 1 变 2（upsert 的冲突分支）',
+  );
   const pharmacy = septemberRows.find((one) => one.externalId === mapId('42000016721202609300005219699'));
   const cheaper = await patch(member.accessToken, pharmacy.id, { amount: 90 });
   const oldRow = (await db.query('SELECT "externalId", "supersededById" FROM finance_transactions WHERE id = $1', [pharmacy.id])).rows[0];
