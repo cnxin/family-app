@@ -1,4 +1,4 @@
-# 依赖升级评估（2026-10-23；第 3～5 步改动清单 2026-10-28）
+# 依赖升级评估（2026-10-23；第 3～5 步改动清单 2026-10-28；5a 已做 2026-11-11）
 
 > 只是评估，没有升级。数据来自 `npm outdated`（2026-10-23，main `2ff7efa`）。运行时：镜像与 CI 都是 Node 22，本机 Node 24，pnpm 10.34。
 
@@ -54,14 +54,18 @@
 
 | 新顺序 | 内容 | 风险 | 备注 |
 | --- | --- | --- | --- |
-| 5a | TypeScript 5.9 → **6.0**（全仓库） | 低到中 | 纯配置活，先做 |
+| 5a | TypeScript 5.9 → **6.0**（全仓库） | 低到中 | ☑ 2026-11-11 已做，结果见下 |
 | 3 | NestJS 10 → 12（经 11），连 cli / typeorm / jwt / throttler / @types/express 5 / @types/multer 2 | 中 | 代码只改 1 行，验证量大 |
 | 4 | TypeORM 0.3 → 1.1 | 中到高 | 代码改 2 处，关键在约束命名与 where 行为 |
 | 5b | TypeScript → 7 | 高 | **等 7.1 出 API 且 typescript-eslint / ts-node 跟上再说**，现在做没有收益 |
 
 原来「第 3 步排在 J7.3 之后」的理由是怕和 agent 目录拆分撞车。Nest 升级在 src 里只碰 1 个文件（见下），撞车概率可忽略，**不必再等 J7.3**。
 
-### 5a. TypeScript 6.0（先做）
+### 5a. TypeScript 6.0（☑ 2026-11-11）
+
+**实际结果**：6 个 `package.json` 的 `typescript` 改成 `~6.0.3`（用 `~` 不用 `^`：typescript-eslint 8.72 的 peer 是 `<6.1.0`，6.1 出来会先撞它）；lockfile 只动 typescript 的 61 行。`apps/api/tsconfig.json` 删 `baseUrl`，加 `"rootDir": "./src"`、`"types": ["node", "multer"]`、`"strict": false`、`"tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"`（显式 rootDir 会把增量信息文件挪到 `apps/api/` 下、落在 dist 外面；dist 被清而它还在时增量构建会不出产物，所以钉回 dist 里，和以前的位置一样）。四个工作区包和 web 的 tsconfig 一行没改，源码一行没改：web 与 packages 在 TS 6 下直接零错误，api 只报 `baseUrl` 弃用（TS5101）一条。`nest build` 产物仍是 `dist/main.js`（429 个源文件对 429 个 js），ts-node 10.9.2 在 TS 6 下跑 `scripts/*.ts` 没有问题，rootDir 收紧到 `./src` 也不影响它跑 `scripts/` 下的文件。CI「镜像构建」新增一步断言 `dist/main.js` 在、`dist/src` 不在、备份 worker 的 `data-source.js` 在——原来那一步只验工作区包能 require，产物挪了位置构建照样绿。
+
+下面是动手前写的对照表，留作记录。
 
 TS 6 改了默认值并弃用一批选项（`ignoreDeprecations: "6.0"` 可暂压；7.0 直接报错）。对照 10 个 tsconfig：
 
@@ -140,7 +144,7 @@ Nest 11 / 12 其他破坏性变更对照：
 
 ### 建议
 
-1. 现在就做 **5a（TS 6）**：半天，纯配置。
+1. ~~现在就做 **5a（TS 6）**：半天，纯配置。~~ 2026-11-11 已做。
 2. 接着做 **3（Nest 12）**：代码 1 行 + 类型若干，重点是黑盒和 13 个 `@Res` 端点。
 3. 然后 **4（TypeORM 1.1）**：代码 2 处 + `NamingStrategyV03` + `invalidWhereValuesBehavior: 'ignore'`，四项迁移验收；之后单独一笔改回 `throw`。
 4. **5b 不做**，等 TS 7.1 + typescript-eslint 支持；ts-node 替换（方案 ③）可以在任何时候单独做。
