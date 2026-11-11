@@ -1,4 +1,4 @@
-# 依赖升级评估（2026-10-23；第 3～5 步改动清单 2026-10-28；5a 已做 2026-11-11）
+# 依赖升级评估（2026-10-23；第 3～5 步改动清单 2026-10-28；5a 已做 2026-11-11、第 3 步已做 2026-11-12）
 
 > 只是评估，没有升级。数据来自 `npm outdated`（2026-10-23，main `2ff7efa`）。运行时：镜像与 CI 都是 Node 22，本机 Node 24，pnpm 10.34。
 
@@ -55,7 +55,7 @@
 | 新顺序 | 内容 | 风险 | 备注 |
 | --- | --- | --- | --- |
 | 5a | TypeScript 5.9 → **6.0**（全仓库） | 低到中 | ☑ 2026-11-11 已做，结果见下 |
-| 3 | NestJS 10 → 12（经 11），连 cli / typeorm / jwt / throttler / @types/express 5 / @types/multer 2 | 中 | 代码只改 1 行，验证量大 |
+| 3 | NestJS 10 → 12（经 11），连 cli / typeorm / jwt / throttler / @types/express 5 / @types/multer 2 | 中 | ☑ 2026-11-12 已做，结果见下 |
 | 4 | TypeORM 0.3 → 1.1 | 中到高 | 代码改 2 处，关键在约束命名与 where 行为 |
 | 5b | TypeScript → 7 | 高 | **等 7.1 出 API 且 typescript-eslint / ts-node 跟上再说**，现在做没有收益 |
 
@@ -84,7 +84,17 @@ TS 6 改了默认值并弃用一批选项（`ignoreDeprecations: "6.0"` 可暂�
 
 验收：typecheck、lint 零新增、`test:api` + `test:web` 全量、镜像构建、`docker run … ls dist/main.js`。
 
-### 3. NestJS 10 → 12（含 Express 5）
+### 3. NestJS 10 → 12（含 Express 5）（☑ 2026-11-12）
+
+**实际结果**：`@nestjs/{common,core,platform-express}` 12.4.2、`@nestjs/cli` 12.0.12、`@nestjs/typeorm` 12.0.3、`@nestjs/jwt` 12.0.4、`@nestjs/throttler` 6.7.1、`@types/express` 5.0.6、`@types/multer` 2.3.0；lockfile 里各工作区的直接依赖只变这 9 个，包条目 697 → 593（新 CLI 不再带 webpack）。
+
+- 源码改 2 处：`src/common/clock.ts` 的 `forRoutes('*')` → `forRoutes('{*splat}')`；`src/common/multipart.ts` 的 `MultipartLimits` 类型别名收窄成对象形态（Nest 12 的 `limits` 多了「按请求返回 limits 的函数」形态，别名把函数也包进去后 `scripts/multipart.check.ts` 编不过；`tsc --noEmit` 只查 `src`，这条是 ts-node 跑脚本时才报的）。动手前预计的 `Reflector`、Pipe 签名两处 typecheck 都没报错，不用改。
+- **删掉 `pnpm-workspace.yaml` 的 `multer: ^2.4.0` override**，api 直接依赖同步到 `^2.5.0`。这条 override 是给 Nest 10 打的补丁（它精确依赖带通告的 multer 2.0.2）；Nest 12.4 精确依赖 2.5.0，override 留着反而把它压回 2.4.0。`multerErrorToHttp` 的按 code 兜底保留没删：Nest 12 的 FileInterceptor 已自己按 code 映射，这段现在走不到，但无害，单测照旧覆盖，要删另开一笔。
+- 生命周期钩子逐个看过：33 个 `onModuleInit` 只做登记（门面、留意规则、事务钩子）或挂定时器，轮询器都在 `onApplicationBootstrap` 才启动，11 个销毁钩子只清定时器——没有组件在初始化期读别人的登记，Nest 11 / 12 的顺序变化不影响。
+- Nest 12 的包是 ESM：编译后的 CommonJS 产物和 ts-node 跑的脚本都靠 `require(esm)` 加载，本机 Node 24.14 与镜像的 Node 22.23.1 实测都能加载。
+- query parser 没设 `extended`，沿用 Express 5 默认的 `simple`。
+
+下面是动手前写的对照表，留作记录。
 
 包：`@nestjs/{common,core,platform-express}` ^12.3、`@nestjs/cli` + `@nestjs/schematics` ^12.0（devDependencies）、`@nestjs/typeorm` ^12.0.2、`@nestjs/jwt` ^12.0.3、`@nestjs/throttler` ^6.7（已声明支持 12，顺手升小版本）、`@types/express` ^5、`@types/multer` ^2。官方 `nest upgrade --dry-run` 可先看一眼，但本仓库用 pnpm，最后还是手改 package.json。
 
@@ -145,7 +155,7 @@ Nest 11 / 12 其他破坏性变更对照：
 ### 建议
 
 1. ~~现在就做 **5a（TS 6）**：半天，纯配置。~~ 2026-11-11 已做。
-2. 接着做 **3（Nest 12）**：代码 1 行 + 类型若干，重点是黑盒和 13 个 `@Res` 端点。
+2. ~~接着做 **3（Nest 12）**：代码 1 行 + 类型若干，重点是黑盒和 13 个 `@Res` 端点。~~ 2026-11-12 已做。
 3. 然后 **4（TypeORM 1.1）**：代码 2 处 + `NamingStrategyV03` + `invalidWhereValuesBehavior: 'ignore'`，四项迁移验收；之后单独一笔改回 `throw`。
 4. **5b 不做**，等 TS 7.1 + typescript-eslint 支持；ts-node 替换（方案 ③）可以在任何时候单独做。
 

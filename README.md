@@ -47,7 +47,7 @@
 | 端 | 技术 |
 | --- | --- |
 | Web 客户端 | Vite、React 19、TanStack Query、React Router、Tailwind 4，响应式手机与桌面布局 |
-| API | NestJS 10、TypeORM、短时 JWT 与可撤销会话 |
+| API | NestJS 12（Express 5）、TypeORM、短时 JWT 与可撤销会话 |
 | 数据库 | PostgreSQL 16 |
 | 本地环境 | Docker Compose + pnpm monorepo |
 

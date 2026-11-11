@@ -1,5 +1,5 @@
 // C2 单测（同 finance-import.check.ts：ts-node + node:assert，不碰数据库）：multer 错误按 code 映射成 400 / 413、
-// 拦截点 limits 带字段名防护且一个不漏、Nest 实际加载的那份 multer ≥ 2.4.0（pnpm-workspace.yaml 的 override 生效）。
+// 拦截点 limits 带字段名防护且一个不漏、Nest 实际加载的那份 multer ≥ 2.4.0，且和 api 直接依赖是同一份（Nest 12 起精确依赖 2.5.0，不再需要 override）。
 // run-api-tests.mjs 全量模式里执行；单独跑（apps/api 下）：node -r ts-node/register scripts/multipart.check.ts
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -15,9 +15,9 @@ function check(name: string, run: () => void) {
   passed += 1;
   console.log(`  ✓ ${name}`);
 }
-/** @types/multer 1.4.x 的 ErrorCode 还没有 2.2+ / 2.3+ 新增的码 */
+/** 测试里要构造任意错误码（含 STREAM_DESTROYED 这类不在 ErrorCode 联合里的） */
 const code = (value: string) => value as never;
-/** Nest 的 FileInterceptor 在 platform-express 自己的目录里 require('multer')：override 没生效时它还是 2.0.2 */
+/** Nest 的 FileInterceptor 在 platform-express 自己的目录里 require('multer')：要看的是它那一份，不是 api 直接依赖那一份 */
 const nestRequire = createRequire(require.resolve('@nestjs/platform-express'));
 const nestMulter = nestRequire('multer') as typeof multer;
 
@@ -43,7 +43,7 @@ check('multipartLimits 补上字段名防护、调用方的值优先', () => {
   assert.equal(limits.files, 1);
   assert.ok(Number.isInteger(limits.fieldNestingDepth) && Number.isInteger(limits.fieldArrayIndexLimit));
 });
-check('Nest 加载的 multer ≥ 2.4.0、和 api 直接依赖是同一份（override 生效）', () => {
+check('Nest 加载的 multer ≥ 2.4.0、和 api 直接依赖是同一份', () => {
   const version = (nestRequire('multer/package.json') as { version: string }).version;
   const [major, minor] = version.split('.').map(Number);
   assert.ok(major > 2 || (major === 2 && minor >= 4), `Nest 用的 multer 是 ${version}`);
