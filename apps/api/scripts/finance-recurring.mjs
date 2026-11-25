@@ -420,15 +420,29 @@ try {
     '账户停用后到期：记下「账户已停用」、之后的几轮不再重试（日志只一条）、没落流水；管理员留意里出现「「…」自动记账失败：账户已停用」，成员看不到',
   );
   const stillStopped = await request(`/finance/recurring/${failing.id}/retry`, owner.accessToken, 'POST');
+  await new Promise((resolve) => setTimeout(resolve, 350));
   const memberRetry = await request(`/finance/recurring/${failing.id}/retry`, member.accessToken, 'POST');
   await request(`/finance/accounts/${doomed.id}`, owner.accessToken, 'PATCH', { isActive: true, expectedVersion: stopped.version });
-  const retried = await request(`/finance/recurring/${failing.id}/retry`, owner.accessToken, 'POST');
+  // 模拟后台轮询恰持有该行锁时管理员点「重试」：手动重试必须等锁释放后落账，不能因 skip_locked 悄悄返回 posted=0
+  let pendingRetry;
+  await db.query('BEGIN');
+  try {
+    await db.query('SELECT id FROM finance_recurring WHERE id = $1 FOR UPDATE', [failing.id]);
+    pendingRetry = request(`/finance/recurring/${failing.id}/retry`, owner.accessToken, 'POST');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await db.query('COMMIT');
+  } catch (error) {
+    await db.query('ROLLBACK');
+    throw error;
+  }
+  const retried = await pendingRetry;
   assert(
-    stillStopped.status === 409 && stillStopped.error.message === '还是没记上：账户已停用' && memberRetry.status === 403 &&
+    stillStopped.status === 409 && stillStopped.error.message === '还是没记上：账户已停用' &&
+      failLogLines(failing.id) === 1 && memberRetry.status === 403 &&
       retried.status === 201 && retried.data.posted === 1 && retried.data.recurring.lastError === null &&
       (await postedFor(failing.id)).length === 1 && (await failRow(failing.id)).lastError === null &&
       (await failedCards(owner.accessToken)).length === 0,
-    '账户没启用时重试 409 说明原因；成员不能重试；账户重新启用后重试：落下这一期、原因清空、留意消失',
+    '账户没启用时重试 409 说明原因且不唤醒后台轮询重复刷日志；成员不能重试；行锁竞争下重试等待锁释放并落下这一期、原因清空、留意消失',
   );
   const doomed2 = (await request('/finance/accounts', owner.accessToken, 'POST', {
     name: `又停用的卡-${suffix}`, type: 'bank', openingBalance: 0,

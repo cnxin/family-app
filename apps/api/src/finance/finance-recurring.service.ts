@@ -223,25 +223,30 @@ export class FinanceRecurringService {
         .setOnLocked('skip_locked')
         .getOne();
       if (!rule || !rule.isActive || !rule.autoPost || rule.nextDueOn > cutoff) return 0;
-      const actor = await this.automationActor(manager, rule.householdId);
-      if (!actor) throw new Error('家里没有在用的家庭主人');
-      let posted = 0;
-      for (let step = 0; step < MAX_CATCH_UP && rule.nextDueOn <= cutoff; step += 1) {
-        const dueOn = rule.nextDueOn;
-        const exists = await manager.getRepository(FinanceTransaction).exists({
-          where: { householdId: rule.householdId, idempotencyKey: recurringIdempotencyKey(rule.id, dueOn) },
-        });
-        if (exists) {
-          this.advance(rule, dueOn);
-          continue;
-        }
-        // 自动落的记账日就是那一期的应付日
-        await this.post(manager, rule, dueOn, dueOn, actor);
-        posted += 1;
-      }
+      const posted = await this.catchUp(manager, rule, cutoff);
       await manager.getRepository(FinanceRecurring).save(rule);
       return posted;
     });
+  }
+
+  private async catchUp(manager: EntityManager, rule: FinanceRecurring, cutoff: string): Promise<number> {
+    const actor = await this.automationActor(manager, rule.householdId);
+    if (!actor) throw new Error('家里没有在用的家庭主人');
+    let posted = 0;
+    for (let step = 0; step < MAX_CATCH_UP && rule.nextDueOn <= cutoff; step += 1) {
+      const dueOn = rule.nextDueOn;
+      const exists = await manager.getRepository(FinanceTransaction).exists({
+        where: { householdId: rule.householdId, idempotencyKey: recurringIdempotencyKey(rule.id, dueOn) },
+      });
+      if (exists) {
+        this.advance(rule, dueOn);
+        continue;
+      }
+      // 自动落的记账日就是那一期的应付日
+      await this.post(manager, rule, dueOn, dueOn, actor);
+      posted += 1;
+    }
+    return posted;
   }
 
   private async automationActor(manager: EntityManager, householdId: string): Promise<JwtUser | null> {
@@ -319,22 +324,38 @@ export class FinanceRecurringService {
     return reason;
   }
 
-  /** 管理员「重试」：清掉失败原因，按调度同样的口径把到期的期落下来；还失败就记下新原因并 409。 */
+  /** 管理员「重试」：在阻塞行锁内清掉失败原因并按调度同样的口径补齐到期期数；还失败则回滚、记下新原因并 409。 */
   async retry(id: string, user: JwtUser) {
     assertCapability(user, 'manage_finance');
-    const rule = await this.rules.findOneBy({ id, householdId: user.householdId });
-    if (!rule) throw new NotFoundException('周期账单不存在');
-    if (!rule.isActive || !rule.autoPost) throw new ConflictException('这条不是在用的自动记账，不用重试');
-    await this.rules.update({ id }, { lastError: null, lastErrorAt: null });
     const household = await this.dataSource.getRepository(Household).findOneByOrFail({ id: user.householdId });
-    let posted: number;
-    try {
-      posted = await this.postDue(id, postingCutoff(household.timezone || 'Asia/Shanghai', this.clock.now()));
-    } catch (error) {
-      const reason = await this.recordFailure(id, error);
-      throw new ConflictException(`还是没记上：${reason}`);
-    }
-    return { recurring: await this.findOne(id, user.householdId, await this.today(user.householdId)), posted };
+    const cutoff = postingCutoff(household.timezone || 'Asia/Shanghai', this.clock.now());
+    let catchUpError: unknown;
+    const posted = await this.dataSource
+      .transaction(async (manager) => {
+        const rule = await this.lock(manager, id, user.householdId);
+        if (!rule.isActive || !rule.autoPost) {
+          throw new ConflictException('这条不是在用的自动记账，不用重试');
+        }
+        rule.lastError = null;
+        rule.lastErrorAt = null;
+        try {
+          const count = rule.nextDueOn <= cutoff ? await this.catchUp(manager, rule, cutoff) : 0;
+          await manager.getRepository(FinanceRecurring).save(rule);
+          return count;
+        } catch (error) {
+          catchUpError = error;
+          throw error;
+        }
+      })
+      .catch(async (error) => {
+        if (catchUpError === undefined) throw error;
+        const reason = await this.recordFailure(id, catchUpError);
+        throw new ConflictException(`还是没记上：${reason}`);
+      });
+    return {
+      recurring: await this.findOne(id, user.householdId, householdToday(household.timezone, this.clock.now())),
+      posted,
+    };
   }
 
   async today(householdId: string) {
