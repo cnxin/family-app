@@ -11,11 +11,14 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import { extractTailscaleIngress } from '../common/tailscale-ingress';
 import { Member } from '../entities';
 import { RequireCapabilities } from './capabilities';
 import { AllowWithoutPassword, CurrentUser, JwtUser, Public } from './jwt.guard';
@@ -65,8 +68,8 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Header('Cache-Control', 'no-store')
   @Post('auth/login')
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  login(@Body() dto: LoginDto, @Req() request: Request) {
+    return this.auth.login(dto, extractTailscaleIngress(request));
   }
 
   @Public()

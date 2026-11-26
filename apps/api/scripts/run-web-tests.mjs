@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import pg from 'pg';
@@ -13,8 +14,19 @@ const rawArgs = process.argv.slice(2);
 if (rawArgs.includes('--client')) {
   throw new Error('旧客户端已在 H1 删除，只剩 apps/web，不再需要 --client');
 }
-const API_PORT = Number(process.env.E2E_API_PORT || 3198);
-const WEB_PORT = Number(process.env.E2E_WEB_PORT || 5181);
+async function resolvePort(envValue) {
+  if (envValue) return Number(envValue);
+  const probe = createNetServer();
+  await new Promise((resolvePort, rejectPort) => {
+    probe.once('error', rejectPort);
+    probe.listen(0, '127.0.0.1', () => resolvePort());
+  });
+  const { port } = probe.address();
+  await new Promise((resolveClose) => probe.close(() => resolveClose()));
+  return port;
+}
+const API_PORT = await resolvePort(process.env.E2E_API_PORT);
+const WEB_PORT = await resolvePort(process.env.E2E_WEB_PORT);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const WEB_URL = `http://localhost:${WEB_PORT}`;
 const TEST_DATABASE = `family_app_web_test_${randomUUID().replaceAll('-', '')}`;
@@ -75,6 +87,21 @@ const testEnvironment = {
   HOME_ASSISTANT_BASE_URL: '',
   HOME_ASSISTANT_TOKEN: '',
   HOME_ASSISTANT_TOKEN_FILE: '',
+  TAILSCALE_API_BASE_URL: '',
+  TAILSCALE_TAILNET: '',
+  TAILSCALE_PUBLIC_URL: '',
+  TAILSCALE_NODE_HOSTNAME: '',
+  TAILSCALE_OAUTH_CLIENT_ID: '',
+  TAILSCALE_OAUTH_CLIENT_ID_FILE: '',
+  TAILSCALE_OAUTH_CLIENT_SECRET: '',
+  TAILSCALE_OAUTH_CLIENT_SECRET_FILE: '',
+  TAILSCALE_API_TOKEN: '',
+  TAILSCALE_API_TOKEN_FILE: '',
+  TAILSCALE_ALLOWED_HOUSEHOLD_ID: '',
+  TAILSCALE_TIMEOUT_MS: '1500',
+  EXTERNAL_ACCESS_POLL_INTERVAL_MS: '300000',
+  EXTERNAL_ACCESS_OFFLINE_ATTENTION_MS: '',
+  TRUST_PROXY_HOPS: '0',
   // E4 的日程联动轮询；e2e 只验家务打勾，1 秒够用
   SMART_HOME_LINKS_POLL_MS: '1000',
 };
@@ -105,11 +132,26 @@ const admin = new Client({
 });
 
 let api = null;
+let activeChild = null;
 let apiOutput = '';
 let databaseCreated = false;
+let cleanupDone = false;
 
 function wait(milliseconds) {
   return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+}
+
+async function terminateProcess(proc) {
+  if (!proc || proc.exitCode != null || proc.signalCode != null) return;
+  proc.kill('SIGTERM');
+  const exited = await Promise.race([
+    once(proc, 'exit').then(() => true),
+    wait(5000).then(() => false),
+  ]);
+  if (!exited && proc.exitCode == null && proc.signalCode == null) {
+    proc.kill('SIGKILL');
+    await once(proc, 'exit').catch(() => {});
+  }
 }
 
 async function runProcess(command, args, cwd, environment = testEnvironment) {
@@ -118,8 +160,15 @@ async function runProcess(command, args, cwd, environment = testEnvironment) {
     env: environment,
     stdio: 'inherit',
   });
-  const [code] = await once(child, 'exit');
-  if (code !== 0) throw new Error(`${command} 执行失败，状态码 ${code}`);
+  activeChild = child;
+  try {
+    const [code, signal] = await once(child, 'exit');
+    if (code !== 0) {
+      throw new Error(`${command} 执行失败，状态码 ${code ?? signal}`);
+    }
+  } finally {
+    if (activeChild === child) activeChild = null;
+  }
 }
 
 function startApi() {
@@ -146,14 +195,18 @@ function startApi() {
 
 async function waitForApi() {
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    if (api?.exitCode != null) {
-      throw new Error(`隔离 API 提前退出，状态码 ${api.exitCode}\n${apiOutput}`);
+    if (api?.exitCode != null || api?.signalCode != null) {
+      throw new Error(
+        `隔离 API 提前退出，状态码 ${api.exitCode ?? api.signalCode}\n${apiOutput}`,
+      );
     }
-    try {
-      const response = await fetch(`${API_URL}/health/ready`);
-      if (response.ok) return;
-    } catch {
-      // The isolated API is still starting.
+    if (apiOutput.includes('"event":"api_started"')) {
+      try {
+        const response = await fetch(`${API_URL}/health/ready`);
+        if (response.ok) return;
+      } catch {
+        // The isolated API is still starting.
+      }
     }
     await wait(250);
   }
@@ -161,11 +214,40 @@ async function waitForApi() {
 }
 
 async function stopApi() {
-  if (api && api.exitCode == null) {
-    api.kill('SIGTERM');
-    await once(api, 'exit');
-  }
+  const target = api;
   api = null;
+  await terminateProcess(target);
+}
+
+async function cleanupResources() {
+  if (cleanupDone) return;
+  cleanupDone = true;
+  await terminateProcess(activeChild);
+  await stopApi();
+  if (databaseCreated) {
+    try {
+      await admin.query(
+        'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',
+        [TEST_DATABASE],
+      );
+      await admin.query(`DROP DATABASE IF EXISTS "${TEST_DATABASE}"`);
+      console.log('隔离浏览器测试数据库已删除');
+    } catch {
+      // 忽略中断时的清理次生错误
+    }
+    databaseCreated = false;
+  }
+  await admin.end().catch(() => {});
+  await rm(TEST_UPLOAD_DIR, { recursive: true, force: true }).catch(() => {});
+}
+
+for (const [signal, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+]) {
+  process.once(signal, () => {
+    void cleanupResources().finally(() => process.exit(code));
+  });
 }
 
 try {
@@ -201,15 +283,5 @@ try {
     console.log(share >= 80 ? `⚠️ ${line}，快到上限了` : line);
   }
 } finally {
-  await stopApi();
-  if (databaseCreated) {
-    await admin.query(
-      'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',
-      [TEST_DATABASE],
-    );
-    await admin.query(`DROP DATABASE "${TEST_DATABASE}"`);
-    console.log('隔离浏览器测试数据库已删除');
-  }
-  await admin.end();
-  await rm(TEST_UPLOAD_DIR, { recursive: true, force: true });
+  await cleanupResources();
 }

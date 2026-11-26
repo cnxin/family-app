@@ -10,6 +10,7 @@ import { databaseOptions } from './database/database.options';
 import { ClockModule } from './common/clock';
 import { DishesModule } from './dishes/dishes.module';
 import { EventsModule } from './events/events.module';
+import { ExternalAccessModule } from './external-access/external-access.module';
 import { GuestsModule } from './guests/guests.module';
 import { HouseholdsModule } from './households/households.module';
 import { FinanceModule } from './finance/finance.module';
@@ -44,6 +45,7 @@ import { UploadModule } from './upload/upload.module';
     AuthModule,
     CalendarModule,
     DishesModule,
+    ExternalAccessModule,
     FinanceModule,
     GuestsModule,
     HouseholdsModule,

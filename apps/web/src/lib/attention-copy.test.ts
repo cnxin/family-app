@@ -131,4 +131,46 @@ describe('attentionCopy：逐域的单件与合并说法', () => {
     );
     expect(merged).toMatchObject({ title: '智能家居有 2 件事要看一下', actionLabel: '去看看', path: '/house/smart-home' });
   });
+
+  it('外部访问两条：密钥到期与控制面离线文案和跳转路径（M5-E）', () => {
+    const expiring = attentionCopy(
+      item({
+        domain: 'external-access',
+        kind: 'key-expiring',
+        dueOn: '2026-09-27',
+        entity: { id: entity.id, name: 'dad-iphone.family.ts.net' },
+      }),
+      '2026-09-22',
+    );
+    expect(expiring).toMatchObject({
+      domainLabel: '外部访问',
+      title: 'dad-iphone.family.ts.net 的访问密钥5 天后到期',
+      actionLabel: '看设备',
+      path: '/house/external-access',
+    });
+    const expiringMany = attentionCopy(
+      item({ domain: 'external-access', kind: 'key-expiring', count: 2, dueOn: '2026-09-27', entity: undefined }),
+      '2026-09-22',
+    );
+    expect(expiringMany).toMatchObject({
+      title: '有 2 台设备的访问密钥快到期了',
+      actionLabel: '看设备',
+      path: '/house/external-access',
+    });
+    const offline = attentionCopy(
+      item({
+        domain: 'external-access',
+        kind: 'offline',
+        dueOn: undefined,
+        entity: { id: entity.id, name: 'Tailscale 控制面' },
+      }),
+      '2026-09-22',
+    );
+    expect(offline).toMatchObject({
+      domainLabel: '外部访问',
+      title: 'Tailscale 控制面暂时连不上',
+      actionLabel: '看连接',
+      path: '/house/external-access/settings',
+    });
+  });
 });

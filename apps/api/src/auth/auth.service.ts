@@ -10,6 +10,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 import { bootstrapSecret } from '../common/config';
 import { hashPin, verifyPin } from '../common/pin';
+import type { TailscaleIngressContext } from '../common/tailscale-ingress';
 import { Account, AuthSession, Household, HouseholdActivityLog, Member } from '../entities';
 import { normalizeLoginName } from './account.credentials';
 import { JwtUser } from './jwt.guard';
@@ -168,7 +169,7 @@ export class AuthService {
     return this.startSession(created.account, created.member);
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, ingress?: TailscaleIngressContext) {
     const candidate = await this.accounts.findOne({
       where: { loginNameNormalized: normalizeLoginName(dto.loginName) },
       select: AUTH_ACCOUNT_SELECT,
@@ -195,7 +196,30 @@ export class AuthService {
     if (memberships.length > 1 && !dto.householdSlug?.trim()) {
       throw new ConflictException('该账号属于多个家庭，请指定家庭空间');
     }
-    return this.startSession(account, memberships[0]);
+    const member = memberships[0];
+    const session = await this.startSession(account, member);
+    if (ingress?.viaTailscale && ingress.login) {
+      const activityLogs = this.dataSource.getRepository(HouseholdActivityLog);
+      await activityLogs.save(
+        activityLogs.create({
+          householdId: member.householdId,
+          actorId: member.id,
+          actorName: member.name,
+          subjectMemberId: member.id,
+          module: 'member',
+          action: 'external_access_login',
+          summary: `${member.name} 通过外部通道登录`,
+          detail: null,
+          targetPath: '/house/external-access',
+          metadata: {
+            tailscaleLogin: ingress.login,
+            tailscaleName: ingress.name,
+            memberId: member.id,
+          },
+        }),
+      );
+    }
+    return session;
   }
 
   async refresh(dto: RefreshDto) {

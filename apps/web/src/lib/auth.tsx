@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AccountProfile, AuthSession, LoginBody } from '@family/contracts';
 
 export interface RedeemBody { invitationToken: string; loginName: string; password: string }
@@ -50,11 +51,15 @@ function write(session: AuthSession | null) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthSession | null>(() => {
     const stored = read();
     setAccessToken(stored?.accessToken ?? null);
     return stored;
   });
+  const identityRef = useRef(
+    session ? `${session.member.householdId}:${session.member.id}:${session.member.role}` : null,
+  );
 
   const setHouseholdTimezone = useCallback((timezone: string) => {
     setSession((current) => {
@@ -76,10 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /** 只清本机：令牌失效、续期失败时用；服务端那边已经不认这次会话了。 */
   const clearSession = useCallback(() => {
+    identityRef.current = null;
+    queryClient.clear();
     setSession(null);
     write(null);
     setAccessToken(null);
-  }, []);
+  }, [queryClient]);
 
   const signOut = useCallback(async () => {
     try {
@@ -91,10 +98,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const apply = useCallback((next: AuthSession) => {
+    const nextIdentity = `${next.member.householdId}:${next.member.id}:${next.member.role}`;
+    if (identityRef.current && identityRef.current !== nextIdentity) {
+      queryClient.clear();
+    }
+    identityRef.current = nextIdentity;
     setSession(next);
     write(next);
     setAccessToken(next.accessToken);
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     setAuthHandlers({

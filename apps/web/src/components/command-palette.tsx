@@ -168,14 +168,16 @@ export function CommandPalette() {
     const pages = entries.filter((entry) => entry.kind === 'page');
     const dishesOnly = entries.filter((entry) => entry.kind === 'dish');
     if (!keyword) return pages;
-    const named = ACTIONS.filter((action) => includes(action.label, keyword)).map((action) => ({
+    const manager = session?.member.role === 'owner' || session?.member.role === 'admin';
+    const availableActions = ACTIONS.filter((action) => !action.managerOnly || manager);
+    const named = availableActions.filter((action) => includes(action.label, keyword)).map((action) => ({
       id: action.id,
       label: action.label,
       hint: '动作',
       kind: 'action' as const,
       go: () => navigate(action.to),
     }));
-    const aliased = ACTIONS.filter(
+    const aliased = availableActions.filter(
       (action) => !includes(action.label, keyword) && action.keywords.some((item) => includes(item, keyword)),
     ).map((action) => ({
       id: action.id,
@@ -211,7 +213,7 @@ export function CommandPalette() {
       : [];
     // 顺序和下面分组显示的顺序一致，上下键和回车才对得上
     return [...named, ...aliased, ...pageHits, ...dishHits, ...itemHits, ...ask].slice(0, 20);
-  }, [agent.data?.enabled, entries, found.data, itemQuery, map.data, navigate, query]);
+  }, [agent.data?.enabled, entries, found.data, itemQuery, map.data, navigate, query, session?.member.role]);
   // 「交给小管家」那条总在，不算候选
   const candidates = results.filter((entry) => entry.kind !== 'agent').length;
   useEffect(() => {

@@ -107,10 +107,19 @@ class ActivitiesService {
         subjectMemberId: log.subjectMemberId,
         targetPath:
           user.role === 'member' &&
-          (log.module === 'member' || log.module === 'invitation')
+          (log.module === 'member' ||
+            log.module === 'invitation' ||
+            log.targetPath?.startsWith('/house/external-access'))
             ? null
             : log.targetPath,
-        metadata: log.metadata,
+        metadata:
+          user.role === 'member' && log.action === 'external_access_login'
+            ? Object.fromEntries(
+                Object.entries(log.metadata ?? {}).filter(
+                  ([key]) => key !== 'tailscaleLogin' && key !== 'tailscaleName',
+                ),
+              )
+            : log.metadata,
         occurredAt: log.createdAt,
       })),
       ...menuEvents.map((event) => ({

@@ -103,6 +103,20 @@ services:
       # 文件还不存在时只是「没配」，不影响启动；写进去之后不用重启 API。家庭也可以在设置页填自己的。
       HOME_ASSISTANT_BASE_URL: ${HOME_ASSISTANT_BASE_URL:-http://host.docker.internal:8123}
       HOME_ASSISTANT_TOKEN_FILE: ${HOME_ASSISTANT_TOKEN_FILE:-/run/integration-secrets/home_assistant_token.txt}
+      # M5-E 外部访问（Tailscale 控制面只读连接）：推荐 OAuth client（scope 仅 devices:core:read），兼容 API 令牌。
+      # 密钥文件放 deploy/secrets/（只读挂到 /run/integration-secrets）；文件不存在时只是「没配」，不影响启动。
+      TAILSCALE_API_BASE_URL: ${TAILSCALE_API_BASE_URL:-https://api.tailscale.com}
+      TAILSCALE_TAILNET: ${TAILSCALE_TAILNET:--}
+      TAILSCALE_PUBLIC_URL: ${TAILSCALE_PUBLIC_URL:-}
+      TAILSCALE_NODE_HOSTNAME: ${TAILSCALE_NODE_HOSTNAME:-xiaoguanjia}
+      TAILSCALE_OAUTH_CLIENT_ID: ${TAILSCALE_OAUTH_CLIENT_ID:-}
+      TAILSCALE_OAUTH_CLIENT_ID_FILE: ${TAILSCALE_OAUTH_CLIENT_ID_FILE:-}
+      TAILSCALE_OAUTH_CLIENT_SECRET: ${TAILSCALE_OAUTH_CLIENT_SECRET:-}
+      TAILSCALE_OAUTH_CLIENT_SECRET_FILE: ${TAILSCALE_OAUTH_CLIENT_SECRET_FILE:-/run/integration-secrets/tailscale_oauth_client_secret.txt}
+      TAILSCALE_API_TOKEN: ${TAILSCALE_API_TOKEN:-}
+      TAILSCALE_API_TOKEN_FILE: ${TAILSCALE_API_TOKEN_FILE:-/run/integration-secrets/tailscale_api_token.txt}
+      TAILSCALE_ALLOWED_HOUSEHOLD_ID: ${TAILSCALE_ALLOWED_HOUSEHOLD_ID:-}
+      EXTERNAL_ACCESS_POLL_INTERVAL_MS: ${EXTERNAL_ACCESS_POLL_INTERVAL_MS:-3600000}
       BACKUP_SCHEDULER_POLL_INTERVAL_MS: ${BACKUP_SCHEDULER_POLL_INTERVAL_MS:-30000}
       BACKUP_RUN_STALE_MS: ${BACKUP_RUN_STALE_MS:-7200000}
     secrets:
@@ -158,6 +172,7 @@ services:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
       - "${HTTPS_PORT:-443}:443/udp"
+      - "127.0.0.1:${TAILSCALE_INGRESS_PORT:-8089}:8080"
     volumes:
       - family_app_caddy_data_prod:/data
       - family_app_caddy_config_prod:/config

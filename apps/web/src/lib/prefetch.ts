@@ -4,6 +4,8 @@ import type {
   AuthSession,
   CalendarEntry,
   Dish,
+  ExternalAccessOverview,
+  ExternalAccessSettings,
   FinanceAccount,
   FinanceSummary,
   HouseholdPoll,
@@ -175,6 +177,19 @@ export function prefetchRoute(client: QueryClient, path: string, session?: AuthS
   PREFETCH[path]?.(client);
   const gated = PREFETCH_WITH_CAPABILITY[path];
   if (gated && session && roleCan(session, gated.capability)) gated.run(client, session);
+  const manager = session?.member.role === 'owner' || session?.member.role === 'admin';
+  if (manager && path === '/house/external-access') {
+    void client.prefetchQuery({
+      queryKey: ['external-access-overview'],
+      queryFn: () => api<ExternalAccessOverview>('/external-access/overview'),
+    });
+  }
+  if (manager && path === '/house/external-access/settings') {
+    void client.prefetchQuery({
+      queryKey: ['external-access-settings'],
+      queryFn: () => api<ExternalAccessSettings>('/external-access/settings'),
+    });
+  }
 }
 
 /** 命令面板里搜菜品用得上，顺手让它常驻缓存。 */

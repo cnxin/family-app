@@ -15,6 +15,7 @@
     "test:connectors": "node -r ts-node/register scripts/media-connectors.contract.ts",
     "test:reconciliation": "node -r ts-node/register scripts/moviepilot-reconciliation.contract.ts",
     "test:metadata": "node -r ts-node/register scripts/media-metadata.contract.ts",
+    "test:external-access": "node -r ts-node/register scripts/external-access.contract.ts",
     "test:isolation": "node scripts/household-isolation.mjs",
     "test:schema": "ts-node scripts/check-schema-drift.ts",
     "lint": "eslint .",

@@ -4,6 +4,7 @@ import {
   useAgentRoutines,
   useAgentSettings,
   useConfigureNightlyDelivery,
+  useExternalAccessSession,
   useUpdateAgentProfile,
   useUpdateCookingPreference,
   useUpdatePassword,
@@ -52,6 +53,7 @@ export function ProfilePage() {
   const updateAgentProfile = useUpdateAgentProfile();
   const agentSettings = useAgentSettings(manager);
   const agentRoutines = useAgentRoutines(manager);
+  const externalAccessSession = useExternalAccessSession(Boolean(session));
   const configureNightly = useConfigureNightlyDelivery();
 
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -190,6 +192,30 @@ export function ProfilePage() {
               {account?.requiresPasswordSetup ? '设置密码' : '修改密码'}
             </Button>
           </div>
+          {externalAccessSession.data?.viaTailscale ? (
+            <div
+              data-external-access-session="tailscale"
+              className="border-t border-border px-3.5 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent" />
+                <p className="text-[13px] font-medium text-ink">正在通过外部通道访问</p>
+              </div>
+              {manager && externalAccessSession.data.login ? (
+                <p className="mt-1 text-[12px] text-ink-soft">
+                  Tailscale 账号：{externalAccessSession.data.login}
+                </p>
+              ) : null}
+              {manager ? (
+                <SoftLink
+                  to="/house/external-access"
+                  className="mt-1.5 inline-block text-[12px] text-accent transition-colors duration-150 hover:underline"
+                >
+                  查看外部访问 →
+                </SoftLink>
+              ) : null}
+            </div>
+          ) : null}
         </Panel>
 
         <Panel title="消息推送" grow={false}>

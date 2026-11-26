@@ -32,6 +32,7 @@ export * from './today';
 export * from './households';
 export * from './events';
 export * from './smart-home';
+export * from './external-access';
 export * from './locations';
 export * from './household-map';
 export * from './plugins';
@@ -54,6 +55,7 @@ import { today } from './today';
 import { households } from './households';
 import { events } from './events';
 import { smartHome, smartHomeLinks, smartHomeWebhook } from './smart-home';
+import { externalAccess } from './external-access';
 import { locations } from './locations';
 import { householdMap } from './household-map';
 import { calendar } from './calendar';
@@ -98,6 +100,7 @@ export const contracts = {
   households,
   events,
   smartHome,
+  externalAccess,
   locations,
   householdMap,
   smartHomeWebhook,

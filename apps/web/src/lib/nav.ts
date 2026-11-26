@@ -91,6 +91,7 @@ export const SCENES: NavScene[] = [
       ...pluginSegments('points'),
       ...pluginSegments('guests'),
       ...pluginSegments('smart-home'),
+      ...pluginSegments('external-access'),
       CORE_NAV.members,
       CORE_NAV.backups,
     ],
