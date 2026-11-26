@@ -63,6 +63,7 @@ export function CredentialField({
   onChange,
   clearing,
   onToggleClear,
+  allowClear = true,
   disabled,
 }: {
   name: string;
@@ -73,6 +74,7 @@ export function CredentialField({
   onChange: (value: string) => void;
   clearing: boolean;
   onToggleClear: () => void;
+  allowClear?: boolean;
   disabled?: boolean;
 }) {
   return (
@@ -92,7 +94,7 @@ export function CredentialField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      {configured ? (
+      {configured && allowClear ? (
         <div className="mt-2 flex items-center gap-2">
           <Checkbox
             checked={clearing}

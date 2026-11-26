@@ -24,8 +24,8 @@ describe('插件注册表 · 全局', () => {
     for (const key of DOMAIN_KEYS) expect(DOMAIN_QUERY_KEYS[key], key).toBeInstanceOf(Array);
   });
 
-  // J1.7 起全量：下面逐插件的断言覆盖全部 18 个
-  it('18 个插件都有 manifest', () => {
+  // J1.7 起全量：下面逐插件的断言覆盖全部插件
+  it('所有插件都有 manifest', () => {
     expect(PLUGINS.map((plugin) => plugin.key).sort()).toEqual([...PLUGIN_KEYS].sort());
   });
 
@@ -82,6 +82,7 @@ describe.each(PLUGINS.map((plugin) => [plugin.key, plugin] as const))('插件注
       keywords: [...action.keywords],
       domain: key,
       to: action.deepLink,
+      ...(action.managerOnly ? { managerOnly: true } : {}),
     }));
     expect(ACTIONS.filter((action) => action.domain === key)).toEqual(expected);
   });

@@ -34,6 +34,8 @@ const TravelPage = lazyPage(() => import('./pages/travel'), 'TravelPage');
 const BackupsPage = lazyPage(() => import('./pages/backups'), 'BackupsPage');
 const SmartHomePage = lazyPage(() => import('./pages/smart-home'), 'SmartHomePage');
 const SmartHomeSettingsPage = lazyPage(() => import('./pages/smart-home-settings'), 'SmartHomeSettingsPage');
+const ExternalAccessPage = lazyPage(() => import('./pages/external-access'), 'ExternalAccessPage');
+const ExternalAccessSettingsPage = lazyPage(() => import('./pages/external-access-settings'), 'ExternalAccessSettingsPage');
 const HouseMapPage = lazyPage(() => import('./pages/house-map'), 'HouseMapPage');
 const HouseMapImportPage = lazyPage(() => import('./pages/house-map-import'), 'HouseMapImportPage');
 const ActivityPage = lazyPage(() => import('./pages/activity'), 'ActivityPage');
@@ -165,6 +167,8 @@ export function App() {
           <Route path="/house/backups" element={<BackupsPage />} />
           <Route path="/house/smart-home" element={<SmartHomePage />} />
           <Route path="/house/smart-home/settings" element={<SmartHomeSettingsPage />} />
+          <Route path="/house/external-access" element={<ExternalAccessPage />} />
+          <Route path="/house/external-access/settings" element={<ExternalAccessSettingsPage />} />
           <Route path="/house/map" element={<HouseMapPage />} />
           <Route path="/house/map/import" element={<HouseMapImportPage />} />
           <Route path="/house/assets/:id" element={<AssetDetailPage />} />

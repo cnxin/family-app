@@ -5,8 +5,8 @@
 ## 1. 前置条件
 
 - 一台长期在线、已安装 Docker Compose 的主机。
-- 使用公网域名时，将 DNS 指向该主机并开放 TCP 80/443 和 UDP 443；Caddy 会自动申请和续期证书。
-- 不准备直接开放公网时，优先通过 Tailscale、WireGuard 等 VPN 访问；Tailscale Serve 私有 HTTPS 入口的拓扑、配置改动和验收清单见 [外部访问与网络管理方案](external-access-plan.md) §3、§4。局域网 HTTP 仅适合部署演练，不能承载真实会话。
+- **外部访问首选 Tailscale Serve（私有 HTTPS，不暴露公网端口）**：主机安装原生 Tailscale（如 Mac mini 装 macOS 版 Tailscale，节点名建议 `xiaoguanjia`），家人各自账号受邀加入同一 tailnet，经 `tailscale serve --bg --https=443 http://127.0.0.1:8089` 接入 Caddy 专用回环入口。拓扑、ACL 与验收清单见 [外部访问与网络管理方案](external-access-plan.md) §3、§4。
+- **备选（公网域名）**：需要直接对外开放时，将 DNS 指向该主机并开放 TCP 80/443 和 UDP 443，Caddy 会自动申请和续期证书；局域网 HTTP 仅适合部署演练，不能承载真实会话。
 - 在升级或迁移前，先确认数据库和附件已经生成可校验的备份。
 
 ## 2. 创建本地生产配置
@@ -51,6 +51,12 @@ chmod 600 deploy/.env.production deploy/secrets/*.txt
 - 状态推送（E2）：API 对每个「连好 HA 且白名单非空」的家庭常驻一条 HA WebSocket（订阅 `state_changed`），变化经 `/events` 推给页面；断了退回每 `SMART_HOME_POLL_MS`（默认 30000）拉一次 `/api/states`，同时按 `SMART_HOME_RECONNECT_MIN_MS`～`SMART_HOME_RECONNECT_MAX_MS`（5 秒～60 秒）退避重连。反代不用额外配置：这条连接是 API 容器主动连 HA。
 
 - HA → 小管家（E3）：HA 的自动化用 `rest_command` 打 `POST /api/smart-home/webhook/<householdId>`，请求头带时间戳与签名（`sha256(密钥 + sha256(密钥 + 时间戳 + "." + 原始请求体))`，HA 模板没有 HMAC，只能这样算）。密钥在「家庭设置 → 智能家居 → 联动」生成，旧密钥轮换后宽限 24 小时；那一页会生成可直接粘贴的 `configuration.yaml` 与自动化 YAML。**HA 必须能访问到小管家的地址**（同机的 Docker 里用宿主机局域网 IP 或 `host.docker.internal:8088`），该端点公开但只认签名。
+
+可选外部访问（Tailscale Serve 与只读控制面，M5-E）：
+
+- 宿主机安装原生 Tailscale 并以节点名 `xiaoguanjia` 加入 tailnet（`tailscale up --hostname=xiaoguanjia --accept-dns=false`），通过 `tailscale serve --bg --https=443 http://127.0.0.1:8089` 把私有 HTTPS 流量转到 `web` 容器专用的回环端口 `127.0.0.1:${TAILSCALE_INGRESS_PORT:-8089}:8080`。同步在 `deploy/.env.production` 将 `TRUST_PROXY_HOPS` 改为 `2`，并将 `https://xiaoguanjia.<tailnet>.ts.net` 追加到 `CORS_ORIGINS`。
+- 阶段 1 只读面板优先使用 Tailscale **OAuth client（scope 仅 `devices:core:read`）**，兼容 90 天 API 访问令牌。OAuth 需同时配置 `TAILSCALE_OAUTH_CLIENT_ID`（或 `TAILSCALE_OAUTH_CLIENT_ID_FILE`）与密钥文件 `deploy/secrets/tailscale_oauth_client_secret.txt`（API 令牌模式则使用 `tailscale_api_token.txt`），挂到 `/run/integration-secrets/`，权限 `600`、属主规则同媒体连接器；可选配合 `TAILSCALE_TAILNET`（默认 `-`）、`TAILSCALE_PUBLIC_URL`、`TAILSCALE_NODE_HOSTNAME`（默认 `xiaoguanjia`）、`TAILSCALE_TIMEOUT_MS`（默认 `3000`）与 `EXTERNAL_ACCESS_POLL_INTERVAL_MS`（默认 `3600000`）；凭据文件不存在时仅算「未配置」，不影响启动。
+- 多家庭实例下，服务器默认配置仅对实例首户（或 `TAILSCALE_ALLOWED_HOUSEHOLD_ID` 指定家庭）的 `owner` 角色展示；其他家庭只有在「家庭设置 → 外部访问」保存自己的家庭覆盖（密文存库、只写不读）后才能看到各自 tailnet 的设备。阶段 1 拒绝保存具备写权限的控制面凭据。
 
 可选影视元数据：
 
@@ -159,11 +165,11 @@ curl https://family.example.com/api/health/ready
 
 ## 4. 网络与安全边界
 
-- 宿主机只映射 Caddy 的 80/443；PostgreSQL 与 API 没有宿主机端口。API 同时接入无入站端口的 `integrations` 网络，以便主动访问 NAS 上的媒体服务。
+- 宿主机默认映射 Caddy 的 80/443（演示栈为 8088）以及**仅绑本机回环**的 `127.0.0.1:${TAILSCALE_INGRESS_PORT:-8089}:8080`（专供宿主机 Tailscale Serve）；PostgreSQL 与 API 没有宿主机端口。API 同时接入无入站端口的 `integrations` 网络，以便主动访问 NAS 媒体服务、Home Assistant 与 Tailscale 控制面。
 - Caddy 为前端和 API 设置基础安全响应头；关闭含客户端地址和完整 URI 的访问日志，只保留轮转后的运行与错误日志。
 - 前端产物只有 `index.html` 和带内容哈希的 `/assets/*`：`/assets/*` 存在的文件返回 `Cache-Control: public, max-age=31536000, immutable`，不存在的直接 404（不回退到 index.html，前端靠它判断发版后旧分块失效并整页刷新一次）；`index.html` 返回 `no-cache`，每次用 ETag 回源校验。
 - API 只记录请求 ID、路由模板、状态、耗时和账号/成员/家庭 UUID，不记录请求体、查询值、姓名、IP、密码或令牌。
-- `TRUST_PROXY_HOPS=1` 只信任紧邻 API 的 Caddy。改变代理层数时必须同步调整，不能使用无边界的代理信任。经 Tailscale Serve 接入时是 Serve 与 Caddy 两跳，须改为 2，并给 Serve 单独开一个只绑 `127.0.0.1` 的入口端口，见 [外部访问与网络管理方案](external-access-plan.md) §3。
+- `TRUST_PROXY_HOPS=1` 只信任紧邻 API 的 Caddy。改变代理层数时必须同步调整，不能使用无边界的代理信任。经 Tailscale Serve 接入时是 Serve 与 Caddy 两跳，须改为 `2`：Caddy 的 `:8080` 专用回环入口仅信任 `private_ranges` 并注入 `X-Family-Ingress: tailscale`，API 侧还要求 `req.ip` 落入 Tailscale 双栈地址段（`100.64.0.0/10` 或 `fd7a:115c:a1e0::/48`）且存在 `Tailscale-User-Login` 才采信；局域网/公网入口 `{$SITE_ADDRESS}` 不配置 `trusted_proxies`（Caddy 自动丢弃来路 `X-Forwarded-For` 并仅写入直连客户端地址）且剥离所有 `Tailscale-*` / `X-Family-Ingress`，防止 `TRUST_PROXY_HOPS=2` 下局域网伪造来源头绕过限流，详见 [外部访问与网络管理方案](external-access-plan.md) §3、§5.4。
 - Web 会话当前仍保存在 `localStorage`，因此 HTTPS 不能消除 XSS 风险。对外开放前应保持依赖更新，并评估改用同站 `HttpOnly` Cookie。
 
 ## 5. 备份与更新

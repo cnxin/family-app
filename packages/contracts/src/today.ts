@@ -4,7 +4,7 @@ import { defineEndpoint } from './registry';
 
 export const attentionItemSchema = z.object({
   key: z.string().min(1),
-  domain: z.enum(['assets', 'guests', 'travel', 'inventory', 'polls', 'points', 'finance', 'backups', 'smart-home']),
+  domain: z.enum(['assets', 'guests', 'travel', 'inventory', 'polls', 'points', 'finance', 'backups', 'smart-home', 'external-access']),
   kind: z.string().min(1),
   /** 合并进这一张卡的全部 kind，顺序与服务端排序一致，至少包含 kind。 */
   kinds: z.array(z.string().min(1)).min(1),

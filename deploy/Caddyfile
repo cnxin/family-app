@@ -1,24 +1,24 @@
-{$SITE_ADDRESS} {
-	# 事件流（SSE）不压缩：encode 要先攒够字节才决定压不压，会把 hello / 心跳 / changed 卡住
-	@compressible not path /api/events
-	encode @compressible zstd gzip
+(strip_external_ingress_headers) {
+	header_up -Tailscale-User-Login
+	header_up -Tailscale-User-Name
+	header_up -Tailscale-User-Profile-Pic
+	header_up -Tailscale-User-Id
+	header_up -Tailscale-App-Capabilities
+	header_up -Tailscale-Headers-Info
+	header_up -X-Family-Ingress
+	header_up X-Forwarded-For {remote_host}
+	# 局域网/直连入口未配置 trusted_proxies，并显式覆写 X-Forwarded-For 为直连客户端地址，
+	# 因此即使 API 设为 TRUST_PROXY_HOPS=2，局域网也无法通过伪造 X-Forwarded-For 绕过限流或冒充 Tailscale 网段
+}
 
-	# /api/events 是长连接事件流：代理不缓冲，每条立刻发出去（H2）
-	handle /api/events {
-		uri strip_prefix /api
-		reverse_proxy api:3100 {
-			flush_interval -1
-		}
-	}
+(tailscale_ingress_proxy) {
+	# :8080 仅映射宿主机 127.0.0.1:8089，只有本机 Tailscale Serve 能连入；
+	# Docker 桥接网关属于 private_ranges，需信任这一跳才能保留 Serve 注入的 Tailscale 客户端地址
+	trusted_proxies private_ranges
+	header_up X-Family-Ingress tailscale
+}
 
-	handle_path /api/* {
-		reverse_proxy api:3100
-	}
-
-	handle /uploads/* {
-		reverse_proxy api:3100
-	}
-
+(family_static) {
 	# 旧客户端已在 H1 删除。家里人的书签和旧端发出的访客链接（/legacy/guest/<token>）
 	# 跳到去掉前缀的同名新路径，查询串保留。要放在默认 handle 之前，不然会被它先吃掉。
 	redir /legacy / 302
@@ -52,6 +52,63 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 	}
+}
+
+{$SITE_ADDRESS} {
+	# 事件流（SSE）不压缩：encode 要先攒够字节才决定压不压，会把 hello / 心跳 / changed 卡住
+	@compressible not path /api/events
+	encode @compressible zstd gzip
+
+	# /api/events 是长连接事件流：代理不缓冲，每条立刻发出去（H2）
+	handle /api/events {
+		uri strip_prefix /api
+		reverse_proxy api:3100 {
+			flush_interval -1
+			import strip_external_ingress_headers
+		}
+	}
+
+	handle_path /api/* {
+		reverse_proxy api:3100 {
+			import strip_external_ingress_headers
+		}
+	}
+
+	handle /uploads/* {
+		reverse_proxy api:3100 {
+			import strip_external_ingress_headers
+		}
+	}
+
+	import family_static
+}
+
+# Tailscale Serve 专用入口（docker-compose.prod.yml 只绑 127.0.0.1:${TAILSCALE_INGRESS_PORT:-8089}:8080）
+:8080 {
+	@compressible not path /api/events
+	encode @compressible zstd gzip
+
+	handle /api/events {
+		uri strip_prefix /api
+		reverse_proxy api:3100 {
+			flush_interval -1
+			import tailscale_ingress_proxy
+		}
+	}
+
+	handle_path /api/* {
+		reverse_proxy api:3100 {
+			import tailscale_ingress_proxy
+		}
+	}
+
+	handle /uploads/* {
+		reverse_proxy api:3100 {
+			import tailscale_ingress_proxy
+		}
+	}
+
+	import family_static
 }
 
 :2015 {

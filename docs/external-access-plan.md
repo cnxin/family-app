@@ -1,6 +1,7 @@
 # M5-E 外部访问与网络管理方案（Tailscale）
 
-> 状态：设计稿，写于 2026-10-30，等 King 过目后再动手。
+> 状态：已拍板实施（2026-11-25 推进阶段 0 + 阶段 1；设计稿写于 2026-10-30）。
+> 已确认结论（§9）：家人各自 Tailscale 账号受邀加入 tailnet、节点名 `xiaoguanjia`、阶段 1 采用「服务器默认 + 家庭覆盖」、控制面凭据「OAuth 优先且兼容 API 令牌」、本次落地阶段 0 + 阶段 1（阶段 2 受控写操作暂不实施）。
 > 来源：评估了《群晖 DS220+：Docker 部署 Tailscale，远程访问 Plex》部署指南，结论是同一套 Tailscale + Serve 可以直接覆盖小管家，不需要公网 IP、DDNS、端口映射或 Funnel。
 > 本方案回答总体方案 §23 里挂着的「外网访问采用 VPN 还是反向代理」：**选 VPN（Tailscale），Caddy 继续做同源反向代理，但不对公网开放。**
 > 阶段 0 是部署验收，不改业务代码；阶段 1、2 各自是一个独立提交批次，都可以不做。
@@ -9,7 +10,7 @@
 
 ## 0. 一句话方案
 
-Mac mini 装 macOS 版 Tailscale，用 `tailscale serve` 把私有 HTTPS 入口 `https://<节点名>.ts.net` 代理到现有 Caddy（8088）；家人手机装 Tailscale 登录同一个 tailnet，浏览器打开这个地址就是小管家。代码层面只需要认第二跳代理和一个新的 CORS 来源。
+Mac mini 装 macOS 版 Tailscale，用 `tailscale serve` 把私有 HTTPS 入口 `https://<节点名>.ts.net` 代理到现有 Caddy 的专用回环入口（`127.0.0.1:8089 -> :8080`）；家人手机装 Tailscale 登录同一个 tailnet，浏览器打开这个地址就是小管家。代码层面只需要认第二跳代理和一个新的 CORS 来源。
 
 在此之上，App 里加一页「家里 → 外部访问」：先只读（节点、设备、密钥到期），再按需加受控写操作（授权新设备、移除设备、密钥到期开关），一律走 Tailscale 控制面 API，**不让 API 容器碰 tailscaled 的本机 socket**。
 
@@ -34,7 +35,7 @@ Tailscale 个人版免费含 6 个用户、不限设备、3 个 ACL 组，一家
 
 | 项目 | 现状 | 对方案的影响 |
 | --- | --- | --- |
-| 对外入口 | Caddy，`SITE_ADDRESS=:80`，宿主机映射 `8088 -> 80`、`8443 -> 443`，纯 HTTP | Serve 终止 TLS 后转到 `127.0.0.1:8088`，Caddy 不用申请证书 |
+| 对外入口 | Caddy，`SITE_ADDRESS=:80`，宿主机映射 `8088 -> 80`、`8443 -> 443` 以及专用回环 `127.0.0.1:8089 -> 8080` | Serve 终止 TLS 后转到独立回环入口 `127.0.0.1:8089`（Caddy `:8080`），与局域网入口物理隔离，Caddy 不用申请证书 |
 | API 代理信任 | `TRUST_PROXY_HOPS=1`（只信紧邻的 Caddy） | 走 Serve 后是两跳，要改成 2，否则限流和日志里的客户端地址是 Serve 的回环地址 |
 | CORS | `CORS_ORIGINS` 白名单 | 加 `https://<节点名>.ts.net` |
 | Web 客户端 | Vite 构建，同源 `/api`，没有可配置的服务器地址 | 不需要改前端地址 |
@@ -98,39 +99,64 @@ api:3100（TRUST_PROXY_HOPS=2）
       - "127.0.0.1:${TAILSCALE_INGRESS_PORT:-8089}:8080"   # 只绑回环，专供 Serve
 ```
 
-`deploy/Caddyfile` 增加第二个站点块（与 `:80` 共用同一组 handle，用 snippet 抽出来）：
+`deploy/Caddyfile` 将前端静态文件与安全头抽成公共 snippet，两个站点块分别处理局域网与 Tailscale Serve 入口（与实际配置一致）：
 
 ```caddyfile
-(family_site) {
-	encode zstd gzip
-	handle_path /api/* {
+{$SITE_ADDRESS} {
+	# 局域网 / 公网入口：绝不配置 trusted_proxies，丢弃来路 X-Forwarded-For 并剥离所有 Tailscale-* / X-Family-Ingress
+	handle_path /api/events {
 		reverse_proxy api:3100 {
+			flush_interval -1
+			header_up X-Forwarded-For {remote_host}
 			header_up -Tailscale-User-Login
 			header_up -Tailscale-User-Name
 			header_up -Tailscale-User-Profile-Pic
+			header_up -Tailscale-User-Id
 			header_up -Tailscale-App-Capabilities
+			header_up -Tailscale-Headers-Info
 			header_up -X-Family-Ingress
 		}
 	}
-	# …uploads、静态文件、安全头与现状一致
-}
-
-{$SITE_ADDRESS} {
-	import family_site
+	handle_path /api/* {
+		reverse_proxy api:3100 {
+			header_up X-Forwarded-For {remote_host}
+			header_up -Tailscale-User-Login
+			header_up -Tailscale-User-Name
+			header_up -Tailscale-User-Profile-Pic
+			header_up -Tailscale-User-Id
+			header_up -Tailscale-App-Capabilities
+			header_up -Tailscale-Headers-Info
+			header_up -X-Family-Ingress
+		}
+	}
+	# …/uploads/* 同样剥离上述头，其余静态文件与安全头与现状一致
 }
 
 :8080 {
-	import family_site
-	# Serve 入口：只有这里才允许把 Tailscale 身份头和入口标记交给 API
-	handle_path /api/* {
+	# 仅绑 127.0.0.1:8089，专供宿主机 Tailscale Serve：
+	# 必须配置 trusted_proxies private_ranges 才能保留 Serve 注入的 X-Forwarded-For
+	handle_path /api/events {
 		reverse_proxy api:3100 {
+			trusted_proxies private_ranges
+			flush_interval -1
 			header_up X-Family-Ingress tailscale
 		}
 	}
+	handle_path /api/* {
+		reverse_proxy api:3100 {
+			trusted_proxies private_ranges
+			header_up X-Family-Ingress tailscale
+		}
+	}
+	handle /uploads/* {
+		reverse_proxy api:3100 {
+			trusted_proxies private_ranges
+			header_up X-Family-Ingress tailscale
+		}
+	}
+	# …前端静态文件与安全头
 }
 ```
-
-> 上面是意图示意，最终写法以 Caddy 的 handle 优先级和实际验证为准：目标是 `:80` 入口剥掉所有 `Tailscale-*` 和 `X-Family-Ingress`，`:8080` 入口原样透传 Serve 注入的头并加上入口标记。
 
 `deploy/.env.production`：
 
@@ -140,7 +166,7 @@ TRUST_PROXY_HOPS=2
 TAILSCALE_INGRESS_PORT=8089
 ```
 
-`TRUST_PROXY_HOPS=2` 对局域网入口也生效：局域网只有 Caddy 一跳，Express 会把 `X-Forwarded-For` 链里不存在的第二跳当作直连，取到的仍是 Caddy 看到的地址，不会放大信任范围；但 `CORS_ORIGINS` 和登录限流都要在两条入口各验一次。
+`TRUST_PROXY_HOPS=2` 对两条入口都安全的原因在于 Caddy 的分入口策略：局域网/公网入口 `{$SITE_ADDRESS}` **不配置 `trusted_proxies`** 且显式用 `header_up X-Forwarded-For {remote_host}` 覆写来源头，Caddy 会丢弃客户端伪造的 `X-Forwarded-For`，只把直连客户端地址传给 API，因此局域网请求无法借 `TRUST_PROXY_HOPS=2` 伪造源 IP 绕过限流；`:8080` 入口仅绑定宿主机回环 `127.0.0.1:8089` 且开启 `trusted_proxies private_ranges`，才能保留 Serve 追加的真实 Tailscale 客户端地址。`CORS_ORIGINS` 和登录限流仍需在两条入口各验一次。
 
 ### 4.3 步骤
 
@@ -173,7 +199,7 @@ Mac mini 节点打 `tag:xiaoguanjia`。注意：**打了 tag 的节点发出的�
 
 - [ ] 局域网 `http://<Mac mini>:8088` 原有访问与登录不变。
 - [ ] 手机关闭 Wi-Fi，经 `https://<节点名>.ts.net` 登录成功，完成一次点菜或任务写操作。
-- [ ] API 访问日志里该请求的客户端地址是手机的 Tailscale 地址（`100.64.0.0/10`），不是回环地址。
+- [ ] 经 Serve 登录后，`GET /api/external-access/session` 返回 `viaTailscale: true`，且家庭活动流写入 `external_access_login`（API 结构化访问日志按 §7 原则不记录客户端 IP）。
 - [ ] 局域网请求故意带上 `Tailscale-User-Login` 或 `X-Family-Ingress` 头，API 侧收不到。
 - [ ] `tailscale ping <手机>` 能看出直连或中继；中继时页面可用但记录下来。
 - [ ] `docker compose restart web api` 后入口不变；Mac mini 重启后 Serve 规则与节点身份保留，不需要重新登录。
@@ -213,25 +239,26 @@ Mac mini 节点打 `tag:xiaoguanjia`。注意：**打了 tag 的节点发出的�
 | `secret.credentialEncrypted` | OAuth client secret（首选）或 API 访问令牌 |
 | `settings.credentialKind` | `oauth_client` 或 `api_token` |
 
-服务器默认：`TAILSCALE_API_BASE_URL`、`TAILSCALE_TAILNET`、`TAILSCALE_OAUTH_CLIENT_ID`、`TAILSCALE_OAUTH_CLIENT_SECRET_FILE`（或 `TAILSCALE_API_TOKEN_FILE`），放 `/run/integration-secrets/`，权限 `600`、属主 UID 1000。
+服务器默认：`TAILSCALE_API_BASE_URL`、`TAILSCALE_TAILNET`、`TAILSCALE_PUBLIC_URL`、`TAILSCALE_NODE_HOSTNAME`、`TAILSCALE_OAUTH_CLIENT_ID`（或 `TAILSCALE_OAUTH_CLIENT_ID_FILE`）、`TAILSCALE_OAUTH_CLIENT_SECRET_FILE`（或 `TAILSCALE_API_TOKEN_FILE`）、`TAILSCALE_ALLOWED_HOUSEHOLD_ID`、`TAILSCALE_TIMEOUT_MS`、`EXTERNAL_ACCESS_POLL_INTERVAL_MS`。密钥文件放 `/run/integration-secrets/`，权限 `600`、属主 UID 1000。
 
-凭据建议用 **OAuth client，scope 仅 `devices:core:read`**：客户端凭据不过期，每次换一个一小时有效的访问令牌；API 访问令牌最长 90 天就要手动轮换，只作为备选。阶段 1 的凭据只能有读权限，由 `POST /external-access/settings/test` 在保存时核验（拿到的令牌能列设备、但 `POST /device/:id/authorized` 返回 403 才算「只读」）。
+凭据建议用 **OAuth client，scope 仅 `devices:core:read`**：客户端凭据不过期，每次换一个一小时有效的访问令牌；API 访问令牌最长 90 天就要手动轮换，只作为备选。阶段 1 的凭据只能有读权限，由 `POST /external-access/settings/test` 与 `PUT /external-access/settings` 调用只读探针（能列设备、且对合成设备 `POST /api/v2/device/0/authorized` 返回 `403` 才判定为 `read_only`；返回非 `403` 的客户端错误如 `404`/`400` 判定为 `read_write` 并在阶段 1 拒绝保存；网络/超时或控制面 5xx 时返回 `unknown` 提示，不阻断离线预配置）。
 
-可见范围：**只有「服务器默认」或拥有这一行的家庭能看到**；其他家庭的管理员看到的是「本实例未向你的家庭开放外部访问管理」。服务器默认模式下只对 `owner` 角色展示，避免一个实例多家庭时互相看见设备。
+可见范围：**只有「服务器默认」或拥有这一行的家庭能看到**；其他家庭的管理员看到的是「本实例未向你的家庭开放外部访问管理」。服务器默认模式下只对主家庭（或 `TAILSCALE_ALLOWED_HOUSEHOLD_ID`）的 `owner` 角色展示，避免一个实例多家庭时互相看见设备。
 
-### 5.3 API（草案）
+### 5.3 API（阶段 1 已实现）
 
 ```text
 GET    /external-access/settings            manage_integrations   模式、是否配置、凭据提示、publicUrl
 PUT    /external-access/settings            manage_integrations   写凭据与设置；进家庭活动
 DELETE /external-access/settings            manage_integrations   回到服务器默认；进家庭活动
 POST   /external-access/settings/test       manage_integrations   换令牌、列设备、确认 scope 只读
-GET    /external-access/overview            manage_integrations   节点 + 设备摘要 + 到期提醒，60 秒缓存
-GET    /external-access/devices             manage_integrations   设备明细
+GET    /external-access/overview            manage_integrations   节点 + 设备摘要 + 到期提醒，60 秒缓存（支持 ?refresh=true）
+GET    /external-access/devices             manage_integrations   设备明细列表（支持 ?refresh=true）
+GET    /external-access/devices/:id         manage_integrations   单台设备明细
 GET    /external-access/session             任何正式成员         { viaTailscale, login?, name? }
 ```
 
-响应里永远不带 `machineKey`、`nodeKey`、`tailnetLockKey`、登录链接、密钥或密文；设备 `addresses` 只在明细里给，不进列表。
+响应里永远不带 `machineKey`、`nodeKey`、`tailnetLockKey`、`clientConnectivity`、登录链接、密钥或密文；`/overview` 返回的设备摘要剥离 `addresses` 与 `tags`，仅 `/devices` 与 `/devices/:id` 明细接口包含它们。
 
 控制面调用：`GET /api/v2/tailnet/{tailnet}/devices`、`GET /api/v2/device/{id}`，3 秒超时，失败只显示「连不上控制面」，其它页面不受影响。调用和 Home Assistant 一样走 `integrations` 网络的出口。
 
@@ -240,7 +267,7 @@ GET    /external-access/session             任何正式成员         { viaTail
 `/external-access/session` 只在**同时**满足下面三条时才报告 `viaTailscale: true`：
 
 1. 请求带 `X-Family-Ingress: tailscale`（只有 `:8080` 入口会加，`:80` 入口剥掉）。
-2. `req.ip`（经 `TRUST_PROXY_HOPS=2` 解析）落在 `100.64.0.0/10`。
+2. `req.ip`（经 `TRUST_PROXY_HOPS=2` 解析）落在 Tailscale 双栈地址段：`100.64.0.0/10`（含 IPv4-mapped IPv6 `::ffff:100.x.y.z`）或 `fd7a:115c:a1e0::/48`。
 3. 请求带 `Tailscale-User-Login`（Serve 已先删掉外来的同名头，所以存在即可信）。
 
 身份头只用于：审计「从外部登录」事件（`external_access_login`，记录登录名和成员 UUID，不记录 IP）、页面上的「外部通道」标识。**不**用身份头代替小管家登录，也不自动把 Tailscale 登录名映射成家庭成员；若将来需要按人对应，照 M4-H 的做法做显式映射。
@@ -328,13 +355,13 @@ GET    /external-access/preauth-keys                 摘要、创建人、到期
 
 ---
 
-## 9. 需要 King 拍板
+## 9. 已拍板事项（2026-11-25 确认）
 
-1. **家人账号**：全家同一个 Tailscale 账号（最省事，但审计分不出人），还是各自账号用用户邀请加入（6 人内免费，能按人审计、按人 ACL）。
-2. **节点名**：建议 `xiaoguanjia`；域名在证书透明度日志里可见，不要带个人信息。
-3. **阶段 1 的可见范围**：按 §5.2「拥有集成行的家庭 / owner 家庭」，还是干脆只做服务器级、只给 owner。
-4. **凭据形态**：OAuth client（推荐）还是 90 天 API 令牌。
-5. **要不要做阶段 2**：如果家人换手机的频率很低，阶段 1 加一条「去控制台授权」的链接可能就够了。
+1. **家人账号**：各自 Tailscale 账号通过用户邀请加入（6 人内免费，支持按人审计与按人 ACL）。
+2. **节点名**：`xiaoguanjia`（私有入口形如 `https://xiaoguanjia.<tailnet>.ts.net`）。
+3. **阶段 1 的可见范围**：按 §5.2「服务器默认 + 家庭覆盖」——拥有集成行的家庭按 `manage_integrations` 可见，服务器默认模式仅对实例主家庭（或 `TAILSCALE_ALLOWED_HOUSEHOLD_ID`）的 `owner` 展示，其余家庭显示未开放提示。
+4. **凭据形态**：OAuth client（仅 `devices:core:read`）优先，同时兼容 90 天 API 访问令牌。
+5. **实施范围**：本次推进**阶段 0 + 阶段 1**（阶段 2 受控写操作留作后续按需评估）。
 
 ---
 

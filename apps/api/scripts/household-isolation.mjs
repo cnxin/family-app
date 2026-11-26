@@ -936,8 +936,87 @@ try {
     '助理原话只在本家庭：两边互相列不出，别人家的删不掉',
   );
 
+  // M5-E 外部访问：普通成员无权限返回 403；非首户创建者未建覆盖行时处于 restricted、查设备明细返回 403、删设置返回 404
+  const foreignMemberEa = await Promise.all([
+    request('/external-access/settings', foreignToken),
+    request('/external-access/overview', foreignToken),
+    request('/external-access/devices', foreignToken),
+    request('/external-access/devices/dev-server-1', foreignToken),
+    request('/external-access/settings', foreignToken, 'DELETE'),
+  ]);
+  assert(
+    foreignMemberEa.every((response) => response.status === 403),
+    '外部访问隔离：其他家庭普通成员访问管理接口全部返回 403',
+  );
+  const foreignOwnerAccountId = randomUUID();
+  const foreignOwnerMemberId = randomUUID();
+  const foreignOwnerSessionId = randomUUID();
+  try {
+    await db.query(
+      `INSERT INTO accounts
+         (id, "loginName", "loginNameNormalized", "passwordHash")
+       VALUES ($1, $2, $3, $4)`,
+      [
+        foreignOwnerAccountId,
+        '隔离测试户主账号',
+        `isolation-owner-${foreignOwnerAccountId}`,
+        FIXTURE_PASSWORD_HASH,
+      ],
+    );
+    await db.query(
+      'INSERT INTO members (id, "householdId", "accountId", name, "avatarEmoji", role) VALUES ($1, $2, $3, $4, $5, $6)',
+      [foreignOwnerMemberId, ids.household, foreignOwnerAccountId, '隔离测试户主', 'O', 'owner'],
+    );
+    await db.query(
+      `INSERT INTO auth_sessions
+         (id, "householdId", "accountId", "memberId", "refreshTokenHash", "roleSnapshot",
+          "credentialSnapshot", "expiresAt")
+       VALUES ($1, $2, $3, $4, $5, 'owner', $6, now() + interval '10 minutes')`,
+      [
+        foreignOwnerSessionId,
+        ids.household,
+        foreignOwnerAccountId,
+        foreignOwnerMemberId,
+        sha256('isolation-owner-refresh-token'),
+        FIXTURE_CREDENTIAL_SNAPSHOT,
+      ],
+    );
+    const foreignOwnerToken = signToken({
+      sub: foreignOwnerAccountId,
+      accountId: foreignOwnerAccountId,
+      memberId: foreignOwnerMemberId,
+      householdId: ids.household,
+      sid: foreignOwnerSessionId,
+      name: '隔离测试户主',
+      role: 'owner',
+    });
+    const foreignEaSettings = await request('/external-access/settings', foreignOwnerToken);
+    const foreignEaOverview = await request('/external-access/overview', foreignOwnerToken);
+    const foreignEaDevices = await request('/external-access/devices', foreignOwnerToken);
+    const foreignEaDeviceDetail = await request('/external-access/devices/dev-server-1', foreignOwnerToken);
+    const foreignEaDelete = await request('/external-access/settings', foreignOwnerToken, 'DELETE');
+    assert(
+      foreignEaSettings.status === 200 &&
+        foreignEaSettings.body.data.accessScope === 'restricted' &&
+        foreignEaSettings.body.data.configured === false &&
+        foreignEaOverview.status === 200 &&
+        foreignEaOverview.body.data.accessScope === 'restricted' &&
+        foreignEaOverview.body.data.devices.length === 0 &&
+        foreignEaDevices.status === 200 &&
+        foreignEaDevices.body.data.devices.length === 0 &&
+        foreignEaDeviceDetail.status === 403 &&
+        foreignEaDelete.status === 404,
+      '外部访问隔离：其他家庭创建者未配置覆盖时处于 restricted，查设备明细返回 403，删设置返回 404',
+    );
+  } finally {
+    await db.query('DELETE FROM auth_sessions WHERE id = $1', [foreignOwnerSessionId]);
+    await db.query('DELETE FROM members WHERE id = $1', [foreignOwnerMemberId]);
+    await db.query('DELETE FROM accounts WHERE id = $1', [foreignOwnerAccountId]);
+  }
+
   console.log('\n家庭数据隔离测试全部通过');
 } finally {
+  await db.query('DELETE FROM integrations WHERE "householdId" = $1', [ids.household]);
   await db.query('DELETE FROM reminders WHERE id = $1', [ids.reminder]);
   await db.query('DELETE FROM notifications WHERE id = $1', [ids.pollNotification]);
   await db.query('DELETE FROM notifications WHERE id = $1', [ids.notification]);

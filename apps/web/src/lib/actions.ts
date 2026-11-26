@@ -7,6 +7,7 @@ export interface Action {
   keywords: string[];
   domain: string;
   to: string;
+  managerOnly?: boolean;
 }
 
 /** 已迁插件的动作从 manifest 取（J1），放在原来的位置，顺序不变。 */
@@ -17,6 +18,7 @@ function fromPlugin(key: PluginKey): Action[] {
     keywords: [...action.keywords],
     domain: key,
     to: action.deepLink,
+    ...(action.managerOnly ? { managerOnly: true } : {}),
   }));
 }
 
@@ -34,4 +36,5 @@ export const ACTIONS: Action[] = [
   ...fromPlugin('tasks'),
   ...fromPlugin('shopping'),
   ...fromPlugin('recipes'),
+  ...fromPlugin('external-access'),
 ];

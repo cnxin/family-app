@@ -5,11 +5,11 @@
 // 这些值已经写进数据库约束或线上数据，J1 不改值，只在这里登记「它属于哪个插件」。
 // scripts/check-plugins.mjs 断言：各处的每个值都能在这里找到唯一归属，这里也没有死别名。
 
-/** 18 个插件（§8.6 第 1 条）。顺序即文档顺序，没有运行时含义。 */
+/** 19 个插件（§8.6 第 1 条 + M5-E 外部访问）。顺序即文档顺序，没有运行时含义。 */
 export const PLUGIN_KEYS = [
   'menus', 'recipes', 'shopping', 'inventory', 'locations', 'assets',
   'calendar', 'tasks', 'reminders', 'polls', 'finance', 'points',
-  'guests', 'smart-home', 'media', 'travel', 'memories', 'knowledge',
+  'guests', 'smart-home', 'media', 'travel', 'memories', 'knowledge', 'external-access',
 ] as const;
 export type PluginKey = (typeof PLUGIN_KEYS)[number];
 
@@ -45,6 +45,7 @@ export const PLUGIN_ALIASES: Readonly<Record<PluginKey, AliasTable>> = {
   travel: { activity: ['travel'], agentSource: ['travel'] },
   memories: { activity: ['memory'], agentSource: ['memory'] },
   knowledge: { activity: ['knowledge'], agentSource: ['knowledge'] },
+  'external-access': {},
 };
 
 /** 内核与助理层占用的别名。 */

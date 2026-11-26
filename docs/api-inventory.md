@@ -4,7 +4,7 @@
 > 用途：重构迁移时逐条对照；`--check` 模式在 CI 里保证清单与代码一致。
 > 权限列只反映装饰器（`@Public` / `@RequireCapabilities`）；标"登录"的端点仍可能在 Service 内部用 `assertCapability` 或角色判断做二次校验。
 
-共 340 个端点（POST 135 / GET 111 / PATCH 50 / DELETE 33 / PUT 11），公开端点 28 个，已定义契约 340 个。
+共 348 个端点（POST 136 / GET 116 / PATCH 50 / DELETE 34 / PUT 12），公开端点 28 个，已定义契约 348 个。
 
 | 模块 | 端点数 | 已有契约 |
 | --- | ---: | ---: |
@@ -16,6 +16,7 @@
 | calendar | 4 | 4 |
 | dishes | 5 | 5 |
 | events | 1 | 1 |
+| external-access | 8 | 8 |
 | finance | 30 | 30 |
 | guests | 21 | 21 |
 | households | 1 | 1 |
@@ -169,6 +170,19 @@
 | 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
 | --- | --- | --- | --- | :-: | --- |
 | GET | `/events` | `EventsController.stream` | 登录 | ✓ | `apps/api/src/events/events.controller.ts` |
+
+## external-access（8）
+
+| 方法 | 路径 | 处理函数 | 权限 | 契约 | 文件 |
+| --- | --- | --- | --- | :-: | --- |
+| GET | `/external-access/devices` | `ExternalAccessController.devices` | `manage_integrations` | ✓ | `apps/api/src/external-access/external-access.module.ts` |
+| GET | `/external-access/devices/:id` | `ExternalAccessController.device` | `manage_integrations` | ✓ | `apps/api/src/external-access/external-access.module.ts` |
+| GET | `/external-access/overview` | `ExternalAccessController.overview` | `manage_integrations` | ✓ | `apps/api/src/external-access/external-access.module.ts` |
+| GET | `/external-access/session` | `ExternalAccessController.session` | 登录 | ✓ | `apps/api/src/external-access/external-access.module.ts` |
+| GET | `/external-access/settings` | `ExternalAccessController.getSettings` | `manage_integrations` | ✓ | `apps/api/src/external-access/external-access.module.ts` |
+| PUT | `/external-access/settings` | `ExternalAccessController.updateSettings` | `manage_integrations` | ✓ | `apps/api/src/external-access/external-access.module.ts` |
+| DELETE | `/external-access/settings` | `ExternalAccessController.resetSettings` | `manage_integrations` | ✓ | `apps/api/src/external-access/external-access.module.ts` |
+| POST | `/external-access/settings/test` | `ExternalAccessController.testSettings` | `manage_integrations` | ✓ | `apps/api/src/external-access/external-access.module.ts` |
 
 ## finance（30）
 

@@ -3,11 +3,25 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { appendFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startFakeTailscale } from './fake-tailscale.mjs';
 
-const API_PORT = Number(process.env.TEST_API_PORT || 3199);
+async function resolvePort(envValue) {
+  if (envValue) return Number(envValue);
+  const probe = createNetServer();
+  await new Promise((resolve, reject) => {
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => resolve());
+  });
+  const { port } = probe.address();
+  await new Promise((resolve) => probe.close(() => resolve()));
+  return port;
+}
+
+const API_PORT = await resolvePort(process.env.TEST_API_PORT);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 const TEST_DATABASE = `family_app_test_${randomUUID().replaceAll('-', '')}`;
 // API 的标准输出同时写一份到这个文件，脚本可以数日志（比如「落失败只记一次」）
@@ -21,10 +35,16 @@ const testEnvironment = {
   ...process.env,
   API_URL,
   BOOTSTRAP_SECRET: 'family-app-api-test-bootstrap-secret',
+  BOOTSTRAP_SECRET_FILE: '',
   DB_NAME: TEST_DATABASE,
+  DB_PASSWORD_FILE: '',
   CORS_ORIGINS: 'http://localhost:8081,http://192.168.1.20:8081',
+  INTEGRATION_SECRET_KEY: '',
+  INTEGRATION_SECRET_KEY_FILE: '',
+  AGENT_DATA_KEY_FILE: '',
   JWT_EXPIRES_SECONDS: '900',
   JWT_SECRET: 'family-app-api-test-secret',
+  JWT_SECRET_FILE: '',
   AGENT_PURGE_POLL_INTERVAL_MS: '100',
   AGENT_ROUTINE_POLL_INTERVAL_MS: '100',
   FINANCE_RECURRING_POLL_INTERVAL_MS: '200',
@@ -69,9 +89,26 @@ const testEnvironment = {
   SMART_HOME_RECONNECT_MAX_MS: '1000',
   SMART_HOME_RECONCILE_MS: '1000',
   SMART_HOME_LINKS_POLL_MS: '300',
+  TAILSCALE_API_BASE_URL: '',
+  TAILSCALE_TAILNET: '',
+  TAILSCALE_PUBLIC_URL: '',
+  TAILSCALE_NODE_HOSTNAME: '',
+  TAILSCALE_OAUTH_CLIENT_ID: '',
+  TAILSCALE_OAUTH_CLIENT_ID_FILE: '',
+  TAILSCALE_OAUTH_CLIENT_SECRET: '',
+  TAILSCALE_OAUTH_CLIENT_SECRET_FILE: '',
+  TAILSCALE_API_TOKEN: '',
+  TAILSCALE_API_TOKEN_FILE: '',
+  TAILSCALE_ALLOWED_HOUSEHOLD_ID: '',
+  TAILSCALE_TIMEOUT_MS: '1500',
+  EXTERNAL_ACCESS_POLL_INTERVAL_MS: '300000',
+  EXTERNAL_ACCESS_OFFLINE_ATTENTION_MS: '',
+  TRUST_PROXY_HOPS: '0',
   SMOKE_DATE: '2199-12-28',
   UPLOAD_DIR: TEST_UPLOAD_DIR,
 };
+
+let activeChild = null;
 
 function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -80,18 +117,22 @@ function wait(milliseconds) {
 async function waitForApi(processHandle) {
   const startedAt = Date.now();
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    if (processHandle.exitCode != null) {
-      throw new Error(`API 提前退出，状态码 ${processHandle.exitCode}`);
+    if (processHandle.exitCode != null || processHandle.signalCode != null) {
+      throw new Error(
+        `API 提前退出，状态码 ${processHandle.exitCode ?? processHandle.signalCode}`,
+      );
     }
-    try {
-      const response = await fetch(`${API_URL}/health/ready`);
-      if (response.ok) {
-        // 启动耗时进日志：ts-node 随代码变多会变慢，超时前能先看出趋势
-        console.log(`  ✓ API 就绪用时 ${Date.now() - startedAt}ms`);
-        return;
+    if (activeApiOutput.includes('"event":"api_started"')) {
+      try {
+        const response = await fetch(`${API_URL}/health/ready`);
+        if (response.ok) {
+          // 启动耗时进日志：ts-node 随代码变多会变慢，超时前能先看出趋势
+          console.log(`  ✓ API 就绪用时 ${Date.now() - startedAt}ms`);
+          return;
+        }
+      } catch {
+        // API is still starting.
       }
-    } catch {
-      // API is still starting.
     }
     await wait(250);
   }
@@ -103,8 +144,15 @@ async function runProcess(command, args) {
     env: testEnvironment,
     stdio: 'inherit',
   });
-  const [code] = await once(child, 'exit');
-  if (code !== 0) throw new Error(`${command} 执行失败，状态码 ${code}`);
+  activeChild = child;
+  try {
+    const [code, signal] = await once(child, 'exit');
+    if (code !== 0) {
+      throw new Error(`${command} 执行失败，状态码 ${code ?? signal}`);
+    }
+  } finally {
+    if (activeChild === child) activeChild = null;
+  }
 }
 
 const timings = [];
@@ -167,6 +215,7 @@ const BUSINESS_SCRIPTS = [
   'smart-home-link-hooks',
   'smart-home-panel',
   'smart-home-attention',
+  'external-access',
   'today-attention',
   'events',
   'households',
@@ -335,12 +384,49 @@ function assertApiLogs(output) {
   console.log('  ✓ 路由、健康轮询和敏感信息日志策略符合预期');
 }
 
-async function stopApi() {
-  if (api && api.exitCode == null) {
-    api.kill('SIGTERM');
-    await once(api, 'exit');
+function assertExternalAccessLogHygiene(output, label) {
+  const forbidden = [
+    'tskey-client-',
+    'tskey-api-',
+    'ts-oauth-',
+    'must-never-leak',
+    'machineKey',
+    'nodeKey',
+    'tailnetLockKey',
+    'client_secret',
+    'dad@example.com',
+    'dad-v6@example.com',
+    'mom-tailscale@example.com',
+    'spoof@example.com',
+    'left-spoof@example.com',
+  ];
+  const leaked = forbidden.find((token) => output.includes(token));
+  if (leaked) {
+    throw new Error(`断言失败: ${label} 的 API 日志泄露了外部访问敏感内容 (${leaked})`);
   }
+  if (/\b(?:authorization|password|pin|refresh[_-]?token|access[_-]?token)\b/i.test(output)) {
+    throw new Error(`断言失败: ${label} 的 API 日志包含敏感字段名称`);
+  }
+  console.log(`  ✓ ${label} API 日志不含 Tailscale 凭据、底层设备密钥或身份头明文`);
+}
+
+async function terminateProcess(proc) {
+  if (!proc || proc.exitCode != null || proc.signalCode != null) return;
+  proc.kill('SIGTERM');
+  const exited = await Promise.race([
+    once(proc, 'exit').then(() => true),
+    wait(5000).then(() => false),
+  ]);
+  if (!exited && proc.exitCode == null && proc.signalCode == null) {
+    proc.kill('SIGKILL');
+    await once(proc, 'exit').catch(() => {});
+  }
+}
+
+async function stopApi() {
+  const target = api;
   api = null;
+  await terminateProcess(target);
 }
 
 const DB_CONNECTION = {
@@ -353,6 +439,46 @@ const admin = new Client({ ...DB_CONNECTION, database: 'postgres' });
 let api = null;
 let databaseCreated = false;
 let activeApiOutput = '';
+let serverDefaultFake = null;
+const tempFilesToClean = [];
+let cleanupDone = false;
+
+async function cleanupResources() {
+  if (cleanupDone) return;
+  cleanupDone = true;
+  await terminateProcess(activeChild);
+  await stopApi();
+  await serverDefaultFake?.stop().catch(() => {});
+  serverDefaultFake = null;
+  if (databaseCreated) {
+    try {
+      await admin.query(
+        'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',
+        [TEST_DATABASE],
+      );
+      await admin.query(`DROP DATABASE IF EXISTS "${TEST_DATABASE}"`);
+      console.log('临时测试数据库已删除');
+    } catch {
+      // 忽略中断时的清理次生错误
+    }
+    databaseCreated = false;
+  }
+  await admin.end().catch(() => {});
+  await rm(TEST_UPLOAD_DIR, { recursive: true, force: true }).catch(() => {});
+  await rm(API_LOG_FILE, { force: true }).catch(() => {});
+  for (const file of tempFilesToClean) {
+    await rm(file, { force: true }).catch(() => {});
+  }
+}
+
+for (const [signal, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+]) {
+  process.once(signal, () => {
+    void cleanupResources().finally(() => process.exit(code));
+  });
+}
 
 try {
   if (fullRun) {
@@ -379,6 +505,11 @@ try {
       '-r',
       'ts-node/register',
       'scripts/media-metadata.contract.ts',
+    ]);
+    await runProcess(process.execPath, [
+      '-r',
+      'ts-node/register',
+      'scripts/external-access.contract.ts',
     ]);
   }
   await admin.query(`CREATE DATABASE "${TEST_DATABASE}"`);
@@ -463,6 +594,56 @@ try {
     await wait(50);
     assertApiLogs(activeApiOutput);
   }
+  if (fullRun || selectedScripts.includes('external-access')) {
+    await wait(50);
+    assertExternalAccessLogHygiene(activeApiOutput, '主批次（external-access）');
+  }
+
+  if (fullRun || selectedScripts.includes('external-access')) {
+    await stopApi();
+    const prevProxyHops = testEnvironment.TRUST_PROXY_HOPS;
+    testEnvironment.TRUST_PROXY_HOPS = '2';
+    api = startApi();
+    await waitForApi(api);
+    await runScript('scripts/external-access-ingress.mjs');
+    await wait(50);
+    assertExternalAccessLogHygiene(activeApiOutput, '外部通道入口（TRUST_PROXY_HOPS=2）');
+    await stopApi();
+    testEnvironment.TRUST_PROXY_HOPS = prevProxyHops;
+
+    // 服务器默认模式（*_FILE 凭据 + 首户 owner / admin / 多家庭受限范围）
+    serverDefaultFake = await startFakeTailscale();
+    const secretFile = join(tmpdir(), `family-app-ts-secret-${randomUUID()}.txt`);
+    writeFileSync(secretFile, `${serverDefaultFake.credentials.oauthClientSecret}\n`, 'utf8');
+    tempFilesToClean.push(secretFile);
+    const prevServerDefaultEnv = {
+      TAILSCALE_API_BASE_URL: testEnvironment.TAILSCALE_API_BASE_URL,
+      TAILSCALE_TAILNET: testEnvironment.TAILSCALE_TAILNET,
+      TAILSCALE_PUBLIC_URL: testEnvironment.TAILSCALE_PUBLIC_URL,
+      TAILSCALE_NODE_HOSTNAME: testEnvironment.TAILSCALE_NODE_HOSTNAME,
+      TAILSCALE_OAUTH_CLIENT_ID: testEnvironment.TAILSCALE_OAUTH_CLIENT_ID,
+      TAILSCALE_OAUTH_CLIENT_SECRET_FILE: testEnvironment.TAILSCALE_OAUTH_CLIENT_SECRET_FILE,
+    };
+    try {
+      testEnvironment.TAILSCALE_API_BASE_URL = serverDefaultFake.url;
+      testEnvironment.TAILSCALE_TAILNET = '-';
+      testEnvironment.TAILSCALE_PUBLIC_URL = 'https://xiaoguanjia.family.ts.net';
+      testEnvironment.TAILSCALE_NODE_HOSTNAME = 'xiaoguanjia';
+      testEnvironment.TAILSCALE_OAUTH_CLIENT_ID = serverDefaultFake.credentials.oauthClientId;
+      testEnvironment.TAILSCALE_OAUTH_CLIENT_SECRET_FILE = secretFile;
+      api = startApi();
+      await waitForApi(api);
+      await runScript('scripts/external-access-server-default.mjs');
+      await wait(50);
+      assertExternalAccessLogHygiene(activeApiOutput, '外部访问（服务器默认模式）');
+    } finally {
+      await stopApi();
+      Object.assign(testEnvironment, prevServerDefaultEnv);
+      await serverDefaultFake?.stop().catch(() => {});
+      serverDefaultFake = null;
+      await rm(secretFile, { force: true }).catch(() => {});
+    }
+  }
 
   if (fullRun) {
     await stopApi();
@@ -510,16 +691,5 @@ try {
   }
 } finally {
   printTimings();
-  await stopApi();
-  if (databaseCreated) {
-    await admin.query(
-      'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1',
-      [TEST_DATABASE],
-    );
-    await admin.query(`DROP DATABASE "${TEST_DATABASE}"`);
-    console.log('临时测试数据库已删除');
-  }
-  await admin.end();
-  await rm(TEST_UPLOAD_DIR, { recursive: true, force: true });
-  await rm(API_LOG_FILE, { force: true });
+  await cleanupResources();
 }

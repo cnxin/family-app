@@ -2,6 +2,7 @@
 // 单独一个文件：plugins/index.ts 与 plugins/agent-tools.ts 都从这里取，免得两者互相 import。
 import { assetsManifest } from './assets';
 import { calendarManifest } from './calendar';
+import { externalAccessManifest } from './external-access';
 import { financeManifest } from './finance';
 import { guestsManifest } from './guests';
 import { inventoryManifest } from './inventory';
@@ -20,4 +21,4 @@ import { tasksManifest } from './tasks';
 import { travelManifest } from './travel';
 
 /** 已迁移的插件。顺序没有运行时含义，各登记处的顺序仍由各自决定。 */
-export const PLUGIN_MANIFESTS = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest, locationsManifest, inventoryManifest, assetsManifest, mediaManifest, smartHomeManifest] as const;
+export const PLUGIN_MANIFESTS = [knowledgeManifest, memoriesManifest, travelManifest, pollsManifest, recipesManifest, pointsManifest, guestsManifest, financeManifest, shoppingManifest, tasksManifest, calendarManifest, remindersManifest, menusManifest, locationsManifest, inventoryManifest, assetsManifest, mediaManifest, smartHomeManifest, externalAccessManifest] as const;

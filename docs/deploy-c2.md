@@ -24,6 +24,7 @@
 
 - 地址是路由器分配的，Mac mini 重启后可能变：在路由器里给 Mac mini 固定这个地址（King 做）。变了就同步改 `family-guide.md`。
 - 演示栈的升级照 §2 的脚本，在 `~/AI/family-app` 里执行 `./scripts/upgrade-prod.sh --no-pull`；试用期什么时候能升、能上什么，见 `execution-plan.md` 进度表「试用期间允许上线的改动」。
+- **外部访问（M5-E，Tailscale Serve）**：`docker-compose.prod.yml` 已在 `web` 服务保留局域网端口 `${HTTP_PORT:-80}:80`（演示栈为 `8088`，`scripts/demo-stack-watchdog.sh` 继续探 `http://localhost:8088/api/health/ready`），同时新增仅绑宿主机回环的 `127.0.0.1:${TAILSCALE_INGRESS_PORT:-8089}:8080` 供 `tailscale serve --bg --https=443 http://127.0.0.1:8089` 使用。启用外部访问时在 `deploy/.env.production` 将 `TRUST_PROXY_HOPS` 设为 `2`、将 `https://xiaoguanjia.<tailnet>.ts.net` 追加到 `CORS_ORIGINS`，细节见 [external-access-plan.md](external-access-plan.md) §4。
 - 浏览器在 HTTP 下不给的能力（「安全上下文」才有的），小管家里的情况（2026-10-08 全仓核过；`scripts/check-secure-context.mjs` 守着，以后谁直接调这些 API，lint 直接红）：
 
 | 功能 | 用到的浏览器能力 | HTTP 下 | 小管家里怎么处理 |

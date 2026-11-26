@@ -294,6 +294,40 @@ try {
       `${table} 清除后无数据`,
     );
   }
+  // external-access 需要 integrations(kind='tailscale') 且存在凭据密文行才算有数据
+  const tsIntegrationId = await insertScoped(db, owner, 'integrations', {
+    kind: 'tailscale',
+    name: 'Tailscale',
+    baseUrl: 'https://api.tailscale.com',
+    isEnabled: true,
+    settings: { credentialKind: 'api_token', tailnet: '-', nodeHostname: 'xiaoguanjia' },
+  });
+  assert.equal(
+    (await modules(owner))['external-access'].hasData,
+    false,
+    '仅有 tailscale 集成行但无凭据时不点亮 external-access',
+  );
+  await db.query(
+    `INSERT INTO integration_secrets ("integrationId", "credentialEncrypted", "credentialHint")
+     VALUES ($1, $2, $3)`,
+    [tsIntegrationId, 'enc-fixture', '****1234'],
+  );
+  assert.equal(
+    (await modules(owner))['external-access'].hasData,
+    true,
+    'tailscale 集成 + 凭据存在时点亮当前家庭 external-access',
+  );
+  assert.equal(
+    (await modules(other))['external-access'].hasData,
+    false,
+    'tailscale 集成不泄漏另一家庭',
+  );
+  await db.query('DELETE FROM integrations WHERE id=$1', [tsIntegrationId]);
+  assert.equal(
+    (await modules(owner))['external-access'].hasData,
+    false,
+    'tailscale 集成清除后无数据',
+  );
   // 不可变流水不能 DELETE；专用家庭保留到 runner 删除隔离库，不关闭触发器。
   for (const key of ['finance', 'points']) {
     const fixture = await createLedgerHousehold(db, key);

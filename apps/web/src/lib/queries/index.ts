@@ -33,5 +33,6 @@ export * from './media-settings';
 export * from './media-watchlist';
 export * from './attention';
 export * from './smart-home';
+export * from './external-access';
 export * from './locations';
 export * from './map';

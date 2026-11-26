@@ -15,7 +15,7 @@ import { Household } from './household';
 import { MediaRequest } from './media';
 import { ViewingSession } from './media-library';
 
-/** 媒体连接器的三种；integrations 表里另有 'home_assistant'（H3，见 smart-home/）。 */
+/** 媒体连接器的三种；integrations 表里另有 'home_assistant'（H3）与 'tailscale'（M5-E）。 */
 export type IntegrationKind = 'plex' | 'emby' | 'moviepilot';
 
 export type IntegrationEventStatus = 'processed' | 'ignored' | 'failed';
@@ -42,7 +42,7 @@ export class Integration {
   householdId: string;
 
   @Column({ type: 'varchar', length: 48 })
-  kind: IntegrationKind | 'home_assistant';
+  kind: IntegrationKind | 'home_assistant' | 'tailscale';
 
   @Column({ type: 'varchar', length: 120 })
   name: string;
